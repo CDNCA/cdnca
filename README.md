@@ -3,11 +3,11 @@
 **CDN 节点、插件超市，一台主控运营 CDN 平台。**  
 **市场能力随版本开放。**
 
-CDNCA 是独立的开源核心（open-core）CDN 平台：自研控制面与边缘数据面，**不是** GoEdge 换皮，也**不是**任何第三方 CDN 产品的马甲或官方关联版。
+CDNCA 是独立的开源核心（open-core）CDN 平台，控制面与边缘数据面均为自研。
 
 社区版可自托管、**免激活**、无内置计费。官网：[https://cdnca.com](https://cdnca.com)
 
-> English (short): CDNCA is an independent open-core CDN platform (Go control plane + edge nodes). Community Edition is free to self-host with no activation. Tagline: *CDN nodes, plugin marketplace — one control plane to run your CDN platform.* Marketplace features roll out by version. Not a GoEdge reskin. Site: https://cdnca.com
+> English (short): CDNCA is an independent open-core CDN platform (Go control plane + edge nodes). Community Edition is free to self-host with no activation. Tagline: *CDN nodes, plugin marketplace — one control plane to run your CDN platform.* Marketplace features roll out by version. Site: https://cdnca.com
 
 ---
 
@@ -203,7 +203,6 @@ pnpm -C apps/web test
 提交前请注意：
 
 - 对外表述须带 **「市场能力随版本开放」**（凡涉及节点/插件市场）
-- 勿使用禁用口径（见下）
 - 重大行为与许可证变更须经维护者确认
 
 ---
@@ -213,15 +212,6 @@ pnpm -C apps/web test
 本仓库以 **GNU Affero General Public License v3.0（AGPL-3.0）** 授权，全文见根目录 [`LICENSE`](./LICENSE)。
 
 简要含义：你可以自由使用、修改与再分发；若修改后通过网络对外提供服务，必须按 AGPL-3.0 第 13 条向使用者提供对应的完整源代码。
-
----
-
-## 声明与禁用口径
-
-- CDNCA 是**独立**开源核心 CDN 平台，**不是** GoEdge 换皮，**不是** CDNFly / GoEdge 官方产品或关联品牌。
-- 与 CDNFly 仅为工作流基线兼容；CDNFly、GoEdge 等为其各自权利人所有。
-- **禁用词 / 禁承诺**：月子；官方节点；「开卖」及同类斩钉截铁的商业承诺；编造性能数字、Star 数、未发布的 Release 链接。
-- 节点市场 / 插件超市：**市场能力随版本开放。**
 
 ---
 
