@@ -1,178 +1,178 @@
 # CDNCA
 
-**CDN 节点、插件超市，一台主控运营 CDN 平台。**  
-**市场能力随版本开放。**
+<p align="right"><a href="README.md"><img alt="English" src="https://img.shields.io/badge/English-2563eb?style=for-the-badge"></a> <a href="README.zh-CN.md"><img alt="简体中文" src="https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-555?style=for-the-badge"></a></p>
 
-CDNCA 是独立的开源核心（open-core）CDN 平台，控制面与边缘数据面均为自研。
+**CDN nodes and a plugin marketplace: run a CDN platform from one control plane.**  
+**Marketplace features roll out by version.**
 
-社区版可自托管、**免激活**、无内置计费。官网：[https://cdnca.com](https://cdnca.com)
+CDNCA is an independent open-core CDN platform. Both the control plane and the edge data plane are built in-house.
 
-> English (short): CDNCA is an independent open-core CDN platform (Go control plane + edge nodes). Community Edition is free to self-host with no activation. Tagline: *CDN nodes, plugin marketplace — one control plane to run your CDN platform.* Marketplace features roll out by version. Site: https://cdnca.com
-
----
-
-## 简介
-
-装一台 CDNCA 主控，即可运营自己的 CDN：
-
-- **节点**：可自建，也可在节点市场订阅供货商节点（供货商可按天 / 按 G / 按带宽 / 95 等自定计价）
-- **插件**：官方与开发者可上架的插件超市（随版本开放）
-- **社区版**：开源可自托管 · 完全免费 · 免激活 · 无内置套餐/支付
-
-**市场能力随版本开放。** 请勿理解为「今日全站已可挂货交易」。
+The Community Edition is self-hosted, needs **no activation**, and has no built-in billing. Website: [https://cdnca.com](https://cdnca.com)
 
 ---
 
-## 四个端，各管一摊
+## Overview
 
-一台主控同时提供管理端（平台运营）和用户端（租户自助）两套界面，边缘节点由主控统一下发配置，市场入口内置在管理端里。
+Install one CDNCA control plane and run your own CDN:
 
-> 下面的截图来自前端加模拟数据（域名、IP 均为文档保留地址），数字只用于展示界面，不代表性能或运营数据。截图脚本：`scripts/ui/readme-shots.mjs`。
+- **Nodes**: run your own, or subscribe to supplier nodes on the node marketplace (suppliers set their own pricing: per day, per GB, per bandwidth, 95th percentile, and so on)
+- **Plugins**: a plugin marketplace where the official team and developers can list plugins (rolling out by version)
+- **Community Edition**: open source and self-hosted · free · no activation · no built-in plans or payments
 
-### 管理端（平台运营）
-
-给 CDN 平台的运营者用：节点、线路、网站、安全策略和统计都在一个后台里。
-
-- **一页看全平台**：运营数据、带宽峰值、请求数、拉黑 IP 数、主控 / 分析服务 / Agent 状态和 TOP10 排行集中在服务概览
-- **节点集中管理**：节点列表直接显示区域、线路组、实时带宽、月流量和 XDP 过滤状态；支持待初始化、同步失败自动禁用和区域管理
-- **全平台网站一览**：按租户、分组、线路组查看所有网站的 CNAME、HTTPS、源站与监听端口，批量修改、批量申请证书
-- **规则统一下发**：WAF 规则库分平台规则和租户规则，平台规则可订阅、可更新，也可以只对指定用户显示
-- **实时监控**：带宽、流量、访问次数、QPS，以及质量监控与回源监控
-
-![管理端 · 服务概览](docs/images/readme/admin-overview.png)
-
-| 节点列表 | 网站列表 |
-|---|---|
-| ![管理端 · 节点列表](docs/images/readme/admin-nodes.png) | ![管理端 · 网站列表](docs/images/readme/admin-sites.png) |
-| **WAF 规则库** | **实时监控** |
-| ![管理端 · WAF 规则库](docs/images/readme/admin-waf.png) | ![管理端 · 实时监控](docs/images/readme/admin-realtime.png) |
-
-### 用户端（租户自助）
-
-给平台的客户用：接入、配置、排障都能自己完成，不用找运营。
-
-- **接入状态一眼可见**：网站详情顶部逐项检查套餐、线路、CNAME、域名解析、HTTPS 证书、是否已发布到节点，哪一步没通过直接标出来
-- **配置按页签分好**：回源、HTTPS、缓存、CC 防护、WAF 防护、自动防御、高级设置，多个访问域名可批量粘贴，中文域名自动转 Punycode
-- **多家 DNS 统一管理**：阿里云、Cloudflare、DNSPod、华为云等账号下的域名放在一处，记录实时读取，修改直接写入并回读确认；本平台在用的 CNAME 记录会单独标出
-- **数据自己查**：域名排行、热门 URL、TLS 指纹、客户端 IP、国家 / 省份 / 运营商、浏览器与操作系统分布、热门 Referer，缓存命中率和安全事件数一并给出
-
-| 服务概览 | 网站配置与接入检查 |
-|---|---|
-| ![用户端 · 服务概览](docs/images/readme/user-overview.png) | ![用户端 · 网站配置](docs/images/readme/user-site-edit.png) |
-| **多家 DNS 统一解析** | **数据分析** |
-| ![用户端 · 域名解析](docs/images/readme/user-dns-hub.png) | ![用户端 · 数据分析](docs/images/readme/user-analysis.png) |
-
-### 节点（边缘）
-
-节点由 Go 写的 `edge-agent` 加 OpenResty 边缘运行时组成，主控只负责下发，流量不经过主控。
-
-- **主控下发、节点执行**：网站、证书、缓存、WAF / CC 规则、四层转发都由主控编译后下发，节点回报生效版本；发布失败的节点自动禁用，不会带着旧配置继续接流量
-- **原生运行时**：OpenResty 1.31.1.1 从源码构建并打上自带补丁（含 JA4 指纹采集、HTTP/3），节点包和容器镜像同源
-- **内核层防护**：XDP 丢包、按站点封禁、TCP 异形包过滤、四层防护规则，攻击流量在进入 OpenResty 之前就被挡掉
-- **四层转发**：TCP / UDP 转发、端口范围、四层会话日志和实时连接
-- **证书按需加载**：节点证书库不设固定上限，ACME HTTP-01 / DNS-01 自动签发
-- **节点接入安全**：一次性注册令牌 + 双向 TLS，节点证书绑定节点 ID，不使用长期共享密钥；网关断开后自动退避重连
-
-节点的运行状态在管理端「节点列表」和「实时监控」里查看（见上方截图）。
-
-### 市场（节点 / 插件，**市场能力随版本开放**）
-
-- **节点市场**：其他主控可以把节点组上架供货，本站按地区、线路、计费方式（按天、按流量、按带宽、95 计费等）挑选订阅；充值直接付到供货方自己的收款账户。本机节点组也可以上架供货
-- **插件商店**：规则包、主题、DNS 接入等插件统一在这里获取、购买和启用；每份购买只绑定本主控，经官方签名的按安装制品目录下发
-- 社区版需免费注册一次安装身份才能连接市场：`control-api community-register`
-
-| 节点市场 | 插件商店 |
-|---|---|
-| ![市场 · 节点市场](docs/images/readme/market-nodes.png) | ![市场 · 插件商店](docs/images/readme/market-plugins.png) |
+**Marketplace features roll out by version.** Not every listing or transaction is available today.
 
 ---
 
-## 社区版包含
+## Four parts, each with its own job
 
-- 网站、域名、证书（含 ACME HTTP-01/DNS-01）、回源、缓存、清缓存与预热
-- 节点、线路组、四层转发、节点监控
-- 多家 DNS 服务商的域名解析统一管理
-- WAF、CC 防护、ACL、JS 挑战、规则包引擎（自建规则包）、快速屏蔽
-- 站点自动防御：CC 自动切换、WAF 攻击自动封禁、WAF 命中自动封禁
-- 租户与用户管理、工单、通知
-- 访问日志、安全日志、CC 统计与分析（ClickHouse）
-- 平台节点安全事件（DDoS / 四层防护触发）进通知中心
-- 默认主题
-- 内置免费模块：短信（阿里云、SUBMAIL）、邮件（阿里云、SendGrid）、备案查询、IP 情报更新、dnspup 拨测
-- 可连接节点市场与插件市场购买规则包、主题和插件：需免费注册安装身份，购买后经官方签名的按安装制品目录下发并生效（**市场能力随版本开放**）
+One control plane serves two web consoles: the admin console (platform operations) and the user console (tenant self-service). Edge nodes get their configuration from the control plane, and the marketplace is built into the admin console.
 
-## 社区版与商业版
+> The screenshots below come from the frontend with mock data (domains and IPs are documentation-reserved addresses). The numbers only illustrate the UI and are not performance or business data. Screenshot script: `README_SHOTS_LANG=en node scripts/ui/readme-shots.mjs`. The consoles ship in Simplified Chinese, Traditional Chinese and English; switch from the language menu on the sign-in page.
 
-| | 社区版 | 商业版 / 收费模块 |
+### Admin console (platform operations)
+
+For the people running the CDN platform: nodes, lines, sites, security policies and statistics in one console.
+
+- **The whole platform on one page**: business data, peak bandwidth, requests, blocked IPs, control plane / analytics / agent status and top-10 rankings on the overview
+- **Central node management**: the node list shows region, line group, live bandwidth, monthly traffic and XDP filter status; covers pending initialization, automatic disabling after failed syncs, and region management
+- **Every site on the platform**: browse all sites by tenant, group and line group with their CNAME, HTTPS, origin and listen ports; bulk edits and bulk certificate requests
+- **Rules pushed from one place**: the WAF rule library separates platform rules from tenant rules; platform rules can be subscribed to and updated, or shown only to selected users
+- **Real-time monitoring**: bandwidth, traffic, requests, QPS, plus quality and origin monitoring
+
+![Admin console · Overview](docs/images/readme/en/admin-overview.png)
+
+| Node list | Site list |
+|---|---|
+| ![Admin console · Node list](docs/images/readme/en/admin-nodes.png) | ![Admin console · Site list](docs/images/readme/en/admin-sites.png) |
+| **WAF rule library** | **Real-time monitoring** |
+| ![Admin console · WAF rule library](docs/images/readme/en/admin-waf.png) | ![Admin console · Real-time monitoring](docs/images/readme/en/admin-realtime.png) |
+
+### User console (tenant self-service)
+
+For the platform's customers: onboarding, configuration and troubleshooting without opening a ticket.
+
+- **Onboarding status at a glance**: the top of each site checks the plan, line, CNAME, DNS resolution, HTTPS certificate and node publication one by one, and flags the step that failed
+- **Settings grouped into tabs**: origin, HTTPS, cache, CC protection, WAF, automatic defense and advanced settings; paste many domains at once, and internationalized domains are converted to Punycode
+- **One place for many DNS providers**: domains from Alibaba Cloud, Cloudflare, DNSPod, Huawei Cloud and other accounts in one view; records are read live, changes are written and read back to confirm, and CNAME records used by this platform are marked
+- **Analytics on their own**: top domains, top URLs, TLS fingerprints, client IPs, country / province / carrier, browser and OS distribution, top referers, with cache hit ratio and security events
+
+| Overview | Site settings and onboarding checks |
+|---|---|
+| ![User console · Overview](docs/images/readme/en/user-overview.png) | ![User console · Site settings](docs/images/readme/en/user-site-edit.png) |
+| **Multi-provider DNS** | **Analytics** |
+| ![User console · DNS](docs/images/readme/en/user-dns-hub.png) | ![User console · Analytics](docs/images/readme/en/user-analysis.png) |
+
+### Edge nodes
+
+A node is the Go `edge-agent` plus the OpenResty edge runtime. The control plane only pushes configuration; traffic never passes through it.
+
+- **The control plane compiles, nodes execute**: sites, certificates, cache, WAF / CC rules and layer-4 forwarding are compiled by the control plane and pushed to nodes, which report the version in effect; a node that fails to publish is disabled instead of serving traffic with stale configuration
+- **Native runtime**: OpenResty 1.31.1.1 built from source with bundled patches (including JA4 fingerprinting and HTTP/3); node packages and container images come from the same build
+- **Kernel-level protection**: XDP drops, per-site blocking, malformed TCP packet filtering and layer-4 guard rules stop attack traffic before it reaches OpenResty
+- **Layer-4 forwarding**: TCP / UDP forwarding, port ranges, layer-4 session logs and live connections
+- **Certificates loaded on demand**: no fixed limit on the node certificate store; automatic ACME HTTP-01 / DNS-01 issuance
+- **Secure node enrollment**: one-time registration tokens and mutual TLS, node certificates bound to the node ID, no long-lived shared secrets; automatic reconnect with backoff when the gateway drops
+
+Node status is shown in the admin console under the node list and real-time monitoring (see the screenshots above).
+
+### Marketplace (nodes / plugins, **rolling out by version**)
+
+- **Node marketplace**: other control planes can list node groups for supply; this site picks and subscribes by region, line and billing model (per day, per traffic, per bandwidth, 95th percentile, and so on), and top-ups go straight to the supplier's own payment account. Local node groups can be listed for supply as well
+- **Plugin store**: rule packs, themes, DNS integrations and other plugins are fetched, bought and enabled here; each purchase is bound to this control plane and delivered through the officially signed per-installation artifact catalog
+- The Community Edition registers its installation identity once, for free, before it can connect to the marketplace: `control-api community-register`
+
+| Node marketplace | Plugin store |
+|---|---|
+| ![Marketplace · Nodes](docs/images/readme/en/market-nodes.png) | ![Marketplace · Plugin store](docs/images/readme/en/market-plugins.png) |
+
+---
+
+## What the Community Edition includes
+
+- Sites, domains, certificates (including ACME HTTP-01/DNS-01), origins, caching, cache purge and prefetch
+- Nodes, line groups, layer-4 forwarding, node monitoring
+- Unified DNS management across multiple DNS providers
+- WAF, CC protection, ACL, JS challenge, rule pack engine (your own rule packs), quick block
+- Automatic site defense: CC auto-switching, automatic bans on WAF attacks and on WAF hits
+- Tenant and user management, tickets, notifications
+- Access logs, security logs, CC statistics and analytics (ClickHouse)
+- Platform node security events (DDoS / layer-4 guard triggers) in the notification center
+- Default theme
+- Built-in free modules: SMS (Alibaba Cloud, SUBMAIL), email (Alibaba Cloud, SendGrid), ICP filing lookup, IP intelligence updates, dnspup probing
+- Connects to the node and plugin marketplaces to buy rule packs, themes and plugins: register a free installation identity, and purchases are delivered and activated through the officially signed per-installation artifact catalog (**marketplace features roll out by version**)
+
+## Community Edition and commercial edition
+
+| | Community Edition | Commercial edition / paid modules |
 |--|--------|-------------------|
-| 开源控制面 / 自建节点 | ✅ | ✅ |
-| 免激活 · 无内置计费 | ✅ | — |
-| 节点市场（供货商订阅） | 随版本开放 | 以产品为准 |
-| 插件超市 | 随版本开放 | 以产品为准 |
-| 商业模块 / 合同级支持 | ❌ | ✅ |
+| Open-source control plane / self-run nodes | ✅ | ✅ |
+| No activation · no built-in billing | ✅ | — |
+| Node marketplace (supplier subscriptions) | Rolling out by version | See product details |
+| Plugin marketplace | Rolling out by version | See product details |
+| Commercial modules / contract support | ❌ | ✅ |
 
-商业模块的代码不在本仓库，包括：智能自动防御与自适应 WAF、攻击自动升级、聚合边缘（对接第三方 CDN）、迁移导入；套餐、余额、充值、订单、流量包、分销、在线支付与财务系统对接；官网前台、额外主题与白标；授权服务、插件市场卖家端、在线升级。官方规则集（高级 CC 规则组、OWASP CRS 档位、自研检测规则集）社区版可在插件市场购买。
+The code for commercial modules is not in this repository. They include: intelligent automatic defense and adaptive WAF, automatic attack escalation, aggregated edge (third-party CDN integration), migration import; plans, balances, top-ups, orders, traffic packages, reselling, online payments and accounting integrations; the public website frontend, extra themes and white-labeling; the license service, the marketplace seller side, and online upgrades. Official rule sets (advanced CC rule groups, OWASP CRS profiles, in-house detection rule sets) can be bought on the plugin marketplace by Community Edition users.
 
-社区版适合想先跑通、自托管的个人、小团队与 CDN 商。需要合同级支持或商业模块时，请通过官网了解（具体条款以正式说明为准）。
+The Community Edition suits individuals, small teams and CDN providers who want to get running and self-host first. For contract support or commercial modules, see the website (terms are subject to the official documentation).
 
-社区版不连接授权服务：社区授权内置在程序里，基础功能和配额不限。主控在安装后向官方匿名上报一次安装信息（安装 ID、版本、节点数、站点数），之后每 7 天一次，可以用 `COMMUNITY_REPORT_URL=off` 关闭。社区版没有在线升级，升级时换用新版本的程序包。数据库结构与商业版相同，升级到商业版只需更换程序包。
+The Community Edition does not connect to the license service: a community license is built into the program, with no limits on basic features or quotas. After installation the control plane sends one anonymous installation report (installation ID, version, node count, site count) and then one every 7 days; turn it off with `COMMUNITY_REPORT_URL=off`. There are no online upgrades: to upgrade, switch to the newer release package. The database schema is the same as the commercial edition, so moving to the commercial edition only takes a package change.
 
 ---
 
-## 架构（主控 + 节点）
+## Architecture (control plane + nodes)
 
-| 层级 | 说明 |
+| Layer | Description |
 |------|------|
-| **主控（控制面）** | Go 实现；站点、节点、策略与运营入口，管理端与用户端 Web |
-| **节点网关** | 节点注册与 gRPC 通道 |
-| **边缘节点（数据面）** | Go 实现的节点 Agent + OpenResty 边缘运行时；缓存、回源与边缘执行 |
+| **Control plane** | Written in Go; sites, nodes, policies and operations, plus the admin and user web consoles |
+| **Node gateway** | Node enrollment and the gRPC channel |
+| **Edge nodes (data plane)** | Go node agent + OpenResty edge runtime; caching, origin fetches and edge execution |
 
 ```
-[ 操作者 ]
+[ Operator ]
     │
     ▼
-[ CDNCA 主控 · Go 控制面 ]
+[ CDNCA control plane · Go ]
     │
-    ├── 自建边缘节点（Go）
-    └── 节点市场 · 供货商节点（随版本开放）
+    ├── Self-run edge nodes (Go)
+    └── Node marketplace · supplier nodes (rolling out by version)
 ```
 
-| 路径 | 内容 |
+| Path | Contents |
 |---|---|
-| `services/control-api` | 主控 API、后台任务、数据库迁移 |
-| `services/agent-gateway` | 节点注册与 gRPC 通道 |
-| `agents/edge-agent` | 节点 Agent（发布应用、日志、遥测、四层、内核防护） |
-| `edge/openresty` | 边缘 Lua 模块与原生补丁 |
-| `apps/web` | 管理端与用户端前端 |
-| `libs/` | 共享库（边缘配置、规则包、授权数据结构、主题） |
-| `proto/` | 主控、网关、节点之间的协议 |
-| `docs/` | 架构、协议契约、开发者文档、ADR |
+| `services/control-api` | Control plane API, background jobs, database migrations |
+| `services/agent-gateway` | Node enrollment and the gRPC channel |
+| `agents/edge-agent` | Node agent (publishing, logs, telemetry, layer 4, kernel protection) |
+| `edge/openresty` | Edge Lua modules and native patches |
+| `apps/web` | Admin and user console frontends |
+| `libs/` | Shared libraries (edge config, rule packs, license data structures, themes) |
+| `proto/` | Protocols between the control plane, gateway and nodes |
+| `docs/` | Architecture, protocol contracts, developer docs, ADRs |
 
 ---
 
-## 快速开始
+## Quick start
 
-安装包将在 GitHub Release 与官网发布，详见 [cdnca.com](https://cdnca.com)。
+Release packages are published on [GitHub Releases](https://github.com/CDNCA/cdnca/releases) and at `https://www.cdnca.com/downloads/ce/`. See [cdnca.com](https://cdnca.com) for details.
 
-全新单主控安装使用 `scripts/install-control.sh`（以 root 执行，`--help` 查看参数），不需要激活码。整包和节点包从 `--release-server` 指定的发布站下载并校验签名，也可以用 `--native-package-file` / `--native-trust-file` 指定本地文件。步骤见[安装指南](docs/installation-guide.md)。
+A fresh single control plane install uses `scripts/install-control.sh` (run as root; `--help` lists the options) and needs no activation code. The control plane and node packages are downloaded from the release server given by `--release-server` and their signatures are verified; you can also point `--native-package-file` / `--native-trust-file` at local files. Steps are in the [installation guide](docs/installation-guide.md).
 
-**路径 A · 自建节点**
+**Path A · Your own nodes**
 
-1. 部署社区版主控
-2. 安装并注册至少一台自建节点
-3. 添加站点，验证缓存与回源
+1. Deploy the Community Edition control plane
+2. Install and register at least one node of your own
+3. Add a site and check caching and origin fetches
 
-**路径 B · 节点市场订阅（轻资产）**
+**Path B · Node marketplace subscription (asset-light)**
 
-1. 部署社区版主控
-2. 用免费的门户账号注册一次本机安装：`control-api community-register --account <门户账号> --password-stdin`
-3. 在节点市场选择供货商并订阅（**市场能力随版本开放**），绑定域名并验证命中
+1. Deploy the Community Edition control plane
+2. Register this installation once with a free portal account: `control-api community-register --account <portal account> --password-stdin`
+3. Pick a supplier on the node marketplace and subscribe (**marketplace features roll out by version**), then bind a domain and check that requests hit
 
 ---
 
-## 本地开发
+## Local development
 
-依赖：Docker（含 Compose v2）、GNU Make、Go（见 `go.work`）、Node.js 与 pnpm、Bash、curl、OpenSSL。
+Requirements: Docker (with Compose v2), GNU Make, Go (see `go.work`), Node.js and pnpm, Bash, curl, OpenSSL.
 
 ```sh
 make help
@@ -180,9 +180,9 @@ make up
 make status
 ```
 
-`make up` 会启动 PostgreSQL、Redis、ClickHouse、NATS JetStream、数据库迁移、`control-api`、`agent-gateway`、Mailpit 和管理端 Web。本地密钥材料生成在仓库外。只启动基础设施：`make infra-up`、`make infra-test`。
+`make up` starts PostgreSQL, Redis, ClickHouse, NATS JetStream, database migrations, `control-api`, `agent-gateway`, Mailpit and the admin web console. Local key material is generated outside the repository. To start only the infrastructure: `make infra-up`, `make infra-test`.
 
-运行测试：
+Run the tests:
 
 ```sh
 go -C services/control-api test ./...
@@ -190,32 +190,32 @@ go -C agents/edge-agent test ./...
 pnpm -C apps/web test
 ```
 
-部分集成测试需要本地 PostgreSQL，没有时会跳过。
+Some integration tests need a local PostgreSQL and are skipped without one.
 
-文档：[开发者入口](docs/developer/README.md) · [协议契约](docs/protocol-contracts.md) · [OpenAPI](api/openapi/v1) · [架构决策记录](docs/adr)
-
----
-
-## 参与贡献
-
-欢迎 Issue、讨论与文档改进。贡献指南将随社区版仓库完善。
-
-提交前请注意：
-
-- 对外表述须带 **「市场能力随版本开放」**（凡涉及节点/插件市场）
-- 重大行为与许可证变更须经维护者确认
+Docs: [Developer guide](docs/developer/README.md) · [Protocol contracts](docs/protocol-contracts.md) · [OpenAPI](api/openapi/v1) · [Architecture decision records](docs/adr)
 
 ---
 
-## 许可证
+## Contributing
 
-本仓库以 **GNU Affero General Public License v3.0（AGPL-3.0）** 授权，全文见根目录 [`LICENSE`](./LICENSE)。
+Issues, discussions and documentation improvements are welcome. Contribution guidelines will grow with the Community Edition repository.
 
-简要含义：你可以自由使用、修改与再分发；若修改后通过网络对外提供服务，必须按 AGPL-3.0 第 13 条向使用者提供对应的完整源代码。
+Before submitting:
+
+- Public wording about the node or plugin marketplace must include **"marketplace features roll out by version"**
+- Major behavior and license changes need maintainer approval
 
 ---
 
-## 链接
+## License
 
-- 官网：https://cdnca.com
-- 本仓库：https://github.com/CDNCA/cdnca
+This repository is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**; see [`LICENSE`](./LICENSE) for the full text.
+
+In short: you may use, modify and redistribute it freely; if you offer a modified version as a network service, AGPL-3.0 section 13 requires you to provide its complete corresponding source code to its users.
+
+---
+
+## Links
+
+- Website: https://cdnca.com
+- Repository: https://github.com/CDNCA/cdnca

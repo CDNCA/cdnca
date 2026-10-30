@@ -3,13 +3,15 @@
 //   pnpm -C apps/web exec vite --host 127.0.0.1 --port 5991   # 另开一个终端
 //   PLAYWRIGHT_CORE=<playwright-core 入口> node scripts/ui/readme-shots.mjs [base] [outDir] [只拍的文件名前缀,逗号分隔]
 // 默认 base=http://127.0.0.1:5991/dashboard，outDir=docs/images/readme。需要本机装有 Chrome。
+// README_SHOTS_LANG=en：界面切到 en-US、模拟数据换成英文，默认输出到 docs/images/readme/en（英文 README 用）。
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const { chromium } = await import(process.env.PLAYWRIGHT_CORE ?? 'playwright-core')
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
-const [base = 'http://127.0.0.1:5991/dashboard', outDir = path.join(repoRoot, 'docs/images/readme'), only = ''] = process.argv.slice(2)
+const lang = process.env.README_SHOTS_LANG === 'en' ? 'en' : 'zh'
+const [base = 'http://127.0.0.1:5991/dashboard', outDir = path.join(repoRoot, lang === 'en' ? 'docs/images/readme/en' : 'docs/images/readme'), only = ''] = process.argv.slice(2)
 fs.mkdirSync(outDir, { recursive: true })
 
 // ---------- 通用工具 ----------
@@ -515,8 +517,58 @@ const handlers = (role) => {
   }
 }
 
+// ---------- 英文模拟数据（README_SHOTS_LANG=en）----------
+// 整串精确替换；拼出来的串（节点描述、报价标题等）再按片段替换。
+const english = {
+  平台管理员: 'Platform admin', 示例租户: 'Demo tenant', 星河电商: 'Galaxy Shop', 云帆资讯: 'Sail News', 示例云服务: 'Demo Cloud',
+  华东: 'East China', 华南: 'South China', 华北: 'North China', 香港: 'Hong Kong', 上海: 'Shanghai', 广州: 'Guangzhou', 北京: 'Beijing',
+  广东: 'Guangdong', 浙江: 'Zhejiang', 江苏: 'Jiangsu', 四川: 'Sichuan', 湖北: 'Hubei', 福建: 'Fujian', 山东: 'Shandong', 中国: 'China', 中国大陆: 'Mainland China',
+  电信: 'China Telecom', 联通: 'China Unicom', 移动: 'China Mobile', 教育网: 'CERNET', 其他: 'Other', 微信: 'WeChat', 默认: 'Default', 境外: 'Overseas',
+  默认线路: 'Default line', 华东加速: 'East China accel', 华南加速: 'South China accel', '全国 BGP': 'Nationwide BGP', 香港海外: 'Hong Kong overseas',
+  官网: 'Website', 电商: 'E-commerce', 资讯: 'News', 静态资源: 'Static assets', 企业版: 'Enterprise', 专业版: 'Professional', 基础版: 'Basic',
+  电商站点防护: 'E-commerce protection', '登录与下单接口的注入、爬虫与撞库拦截': 'Blocks injection, scraping and credential stuffing on login and checkout',
+  官网基础防护: 'Website baseline', '常见扫描器与敏感路径拦截': 'Blocks common scanners and sensitive paths',
+  'API 接口白名单': 'API allowlist', '仅放行合作方网段，其余拦截': 'Only partner ranges are allowed',
+  资讯站评论区防护: 'Comment protection', '评论接口 XSS 与垃圾内容过滤': 'Filters XSS and spam on the comment API',
+  静态资源防盗链: 'Hotlink protection', 'Referer 校验，拒绝外链引用': 'Referer check against hotlinking',
+  后台路径保护: 'Admin path protection', '/admin 仅允许办公网访问': '/admin from the office network only',
+  拦截扫描器: 'Block scanners', 敏感路径: 'Sensitive paths',
+  'OWASP 核心规则集': 'OWASP Core Rule Set', 'SQL 注入、XSS、命令执行等通用攻击检测': 'Detects SQL injection, XSS, command execution and more',
+  'WordPress 专项防护': 'WordPress protection', 'xmlrpc、插件漏洞与暴力登录防护': 'xmlrpc, plugin exploits and brute-force logins',
+  恶意爬虫与扫描器: 'Bad bots and scanners', '常见扫描器、采集器 User-Agent 与行为特征': 'Scanner and scraper User-Agents and behavior',
+  'SQL 注入检测': 'SQL injection', 跨站脚本检测: 'Cross-site scripting', 命令执行检测: 'Command execution', 路径穿越检测: 'Path traversal', 扫描器识别: 'Scanner detection',
+  'SQL 注入': 'SQL injection', 跨站脚本: 'XSS', 命令执行: 'Command execution', 文件包含: 'File inclusion', 扫描器: 'Scanners',
+  '阿里云 DNS（主账号）': 'Alibaba Cloud DNS (main)', '华为云 DNS': 'Huawei Cloud DNS',
+  'WordPress 防护规则包': 'WordPress protection pack', '针对 xmlrpc、wp-login 暴力破解与常见插件漏洞的规则集合，开箱即用。': 'Ready-to-use rules for xmlrpc, wp-login brute force and common plugin exploits.',
+  'API 接口防刷规则包': 'API abuse protection pack', '按接口路径限速、签名校验失败拦截、异常参数检测，适合开放 API。': 'Per-path rate limits, signature failure blocking and parameter checks for public APIs.',
+  恶意爬虫识别规则包: 'Bad bot detection pack', '覆盖 300+ 采集器与扫描器特征，配合 JS 挑战降低误杀。': 'Signatures for 300+ scrapers and scanners, paired with JS challenges to cut false positives.',
+  'Aurora 控制台主题': 'Aurora console theme', '深浅双色的控制台主题，含登录页、错误页与用户端整套样式。': 'Light and dark console theme with login, error and user console styles.',
+  极简白主题: 'Minimal white theme', '大留白、细线条的简洁风格，适合面向企业客户的白标部署。': 'Airy, thin-line style for white-label enterprise deployments.',
+  'DNS.LA 解析接入': 'DNS.LA integration', '在多家 DNS 统一管理中接入 DNS.LA 账号，支持分线路解析。': 'Adds DNS.LA accounts to multi-provider DNS, with per-line resolution.',
+  '华东三网 CDN 套餐 · 标准版': 'East China tri-carrier CDN · Standard', '全国 BGP 高防加速': 'Nationwide BGP with DDoS protection',
+  '华南电信精品线路 · 按流量': 'South China Telecom premium · per GB', '香港 CN2 GIA 国际加速': 'Hong Kong CN2 GIA international',
+  '北方联通大带宽 · 日峰值计费': 'North China Unicom high bandwidth · daily peak', '视频点播专用 · 按流量': 'Video on demand · per GB', '入门体验包 · 小站点': 'Starter pack · small sites',
+  示例条款: 'Sample terms', '(直接访问)': '(direct)',
+  '社区版 1.0.35 已发布：新增多家 DNS 统一管理': 'Community Edition 1.0.35 released: multi-provider DNS', '节点维护通知：华南线路例行升级': 'Maintenance: South China line upgrade',
+}
+const englishFragments = [['边缘节点', ' edge node']]
+function toEnglish(value) {
+  if (typeof value === 'string') {
+    if (Object.hasOwn(english, value)) return english[value]
+    if (!/[\u4e00-\u9fff]/.test(value)) return value
+    let out = value
+    for (const [zh, en] of Object.entries(english).sort((a, b) => b[0].length - a[0].length)) out = out.split(zh).join(` ${en} `)
+    for (const [zh, en] of englishFragments) out = out.split(zh).join(en)
+    return out.replace(/\s+/g, ' ').trim()
+  }
+  if (Array.isArray(value)) return value.map(toEnglish)
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toEnglish(v)]))
+  return value
+}
+
 async function shoot(browser, { file, role, path: route, ready, before }) {
-  const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', deviceScaleFactor: 1 })
+  const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, locale: lang === 'en' ? 'en-US' : 'zh-CN', timezoneId: 'Asia/Shanghai', deviceScaleFactor: 1 })
+  await page.addInitScript((locale) => window.localStorage.setItem('cdnca.locale', locale), lang === 'en' ? 'en-US' : 'zh-CN')
   const problems = []
   page.on('pageerror', (e) => problems.push(`pageerror ${e.message.slice(0, 200)}`))
   page.on('console', async (m) => { if (m.type() === 'error') problems.push(`console ${(await Promise.all(m.args().slice(1, 2).map((a) => a.jsonValue().catch(() => '')))).join(' ')} ${m.text().slice(0, 120)}`) })
@@ -528,7 +580,7 @@ async function shoot(browser, { file, role, path: route, ready, before }) {
     try { body = handle(p, u, req.method()) } catch (e) { problems.push(`mock ${p} ${e.message}`) }
     if (body === undefined && !/^\/v1\/(theme\/current|admin\/inbox|account\/inbox|installation-lock|admin\/system-settings|system-settings\/public|admin\/tickets\/summary|plugin-ui\/pages|account\/messages)/.test(p)) unknown.add(`${file} ${req.method()} ${p}${u.search}`)
     if (body === undefined) body = { items: [] }
-    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(lang === 'en' ? toEnglish(body) : body) })
   })
   await page.goto(`${base}${route}`, { waitUntil: 'networkidle' })
   if (before) await before(page)
