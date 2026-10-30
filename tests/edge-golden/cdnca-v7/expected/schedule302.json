@@ -1,0 +1,282 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "schedule302",
+  "scenario_sha256": "afa04914604a52e5e9f89e3ae44394d2106637a92c17e2482bfb6a9a1cedd9e6",
+  "steps": [
+    {
+      "id": "redirect-client-a",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 302,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "142",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "http://127.0.0.2:18096<masked>dl.example.test/v/a.mp4?t=1",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 142,
+            "sha256": "745173bcc5c57ce9751dd019606e877e0aae13b60372fdb090f3db0470c3a43c",
+            "text": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": [
+            {
+              "origin": "dl",
+              "method": "GET",
+              "uri": "/v/a.mp4?t=1",
+              "host": "dl.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.1.6",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.1.6"
+              },
+              "peer": "127.0.0.1"
+            }
+          ],
+          "followed": {
+            "status": 200,
+            "proto": "HTTP/1.1",
+            "headers": {
+              "content-length": "11",
+              "content-type": "video/mp4",
+              "date": "<masked>",
+              "server": "openresty"
+            },
+            "body": {
+              "length": 11,
+              "sha256": "79fd615a866fe7f9eb4da8d9c41ab57e3bd48056df42fd2c13e4d461a87afbe3",
+              "text": "video-bytes"
+            },
+            "origin": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "redirect-client-b",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 302,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "142",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "http://127.0.0.3:18096<masked>dl.example.test/v/a.mp4?t=1",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 142,
+            "sha256": "745173bcc5c57ce9751dd019606e877e0aae13b60372fdb090f3db0470c3a43c",
+            "text": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": [
+            {
+              "origin": "dl",
+              "method": "GET",
+              "uri": "/v/a.mp4?t=1",
+              "host": "dl.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.1.5",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.1.5"
+              },
+              "peer": "127.0.0.1"
+            }
+          ],
+          "followed": {
+            "status": 200,
+            "proto": "HTTP/1.1",
+            "headers": {
+              "content-length": "11",
+              "content-type": "video/mp4",
+              "date": "<masked>",
+              "server": "openresty"
+            },
+            "body": {
+              "length": 11,
+              "sha256": "79fd615a866fe7f9eb4da8d9c41ab57e3bd48056df42fd2c13e4d461a87afbe3",
+              "text": "video-bytes"
+            },
+            "origin": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "page-served-here",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "17",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 17,
+            "sha256": "639cf5f89793ec65e282fe1de4de829b3ffe7095c04517cf64156d0d35579f56",
+            "text": "<html>page</html>"
+          },
+          "origin": [
+            {
+              "origin": "dl",
+              "method": "GET",
+              "uri": "/index.html",
+              "host": "dl.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.1.6",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.1.6"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "post-served-here",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "6",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 6,
+            "sha256": "1637cc683d5c44284751994ea032108f8d54ef4e4b989a7a593d14e312c6a5e9",
+            "text": "posted"
+          },
+          "origin": [
+            {
+              "origin": "dl",
+              "method": "POST",
+              "uri": "/upload.bin",
+              "host": "dl.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "content-length": "3",
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.1.6",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.1.6"
+              },
+              "body": {
+                "length": 3,
+                "sha256": "1f206b11c23e28cc250ded7fc0098d3823a8467a54340f1ac4e535cb8544493f",
+                "text": "x=1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unscheduled-site",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "11",
+            "content-type": "video/mp4",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 11,
+            "sha256": "79fd615a866fe7f9eb4da8d9c41ab57e3bd48056df42fd2c13e4d461a87afbe3",
+            "text": "video-bytes"
+          },
+          "origin": [
+            {
+              "origin": "dl",
+              "method": "GET",
+              "uri": "/v/a.mp4",
+              "host": "www.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.1.6",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.1.6"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forged-landing",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdnca-s302-reject": "signature"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "forged-token-header",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdnca-s302-reject": "signature"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    }
+  ]
+}

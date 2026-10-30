@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.cdnca.example/marketplace/v1/extension-catalog.schema.json",
+  "title": "CDNCA 扩展点目录 v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["api_version", "kind", "catalog_id", "events", "permissions"],
+  "properties": {
+    "api_version": {"const": "marketplace.cdnca.io/v1"},
+    "kind": {"const": "ExtensionCatalog"},
+    "catalog_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9._-]{0,95}$"
+    },
+    "events": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/event"}
+    },
+    "permissions": {
+      "type": "array",
+      "items": {"$ref": "#/definitions/permission"}
+    }
+  },
+  "definitions": {
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh-CN"],
+      "properties": {
+        "zh-CN": {"type": "string", "minLength": 1, "maxLength": 256},
+        "en-US": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "status", "description", "required_permission"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "pattern": "^io\\.cdnca\\.[a-z][a-z0-9_]*\\.v[1-9][0-9]*\\.[a-z][a-z0-9_]*$"
+        },
+        "status": {"enum": ["reserved", "available", "deprecated"]},
+        "description": {"$ref": "#/definitions/localizedText"},
+        "required_permission": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*){1,7}$"
+        }
+      }
+    },
+    "permission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "description", "risk"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*){1,7}$"
+        },
+        "status": {"enum": ["reserved", "available", "deprecated"]},
+        "description": {"$ref": "#/definitions/localizedText"},
+        "risk": {"enum": ["low", "medium", "high"]}
+      }
+    }
+  }
+}

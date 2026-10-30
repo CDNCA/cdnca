@@ -1,0 +1,170 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Platform System Mail Settings API
+  version: 0.1.0
+  description: Platform administrator SMTP and SMS provider settings. Secrets are references only and never returned in plaintext.
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+servers:
+  - {url: /}
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/system-mail-settings:
+    get:
+      summary: Read platform mail settings
+      operationId: getPlatformSystemMailSettings
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': {description: Current mail settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+    put:
+      summary: Update platform mail settings
+      description: Persists configuration only. Runtime settings are applied at process startup when the notification runtime is enabled; saving does not enable or reload a provider.
+      operationId: updatePlatformSystemMailSettings
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/WriteRequest'}}}
+      responses:
+        '200': {description: Saved mail settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied, or the chosen official mail service's module (module.mail.<provider>) is not licensed (system_mail_settings_module_not_licensed)}
+        '409': {description: Revision or idempotency conflict}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+  /v1/admin/system-mail-settings/tests:
+    post:
+      summary: Send a test mail with the provider on the page
+      description: Sends one test mail through value.mail_provider without saving anything, so a provider can be checked before switching. An official provider uses mail_secret or, only for the same provider, the stored credential; SMTP uses the runtime SMTP password. The attempt is audited without the credential.
+      operationId: testPlatformSystemMailSettings
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [value, to]
+              properties:
+                value: {$ref: '#/components/schemas/Settings'}
+                mail_secret: {type: string, maxLength: 512, writeOnly: true}
+                to: {type: string, format: email, maxLength: 254}
+      responses:
+        '200':
+          description: The send was attempted; ok tells whether the provider accepted it.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [ok, provider]
+                properties:
+                  ok: {type: boolean}
+                  provider: {type: string}
+                  message_id: {type: string}
+                  code: {type: string, description: 'Stable failure code (libs/mail): config_invalid, credential_rejected, sender_rejected, recipient_rejected, provider_rate_limited, provider_unavailable, provider_rejected, provider_response_unknown, tls_required, or a plugin error code.'}
+        '400': {description: Validation error}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied, or the chosen official mail service's module (module.mail.<provider>) is not licensed (system_mail_settings_module_not_licensed)}
+        '503': {description: The notification runtime (email) is not enabled}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+    RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: On a 400 system_mail_settings_validation_error that names the refused field of the save body (value.<field>, sms_access_key_secret or mail_secret) and a machine reason.
+              x-description-zh: 能定位字段的 400 system_mail_settings_validation_error 附带 field（保存请求体路径 value.<字段>、sms_access_key_secret、mail_secret）与 reason 机器码。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string}
+                reason: {type: string}
+              example: {field: value.smtp_port, reason: out_of_range}
+    SecretReference:
+      type: string
+      maxLength: 1024
+      pattern: '^(|vault://.+|kms-envelope://.+)$'
+      description: Empty or an opaque Vault/KMS envelope reference. Plaintext secrets are rejected.
+    Document:
+      type: object
+      additionalProperties: false
+      required: [schema, revision, value]
+      properties:
+        schema: {const: cdnca.platform-system-mail-settings/v1}
+        revision: {type: integer, minimum: 0, maximum: 9223372036854775806}
+        updated_at: {type: string, format: date-time}
+        value: {$ref: '#/components/schemas/Settings'}
+        mail_secret_configured: {type: boolean, description: An official mail service credential is stored (never returned).}
+        mail_secret_provider: {type: string, enum: [aliyun, sendgrid], description: The provider the stored credential belongs to; it is reused only for that provider.}
+        mail_secret_fingerprint: {type: string, pattern: '^[0-9a-f]{16}$'}
+    WriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        mail_secret:
+          type: string
+          maxLength: 512
+          writeOnly: true
+          description: Official mail service credential (DirectMail AccessKeySecret or SendGrid API key) for value.mail_provider. Omitted keeps the stored one; required when choosing an official provider whose credential is not stored.
+        value:
+          allOf:
+            - {$ref: '#/components/schemas/Settings'}
+            - type: object
+              properties:
+                sms_provider:
+                  type: string
+                  enum: ['', https_json]
+                  description: Empty inherits the runtime environment configuration and does not disable SMS. https_json is the currently supported adapter. Other values are rejected on writes; legacy values remain readable.
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [smtp_address, smtp_ssl, smtp_port, smtp_user, smtp_password_reference, sms_provider, sms_access_key_id, sms_access_key_reference, sms_signature_name]
+      properties:
+        smtp_address: {type: string, maxLength: 512}
+        smtp_ssl: {type: boolean}
+        smtp_port: {type: integer, minimum: 1, maximum: 65535}
+        smtp_user: {type: string, maxLength: 256}
+        smtp_password_reference: {$ref: '#/components/schemas/SecretReference'}
+        sms_provider: {type: string, maxLength: 64}
+        sms_access_key_id: {type: string, maxLength: 256}
+        sms_access_key_reference: {$ref: '#/components/schemas/SecretReference'}
+        sms_signature_name: {type: string, maxLength: 256}
+        mail_provider:
+          type: string
+          maxLength: 136
+          pattern: '^(|smtp|aliyun|sendgrid|plugin:[a-z0-9]+([.-][a-z0-9]+)+)$'
+          description: The one system mail sender. Empty or smtp is the built-in SMTP above (unchanged); aliyun (DirectMail) or sendgrid is an official mail service; plugin:<plugin id> is a usable third-party mail plugin. The SMTP and official fields are kept whatever is chosen. The control plane applies the saved choice at start; a failing provider is never replaced by another one.
+        mail_region: {type: string, enum: ['', cn-hangzhou, ap-southeast-1, ap-southeast-2, global, eu]}
+        mail_access_key_id: {type: string, maxLength: 256, description: DirectMail AccessKeyId (aliyun only).}
+        mail_from: {type: string, maxLength: 254, format: email, description: Sender address verified at the official provider.}
+        mail_from_name: {type: string, maxLength: 64}

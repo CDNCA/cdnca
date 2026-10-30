@@ -1,0 +1,184 @@
+{
+  "schema": "cdnca.native-nats.profile/v1",
+  "server_version": "2.12.15-cdnca.1",
+  "server_artifact": {
+    "sha256": "25f69afd90f45b997f5d3ed87ea7e389582955c50149938e7fc7b04f77b04e62",
+    "bytes": 16011412,
+    "license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "license_bytes": 11357
+  },
+  "cli_version": "0.2.4",
+  "min_max_payload": 2162688,
+  "stream_defaults": {
+    "retention": "limits", "storage": "file", "num_replicas": 1,
+    "max_consumers": -1, "max_msgs": 1000000, "max_bytes": 1073741824,
+    "discard": "old", "max_age": 604800000000000, "max_msgs_per_subject": -1,
+    "max_msg_size": 1048576, "duplicate_window": 120000000000, "compression": "none"
+  },
+  "consumer_defaults": {
+    "deliver_policy": "all", "ack_policy": "explicit", "replay_policy": "instant",
+    "ack_wait": 120000000000, "max_deliver": -1, "max_waiting": 32,
+    "max_ack_pending": 256, "max_batch": 1, "max_expires": 5000000000,
+    "num_replicas": 0, "mem_storage": false
+  },
+  "streams": [
+    {
+      "name": "AGENT_COMMANDS",
+      "subjects": [
+        "cdnca.agent.commands.*", "cdnca.agent.commands.acme-http01.*",
+        "cdnca.agent.commands.cache.*", "cdnca.agent.commands.cache-dlq.*",
+        "cdnca.agent.commands.upgrade.*", "cdnca.agent.commands.drain.*",
+        "cdnca.agent.commands.gateway-port.*"
+      ]
+    },
+    {
+      "name": "AGENT_DEPLOYMENT_STATUS",
+      "subjects": [
+        "cdnca.agent.deployment-status.*", "cdnca.agent.deployment-status.generic-v2.*.*",
+        "cdnca.agent.deployment-status.terminal-receipt.*.*",
+        "cdnca.agent.deployment-status.terminal-receipt-confirmation.*.*",
+        "cdnca.agent.deployment-status.terminal-receipt-confirmation-index.*",
+        "cdnca.agent.deployment-status.acme-http01.*", "cdnca.agent.deployment-status.cache.*",
+        "cdnca.agent.deployment-status.cache-dlq.*",
+        "cdnca.agent.deployment-status.upgrade.*", "cdnca.agent.deployment-status.upgrade-v2.*",
+        "cdnca.agent.deployment-status.upgrade-proof.pending.*",
+        "cdnca.agent.deployment-status.upgrade-proof.confirmed.*.*",
+        "cdnca.agent.deployment-status.upgrade-proof.completed.*.*.*",
+        "cdnca.agent.deployment-status.upgrade-proof.status.*.*",
+        "cdnca.agent.deployment-status.drain.*", "cdnca.agent.deployment-status.gateway-port.*"
+      ],
+      "max_consumers": 32, "max_msgs": -1, "max_bytes": -1, "max_age": 0,
+      "duplicate_window": 600000000000
+    },
+    {"name": "AGENT_FIREWALL_COMMANDS", "subjects": ["cdnca.agent.firewall.commands.*"]},
+    {"name": "AGENT_FIREWALL_STATUS", "subjects": ["cdnca.agent.firewall.status.*"]},
+    {"name": "AGENT_HEARTBEATS", "subjects": ["cdnca.agent.heartbeats.*"]},
+    {
+      "name": "NODE_MONITORING_COMMANDS", "subjects": ["cdnca.agent.node-monitoring.commands.*"],
+      "retention": "workqueue", "max_msgs": -1, "max_bytes": -1, "discard": "new", "max_age": 0
+    },
+    {
+      "name": "NODE_MONITORING_STATUS", "subjects": ["cdnca.agent.node-monitoring.status.*"],
+      "retention": "workqueue", "max_msgs": -1, "max_bytes": -1, "discard": "new", "max_age": 0
+    },
+    {
+      "name": "ANALYTICS_INGEST_V1", "subjects": ["cdnca.analytics.ingest.v1.*"],
+      "retention": "workqueue", "max_consumers": 1, "max_msgs": 10000000,
+      "max_bytes": 10737418240, "discard": "new", "max_age": 0, "duplicate_window": 600000000000
+    },
+    {
+      "name": "SECURITY_CC_COORDINATION_V1", "subjects": ["cdnca.security.cccoord.v1.*.*"],
+      "retention": "workqueue", "max_consumers": 1, "max_msgs": 2000000,
+      "max_bytes": 2147483648, "discard": "new", "max_age": 86400000000000,
+      "duplicate_window": 600000000000
+    },
+    {
+      "name": "CONNECTIONS_INGEST_V1", "subjects": ["cdnca.connections.v1.*.*"],
+      "retention": "workqueue", "max_consumers": 1, "max_bytes": 2147483648,
+      "discard": "new", "discard_new_per_subject": true, "max_age": 0,
+      "max_msgs_per_subject": 1, "max_msg_size": 65536, "duplicate_window": 600000000000
+    },
+    {
+      "name": "L4_SESSIONS_INGEST_V1", "subjects": ["cdnca.l4.sessions.v1.*.*.*"],
+      "retention": "workqueue", "max_consumers": 1, "max_msgs": 5000000,
+      "max_bytes": 5368709120, "discard": "new", "max_age": 2592000000000000,
+      "duplicate_window": 600000000000
+    },
+    {
+      "name": "PACKAGE_COMMERCE",
+      "subjects": [
+        "cdnca.package_commerce.order.awaiting_payment", "cdnca.package_commerce.order.fulfilled",
+        "cdnca.package_commerce.order.refund_applied", "cdnca.package_commerce.order.void_applied",
+        "cdnca.package_commerce.callback.applied", "cdnca.package_commerce.callback.rejected_signature",
+        "cdnca.package_commerce.callback.rejected_mismatch", "cdnca.package_commerce.callback.ignored_out_of_order",
+        "cdnca.package_commerce.callback.ignored_terminal", "cdnca.package_commerce.callback.failed_fulfillment"
+      ],
+      "max_consumers": 32, "max_msgs": 100000, "max_msgs_per_subject": 10000,
+      "max_bytes": 67108864, "max_age": 86400000000000
+    },
+    {
+      "name": "ANALYTICS_ISOLATION_V1", "subjects": ["cdnca.analytics.isolation.v1"],
+      "max_msgs": 10000000, "discard": "new", "max_age": 2592000000000000,
+      "max_msg_size": 2097152, "duplicate_window": 600000000000
+    },
+    {
+      "name": "CONNECTIONS_DEAD_V1", "subjects": ["cdnca.connections.dead.v1"],
+      "discard": "new", "max_age": 2592000000000000, "max_msg_size": 8192,
+      "duplicate_window": 86400000000000
+    },
+    {
+      "name": "KV_AISTATE_2dcd3c381ead92f3", "subjects": ["$KV.AISTATE_2dcd3c381ead92f3.>"],
+      "max_msgs": -1, "max_bytes": 4194304, "discard": "new", "max_age": 0,
+      "max_msgs_per_subject": 1, "max_msg_size": 1024,
+      "deny_delete": true, "allow_rollup_hdrs": true, "allow_direct": true
+    },
+    {
+      "name": "KV_AILEASE_2dcd3c381ead92f3", "subjects": ["$KV.AILEASE_2dcd3c381ead92f3.>"],
+      "max_msgs": -1, "max_bytes": 4194304, "discard": "new", "max_age": 40000000000,
+      "max_msgs_per_subject": 1, "max_msg_size": 1024, "duplicate_window": 40000000000,
+      "deny_delete": true, "allow_rollup_hdrs": true, "allow_direct": true
+    },
+    {
+      "name": "KV_AIEVIDENCE_2dcd3c381ead92f3", "subjects": ["$KV.AIEVIDENCE_2dcd3c381ead92f3.>"],
+      "max_msgs": -1, "discard": "new", "max_age": 0,
+      "max_msgs_per_subject": 1, "max_msg_size": 2162688,
+      "deny_delete": true, "allow_rollup_hdrs": true, "allow_direct": true
+    }
+  ],
+  "consumers": [
+    {
+      "stream": "AGENT_DEPLOYMENT_STATUS",
+      "config": {"durable_name": "control_api_edge_status", "filter_subjects": [
+        "cdnca.agent.deployment-status.*", "cdnca.agent.deployment-status.generic-v2.*.*"
+      ]}
+    },
+    {
+      "stream": "AGENT_DEPLOYMENT_STATUS",
+      "config": {"durable_name": "control_api_upgrade_status", "filter_subjects": [
+        "cdnca.agent.deployment-status.upgrade.*", "cdnca.agent.deployment-status.upgrade-v2.*"
+      ], "max_ack_pending": 64, "max_waiting": 16, "max_expires": 2000000000, "max_bytes": 262144}
+    },
+    {
+      "stream": "AGENT_DEPLOYMENT_STATUS",
+      "config": {"durable_name": "control_api_cache_status", "filter_subject": "cdnca.agent.deployment-status.cache.*",
+                 "max_deliver": 5, "max_ack_pending": 64, "max_waiting": 16, "max_expires": 2000000000,
+                 "max_bytes": 1048576}
+    },
+    {
+      "stream": "AGENT_DEPLOYMENT_STATUS",
+      "config": {"durable_name": "control_api_acme_http01_status",
+                 "filter_subject": "cdnca.agent.deployment-status.acme-http01.*"}
+    },
+    {
+      "stream": "NODE_MONITORING_STATUS",
+      "config": {"durable_name": "control_api_node_metrics", "filter_subject": "cdnca.agent.node-monitoring.status.*"}
+    },
+    {
+      "stream": "AGENT_HEARTBEATS",
+      "config": {"durable_name": "control_api_node_presence", "ack_wait": 30000000000,
+                 "filter_subject": "cdnca.agent.heartbeats.*"}
+    },
+    {
+      "stream": "ANALYTICS_INGEST_V1",
+      "config": {"durable_name": "control_api_analytics_ingest_v1", "filter_subject": "cdnca.analytics.ingest.v1.*",
+                 "max_waiting": 16, "max_batch": 32, "max_expires": 2000000000, "max_bytes": 33554432}
+    },
+    {
+      "stream": "SECURITY_CC_COORDINATION_V1",
+      "config": {"durable_name": "control_api_cc_coordination_v1", "filter_subject": "cdnca.security.cccoord.v1.*.*",
+                 "max_waiting": 16, "max_bytes": 1048576}
+    },
+    {
+      "stream": "CONNECTIONS_INGEST_V1",
+      "config": {"durable_name": "control_api_connections", "filter_subject": "cdnca.connections.v1.*.*",
+                 "ack_wait": 30000000000, "max_deliver": 8, "max_waiting": 16, "max_bytes": 65536,
+                 "backoff": [30000000000, 60000000000, 120000000000, 300000000000, 600000000000, 900000000000, 1800000000000]}
+    },
+    {
+      "stream": "L4_SESSIONS_INGEST_V1",
+      "config": {"durable_name": "control_api_l4_sessions_v1", "filter_subject": "cdnca.l4.sessions.v1.*.*.*",
+                 "ack_wait": 5000000000, "max_waiting": 16, "max_ack_pending": 1000,
+                 "max_batch": 32, "max_bytes": 33554432}
+    }
+  ]
+}

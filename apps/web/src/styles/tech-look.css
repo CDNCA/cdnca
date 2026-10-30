@@ -1,0 +1,409 @@
+/*
+ * Theme look "tech" (official.tech, layout_slots.look = tech): the licensing
+ * console look (packages/cdnca-ui/src/console.css) for the control plane.
+ * Theme packages only carry variables (ADR 0007 §7), so the structural rules
+ * live here and apply only under html[data-cdnca-look="tech"], which
+ * ThemeProvider sets from the active theme. Without that attribute (default
+ * theme, official.slate, any classic theme) nothing in this file matches.
+ *
+ * Motion: html[data-cdnca-motion] = subtle | rich, 150-250 ms, transform and
+ * opacity only, all inside prefers-reduced-motion: no-preference.
+ */
+html[data-cdnca-look="tech"] {
+  --tech-radius-lg: 10px;
+  --tech-radius-md: 8px;
+  --tech-ease: cubic-bezier(0.2, 0, 0, 1);
+  --tech-sidebar-line: rgb(148 163 184 / 14%);
+  --tech-sidebar-text: rgb(203 213 225 / 82%);
+  --tech-primary-soft: color-mix(in srgb, var(--cdnca-color-primary) 7%, #ffffff);
+  font-variant-numeric: tabular-nums;
+}
+
+html[data-cdnca-look="tech"] :focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ---------- Shell: dark gradient sidebar, frosted top bar ---------- */
+html[data-cdnca-look="tech"] .app-main {
+  background-color: var(--cdnca-color-bg-page);
+  background-image: none;
+}
+
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .app-sidebar {
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--cdnca-color-primary) 14%, transparent), transparent 60%),
+    var(--cdnca-color-sidebar-dark) !important;
+  border-inline-end: 1px solid var(--tech-sidebar-line);
+  box-shadow: none;
+}
+
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-brand,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu.ant-menu,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-sub {
+  background: transparent !important;
+}
+
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-brand {
+  border-bottom: 1px solid var(--tech-sidebar-line);
+  box-shadow: none;
+}
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-item,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu-title {
+  width: calc(100% - 16px);
+  margin-inline: 8px;
+  color: var(--tech-sidebar-text);
+  border-radius: 6px;
+}
+
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-item:hover,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu-title:hover {
+  color: #ffffff !important;
+  background: rgb(255 255 255 / 6%) !important;
+}
+
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu.ant-menu-inline .ant-menu-item-selected,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu .ant-menu-item-selected {
+  /* !important: the shell's :root[data-cdnca-theme] selected rules are more specific. */
+  color: #ffffff !important;
+  background: var(--cdnca-color-primary) !important;
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--cdnca-color-primary) 80%, transparent) !important;
+}
+
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-item-selected::before,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-sub::before {
+  display: none;
+}
+
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-item-selected .ant-menu-item-icon,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu-selected > .ant-menu-submenu-title,
+html[data-cdnca-look="tech"] .app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon {
+  color: #ffffff !important;
+}
+
+html[data-cdnca-look="tech"] .app-shell:not(.is-dark) .app-header {
+  background: rgb(255 255 255 / 86%);
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+  backdrop-filter: saturate(160%) blur(10px);
+}
+
+html[data-cdnca-look="tech"] .header-icon-button:hover,
+html[data-cdnca-look="tech"] .account-trigger:hover {
+  color: var(--cdnca-color-primary);
+  background: var(--tech-primary-soft);
+}
+
+/* ---------- Cards ---------- */
+html[data-cdnca-look="tech"] .ant-card {
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--tech-radius-lg);
+  box-shadow: var(--cdnca-shadow-card);
+}
+
+html[data-cdnca-look="tech"] .ant-card .ant-card-head {
+  border-bottom-color: var(--cdnca-color-border-secondary);
+}
+
+html[data-cdnca-look="tech"] .ant-card .ant-card-head-title {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+/* ---------- Buttons ---------- */
+html[data-cdnca-look="tech"] .ant-btn {
+  font-weight: var(--cdnca-button-font-weight);
+}
+
+html[data-cdnca-look="tech"] .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous):not(.ant-btn-background-ghost) {
+  box-shadow: var(--cdnca-button-shadow);
+}
+
+html[data-cdnca-look="tech"] .ant-btn-default:not(:disabled):not(.ant-btn-dangerous):hover {
+  background: var(--tech-primary-soft);
+}
+
+html[data-cdnca-look="tech"] .ant-btn-sm {
+  border-radius: 5px;
+}
+
+/* ---------- Forms ---------- */
+html[data-cdnca-look="tech"] .ant-form-item .ant-form-item-label > label {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+}
+
+html[data-cdnca-look="tech"] :is(.ant-input-affix-wrapper, .ant-select-selector, .ant-picker, .ant-input-number):focus-within,
+html[data-cdnca-look="tech"] .ant-input:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cdnca-color-focus-ring) 18%, transparent);
+}
+
+html[data-cdnca-look="tech"] .form-grid-2,
+html[data-cdnca-look="tech"] .form-grid-3,
+html[data-cdnca-look="tech"] .form-grid-4 {
+  display: grid;
+  align-items: start;
+  gap: 0 16px;
+}
+
+html[data-cdnca-look="tech"] .form-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+html[data-cdnca-look="tech"] .form-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+html[data-cdnca-look="tech"] .form-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+html[data-cdnca-look="tech"] .form-grid-full { grid-column: 1 / -1; }
+
+@media (max-width: 767px) {
+  html[data-cdnca-look="tech"] :is(.form-grid-2, .form-grid-3, .form-grid-4) {
+    grid-template-columns: 1fr;
+  }
+}
+/* ---------- Tables ---------- */
+html[data-cdnca-look="tech"] .ant-table-wrapper .ant-table-thead > tr > th {
+  color: var(--cdnca-color-table-header-text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: var(--cdnca-color-table-header);
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+html[data-cdnca-look="tech"] .ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom-color: color-mix(in srgb, var(--cdnca-color-border-secondary) 70%, #ffffff);
+}
+
+html[data-cdnca-look="tech"] .ant-table-wrapper .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: var(--cdnca-color-table-row-hover);
+}
+
+html[data-cdnca-look="tech"] .ant-table-wrapper .ant-table-cell-fix-right-first::after,
+html[data-cdnca-look="tech"] .ant-table-wrapper .ant-table-cell-fix-left-last::after {
+  box-shadow: none !important;
+}
+
+html[data-cdnca-look="tech"] :is(.ant-table-content, .ant-table-body) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cdnca-color-border) transparent;
+}
+
+/* ---------- Tags, alerts, feedback ---------- */
+html[data-cdnca-look="tech"] .ant-tag {
+  padding-inline: 8px;
+  font-weight: 500;
+  border-color: transparent;
+  border-radius: 999px;
+}
+
+html[data-cdnca-look="tech"] .ant-tag.ant-tag-success { color: var(--cdnca-color-success); background: var(--cdnca-color-success-bg); }
+html[data-cdnca-look="tech"] .ant-tag.ant-tag-processing { color: var(--cdnca-color-primary); background: var(--cdnca-color-info-bg); }
+html[data-cdnca-look="tech"] .ant-tag.ant-tag-warning { color: var(--cdnca-color-warning); background: var(--cdnca-color-warning-bg); }
+html[data-cdnca-look="tech"] .ant-tag.ant-tag-error { color: var(--cdnca-color-error); background: var(--cdnca-color-error-bg); }
+
+html[data-cdnca-look="tech"] .ant-alert {
+  border-width: 1px;
+  border-radius: var(--tech-radius-md);
+}
+
+html[data-cdnca-look="tech"] .ant-alert-info { background: var(--cdnca-color-info-bg); border-color: color-mix(in srgb, var(--cdnca-color-primary) 18%, #ffffff); }
+html[data-cdnca-look="tech"] .ant-alert-success { background: var(--cdnca-color-success-bg); border-color: color-mix(in srgb, var(--cdnca-color-success) 22%, #ffffff); }
+html[data-cdnca-look="tech"] .ant-alert-warning { background: var(--cdnca-color-warning-bg); border-color: color-mix(in srgb, var(--cdnca-color-warning) 25%, #ffffff); }
+html[data-cdnca-look="tech"] .ant-alert-error { background: var(--cdnca-color-error-bg); border-color: color-mix(in srgb, var(--cdnca-color-error) 20%, #ffffff); }
+
+html[data-cdnca-look="tech"] .ant-message .ant-message-notice-content {
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--tech-radius-md);
+  box-shadow: var(--cdnca-shadow-popup);
+}
+
+html[data-cdnca-look="tech"] .ant-notification .ant-notification-notice {
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--tech-radius-lg);
+  box-shadow: var(--cdnca-shadow-popup);
+}
+
+/* ---------- Modals, drawers, popups ---------- */
+html[data-cdnca-look="tech"] .ant-modal .ant-modal-content {
+  padding: 22px 24px 20px;
+  border-radius: var(--tech-radius-lg);
+  box-shadow: var(--cdnca-shadow-popup);
+}
+
+html[data-cdnca-look="tech"] .ant-modal .ant-modal-header {
+  margin-bottom: 16px;
+}
+
+html[data-cdnca-look="tech"] .ant-modal .ant-modal-title,
+html[data-cdnca-look="tech"] .ant-drawer .ant-drawer-title {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+html[data-cdnca-look="tech"] .ant-modal .ant-modal-footer {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+html[data-cdnca-look="tech"] .ant-drawer .ant-drawer-header {
+  padding: 16px 22px;
+  border-bottom-color: var(--cdnca-color-border-secondary);
+}
+
+html[data-cdnca-look="tech"] :is(.ant-popover .ant-popover-inner, .ant-dropdown .ant-dropdown-menu, .ant-select-dropdown) {
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--tech-radius-lg);
+  box-shadow: var(--cdnca-shadow-popup);
+}
+
+html[data-cdnca-look="tech"] .ant-dropdown .ant-dropdown-menu {
+  padding: 6px;
+}
+
+html[data-cdnca-look="tech"] .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item {
+  border-radius: 6px;
+}
+
+html[data-cdnca-look="tech"] .ant-tabs-tab {
+  font-weight: 500;
+}
+
+html[data-cdnca-look="tech"] .ant-descriptions-bordered .ant-descriptions-item-label {
+  color: var(--cdnca-color-table-header-text);
+  background: var(--cdnca-color-table-header);
+}
+/* ---------- Sign-in page ---------- */
+html[data-cdnca-look="tech"] .login-page {
+  background:
+    radial-gradient(80% 60% at 100% 0%, color-mix(in srgb, var(--cdnca-color-primary) 10%, transparent), transparent 70%),
+    var(--cdnca-color-bg-login);
+}
+
+html[data-cdnca-look="tech"] .login-header {
+  background: rgb(255 255 255 / 86%);
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+  box-shadow: none;
+  -webkit-backdrop-filter: saturate(160%) blur(10px);
+  backdrop-filter: saturate(160%) blur(10px);
+}
+
+html[data-cdnca-look="tech"] .login-container {
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 12px;
+  box-shadow: var(--cdnca-shadow-popup);
+}
+
+html[data-cdnca-look="tech"] .login-panel h1 {
+  color: var(--cdnca-color-title);
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+html[data-cdnca-look="tech"] .login-form .ant-input-affix-wrapper,
+html[data-cdnca-look="tech"] .login-submit-item .ant-btn {
+  border-radius: var(--tech-radius-md);
+}
+
+/* ---------- Loading skeleton ---------- */
+html[data-cdnca-look="tech"] .route-loading {
+  position: relative;
+  margin: 24px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--tech-radius-lg);
+  box-shadow: var(--cdnca-shadow-card);
+}
+
+html[data-cdnca-look="tech"] .route-loading::before {
+  position: absolute;
+  inset: 24px;
+  content: '';
+  background:
+    linear-gradient(var(--cdnca-color-table-header), var(--cdnca-color-table-header)) 0 0 / 40% 16px no-repeat,
+    linear-gradient(var(--cdnca-color-table-header), var(--cdnca-color-table-header)) 0 40px / 100% 12px no-repeat,
+    linear-gradient(var(--cdnca-color-table-header), var(--cdnca-color-table-header)) 0 68px / 86% 12px no-repeat,
+    linear-gradient(var(--cdnca-color-table-header), var(--cdnca-color-table-header)) 0 96px / 64% 12px no-repeat;
+}
+
+html[data-cdnca-look="tech"] .route-loading > * {
+  position: relative;
+}
+
+/* ---------- Motion (transform / opacity only, 150-250 ms) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  html[data-cdnca-motion="subtle"] .ant-btn,
+  html[data-cdnca-motion="rich"] .ant-btn {
+    transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  }
+
+  /* Button press feedback. */
+  html[data-cdnca-motion="subtle"] .ant-btn:not(:disabled):active,
+  html[data-cdnca-motion="rich"] .ant-btn:not(:disabled):active {
+    transform: scale(0.97);
+    transition-duration: 150ms;
+  }
+
+  /* Page switch: the routed page fades in (the Outlet remounts per route). */
+  html[data-cdnca-motion="subtle"] .app-main > :not(.app-footer),
+  html[data-cdnca-motion="rich"] .app-main > :not(.app-footer) {
+    animation: cdnca-tech-page-in 200ms var(--tech-ease, ease-out) both;
+  }
+
+  /* Skeleton pulse while a route chunk loads. */
+  html[data-cdnca-motion="subtle"] .route-loading::before,
+  html[data-cdnca-motion="rich"] .route-loading::before {
+    animation: cdnca-tech-pulse 1.2s ease-in-out infinite;
+  }
+
+  /* Rich: menus, popups, modals and drawers get their own entrance. */
+  html[data-cdnca-motion="rich"] .shell-menu .ant-menu-sub.ant-menu-inline > .ant-menu-item {
+    animation: cdnca-tech-slide-in 180ms var(--tech-ease, ease-out) both;
+  }
+
+  html[data-cdnca-motion="rich"] .ant-modal .ant-modal-content,
+  html[data-cdnca-motion="rich"] .ant-drawer .ant-drawer-body {
+    animation: cdnca-tech-rise-in 220ms var(--tech-ease, ease-out) both;
+  }
+
+  html[data-cdnca-motion="rich"] .ant-dropdown .ant-dropdown-menu,
+  html[data-cdnca-motion="rich"] .ant-popover .ant-popover-inner {
+    animation: cdnca-tech-pop-in 160ms var(--tech-ease, ease-out) both;
+  }
+
+  html[data-cdnca-motion="rich"] .ant-table-wrapper .ant-table-tbody > tr.ant-table-row {
+    transition: opacity 150ms ease-out;
+  }
+}
+
+/* Reduced motion: nothing in the tech look moves. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-cdnca-look="tech"] *,
+  html[data-cdnca-look="tech"] *::before,
+  html[data-cdnca-look="tech"] *::after {
+    animation: none !important;
+    transition-duration: 0ms !important;
+  }
+}
+
+@keyframes cdnca-tech-page-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cdnca-tech-slide-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cdnca-tech-rise-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cdnca-tech-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cdnca-tech-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}

@@ -1,0 +1,71 @@
+.site-https-tab .site-setting-section {
+  padding-top: 18px;
+}
+
+.site-https-switch-line {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 14px;
+  color: var(--cdnca-color-text-disabled, #999);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.site-https-disabled-note {
+  max-width: 800px;
+  /* aligned with the control column: 120px label + 16px gap */
+  margin: 16px 0 0 136px;
+  padding: 10px 16px;
+  border-radius: 4px;
+  background: var(--cdnca-color-bg-field, #f7f9fc);
+  color: var(--cdnca-color-neutral59, #8c93a3);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.site-https-certificate-control {
+  width: min(560px, 100%);
+}
+
+.site-https-certificate-control > .ant-select {
+  min-width: 0;
+  flex: 1;
+}
+
+.site-https-certificate-meta {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.site-https-tab .site-setting-control > .ant-alert,
+.site-https-tab .site-setting-control > .site-https-certificate-meta + .ant-alert,
+.site-https-tab .site-setting-control > .ant-select + .ant-alert {
+  margin-top: 8px;
+}
+
+@media (max-width: 767px) {
+  .site-https-switch-line {
+    align-items: flex-start;
+  }
+
+  .site-https-switch-line .ant-switch {
+    margin-top: 5px;
+  }
+
+  .site-https-disabled-note {
+    margin-left: 0;
+  }
+
+  .site-https-certificate-control {
+    display: flex;
+    width: 100%;
+  }
+
+  .site-https-certificate-meta {
+    flex-wrap: wrap;
+  }
+}

@@ -1,0 +1,108 @@
+openapi: 3.1.0
+info:
+  title: cdnca Market Supply Attack Log API
+  version: 1.0.0
+  description: >-
+    Attack log lines a market leaf supplier relayed for this controller's market-supplied sites (ADR 0012
+    §19.1, ML-21). The leaf sends one signed digest per site and 5-minute window; lines carry client IP,
+    host, path, action, detector and rule only. The block event page lists them as "market supply · leaf".
+paths:
+  /v1/analytics/market-security:
+    get:
+      operationId: listMarketSecurityLogs
+      summary: List relayed market supply attack log lines of the session tenant
+      security: [{bearerSession: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/ClientIP'}
+        - {$ref: '#/components/parameters/Host'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {$ref: '#/components/responses/Page'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/analytics/market-security:
+    get:
+      operationId: listAdminMarketSecurityLogs
+      summary: List relayed market supply attack log lines of any tenant
+      security: [{bearerSession: []}]
+      x-required-permissions: [platform.admin]
+      parameters:
+        - {name: tenant_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/ClientIP'}
+        - {$ref: '#/components/parameters/Host'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {$ref: '#/components/responses/Page'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerSession: {type: http, scheme: bearer, bearerFormat: opaque-session}
+  parameters:
+    From: {name: from, in: query, required: true, description: RFC 3339; at most 31 days before to., schema: {type: string, format: date-time}}
+    To: {name: to, in: query, required: true, schema: {type: string, format: date-time}}
+    SiteID: {name: site_id, in: query, required: false, schema: {type: string, format: uuid}}
+    ClientIP: {name: client_ip, in: query, required: false, schema: {type: string}}
+    Host: {name: host, in: query, required: false, schema: {type: string, maxLength: 253}}
+    Cursor: {name: cursor, in: query, required: false, description: meta.next_cursor of the previous page., schema: {type: string}}
+    Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+  schemas:
+    Log:
+      type: object
+      required: [site_id, supply_id, leaf_ref, occurred_at, client_ip, host, path, action, detector, rule_id, cursor]
+      properties:
+        site_id: {type: string, format: uuid, description: The local (subscriber) site.}
+        supply_id: {type: string, format: uuid}
+        leaf_ref: {type: string, description: Short display number of the leaf supplier.}
+        occurred_at: {type: string, format: date-time}
+        client_ip: {type: string}
+        host: {type: string}
+        path: {type: string}
+        action: {type: string, enum: [block, challenge, temporary_ban]}
+        detector: {type: string}
+        rule_id: {type: string}
+        cursor: {type: string}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            request_id: {type: string}
+  responses:
+    Page:
+      description: Newest first.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data, meta]
+            properties:
+              data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Log'}}
+              meta:
+                type: object
+                properties:
+                  next_cursor: {type: string}
+    Error:
+      description: Error.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

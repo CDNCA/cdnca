@@ -1,0 +1,123 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Market Plugin Library API
+  version: 1.0.0
+  description: >-
+    Platform-scoped plugin library of this controller (PA-27). plugin-library is served from local state only;
+    plugin-downloads is forwarded to the market (docs/architecture/marketplace-openapi/buyer.yaml
+    POST /v1/plugin-downloads) with the controller's market certificate. The platform scope is derived only from
+    the authenticated session.
+servers: [{url: /}]
+security: [{bearerAuth: []}]
+paths:
+  /v1/admin/market/plugin-library:
+    get:
+      operationId: getMarketPluginLibrary
+      summary: What this controller holds of each market plugin (installed, enabled, withdrawn)
+      description: >-
+        Installed means an installation head exists in any tenant; enabled that one is enabled; withdrawn that a
+        materialized artifact (data pack, ui_page, provider) was withdrawn by the platform because the licence moved
+        to another controller or ended. No query parameters are accepted.
+      x-required-any-permission: [marketplace.browse, marketplace.purchase, marketplace.sell]
+      responses:
+        '200':
+          description: One item per plugin with local state
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PluginLibrary'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/Internal'}
+  /v1/admin/market/plugin-downloads:
+    post:
+      operationId: downloadMarketPlugin
+      summary: Download a plugin licence for this installation (forwarded to the market)
+      description: >-
+        A live licence this installation holds is returned; a free plan issues the installation's free licence
+        (repeat calls return the same one); otherwise the market answers 402 purchase_required. Naturally
+        idempotent, so no Idempotency-Key is required. Market errors other than 401 and 5xx are passed through.
+      x-required-permissions: [marketplace.purchase]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PluginDownloadInput'}
+      responses:
+        '200':
+          description: Downloadable
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PluginDownload'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '402': {$ref: '#/components/responses/MarketError'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/MarketError'}
+        '501': {$ref: '#/components/responses/MarketFeatureUnavailable'}
+        '502': {$ref: '#/components/responses/MarketUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    PluginID: {type: string, maxLength: 128, pattern: '^[a-z0-9]+([.-][a-z0-9]+)+$'}
+    LibraryItem:
+      type: object
+      additionalProperties: false
+      required: [plugin_id, installed, enabled, withdrawn]
+      properties:
+        plugin_id: {$ref: '#/components/schemas/PluginID'}
+        installed: {type: boolean}
+        enabled: {type: boolean}
+        withdrawn: {type: boolean}
+    PluginLibrary:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/LibraryItem'}
+    PluginDownloadInput:
+      type: object
+      additionalProperties: false
+      required: [plugin_id]
+      properties:
+        plugin_id: {$ref: '#/components/schemas/PluginID'}
+    PluginDownload:
+      type: object
+      description: The market answer as is (buyer.yaml buyerDownloadPlugin; license is the market License).
+      required: [plugin_id, publisher_kind, source, license]
+      properties:
+        plugin_id: {$ref: '#/components/schemas/PluginID'}
+        publisher_kind: {type: string, enum: [official, certified, third_party]}
+        source: {type: string, enum: [licensed, free]}
+        license: {type: object, description: market License (marketplace-openapi components/trading.yaml#/License)}
+    ControlError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {type: string, description: Stable error code}
+  responses:
+    BadRequest:
+      description: 'Invalid query or body (invalid_query, invalid_body)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    Unauthorized:
+      description: 'Authentication is required'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    Forbidden:
+      description: 'Required marketplace permission is missing (forbidden)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    Internal:
+      description: 'Local store failure (internal)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    MarketError:
+      description: 'Market error passed through (e.g. purchase_required, not_found)'
+      content: {application/json: {schema: {type: object}}}
+    MarketFeatureUnavailable:
+      description: 'The market has not mounted this entry (market_feature_unavailable)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ControlError'}}}
+    MarketUnavailable:
+      description: 'Market unreachable, 401 or 5xx (market_unavailable, market_response_invalid)'
+      content: {application/json: {schema: {type: object}}}

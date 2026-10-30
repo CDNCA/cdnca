@@ -1,0 +1,36 @@
+[Unit]
+Description=CDNCA edge OpenResty runtime
+Documentation=file:///usr/share/doc/cdnca-edge/openresty-runtime.md
+Wants=network-online.target
+After=network-online.target
+ConditionPathIsSymbolicLink=/var/lib/cdnca-edge/current
+
+[Service]
+Type=simple
+User=cdnca-edge
+Group=cdnca-edge
+UMask=0077
+ExecStartPre=/usr/bin/test -f /var/lib/cdnca-edge/current/nginx.conf
+ExecStartPre=/usr/local/openresty/bin/openresty -t -e /var/lib/cdnca-edge/shared/error.log -p /var/lib/cdnca-edge/current/ -c nginx.conf
+ExecStart=/usr/local/openresty/bin/openresty -g "daemon off;" -e /var/lib/cdnca-edge/shared/error.log -p /var/lib/cdnca-edge/current/ -c nginx.conf
+ExecReload=/usr/local/openresty/bin/openresty -s reload -e /var/lib/cdnca-edge/shared/error.log -p /var/lib/cdnca-edge/current/ -c nginx.conf
+ExecStop=/usr/local/openresty/bin/openresty -s quit -e /var/lib/cdnca-edge/shared/error.log -p /var/lib/cdnca-edge/current/ -c nginx.conf
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+LimitNOFILE=1048576
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadOnlyPaths=/var/lib/cdnca-edge
+ReadWritePaths=/var/lib/cdnca-edge/shared
+CapabilityBoundingSet=CAP_BPF CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_PERFMON
+AmbientCapabilities=CAP_BPF CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_PERFMON
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,2978 @@
+{
+ "id": "security-policies",
+ "prefix": "/v1/security-policies",
+ "operations": [
+  {
+   "operation_id": "listSecurityPolicies",
+   "method": "GET",
+   "path": "/v1/security-policies",
+   "summary": "List tenant WAF, CC and ACL policies",
+   "summary_zh": "列出 WAF 规则库、CC 与访问控制策略",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. Tenant identities see only their active scope and never receive owner metadata; platform identities may filter across tenant owners.",
+   "description_zh": "需要 security_policies.read 权限。租户身份只看到当前作用域内的策略，响应里没有 owner 信息； owner 参数只对平台身份生效，可跨租户筛选。",
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer",
+     "description_zh": "页码，从 1 开始"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description_zh": "每页条数，1–100"
+    },
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string: waf / cc / acl",
+     "description": "Policy kind; omit for all kinds.",
+     "description_zh": "策略类型；不传表示全部类型"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: enabled / disabled",
+     "description_zh": "按启用状态筛选"
+    },
+    {
+     "name": "name",
+     "in": "query",
+     "type": "string",
+     "description_zh": "按名称筛选"
+    },
+    {
+     "name": "id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Exact canonical security policy UUID filter.",
+     "description_zh": "按策略 UUID 精确筛选"
+    },
+    {
+     "name": "owner",
+     "in": "query",
+     "type": "string",
+     "description": "Platform-only owner name, username, or exact UUID filter.",
+     "description_zh": "只对平台身份生效：按所属用户的名称、用户名或 UUID 筛选"
+    },
+    {
+     "name": "scope",
+     "in": "query",
+     "type": "string: global / site / system",
+     "description": "WAF rule libraries only: requires kind=waf (400 otherwise). system: subscribed platform rule library copies; site: own libraries bound to a site; global: own libraries no site is bound to. Total and counts follow the filter.",
+     "description_zh": "只用于 WAF 规则库，必须同时传 kind=waf，否则返回 400。system：订阅的平台规则库副本； site：已绑定到站点的自有规则库；global：没有绑定任何站点的自有规则库。总数与统计按该筛选计算。"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page ordered newest first.",
+     "description_zh": "按创建时间从新到旧的稳定分页结果。",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SecurityPolicy>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createSecurityPolicy",
+   "method": "POST",
+   "path": "/v1/security-policies",
+   "summary": "Create a versioned WAF, CC or ACL policy",
+   "summary_zh": "创建带版本的 WAF 规则库、CC 或访问控制策略",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage. Platform identities must provide an active tenant target_scope_id and owner_id; tenant identities are fixed to their current scope and identity. Rule IDs are server-generated and identical idempotent replay returns the original IDs. This control-plane slice does not claim edge publication or enforcement.",
+   "description_zh": "需要 security_policies.manage 权限。平台身份必须提供有效租户的 target_scope_id 与 owner_id；租户身份固定为当前作用域和身份。 规则 ID 由服务端生成，同一幂等请求重放返回原 ID。创建只保存配置，不代表已发布到节点或已生效。",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "kind",
+      "type": "string: waf / cc / acl",
+      "required": true,
+      "description": "waf = WAF rule library, cc = CC protection, acl = access control.",
+      "description_zh": "waf 为 WAF 规则库，cc 为 CC 防护，acl 为访问控制。"
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "default_action",
+      "type": "string: allow / block",
+      "required": true
+     },
+     {
+      "name": "rules",
+      "type": "array<SecurityPolicyRuleInput>",
+      "required": true
+     },
+     {
+      "name": "cc_settings",
+      "type": "SecurityPolicyCCSettings",
+      "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+     },
+     {
+      "name": "waf_settings",
+      "type": "SecurityPolicyWAFSettings",
+      "description": "WAF only (node CAPABILITY_NAME_WAF v2). Omitted (or defend mode without auto_block) is stored as absent."
+     },
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Policy and immutable revision-one snapshot created, or an identical request replayed.",
+     "description_zh": "已创建策略及其不可变的第 1 版快照，或重放了相同请求。",
+     "fields": [
+      {
+       "name": "kind",
+       "type": "string: waf / cc / acl",
+       "required": true,
+       "description": "waf = WAF rule library, cc = CC protection, acl = access control.",
+       "description_zh": "waf 为 WAF 规则库，cc 为 CC 防护，acl 为访问控制。"
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "default_action",
+       "type": "string: allow / block",
+       "required": true
+      },
+      {
+       "name": "rules",
+       "type": "array<SecurityPolicyRuleInput>",
+       "required": true
+      },
+      {
+       "name": "cc_settings",
+       "type": "SecurityPolicyCCSettings",
+       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+      },
+      {
+       "name": "waf_settings",
+       "type": "SecurityPolicyWAFSettings",
+       "description": "WAF only (node CAPABILITY_NAME_WAF v2). Omitted (or defend mode without auto_block) is stored as absent."
+      },
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "batchSecurityPolicies",
+   "method": "POST",
+   "path": "/v1/security-policies/batch",
+   "summary": "Enable, disable or delete selected WAF rule libraries item by item",
+   "summary_zh": "逐项启用、停用或删除选中的 WAF 规则库",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage. Each item is written on its own with a version check (CAS) under an item key derived from Idempotency-Key, so retrying the same batch replays written items. Results come back in request order, one per item; refusals (version conflict, system library, not found, in use, ...) are item results and do not stop the batch. A store failure marks that item error and the rest not_attempted. System (platform) libraries are never modified.",
+   "description_zh": "需要 security_policies.manage 权限。每一项单独按版本号校验后写入，幂等键按 Idempotency-Key 逐项派生，重试同一批次会重放已写入的项。 结果按请求顺序逐项返回；版本冲突、系统规则库、不存在、使用中等拒绝都作为该项结果，不中断整批。存储失败时该项为 error，其余为 not_attempted。 平台（系统）规则库永远不会被修改。",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "action",
+      "type": "string: enable / disable / delete",
+      "required": true
+     },
+     {
+      "name": "items",
+      "type": "array<object>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "One result per item, in request order.",
+     "description_zh": "每项一个结果，按请求顺序。",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listSecurityPolicyFilters",
+   "method": "GET",
+   "path": "/v1/security-policies/filters",
+   "summary": "List persisted CC filters",
+   "summary_zh": "列出 CC 过滤器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. Rows created before the filter resource was introduced are materialized from real CC rule actions; newly created rows are independent versioned resources. Tenant identities see only their active scope and never receive owner metadata.",
+   "description_zh": "需要 security_policies.read 权限。过滤器资源上线前的数据由现有 CC 规则动作投影得到；之后新建的是独立的带版本资源。租户身份只看到当前作用域，响应里没有 owner 信息。",
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: enabled / disabled"
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "name",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "owner",
+     "in": "query",
+     "type": "string",
+     "description": "Platform-only owner filter."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Filter rows projected deterministically from real CC rule actions.",
+     "description_zh": "过滤器列表。",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SecurityPolicyReference>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createSecurityPolicyFilter",
+   "method": "POST",
+   "path": "/v1/security-policies/filters",
+   "summary": "Create a versioned CC filter",
+   "summary_zh": "创建带版本的 CC 过滤器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage. Platform identities must provide target_scope_id and owner_id; tenant identities are fixed to their current scope.",
+   "description_zh": "需要 security_policies.manage 权限。平台身份必须提供 target_scope_id 与 owner_id；租户身份固定为当前作用域。",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "type",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "parameters",
+      "type": "object",
+      "required": true
+     },
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityPolicyFilter",
+   "method": "GET",
+   "path": "/v1/security-policies/filters/{id}",
+   "summary": "Get one CC filter",
+   "summary_zh": "读取一个 CC 过滤器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSecurityPolicyFilter",
+   "method": "PATCH",
+   "path": "/v1/security-policies/filters/{id}",
+   "summary": "Replace a CC filter using optimistic concurrency",
+   "summary_zh": "按版本号整体替换 CC 过滤器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "type",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "parameters",
+      "type": "object",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSecurityPolicyFilter",
+   "method": "DELETE",
+   "path": "/v1/security-policies/filters/{id}",
+   "summary": "Soft-delete a CC filter",
+   "summary_zh": "删除 CC 过滤器（软删除）",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Filter deleted",
+     "description_zh": "已删除，或重放了相同请求。"
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "disableSecurityPolicyFilter",
+   "method": "POST",
+   "path": "/v1/security-policies/filters/{id}/disable",
+   "summary": "Disable a CC filter",
+   "summary_zh": "停用 CC 过滤器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Filter disabled.",
+     "description_zh": "已停用。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "enableSecurityPolicyFilter",
+   "method": "POST",
+   "path": "/v1/security-policies/filters/{id}/enable",
+   "summary": "Enable a CC filter",
+   "summary_zh": "启用 CC 过滤器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Filter enabled.",
+     "description_zh": "已启用。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listSecurityPolicyMatchers",
+   "method": "GET",
+   "path": "/v1/security-policies/matchers",
+   "summary": "List persisted CC matchers",
+   "summary_zh": "列出 CC 匹配器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. Rows created before the matcher resource was introduced are materialized from the existing CC rules; newly created rows are independent versioned resources. Tenant identities see only their active scope and never receive owner metadata.",
+   "description_zh": "需要 security_policies.read 权限。匹配器资源上线前的数据由现有 CC 规则投影得到；之后新建的是独立的带版本资源。租户身份只看到当前作用域，响应里没有 owner 信息。",
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: enabled / disabled"
+    },
+    {
+     "name": "name",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "owner",
+     "in": "query",
+     "type": "string",
+     "description": "Platform-only owner filter."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Matcher rows projected deterministically from real CC policy conditions.",
+     "description_zh": "匹配器列表。",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SecurityPolicyReference>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createSecurityPolicyMatcher",
+   "method": "POST",
+   "path": "/v1/security-policies/matchers",
+   "summary": "Create a versioned CC matcher",
+   "summary_zh": "创建带版本的 CC 匹配器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage. Platform identities must provide target_scope_id and owner_id; tenant identities are fixed to their current scope.",
+   "description_zh": "需要 security_policies.manage 权限。平台身份必须提供 target_scope_id 与 owner_id；租户身份固定为当前作用域。",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "field",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "operator",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "key",
+      "type": "string"
+     },
+     {
+      "name": "values",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Matcher created with revision one, or an identical request replayed.",
+     "description_zh": "已创建第 1 版匹配器，或重放了相同请求。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityPolicyMatcher",
+   "method": "GET",
+   "path": "/v1/security-policies/matchers/{id}",
+   "summary": "Get one CC matcher",
+   "summary_zh": "读取一个 CC 匹配器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSecurityPolicyMatcher",
+   "method": "PATCH",
+   "path": "/v1/security-policies/matchers/{id}",
+   "summary": "Replace a CC matcher using optimistic concurrency",
+   "summary_zh": "按版本号整体替换 CC 匹配器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "field",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "operator",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "key",
+      "type": "string"
+     },
+     {
+      "name": "values",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSecurityPolicyMatcher",
+   "method": "DELETE",
+   "path": "/v1/security-policies/matchers/{id}",
+   "summary": "Soft-delete a CC matcher",
+   "summary_zh": "删除 CC 匹配器（软删除）",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Matcher deleted",
+     "description_zh": "已删除，或重放了相同请求。"
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "disableSecurityPolicyMatcher",
+   "method": "POST",
+   "path": "/v1/security-policies/matchers/{id}/disable",
+   "summary": "Disable a CC matcher",
+   "summary_zh": "停用 CC 匹配器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Matcher disabled.",
+     "description_zh": "已停用。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "enableSecurityPolicyMatcher",
+   "method": "POST",
+   "path": "/v1/security-policies/matchers/{id}/enable",
+   "summary": "Enable a CC matcher",
+   "summary_zh": "启用 CC 匹配器",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Matcher enabled.",
+     "description_zh": "已启用。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "system_rule",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "system_rule_id",
+       "type": "string"
+      },
+      {
+       "name": "system_rule_key",
+       "type": "string"
+      },
+      {
+       "name": "status",
+       "type": "string: enabled / disabled",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string"
+      },
+      {
+       "name": "sort",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "description",
+       "type": "string"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "field",
+       "type": "string"
+      },
+      {
+       "name": "operator",
+       "type": "string"
+      },
+      {
+       "name": "key",
+       "type": "string"
+      },
+      {
+       "name": "values",
+       "type": "array<string>"
+      },
+      {
+       "name": "parameters",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityPolicy",
+   "method": "GET",
+   "path": "/v1/security-policies/{id}",
+   "summary": "Get one active WAF, CC or ACL policy",
+   "summary_zh": "读取一个策略",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current policy projection. Owner is omitted for tenant identities.",
+     "description_zh": "策略当前内容；租户身份不返回 owner。",
+     "fields": [
+      {
+       "name": "kind",
+       "type": "string: waf / cc / acl",
+       "required": true,
+       "description": "waf = WAF rule library, cc = CC protection, acl = access control.",
+       "description_zh": "waf 为 WAF 规则库，cc 为 CC 防护，acl 为访问控制。"
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "default_action",
+       "type": "string: allow / block",
+       "required": true
+      },
+      {
+       "name": "rules",
+       "type": "array<SecurityPolicyRuleInput>",
+       "required": true
+      },
+      {
+       "name": "cc_settings",
+       "type": "SecurityPolicyCCSettings",
+       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+      },
+      {
+       "name": "waf_settings",
+       "type": "SecurityPolicyWAFSettings",
+       "description": "WAF only (node CAPABILITY_NAME_WAF v2). Omitted (or defend mode without auto_block) is stored as absent."
+      },
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSecurityPolicy",
+   "method": "PATCH",
+   "path": "/v1/security-policies/{id}",
+   "summary": "Replace policy fields using optimistic concurrency",
+   "summary_zh": "按版本号整体替换策略字段",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage. Existing rule IDs must belong to this policy; omitted IDs create new rules. A successful update appends one immutable revision snapshot.",
+   "description_zh": "需要 security_policies.manage 权限。已有规则 ID 必须属于该策略，不带 ID 的规则新建；每次成功更新追加一个不可变的版本快照。",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "kind",
+      "type": "string: waf / cc / acl",
+      "required": true,
+      "description": "waf = WAF rule library, cc = CC protection, acl = access control.",
+      "description_zh": "waf 为 WAF 规则库，cc 为 CC 防护，acl 为访问控制。"
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "default_action",
+      "type": "string: allow / block",
+      "required": true
+     },
+     {
+      "name": "rules",
+      "type": "array<SecurityPolicyRuleInput>",
+      "required": true
+     },
+     {
+      "name": "cc_settings",
+      "type": "SecurityPolicyCCSettings",
+      "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+     },
+     {
+      "name": "waf_settings",
+      "type": "SecurityPolicyWAFSettings",
+      "description": "WAF only (node CAPABILITY_NAME_WAF v2). Omitted (or defend mode without auto_block) is stored as absent."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Policy replaced and version incremented, or an identical request replayed.",
+     "description_zh": "已替换并递增版本，或重放了相同请求。",
+     "fields": [
+      {
+       "name": "kind",
+       "type": "string: waf / cc / acl",
+       "required": true,
+       "description": "waf = WAF rule library, cc = CC protection, acl = access control.",
+       "description_zh": "waf 为 WAF 规则库，cc 为 CC 防护，acl 为访问控制。"
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "default_action",
+       "type": "string: allow / block",
+       "required": true
+      },
+      {
+       "name": "rules",
+       "type": "array<SecurityPolicyRuleInput>",
+       "required": true
+      },
+      {
+       "name": "cc_settings",
+       "type": "SecurityPolicyCCSettings",
+       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+      },
+      {
+       "name": "waf_settings",
+       "type": "SecurityPolicyWAFSettings",
+       "description": "WAF only (node CAPABILITY_NAME_WAF v2). Omitted (or defend mode without auto_block) is stored as absent."
+      },
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "SecurityPolicyOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSecurityPolicy",
+   "method": "DELETE",
+   "path": "/v1/security-policies/{id}",
+   "summary": "Soft-delete a policy using optimistic concurrency",
+   "summary_zh": "按版本号删除策略（软删除）",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Policy soft-deleted, or an identical request replayed.",
+     "description_zh": "已删除，或重放了相同请求。"
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "evaluateSecurityPolicy",
+   "method": "POST",
+   "path": "/v1/security-policies/{id}/evaluate",
+   "summary": "Preview deterministic policy evaluation",
+   "summary_zh": "预览策略对一次请求的判定结果",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read and an exact If-Match version. Conditions within a rule are ANDed; rules are ordered by ascending priority and UUID. continue preserves the current decision while evaluation continues, stop returns the terminal decision, and the policy default applies only when no rule matches. Preview does not publish configuration or prove edge enforcement.",
+   "description_zh": "需要 security_policies.read 权限，并用 If-Match 指定准确版本。同一规则内的条件取“且”；规则按优先级升序、再按 UUID 排序。continue 保留当前判定继续评估，stop 返回最终判定，没有规则命中时才用策略默认动作。预览不发布配置，也不代表节点已生效。",
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "client_ip",
+      "type": "any | any",
+      "required": true
+     },
+     {
+      "name": "host",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "path",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "method",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "headers",
+      "type": "object",
+      "required": true,
+      "description": "Header names are case-insensitive; arrays preserve repeated field values. Scalar values remain accepted for legacy clients."
+     },
+     {
+      "name": "country",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "asn",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "ja4",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "port",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "distinct_user_agents",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "status_404_count",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Deterministic preview result for the requested policy version.",
+     "description_zh": "指定版本策略的确定性预览结果。",
+     "fields": [
+      {
+       "name": "policy_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "policy_version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: allow / block / rate_limit / challenge / log / ban",
+       "required": true,
+       "description": "ban is a WAF rule action (temporary ban, action_config.waf_ban); a WAF challenge carries action_config.waf_challenge."
+      },
+      {
+       "name": "matched_rule_ids",
+       "type": "array<string(uuid)>",
+       "required": true
+      },
+      {
+       "name": "terminal_rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "used_default",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

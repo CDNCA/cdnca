@@ -1,0 +1,207 @@
+{{- if and .Values.networkPolicy.enabled .Values.web.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" "web") }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" "web") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" "web") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.podSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.web.service.httpPort }}
+          protocol: TCP
+  egress: []
+{{- end }}
+{{- if and .Values.networkPolicy.enabled .Values.controlApi.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" "control-api") }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" "control-api") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" "control-api") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.ingressController.podSelector | nindent 14 }}
+      ports:
+        - port: {{ .Values.controlApi.service.httpPort }}
+          protocol: TCP
+    {{- if .Values.agentGateway.enabled }}
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "cdnca.selectorLabels" (dict "root" . "component" "agent-gateway") | nindent 14 }}
+      ports:
+        - port: {{ .Values.controlApi.service.internalGRPCPort }}
+          protocol: TCP
+    {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- if .Values.networkPolicy.dataStores.postgresql.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dataStores.postgresql.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.dataStores.postgresql.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.dataStores.redis.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dataStores.redis.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.dataStores.redis.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.dataStores.nats.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dataStores.nats.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.dataStores.nats.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.dataStores.clickhouse.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dataStores.clickhouse.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.dataStores.clickhouse.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.controlExternalEgress.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.controlExternalEgress.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        {{- range .Values.networkPolicy.controlExternalEgress.ports }}
+        - port: {{ . }}
+          protocol: TCP
+        {{- end }}
+    {{- end }}
+    {{- if .Values.pluginWebhook.enabled }}
+    - to:
+        {{- range .Values.pluginWebhook.nats.egressCIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: 4222
+          protocol: TCP
+    {{- end }}
+{{- end }}
+{{- if and .Values.networkPolicy.enabled .Values.agentGateway.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" "agent-gateway") }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" "agent-gateway") | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" "agent-gateway") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  {{- if .Values.networkPolicy.gatewaySourceCIDRs }}
+  ingress:
+    - from:
+        {{- range .Values.networkPolicy.gatewaySourceCIDRs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.agentGateway.service.enrollmentPort }}
+          protocol: TCP
+        - port: {{ .Values.agentGateway.service.agentPort }}
+          protocol: TCP
+  {{- else }}
+  ingress: []
+  {{- end }}
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- if .Values.controlApi.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "cdnca.selectorLabels" (dict "root" . "component" "control-api") | nindent 14 }}
+      ports:
+        - port: {{ .Values.controlApi.service.internalGRPCPort }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.dataStores.redis.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dataStores.redis.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.dataStores.redis.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.dataStores.nats.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dataStores.nats.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.dataStores.nats.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.networkPolicy.gatewayExternalEgress.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.gatewayExternalEgress.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        {{- range .Values.networkPolicy.gatewayExternalEgress.ports }}
+        - port: {{ . }}
+          protocol: TCP
+        {{- end }}
+    {{- end }}
+{{- end }}

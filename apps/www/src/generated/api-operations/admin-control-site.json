@@ -1,0 +1,785 @@
+{
+ "id": "admin-control-site",
+ "prefix": "/v1/admin/control-site",
+ "operations": [
+  {
+   "operation_id": "getControlSite",
+   "method": "GET",
+   "path": "/v1/admin/control-site",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Draft",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.control-site/v1"
+      },
+      {
+       "name": "revision",
+       "type": "integer"
+      },
+      {
+       "name": "theme",
+       "type": "ThemeView | null"
+      },
+      {
+       "name": "draft",
+       "type": "Document"
+      },
+      {
+       "name": "published",
+       "type": "Document | null"
+      },
+      {
+       "name": "published_revision",
+       "type": "integer | null"
+      },
+      {
+       "name": "dirty",
+       "type": "boolean"
+      },
+      {
+       "name": "seeded",
+       "type": "boolean"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time) | null(date-time)"
+      },
+      {
+       "name": "assets",
+       "type": "array<Asset>"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "saveControlSiteDraft",
+   "method": "PUT",
+   "path": "/v1/admin/control-site",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "draft",
+      "type": "Document",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.control-site/v1"
+      },
+      {
+       "name": "revision",
+       "type": "integer"
+      },
+      {
+       "name": "theme",
+       "type": "ThemeView | null"
+      },
+      {
+       "name": "draft",
+       "type": "Document"
+      },
+      {
+       "name": "published",
+       "type": "Document | null"
+      },
+      {
+       "name": "published_revision",
+       "type": "integer | null"
+      },
+      {
+       "name": "dirty",
+       "type": "boolean"
+      },
+      {
+       "name": "seeded",
+       "type": "boolean"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time) | null(date-time)"
+      },
+      {
+       "name": "assets",
+       "type": "array<Asset>"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid content or unknown image"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Revision or idempotency conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "uploadControlSiteAsset",
+   "method": "POST",
+   "path": "/v1/admin/control-site/assets",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "image/png",
+     "image/jpeg",
+     "image/webp",
+     "image/svg+xml",
+     "image/x-icon"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stored image",
+     "fields": [
+      {
+       "name": "sha256",
+       "type": "string"
+      },
+      {
+       "name": "reference",
+       "type": "string"
+      },
+      {
+       "name": "url",
+       "type": "string"
+      },
+      {
+       "name": "mime_type",
+       "type": "string"
+      },
+      {
+       "name": "size_bytes",
+       "type": "integer"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Not an accepted image or an unsafe SVG"
+    },
+    {
+     "status": "413",
+     "description": "Larger than 2 MiB"
+    }
+   ]
+  },
+  {
+   "operation_id": "publishControlSite",
+   "method": "POST",
+   "path": "/v1/admin/control-site/publish",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Published",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.control-site/v1"
+      },
+      {
+       "name": "revision",
+       "type": "integer"
+      },
+      {
+       "name": "theme",
+       "type": "ThemeView | null"
+      },
+      {
+       "name": "draft",
+       "type": "Document"
+      },
+      {
+       "name": "published",
+       "type": "Document | null"
+      },
+      {
+       "name": "published_revision",
+       "type": "integer | null"
+      },
+      {
+       "name": "dirty",
+       "type": "boolean"
+      },
+      {
+       "name": "seeded",
+       "type": "boolean"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time) | null(date-time)"
+      },
+      {
+       "name": "assets",
+       "type": "array<Asset>"
+      }
+     ]
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Revision conflict or nothing to publish"
+    }
+   ]
+  },
+  {
+   "operation_id": "listWebsiteThemes",
+   "method": "GET",
+   "path": "/v1/admin/control-site/themes",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Built-in, uploaded and market website theme plugins (installed or available) and the active one.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Catalog",
+     "fields": [
+      {
+       "name": "themes",
+       "type": "array<ThemeEntry>"
+      },
+      {
+       "name": "active_theme_id",
+       "type": "string",
+       "description": "official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market)."
+      },
+      {
+       "name": "activation_revision",
+       "type": "integer",
+       "description": "0 while no plugin was activated (the built-in default is used)."
+      }
+     ]
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "uploadWebsiteTheme",
+   "method": "POST",
+   "path": "/v1/admin/control-site/themes",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Validates and installs an uploaded package (id custom.*); an upload with the same id is replaced and keeps its parameters.",
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "schema",
+      "type": "const cdnca.site-theme/v1",
+      "required": true
+     },
+     {
+      "name": "id",
+      "type": "string",
+      "required": true,
+      "description": "official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market)."
+     },
+     {
+      "name": "version",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "I18nText",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "I18nText"
+     },
+     {
+      "name": "layout",
+      "type": "string: jidun / xmf",
+      "required": true
+     },
+     {
+      "name": "tokens",
+      "type": "object"
+     },
+     {
+      "name": "images",
+      "type": "object"
+     },
+     {
+      "name": "seed",
+      "type": "SeedContent",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Installed",
+     "fields": [
+      {
+       "name": "themes",
+       "type": "array<ThemeEntry>"
+      },
+      {
+       "name": "active_theme_id",
+       "type": "string",
+       "description": "official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market)."
+      },
+      {
+       "name": "activation_revision",
+       "type": "integer",
+       "description": "0 while no plugin was activated (the built-in default is used)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "control_site_theme_invalid with reason and field"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "413",
+     "description": "Larger than 8 MiB"
+    }
+   ]
+  },
+  {
+   "operation_id": "uninstallWebsiteTheme",
+   "method": "DELETE",
+   "path": "/v1/admin/control-site/themes/{theme_id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Uninstalls a plugin that is not active and drops its parameters; website content is kept. A market plugin stays available to install.",
+   "params": [
+    {
+     "name": "theme_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Uninstalled",
+     "fields": [
+      {
+       "name": "themes",
+       "type": "array<ThemeEntry>"
+      },
+      {
+       "name": "active_theme_id",
+       "type": "string",
+       "description": "official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market)."
+      },
+      {
+       "name": "activation_revision",
+       "type": "integer",
+       "description": "0 while no plugin was activated (the built-in default is used)."
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "Unknown theme"
+    },
+    {
+     "status": "409",
+     "description": "control_site_theme_active or control_site_theme_not_installed"
+    }
+   ]
+  },
+  {
+   "operation_id": "activateWebsiteTheme",
+   "method": "POST",
+   "path": "/v1/admin/control-site/themes/{theme_id}/activate",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Makes an installed plugin the website's theme. The website reads the new layout's content (or the plugin seed); other layouts' content is kept.",
+   "params": [
+    {
+     "name": "theme_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Activation revision seen (\"0\" before any activation)"
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Activated",
+     "fields": [
+      {
+       "name": "themes",
+       "type": "array<ThemeEntry>"
+      },
+      {
+       "name": "active_theme_id",
+       "type": "string",
+       "description": "official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market)."
+      },
+      {
+       "name": "activation_revision",
+       "type": "integer",
+       "description": "0 while no plugin was activated (the built-in default is used)."
+      }
+     ]
+    },
+    {
+     "status": "403",
+     "description": "Permission denied, or control_site_theme_withdrawn"
+    },
+    {
+     "status": "409",
+     "description": "Revision conflict, control_site_theme_not_installed or control_site_theme_unchanged"
+    }
+   ]
+  },
+  {
+   "operation_id": "customizeWebsiteTheme",
+   "method": "PUT",
+   "path": "/v1/admin/control-site/themes/{theme_id}/customization",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Token overrides (the layout whitelist) and replacement images per plugin slot (uploaded images). Empty maps restore the plugin defaults. Applies at once.",
+   "params": [
+    {
+     "name": "theme_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Customization revision seen (\"0\" for none)"
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tokens",
+      "type": "object"
+     },
+     {
+      "name": "images",
+      "type": "object"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved",
+     "fields": [
+      {
+       "name": "themes",
+       "type": "array<ThemeEntry>"
+      },
+      {
+       "name": "active_theme_id",
+       "type": "string",
+       "description": "official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market)."
+      },
+      {
+       "name": "activation_revision",
+       "type": "integer",
+       "description": "0 while no plugin was activated (the built-in default is used)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Unknown token"
+    },
+    {
+     "status": "409",
+     "description": "Revision conflict or not installed"
+    }
+   ]
+  },
+  {
+   "operation_id": "installWebsiteTheme",
+   "method": "POST",
+   "path": "/v1/admin/control-site/themes/{theme_id}/install",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Installs a built-in plugin, or a market plugin this installation is authorized for.",
+   "params": [
+    {
+     "name": "theme_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Installed",
+     "fields": [
+      {
+       "name": "themes",
+       "type": "array<ThemeEntry>"
+      },
+      {
+       "name": "active_theme_id",
+       "type": "string",
+       "description": "official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market)."
+      },
+      {
+       "name": "activation_revision",
+       "type": "integer",
+       "description": "0 while no plugin was activated (the built-in default is used)."
+      }
+     ]
+    },
+    {
+     "status": "403",
+     "description": "Permission denied, or control_site_theme_withdrawn"
+    },
+    {
+     "status": "404",
+     "description": "Unknown theme"
+    },
+    {
+     "status": "409",
+     "description": "control_site_theme_unchanged (already installed)"
+    }
+   ]
+  },
+  {
+   "operation_id": "readWebsiteThemeSeed",
+   "method": "GET",
+   "path": "/v1/admin/control-site/themes/{theme_id}/seed",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "theme_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The plugin's default content",
+     "fields": [
+      {
+       "name": "nav",
+       "type": "array<object> | null"
+      },
+      {
+       "name": "actions",
+       "type": "array<Link> | null"
+      },
+      {
+       "name": "footer",
+       "type": "object"
+      },
+      {
+       "name": "pages",
+       "type": "array<object> | null"
+      },
+      {
+       "name": "brand",
+       "type": "Brand"
+      },
+      {
+       "name": "contact",
+       "type": "Contact"
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "Unknown theme"
+    }
+   ]
+  }
+ ]
+}

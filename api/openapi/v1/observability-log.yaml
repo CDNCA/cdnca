@@ -1,0 +1,322 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Observability Logs API
+  version: 1.0.0
+  description: Session-only access to immutable login, operation, notification, and frontend facts.
+servers:
+  - url: /
+paths:
+  /v1/observability/logs:
+    get:
+      operationId: listObservabilityLogs
+      security:
+        - bearerSession: []
+      summary: List authorized observability facts
+      description: Tenant sessions are restricted to their own scope and facts where they are the actor or subject. Platform sessions require platform.admin and one explicit target_scope_id. Platform automation may capture a signed opaque audit boundary, then query an exact actor after that boundary without exposing stream positions; notification facts cannot be mixed into boundary queries.
+      parameters:
+        - name: target_scope_id
+          in: query
+          required: false
+          x-platform-permission: platform.admin
+          x-tenant-allowed: false
+          x-tenant-actor-subject-isolation: true
+          schema: {type: string, format: uuid}
+        - {$ref: '#/components/parameters/Kind'}
+        - {$ref: '#/components/parameters/Result'}
+        - {$ref: '#/components/parameters/Action'}
+        - {$ref: '#/components/parameters/ActionVerb'}
+        - {$ref: '#/components/parameters/ResourceType'}
+        - {$ref: '#/components/parameters/ResourceID'}
+        - {$ref: '#/components/parameters/Change'}
+        - {$ref: '#/components/parameters/SourceIP'}
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/AuditBoundaryMode'}
+        - {$ref: '#/components/parameters/AfterAuditBoundary'}
+        - {$ref: '#/components/parameters/ActorUserID'}
+      responses:
+        '200':
+          description: Stable snapshot-bound keyset page.
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LogPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/observability/logs/export:
+    get:
+      operationId: exportObservabilityLogs
+      security:
+        - bearerSession: []
+      summary: Export authorized observability facts as bounded CSV
+      description: Tenant sessions are restricted to their own scope and facts where they are the actor or subject. Platform sessions require platform.admin and one explicit target_scope_id.
+      parameters:
+        - name: target_scope_id
+          in: query
+          required: false
+          x-platform-permission: platform.admin
+          x-tenant-allowed: false
+          x-tenant-actor-subject-isolation: true
+          schema: {type: string, format: uuid}
+        - {$ref: '#/components/parameters/Kind'}
+        - {$ref: '#/components/parameters/Result'}
+        - {$ref: '#/components/parameters/Action'}
+        - {$ref: '#/components/parameters/ActionVerb'}
+        - {$ref: '#/components/parameters/ResourceType'}
+        - {$ref: '#/components/parameters/ResourceID'}
+        - {$ref: '#/components/parameters/Change'}
+        - {$ref: '#/components/parameters/SourceIP'}
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+      responses:
+        '200':
+          description: RFC 4180 CSV limited to 8 MiB with a digest of the exact safe bytes.
+          headers:
+            Content-Disposition:
+              schema: {type: string, const: 'attachment; filename="observability-logs.csv"'}
+            Cache-Control:
+              schema: {type: string, const: no-store}
+            X-Content-Type-Options:
+              schema: {type: string, const: nosniff}
+            X-Content-SHA256:
+              schema: {type: string, pattern: '^[0-9a-f]{64}$'}
+          content:
+            text/csv:
+              schema:
+                type: string
+                maxLength: 8388608
+                x-max-bytes: 8388608
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/observability/frontend-events:
+    post:
+      operationId: recordObservabilityFrontendEvent
+      security:
+        - bearerSession: []
+      summary: Append a sanitized frontend event
+      description: Tenant sessions append only to their own actor and subject scope. Platform sessions require platform.admin and one explicit target_scope_id. Source IP, actor, and request ID are derived from the trusted request and session.
+      parameters:
+        - name: target_scope_id
+          in: query
+          required: false
+          x-platform-permission: platform.admin
+          x-tenant-allowed: false
+          x-tenant-actor-subject-isolation: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [event_code, route, reason_code, result_code, release]
+              properties:
+                event_code: {type: string, enum: [route_error, api_error, render_error]}
+                route:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+                  pattern: '^/[^?#\r\n]{0,255}$'
+                reason_code:
+                  type: string
+                  pattern: '^[a-z][a-z0-9._-]{0,95}$'
+                result_code: {type: string, enum: [success, denied, failure]}
+                release:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  pattern: '^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$'
+      responses:
+        '202':
+          description: Event accepted into the durable audit fact stream.
+          headers:
+            Cache-Control: {$ref: '#/components/headers/NoStore'}
+            X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerSession:
+      type: http
+      scheme: bearer
+  parameters:
+    Kind:
+      name: kind
+      in: query
+      required: false
+      schema:
+        type: array
+        maxItems: 4
+        uniqueItems: true
+        items: {type: string, enum: [login, operation, notification, frontend]}
+      style: form
+      explode: true
+    Result:
+      name: result
+      in: query
+      required: false
+      schema:
+        type: array
+        maxItems: 16
+        uniqueItems: true
+        items: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+      style: form
+      explode: true
+    Action:
+      name: action
+      in: query
+      required: false
+      schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+    ActionVerb:
+      name: action_verb
+      in: query
+      required: false
+      schema: {type: string, enum: [create, update, delete]}
+    ResourceType:
+      name: resource_type
+      in: query
+      required: false
+      schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+    ResourceID:
+      name: resource_id
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 256}
+    Change:
+      name: change
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 256}
+    SourceIP:
+      name: source_ip
+      in: query
+      required: false
+      schema:
+        oneOf:
+          - {type: string, format: ipv4}
+          - {type: string, format: ipv6}
+          - {type: string, const: unknown}
+    From:
+      name: from
+      in: query
+      required: false
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      required: false
+      schema: {type: string, format: date-time}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 300, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    AuditBoundaryMode:
+      name: audit_boundary
+      in: query
+      required: false
+      description: Capture a signed target-scope audit head. Must be used alone with target_scope_id by a platform administrator.
+      schema: {type: string, const: capture}
+    AfterAuditBoundary:
+      name: after_audit_boundary
+      in: query
+      required: false
+      description: Signed boundary returned by a prior capture. Must be paired with actor_user_id and resent unchanged on cursor pages.
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    ActorUserID:
+      name: actor_user_id
+      in: query
+      required: false
+      description: Exact browser actor for platform filtering. A signed-boundary query must pair this parameter with after_audit_boundary; subject-only notification matching is not permitted in that mode.
+      schema: {type: string, format: uuid}
+  headers:
+    NoStore:
+      description: Prevent storage of session-scoped observability facts.
+      schema: {type: string, const: no-store}
+    NoSniff:
+      description: Disable MIME sniffing.
+      schema: {type: string, const: nosniff}
+  responses:
+    Error:
+      description: Stable error code without raw dependency messages.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+        X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    LogFact:
+      type: object
+      additionalProperties: false
+      required: [event_id, kind, occurred_at, action, reason_code, result_code]
+      properties:
+        event_id: {type: string, minLength: 1, maxLength: 128}
+        kind: {type: string, enum: [login, operation, notification, frontend]}
+        occurred_at: {type: string, format: date-time}
+        action: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        reason_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        result_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        actor_user_id: {type: string, format: uuid}
+        subject_user_id: {type: string, minLength: 1, maxLength: 128}
+        resource_type: {type: string, maxLength: 96}
+        resource_id: {type: string, maxLength: 256}
+        resource_name: {type: string, minLength: 1, maxLength: 256, description: 'Current object name looked up at query time in the row''s scope (site domain, node/stream/certificate/DNS provider name, ticket subject, member username).'}
+        resource_deleted: {type: boolean, enum: [true], description: 'The nameable object no longer exists in this scope; the page shows 已删除的对象 with the first 8 characters of resource_id.'}
+        user_agent: {type: string, maxLength: 2048}
+        change_summary: {type: string, maxLength: 2048}
+        request_id: {type: string, minLength: 1, maxLength: 128}
+        source_ip: {type: string, maxLength: 64}
+        geo_code: {type: string, pattern: '^(unknown|[A-Z]{2})$'}
+    LogPage:
+      type: object
+      additionalProperties: false
+      required: [items, snapshot_at, total_count]
+      properties:
+        items:
+          type: array
+          maxItems: 300
+          items: {$ref: '#/components/schemas/LogFact'}
+        snapshot_at: {type: string, format: date-time}
+        total_count: {type: integer, format: int64, minimum: 0}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+        audit_boundary:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Signed opaque boundary; internal stream positions are never exposed.
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - observability_logs_invalid_request
+                - observability_logs_cursor_expired
+                - permission_denied
+                - observability_logs_unavailable
+            request_id: {type: string, minLength: 1, maxLength: 128}

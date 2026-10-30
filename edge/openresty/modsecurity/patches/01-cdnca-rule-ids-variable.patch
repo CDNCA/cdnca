@@ -1,0 +1,119 @@
+--- a/src/ngx_http_modsecurity_module.c
++++ b/src/ngx_http_modsecurity_module.c
+@@ -30,6 +30,9 @@
+ #endif
+ 
+ static ngx_int_t ngx_http_modsecurity_init(ngx_conf_t *cf);
++static ngx_int_t ngx_http_modsecurity_add_variables(ngx_conf_t *cf);
++static ngx_int_t ngx_http_modsecurity_rule_ids_variable(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data);
+ static void *ngx_http_modsecurity_create_main_conf(ngx_conf_t *cf);
+ static char *ngx_http_modsecurity_init_main_conf(ngx_conf_t *cf, void *conf);
+ static void *ngx_http_modsecurity_create_conf(ngx_conf_t *cf);
+@@ -514,11 +517,28 @@
+     NULL
+   },
+   ngx_null_command
++};
++
++
++/*
++ * cdnca: $modsecurity_rule_ids, the IDs of the rule messages the request's
++ * transaction keeps (the rules with "log": msc_get_rules_messages_rule_ids),
++ * in match order, as ",<id>,<id>,...," ("," for none); not found when the
++ * request has no transaction. Read per request from the request's own
++ * transaction, never cached.
++ */
++static ngx_http_variable_t  ngx_http_modsecurity_vars[] = {
++
++    { ngx_string("modsecurity_rule_ids"), NULL,
++      ngx_http_modsecurity_rule_ids_variable, 0,
++      NGX_HTTP_VAR_NOCACHEABLE, 0 },
++
++      ngx_http_null_variable
+ };
+ 
+ 
+ static ngx_http_module_t ngx_http_modsecurity_ctx = {
+-    NULL,                                  /* preconfiguration */
++    ngx_http_modsecurity_add_variables,    /* preconfiguration */
+     ngx_http_modsecurity_init,             /* postconfiguration */
+ 
+     ngx_http_modsecurity_create_main_conf, /* create main configuration */
+@@ -546,8 +566,76 @@
+     NULL,                                  /* exit master */
+     NGX_MODULE_V1_PADDING
+ };
++
++
++static ngx_int_t
++ngx_http_modsecurity_add_variables(ngx_conf_t *cf)
++{
++    ngx_http_variable_t  *var, *v;
++
++    for (v = ngx_http_modsecurity_vars; v->name.len; v++) {
++        var = ngx_http_add_variable(cf, &v->name, v->flags);
++        if (var == NULL) {
++            return NGX_ERROR;
++        }
++
++        var->get_handler = v->get_handler;
++        var->data = v->data;
++    }
++
++    return NGX_OK;
++}
++
++
++static ngx_int_t
++ngx_http_modsecurity_rule_ids_variable(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data)
++{
++    size_t                       i, n;
++    u_char                      *p;
++    int64_t                     *ids;
++    ngx_http_modsecurity_ctx_t  *ctx;
++
++    ctx = ngx_http_modsecurity_get_module_ctx(r);
++
++    if (ctx == NULL || ctx->modsec_transaction == NULL) {
++        v->not_found = 1;
++        return NGX_OK;
++    }
++
++    n = msc_get_rules_messages_size(ctx->modsec_transaction);
++    ids = NULL;
++
++    if (n > 0) {
++        ids = ngx_palloc(r->pool, n * sizeof(int64_t));
++        if (ids == NULL) {
++            return NGX_ERROR;
++        }
++
++        n = msc_get_rules_messages_rule_ids(ctx->modsec_transaction, ids, n);
++    }
+ 
++    p = ngx_pnalloc(r->pool, 1 + n * (NGX_INT64_LEN + 1));
++    if (p == NULL) {
++        return NGX_ERROR;
++    }
+ 
++    v->data = p;
++    *p++ = ',';
++
++    for (i = 0; i < n; i++) {
++        p = ngx_sprintf(p, "%L,", ids[i]);
++    }
++
++    v->len = p - v->data;
++    v->valid = 1;
++    v->no_cacheable = 1;
++    v->not_found = 0;
++
++    return NGX_OK;
++}
++
++
+ static ngx_int_t
+ ngx_http_modsecurity_init(ngx_conf_t *cf)
+ {

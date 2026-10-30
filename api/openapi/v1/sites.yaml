@@ -1,0 +1,2036 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Sites API
+  version: 0.1.0
+  description: >-
+    Tenant-isolated website inventory with writable basic settings and origin
+    pool desired state and versioned conditional origin routing. HTTPS,
+    security, cache, access, and other advanced sections remain outside this
+    version until their control-plane behavior exists.
+    Origin changes in this contract are not evidence of edge activation.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/sites:
+    get:
+      operationId: listSites
+      summary: List websites visible in the authenticated scope
+      description: >-
+        Platform administrators can list all tenant scopes. Tenant principals
+        are always restricted by the server to their active tenant scope, and
+        owner and region are redacted in their response. The owner, region_id,
+        and node_group_id filters are platform-only to prevent count-based
+        disclosure of redacted metadata.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - {name: domain, in: query, description: Case-insensitive domain substring; a positive decimal also matches the site display ID exactly., schema: {type: string, maxLength: 253}}
+        - name: domains
+          in: query
+          description: Comma- or whitespace-separated exact domains, at most 50.
+          schema: {type: string}
+        - {name: origin_ip, in: query, schema: {type: string}}
+        - name: site_ids
+          in: query
+          description: Comma- or whitespace-separated UUIDs, at most 100.
+          schema: {type: string}
+        - {name: owner, in: query, schema: {type: string, maxLength: 128}}
+        - $ref: '#/components/parameters/PackageIDQuery'
+        - {name: package, in: query, description: Case-insensitive substring of the site's package name (the name form of package_id)., schema: {type: string, maxLength: 128}}
+        - {name: site, in: query, description: Case-insensitive domain substring or exact site display ID (the name form of site_ids)., schema: {type: string, maxLength: 253}}
+        - $ref: '#/components/parameters/GroupIDQuery'
+        - $ref: '#/components/parameters/RegionIDQuery'
+        - $ref: '#/components/parameters/NodeGroupIDQuery'
+        - {name: cname_domain, in: query, schema: {type: string, maxLength: 253}}
+        - {name: cname_hostname, in: query, schema: {type: string, maxLength: 63}}
+        - $ref: '#/components/parameters/HTTPPortQuery'
+        - $ref: '#/components/parameters/HTTPSPortQuery'
+        - {name: https_enabled, in: query, schema: {type: boolean}}
+        - {name: enabled, in: query, schema: {type: boolean}}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/SiteStatus'}}
+        - {name: is_default, in: query, schema: {type: boolean}}
+        - {name: sync_status, in: query, schema: {$ref: '#/components/schemas/SyncStatus'}}
+      responses:
+        '200':
+          description: Stable page ordered by creation time and ID descending.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteListResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createSite
+      summary: Create a website
+      description: >-
+        Requires sites.manage and Idempotency-Key. A platform principal must
+        provide target_scope_id and owner_id. A tenant principal is forced to
+        its active scope and own user ID even if those fields are supplied.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateSiteRequest'}
+      responses:
+        '201':
+          description: >-
+            Created, or the stored result of an identical idempotent retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteDetail'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/export:
+    get:
+      operationId: exportSiteDomains
+      summary: Export an immutable snapshot of site domains
+      description: >-
+        Requires sites.export. Tenant principals are restricted to their active
+        tenant scope. Platform principals must provide target_scope_id. The
+        response is a UTF-8 CSV produced from an immutable, actor- and
+        filter-bound snapshot; cells that could be interpreted as spreadsheet
+        formulas are escaped.
+      parameters:
+        - name: target_scope_id
+          in: query
+          description: Required for platform principals; tenants may omit their own scope.
+          schema: {type: string, format: uuid}
+        - name: domain
+          in: query
+          description: Optional case-insensitive domain substring filter.
+          schema: {type: string, maxLength: 253}
+        - name: domains
+          in: query
+          description: Comma- or whitespace-separated exact domains, at most 50.
+          schema: {type: string}
+        - {name: origin_ip, in: query, schema: {type: string}}
+        - name: site_ids
+          in: query
+          description: Comma- or whitespace-separated UUIDs, at most 100.
+          schema: {type: string}
+        - {name: owner, in: query, schema: {type: string, maxLength: 128}}
+        - $ref: '#/components/parameters/PackageIDQuery'
+        - {name: package, in: query, description: Case-insensitive substring of the site's package name (the name form of package_id)., schema: {type: string, maxLength: 128}}
+        - {name: site, in: query, description: Case-insensitive domain substring or exact site display ID (the name form of site_ids)., schema: {type: string, maxLength: 253}}
+        - $ref: '#/components/parameters/GroupIDQuery'
+        - $ref: '#/components/parameters/RegionIDQuery'
+        - $ref: '#/components/parameters/NodeGroupIDQuery'
+        - {name: cname_domain, in: query, schema: {type: string, maxLength: 253}}
+        - {name: cname_hostname, in: query, schema: {type: string, maxLength: 63}}
+        - $ref: '#/components/parameters/HTTPPortQuery'
+        - $ref: '#/components/parameters/HTTPSPortQuery'
+        - {name: https_enabled, in: query, schema: {type: boolean}}
+        - {name: enabled, in: query, schema: {type: boolean}}
+        - {name: status, in: query, schema: {$ref: '#/components/schemas/SiteStatus'}}
+        - {name: is_default, in: query, schema: {type: boolean}}
+        - {name: sync_status, in: query, schema: {$ref: '#/components/schemas/SyncStatus'}}
+      responses:
+        '200':
+          description: Immutable site-domain snapshot in deterministic order.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            X-Site-Domain-Export-Snapshot-ID:
+              description: Durable snapshot identifier for audit correlation.
+              schema: {type: string, format: uuid}
+          content:
+            text/csv:
+              schema: {type: string, format: binary}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/batch-action:
+    post:
+      operationId: batchSiteAction
+      summary: Enable, disable, soft-delete, queue CNAME regeneration for, or set the HTTPS protocols of websites
+      description: >-
+        Requires sites.manage and Idempotency-Key. The response preserves input
+        order while rows are locked in UUID order. Business failures are
+        reported per item and do not undo successful items; a database or audit
+        failure rolls back the complete batch. Tenant principals see resources
+        outside their active scope as site_not_found. Tenant actions against a
+        platform-locked site fail with site_locked, while platform principals
+        retain maintenance access. Enable performs the same local entitlement
+        feature, state, and domains.count checks as a single website update.
+        Disable and delete remain available while entitlement is in grace or
+        expired state. These actions change control-plane desired state only and
+        do not claim that an edge configuration has been activated.
+        regenerate_cname applies only to failed CNAME allocations, requires
+        sites.manage and dns.manage, and transactionally creates one durable
+        CNAME job per accepted site. Its per-item result is queued; the returned
+        site.cname_task_id is the durable task identity and site.cname_state
+        remains pending until provider reconciliation plus authoritative and
+        public recursive convergence completes.
+        set_protocols (网站协议批量设置) writes basic.http2_enabled,
+        basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected
+        site at its expected_version, as a single-site basic update would; keys
+        left out of protocols keep each site's value. Each changed site records
+        site.tls_profile.update, and every scope with an updated site queues its
+        automatic publication (site.update). Its per-item result is updated.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BatchSiteActionRequest'}
+      responses:
+        '200':
+          description: >-
+            Ordered per-item results, or the stored result of an identical
+            idempotent retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BatchSiteActionResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      operationId: getSite
+      summary: Get one website and its basic settings
+      responses:
+        '200':
+          description: Website detail. Tenant responses redact owner.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteDetail'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    patch:
+      operationId: updateSiteSettings
+      summary: Replace the complete basic or origin settings section
+      description: >-
+        section=basic and section=origin are writable discriminated variants.
+        expected_version is a shared optimistic concurrency guard, so basic and
+        origin writes against one website serialize on the same version. The
+        complete selected section is required. Origin writes update control-plane
+        desired state and the legacy basic.origins compatibility projection in one
+        transaction; no edge configuration is generated or activated in this
+        slice. A basic write may preserve an identical rich origin projection, but
+        replacing origins while non-default origin metadata exists returns 409
+        origin_section_conflict. Identical retries require the same normalized
+        payload and Idempotency-Key.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateSiteRequest'}
+      responses:
+        '200':
+          description: Updated, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteDetail'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteSite
+      summary: Soft-delete a website
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Deleted, or an identical delete retry was replayed.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/origin-routing:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      operationId: getSiteOriginRouting
+      summary: Get the normalized conditional origin-routing document
+      description: >-
+        Requires sites.read. Tenant principals can only read sites in their
+        active scope. The document is ordered deterministically and represents
+        control-plane desired state, not proof of edge activation. The
+        response-only effective_retry and effective_l2_fallback objects expose
+        the fixed fail-safe edge retry and L1-to-L2 direct-origin fallback
+        guards. These guards are not caller-configurable and do not indicate
+        that L2 routing is enabled for this site.
+      responses:
+        '200':
+          description: Current normalized document and the shared site version.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConditionalOriginState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    put:
+      operationId: replaceSiteOriginRouting
+      summary: Replace the complete conditional origin-routing document
+      description: >-
+        Requires sites.manage, Idempotency-Key, and a strong If-Match value for
+        the shared site version. The update, idempotency claim, automatic edge
+        publication request, and site.origin_route.update audit event commit in
+        one transaction. Identical semantic input is normalized before the
+        idempotency digest is calculated. effective_retry and
+        effective_l2_fallback are response-only and are rejected if supplied
+        in this request document.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConditionalOriginDocument'}
+      responses:
+        '200':
+          description: Updated state, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ConditionalOriginState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/schedule302:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      operationId: getSiteSchedule302
+      summary: Get the site's HTTP 302 scheduling settings
+      description: >-
+        Requires sites.read. HTTP 302 scheduling (together with DNS scheduling)
+        lets the node a visitor reaches redirect large downloads and video to the
+        best node for the visitor's carrier and region. Disabled sites return the
+        default settings with enabled false. plain_http reports whether the site
+        has a plain HTTP port, which scheduling needs.
+      responses:
+        '200':
+          description: Current settings and the shared site version.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteSchedule302State'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    put:
+      operationId: replaceSiteSchedule302
+      summary: Replace the site's HTTP 302 scheduling settings
+      description: >-
+        Requires sites.manage, Idempotency-Key, and a strong If-Match value for
+        the shared site version. The update, idempotency claim, automatic edge
+        publication request and the site.schedule302.update audit event commit
+        in one transaction; a refused write records the event with result
+        denied and a reason code. Turning scheduling off deletes the settings
+        and the site's signing key. 422 schedule302_no_plain_http: the site has
+        no plain HTTP port.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteSchedule302Settings'}
+      responses:
+        '200':
+          description: Updated state, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteSchedule302State'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/BadRequest'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/origin-status:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      operationId: getSiteOriginStatus
+      summary: Origin pool probe state and the active origin level
+      description: >-
+        Requires sites.read. The control plane probes every origin of the pool
+        (origin address with the pool's origin Host / SNI and health check path,
+        from the tenant's own nodes when they can, else from the control plane).
+        An origin is unhealthy after 3 consecutive failures, healthy after 2
+        consecutive successes, unknown before that or when it cannot be probed.
+        Aggregated edge scheduling reads overall.
+      responses:
+        '200':
+          description: Current state.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OriginPoolStatus'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/auto-dns/sync:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: syncSiteAutoDNS
+      summary: 解析检测 > 同步解析 (run the site's automatic DNS records again)
+      description: >-
+        Requires sites.manage and dns.manage. Resets the site's auto_dns task
+        to pending (creating it with provider_id when the site has none) and
+        returns at once; the records are written in the background. Repeating
+        the call is harmless. 422 dns_provider_unusable: not a verified
+        account of the site owner.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                provider_id: {type: string, format: uuid, description: another account of the owner; omitted keeps the task's}
+      responses:
+        '202':
+          description: Task scheduled.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteAutoDNSStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/access-check:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: checkSiteAccess
+      summary: 接入状态 > 立即检查 (resolve the site's domains now)
+      description: >-
+        Requires sites.read. Resolves every domain of the site through the
+        control plane host's resolver now (no DNS provider or third-party API),
+        stores the result as the background check does and returns the site's
+        access_readiness. Once a minute per site: 429 access_check_throttled
+        with Retry-After (seconds) within the minute.
+      responses:
+        '200':
+          description: The site's access readiness after the check.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteAccessReadiness'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/site-defaults:
+    get:
+      operationId: listSiteDefaults
+      summary: 网站列表 > 默认设置 (the caller's defaults for new sites)
+      description: >-
+        Requires sites.read. A tenant sees only its own scope. Defaults fill
+        the fields a new site's create request leaves out; group rows win over
+        global ones; existing sites are never changed.
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+        - {name: setting_name, in: query, schema: {$ref: '#/components/schemas/SiteDefaultSettingName'}}
+        - {name: enabled, in: query, schema: {type: boolean}}
+      responses:
+        '200':
+          description: One page.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteUserDefaultList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createSiteDefault
+      summary: Add a site default
+      description: >-
+        Requires sites.manage and Idempotency-Key. 409 site_default_conflict:
+        the setting already has a default in the same scope (global, or the
+        same group).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateSiteDefaultRequest'}
+      responses:
+        '201':
+          description: Created.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteUserDefault'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/site-defaults/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+    patch:
+      operationId: updateSiteDefault
+      summary: Change a site default's value or enable / disable it
+      description: Requires sites.manage and Idempotency-Key; another tenant's ID is 404.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateSiteDefaultRequest'}
+      responses:
+        '200':
+          description: Updated.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteUserDefault'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteSiteDefault
+      summary: Delete a site default
+      description: Requires sites.manage and Idempotency-Key; another tenant's ID is 404.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': {description: Deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/origin-failback:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: failbackSiteOrigin
+      summary: Switch the pool back to the highest healthy level (manual failback)
+      description: >-
+        Requires sites.manage and Idempotency-Key. Moves the active level to the
+        lowest-numbered level that is healthy (the primary when it is), records
+        site.origin.failback and republishes the site. 409 origin_failback_unavailable:
+        no higher level is healthy.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: State after the switch.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OriginPoolStatus'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/lock:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: lockSite
+      summary: Lock a website against tenant writes
+      description: >-
+        Requires sites.manage in a platform scope. The expected version is
+        checked atomically. Locking changes only control-plane lock metadata
+        and the website version; it does not disable or republish the active
+        edge configuration. Tenant edit, enable/disable, and delete attempts
+        return 409 site_locked until a platform administrator unlocks the site.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LockSiteRequest'}
+      responses:
+        '200':
+          description: Locked, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteDetail'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/unlock:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: unlockSite
+      summary: Restore tenant write access to a website
+      description: >-
+        Requires sites.manage in a platform scope. The expected version is
+        checked atomically and the previous lock metadata is cleared. Existing
+        edge traffic and operational website status are not changed.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UnlockSiteRequest'}
+      responses:
+        '200':
+          description: Unlocked, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteDetail'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{id}/transfer:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    post:
+      operationId: transferSite
+      summary: Move a website to another user
+      description: >-
+        Requires sites.manage in a platform scope held by a platform
+        administrator. In one transaction the website is re-created in the
+        target user's tenant (new website ID, newly allocated CNAME) and the
+        current website is deleted; the old CNAME retires by the delete rules
+        and the customer must repoint DNS from from_cname to the new site's
+        CNAME. Historical statistics, logs and bills stay with the previous
+        owner. The target is another active user with a tenant of its own;
+        target_package_subscription_id is one of that user's own package
+        subscriptions, or null for no package. copied lists what was carried
+        to the new website and released what the administrator must configure
+        again; item names are http_policy, cache_policy, certificate,
+        waf_policy, cc_policy, acl_policy, auto_defense and js_challenge
+        (automatic DNS records are not moved). Without a carried certificate
+        HTTPS is off on the new website. Errors: 422
+        site_transfer_target_invalid (target is not an active user with its
+        own tenant, or is the current owner), 422 domain_blocked, 409
+        domain_verified_by_other (an apex is verified by another account,
+        including the previous owner; domain ownership is not transferred),
+        409 domain_ownership_required, 409 site_locked, 409 version_conflict
+        (stale expected_version) and 409 idempotency_conflict. Domain errors
+        carry the refused domain and apex.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TransferSiteRequest'}
+      responses:
+        '201':
+          description: >-
+            Moved, or the stored result of an identical idempotent retry. The
+            ETag is the new website's version.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TransferSiteResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: >-
+            domain_verified_by_other, domain_ownership_required, site_locked,
+            version_conflict or idempotency_conflict.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/ErrorEnvelope'}
+                  - {$ref: '#/components/schemas/DomainTrustErrorEnvelope'}
+        '422':
+          description: site_transfer_target_invalid or domain_blocked.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/ErrorEnvelope'}
+                  - {$ref: '#/components/schemas/DomainTrustErrorEnvelope'}
+        '500': {$ref: '#/components/responses/InternalError'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  headers:
+    RequestID:
+      description: Stable request correlation identifier.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    SiteETag:
+      description: Quoted decimal website version, for example "2".
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  parameters:
+    SiteID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    PackageIDQuery:
+      name: package_id
+      in: query
+      schema: {type: string, format: uuid}
+    GroupIDQuery:
+      name: group_id
+      in: query
+      schema: {type: string, format: uuid}
+    RegionIDQuery:
+      name: region_id
+      in: query
+      schema: {type: string, format: uuid}
+    NodeGroupIDQuery:
+      name: node_group_id
+      in: query
+      schema: {type: string, format: uuid}
+    HTTPPortQuery:
+      name: http_port
+      in: query
+      schema: {type: string, pattern: '^[0-9]{1,5}$'}
+    HTTPSPortQuery:
+      name: https_port
+      in: query
+      schema: {type: string, pattern: '^[0-9]{1,5}$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Stable per-actor key. Reuse with different normalized input returns
+        409 idempotency_conflict.
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted decimal version returned by ETag.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  schemas:
+    SiteStatus:
+      type: string
+      enum: [active, disabled, package_expired, traffic_exceeded, locked, syncing, sync_failed]
+      description: >-
+        Operational status. The locked value is retained only for legacy read
+        compatibility; new lock state is represented by SiteLockState and can
+        be changed only through the platform lock and unlock operations.
+    SyncStatus:
+      type: string
+      enum: [synced, pending, failed]
+    OwnerReference:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19, readOnly: true}
+        display_name: {type: string}
+    NamedReference:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+    RegionReference:
+      type: object
+      additionalProperties: false
+      required: [name, node_group_name]
+      properties:
+        name: {type: string}
+        node_group_name: {type: string}
+    SiteLockOperator:
+      type: object
+      additionalProperties: false
+      required: [display_name]
+      description: A non-sensitive display reference; username and contact data are never returned.
+      properties:
+        display_name: {type: string, minLength: 1, maxLength: 128}
+    SiteLockState:
+      type: object
+      additionalProperties: false
+      required: [locked, reason, locked_at, operator]
+      properties:
+        locked: {type: boolean}
+        reason: {type: [string, 'null'], minLength: 1, maxLength: 500}
+        locked_at: {type: [string, 'null'], format: date-time}
+        operator:
+          oneOf:
+            - {$ref: '#/components/schemas/SiteLockOperator'}
+            - {type: 'null'}
+    IPv6RuntimeState:
+      type: string
+      enum: [disabled, pending, active, failed]
+    SiteListenerState:
+      type: object
+      additionalProperties: false
+      required: [ipv6_desired_enabled, ipv6_runtime_state]
+      properties:
+        ipv6_desired_enabled: {type: boolean, readOnly: true}
+        ipv6_runtime_state:
+          $ref: '#/components/schemas/IPv6RuntimeState'
+          readOnly: true
+    SiteListItem:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, version, owner, domain, listen_ports, origins, cname, https_enabled, listener_state, package, group_name, region, status, lock, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19, readOnly: true}
+        version: {type: integer, format: int64, minimum: 1}
+        owner:
+          oneOf:
+            - {$ref: '#/components/schemas/OwnerReference'}
+            - {type: 'null'}
+        domain: {type: string, maxLength: 253}
+        listen_ports:
+          type: array
+          items: {type: string, pattern: '^[0-9]{1,5}$'}
+        origins:
+          type: array
+          minItems: 1
+          items: {type: string}
+        cname: {type: string, maxLength: 253}
+        package_subscription_id: {type: [string, 'null'], format: uuid}
+        cname_state: {type: [string, 'null'], enum: [pending, failed, done, null]}
+        cname_failure_code:
+          type: [string, 'null']
+          pattern: '^[a-z][a-z0-9._-]{0,127}$'
+          description: >-
+            Why the current CNAME task failed (only when cname_state is failed).
+            dns_provider_not_configured / cname_zone_not_configured /
+            cname_zone_provider_mismatch recover automatically once the DNS
+            configuration (provider, CNAME domain) is completed. Other codes may
+            be added; clients show unknown codes generically.
+          examples: [cname_zone_not_configured]
+        cname_domain:
+          type: [string, 'null']
+          maxLength: 253
+          description: CNAME domain of the site (empty means the default CNAME domain).
+        cname_task_id: {type: [string, 'null'], format: uuid}
+        cname_current_revision: {type: [integer, 'null'], format: int64, minimum: 1}
+        cname_lkg_revision: {type: [integer, 'null'], format: int64, minimum: 1}
+        https_enabled: {type: boolean}
+        https_certificate_bound:
+          type: boolean
+          description: The site's current certificate binding is a bind. HTTPS enabled without a bound certificate is not serving yet.
+        listener_state: {$ref: '#/components/schemas/SiteListenerState'}
+        package:
+          oneOf:
+            - {$ref: '#/components/schemas/NamedReference'}
+            - {type: 'null'}
+        group_name: {type: [string, 'null']}
+        region:
+          oneOf:
+            - {$ref: '#/components/schemas/RegionReference'}
+            - {type: 'null'}
+        status: {$ref: '#/components/schemas/SiteStatus'}
+        lock: {$ref: '#/components/schemas/SiteLockState'}
+        created_at: {type: string, format: date-time}
+        auto_dns:
+          description: 建站「DNS API（自动添加记录）」task; null when none was asked for.
+          oneOf:
+            - {$ref: '#/components/schemas/SiteAutoDNSStatus'}
+            - {type: 'null'}
+        access_readiness:
+          description: 接入状态, read from stored facts (no resolution in the request).
+          oneOf:
+            - {$ref: '#/components/schemas/SiteAccessReadiness'}
+            - {type: 'null'}
+    SiteAccessReadiness:
+      type: object
+      additionalProperties: false
+      required: [state, checks]
+      description: >-
+        ready when every check passes; blocked when one needs a change (no valid
+        package, no line group or no online node on a published endpoint, CNAME
+        failed, HTTPS certificate missing/expired/revoked, site disabled,
+        rollout failed); else pending (CNAME generating, DNS not pointed or not
+        checked yet, rollout in flight, never run or the latest publication not
+        carrying the site).
+      properties:
+        state: {type: string, enum: [ready, pending, blocked]}
+        checks:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items: {$ref: '#/components/schemas/SiteAccessCheck'}
+    SiteAccessCheck:
+      type: object
+      additionalProperties: false
+      required: [code, ok, detail, checked_at]
+      properties:
+        code: {type: string, enum: [package, line_group, cname_generated, dns_resolved, https_cert, published]}
+        ok: {type: boolean}
+        detail:
+          type: string
+          pattern: '^[a-z0-9_.-]{0,128}$'
+          description: >-
+            Stable reason code; empty when ok (https_cert ok may be
+            https_disabled). package: no_package, package_disabled,
+            package_deleted (as package_unavailable_reason). line_group:
+            no_line_group, no_online_nodes (online nodes count only endpoints
+            the line group publishes now, not standby ones held back).
+            cname_generated: cname_pending, cname_failed or the CNAME failure
+            code. dns_resolved: waiting_cname, not_checked, no_domains,
+            dns_points_elsewhere, dns_not_found, dns_lookup_failed. https_cert:
+            certificate_missing, certificate_expired, certificate_not_yet_valid,
+            certificate_revoked, certificate_not_active. published: site_disabled,
+            not_published, site_not_in_publication (the scope's latest
+            publication does not carry the site), publishing, publish_failed.
+            dns_resolved A/AAAA answers must be addresses the line group
+            publishes now. Other codes may be added.
+        checked_at:
+          type: [string, 'null']
+          format: date-time
+          description: When the fact was read; for dns_resolved, when the stored check ran (null before one ran for the current CNAME and domains).
+        package_unavailable_reason:
+          type: [string, 'null']
+          enum: [no_package, package_disabled, package_deleted, null]
+          readOnly: true
+          description: >-
+            Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are
+            published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid.
+    SiteAutoDNSStatus:
+      type: object
+      additionalProperties: false
+      required: [provider_id, provider_name, state, failure_code, attempts, results, updated_at]
+      properties:
+        provider_id: {type: string, format: uuid}
+        provider_name: {type: string}
+        state:
+          type: string
+          enum: [pending, done, failed]
+          description: >-
+            done once every site domain is written to the DNS provider and the
+            provider lists the CNAME back; propagation is not waited for.
+        failure_code:
+          type: [string, 'null']
+          description: >-
+            Stable code, e.g. cname_pending, zone_not_hosted, apex_domain,
+            wildcard_domain, dns_record_conflict, dns_provider_<code>,
+            retries_exhausted:<code>.
+        attempts: {type: integer, minimum: 0}
+        results:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [domain]
+            properties:
+              domain: {type: string}
+              before: {type: string, description: previous CNAME target}
+              code: {type: string, description: failure code of this domain; absent when it points at the CNAME}
+        updated_at: {type: string, format: date-time}
+    SiteUserDefault:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, scope_id, owner_user_id, setting_name, setting_value, scope_name, group_id, group_name, enabled, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string}
+        scope_id: {type: string, format: uuid}
+        owner_user_id: {type: string, format: uuid}
+        setting_name: {$ref: '#/components/schemas/SiteDefaultSettingName'}
+        setting_value: {type: string}
+        scope_name: {type: string, enum: [global, group]}
+        group_id: {type: [string, 'null'], format: uuid}
+        group_name: {type: [string, 'null']}
+        enabled: {type: boolean}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    SiteDefaultSettingName:
+      type: string
+      enum: [http_listen_port, https_listen_port, balance_way, backend_https_port, ups_keepalive,
+        ups_keepalive_timeout, websocket_enable, force_ssl_enable, hsts, ocsp_stapling, recv_real_time, send_real_time,
+        ssl_protocols, ssl_cipher_preset, origin_protocol, backend_http_port, origin_connect_timeout, origin_read_timeout,
+        cc_ban_seconds, cc_pass_seconds, gzip_enable, dns_provider, ipv6_enable,
+        cc_policy, waf_policy, acl_policy, block_proxy, req_header, post_size_limit,
+        http2, http3, ssl_prefer_server_ciphers, proxy_cache, cond_origin, block_region, ssl_cipher_suites]
+      description: >-
+        Ports are space separated; balance_way is round_robin, ip_hash,
+        url_hash, least_conn or random; backend_https_port 1-65535;
+        ups_keepalive_timeout seconds 1-300; cc_ban_seconds 1-86400 and
+        cc_pass_seconds 60-604800 (filled into a new CC policy that names
+        none); dns_provider is the ID of a verified DNS account of the scope
+        (checked when saved; a create that names none uses it when the
+        creator has dns.manage, and skips the records if it is no longer
+        usable); cc_policy, waf_policy and acl_policy are the ID of one of the
+        owner's own rule libraries of that kind (not a subscribed one; checked
+        when saved), copied into a library of the new site's own and bound to
+        it in the create (later changes of the library or the default leave
+        existing sites alone; a library gone by then, or a package without the
+        feature, skips the copy); block_proxy 1 adds rules blocking requests
+        with a Via, X-Forwarded-For or Forwarded header to the new site's WAF
+        library (identified by proxy headers: users behind a corporate proxy
+        are blocked too); req_header is one "Name: value" per line (up to 8192
+        characters), set on requests to the origin; post_size_limit is the
+        upload limit in MB 1-1024 (client_max_body_size). req_header and
+        post_size_limit become the new site's HTTP policy when the creator has
+        http_policies.manage; http2, http3 and ssl_prefer_server_ciphers fill
+        the new site's http2_enabled, http3_enabled and
+        tls_prefer_server_ciphers; proxy_cache is a cache policy document
+        (JSON, the document of /v1/cache-policies/{site_id}; up to 65536
+        characters) written as the new site's first cache policy revision in
+        the create; cond_origin is {"routes": [...]} of conditional origin
+        rules (as the site's conditional origin document) whose pool_id is
+        the placeholder "@default", replaced by the new site's own default
+        origin pool (no origin addresses are stored); block_region is
+        abrord_inc (block outside mainland China, Hong Kong, Macao and Taiwan
+        included), abrord_no_inc (outside CN/HK/MO/TW), china_inc (CN, HK, MO
+        and TW), china_not_inc (CN only) or none, the competitor's values: a
+        preset adds one WAF rule on the client's country (by the node's IP
+        intelligence library) to the new site's WAF library as block_proxy
+        does, none adds nothing; ssl_cipher_preset is modern, compatible,
+        legacy or custom; ssl_cipher_suites is the custom preset's
+        colon-separated suite list (the same whitelist and rules as the site's
+        tls_cipher_suites), and a custom ssl_cipher_preset applies to a new
+        site only together with it; the rest are 1 (on) or 0 (off).
+    CreateSiteDefaultRequest:
+      type: object
+      additionalProperties: false
+      required: [setting_name, setting_value]
+      properties:
+        target_scope_id: {type: string, format: uuid, description: platform only}
+        owner_id: {type: string, format: uuid, description: platform only}
+        setting_name: {$ref: '#/components/schemas/SiteDefaultSettingName'}
+        setting_value: {type: string, minLength: 1, maxLength: 65536, description: "at most 256, req_header 8192, proxy_cache and cond_origin 65536"}
+        scope_name: {type: string, enum: [global, group], default: global}
+        group_id: {type: [string, 'null'], format: uuid, description: required when scope_name is group}
+    UpdateSiteDefaultRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      minProperties: 2
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        setting_value: {type: string, minLength: 1, maxLength: 65536, description: "at most 256, req_header 8192, proxy_cache and cond_origin 65536"}
+        enabled: {type: boolean}
+    SiteUserDefaultList:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SiteUserDefault'}}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    SiteListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/SiteListItem'}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    SiteBasic:
+      type: object
+      additionalProperties: false
+      required:
+        - package_id
+        - package_name
+        - group_id
+        - group_name
+        - domains
+        - http_enabled
+        - origins
+        - cname
+        - https_enabled
+        - enabled
+        - status
+        - is_default
+      properties:
+        package_id: {type: [string, 'null'], format: uuid}
+        package_subscription_id: {type: [string, 'null'], format: uuid}
+        cname_mode: {type: string, enum: [site, package, ''], readOnly: true}
+        cname_domain: {type: string, maxLength: 253, readOnly: true}
+        cname_hostname: {type: string, maxLength: 253, readOnly: true}
+        cname_regenerate: {type: boolean, writeOnly: true, default: false}
+        package_name: {type: [string, 'null'], maxLength: 128}
+        group_id: {type: [string, 'null'], format: uuid}
+        group_name: {type: [string, 'null'], maxLength: 128}
+        domains:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: {type: string, maxLength: 253}
+        http_enabled:
+          type: boolean
+          const: true
+          description: The first slice requires at least one HTTP listener.
+        http_listen_ports:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, pattern: '^[0-9]{1,5}$'}
+        https_listen_ports:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, pattern: '^[0-9]{1,5}$'}
+          description: >-
+            A create may leave out (or empty) http_listen_ports and, with
+            https_enabled, https_listen_ports: they follow the owner's site
+            defaults (网站列表 > 默认设置, group before global), else 80 and
+            443. Listed ports win. Required in responses and basic updates.
+        ipv6_enabled:
+          type: boolean
+          description: >-
+            Desired dual-stack listener state; runtime activation is reported
+            by listener_state. A create may leave it out: the owner's site
+            default ipv6_enable, else off. Required in basic updates.
+        origins:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, maxLength: 512}
+        cname: {type: string, maxLength: 253}
+        tls_protocols:
+          type: array
+          minItems: 1
+          maxItems: 8
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 5
+            maxLength: 16
+            pattern: '^(?:SSLv2|SSLv3|TLSv[0-9]+(?:\.[0-9]+)?)$'
+          description: >-
+            Persisted ordered TLS protocol fact. Responses may expose SSLv2,
+            SSLv3, TLSv1, TLSv1.1, or a constrained future TLS version so the
+            client can require explicit remediation instead of silently
+            presenting a secure canonical value.
+        tls_cipher_preset:
+          type: string
+          enum: [modern, compatible, legacy, custom]
+          description: >-
+            TLS 1.2-and-older cipher suites: modern (ECDHE + AEAD), compatible
+            (adds CBC and RSA key exchange), legacy (OpenSSL DEFAULT at
+            SECLEVEL=0; required when tls_protocols include TLSv1/TLSv1.1),
+            custom (tls_cipher_suites; needs TLSv1.2 and no TLSv1/TLSv1.1,
+            and nodes with SITE_TLS_CUSTOM_CIPHERS). Omitted on create: the
+            system default (网站默认 > HTTPS > SSL); omitted on update:
+            unchanged (tls_cipher_suites is sent with it).
+        tls_cipher_suites:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items:
+            type: string
+            enum: [ECDHE-ECDSA-AES128-GCM-SHA256, ECDHE-RSA-AES128-GCM-SHA256, ECDHE-ECDSA-AES256-GCM-SHA384,
+              ECDHE-RSA-AES256-GCM-SHA384, ECDHE-ECDSA-CHACHA20-POLY1305, ECDHE-RSA-CHACHA20-POLY1305,
+              ECDHE-ECDSA-AES128-SHA256, ECDHE-RSA-AES128-SHA256, ECDHE-ECDSA-AES256-SHA384, ECDHE-RSA-AES256-SHA384,
+              ECDHE-ECDSA-AES128-SHA, ECDHE-RSA-AES128-SHA, ECDHE-ECDSA-AES256-SHA, ECDHE-RSA-AES256-SHA,
+              AES128-GCM-SHA256, AES256-GCM-SHA384, AES128-SHA256, AES256-SHA256, AES128-SHA, AES256-SHA]
+          description: >-
+            Ordered OpenSSL TLS 1.2 suite names of the custom preset (the
+            server's order wins), only with tls_cipher_preset custom (a
+            response carries none for the other presets). Only names of this
+            whitelist (edgeconfig.TLSCustomCipherSuites); at least one
+            ECDHE-ECDSA and one ECDHE-RSA AEAD (GCM or CHACHA20-POLY1305)
+            suite, so a handshake works with either certificate type. TLS 1.3
+            suites stay OpenSSL's default.
+        tls_ocsp_stapling:
+          type: boolean
+          description: Staple the issuer's OCSP response. Omitted on create the system default; on update unchanged.
+        tls_client_auth:
+          type: string
+          enum: ['off', optional, required]
+          description: >-
+            Client certificate verification against tls_client_ca_pem.
+            required refuses clients without a valid certificate; optional
+            serves every client and sends X-Client-Verify,
+            X-Client-Cert-Subject and X-Client-Cert-Fingerprint to the origin.
+        tls_client_ca_pem:
+          type: string
+          maxLength: 262144
+          description: PEM CA certificates (1-64, CA basic constraint); sent with tls_client_auth, empty when off.
+        http2_enabled:
+          type: boolean
+          description: >-
+            HTTP/2 on the site's HTTPS ports. Off: the site's TLS connections
+            negotiate http/1.1 only, also on a port other sites serve with
+            HTTP/2 (an HTTP/2 connection coalesced from another site gets 421).
+            Off needs node capability SITE_TLS_OPTIONS. Omitted on create: the
+            owner's default http2, else on; omitted on update: unchanged.
+        http3_enabled:
+          type: boolean
+          description: >-
+            HTTP/3 (QUIC, Alt-Svc) on the site's HTTPS ports; only with TLSv1.3
+            in tls_protocols. Off: no Alt-Svc and QUIC handshakes for the site
+            are refused. Omitted on create: the owner's default http3, else on;
+            omitted on update: unchanged.
+        tls_prefer_server_ciphers:
+          type: [boolean, 'null']
+          description: >-
+            ssl_prefer_server_ciphers for TLS 1.2 and older. null: by
+            tls_cipher_preset (modern off, compatible and legacy on). A value
+            other than the preset's needs node capability SITE_TLS_OPTIONS.
+            Omitted on create: the owner's default ssl_prefer_server_ciphers,
+            else null; omitted on update: unchanged; null on update: by preset.
+        cname_state: {type: [string, 'null'], enum: [pending, failed, done, null], readOnly: true}
+        cname_failure_code:
+          type: string
+          readOnly: true
+          pattern: '^[a-z][a-z0-9._-]{0,127}$'
+          description: Present only when cname_state is failed; see SiteListItem.cname_failure_code.
+        cname_task_id: {type: [string, 'null'], format: uuid, readOnly: true}
+        cname_current_revision: {type: [integer, 'null'], format: int64, minimum: 1, readOnly: true}
+        cname_lkg_revision: {type: [integer, 'null'], format: int64, minimum: 1, readOnly: true}
+        https_enabled: {type: boolean}
+        cache_status_header:
+          type: boolean
+          description: >-
+            响应头显示缓存状态: the node answers the cache status response header with the
+            request's cache status (HIT, MISS, EXPIRED, BYPASS, STALE, UPDATING, REVALIDATED; no
+            node name or address). The origin's own header of that name is always removed. Hidden while the site is at attack
+            escalation level B or above (shown again after the next publication once it is back
+            at A). Omitted on create: on; omitted on update: unchanged. Audited as
+            site.cache_status_header.update.
+        enabled: {type: boolean}
+        status: {$ref: '#/components/schemas/SiteStatus'}
+        sync_status:
+          allOf: [{$ref: '#/components/schemas/SyncStatus'}]
+          readOnly: true
+          description: >-
+            Derived by the server (PJ-C02, migration 503) from the site's latest automatic publication: succeeded synced,
+            failed failed, otherwise pending; synced without one. Always present in responses; a write carrying it is
+            refused (400).
+        is_default:
+          type: boolean
+          description: >-
+            默认站点 (platform operators only; a tenant's value is ignored and the stored one kept): answers every Host no site
+            serves and TLS handshakes without or with an unknown SNI (IP certificates) on its ports. One
+            in the installation: setting it clears the previous default site in the same request (both
+            audited as site.default.update; the previous one is republished). Needs SITE_EDGE_OPTIONS.
+    SiteBasicRequest:
+      allOf:
+        - {$ref: '#/components/schemas/SiteBasic'}
+        - type: object
+          properties:
+            tls_protocols:
+              type: array
+              minItems: 1
+              maxItems: 4
+              items: {type: string, enum: [TLSv1, TLSv1.1, TLSv1.2, TLSv1.3]}
+              description: >-
+                An ascending contiguous range of TLSv1..TLSv1.3 (for example
+                [TLSv1.3], [TLSv1.2, TLSv1.3] or [TLSv1, TLSv1.1, TLSv1.2,
+                TLSv1.3]). Omitted on create: the system default; omitted on
+                update: unchanged. SSLv2/SSLv3, gaps, reordered or duplicate
+                sets are rejected before mutation.
+    SiteBasicResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SiteBasic'}
+        - type: object
+          required: [tls_protocols, http_listen_ports, https_listen_ports, ipv6_enabled]
+    SiteDetail:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, display_id, version, owner, created_at, updated_at, lock, listener_state, basic, origin_pool]
+      properties:
+        id: {type: string, format: uuid}
+        scope_id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Tenant scope that owns the site; platform operators use it for scoped certificate and policy operations.
+        display_id: {type: string, pattern: '^[1-9][0-9]*$', maxLength: 19, readOnly: true}
+        version: {type: integer, format: int64, minimum: 1}
+        owner:
+          oneOf:
+            - {$ref: '#/components/schemas/OwnerReference'}
+            - {type: 'null'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        lock: {$ref: '#/components/schemas/SiteLockState'}
+        listener_state: {$ref: '#/components/schemas/SiteListenerState'}
+        https_certificate_bound:
+          type: boolean
+          readOnly: true
+          description: The site has a bound certificate. Turning HTTPS or forced HTTPS on without one is refused (400 validation_error, details.field https_enabled / force_https, reason certificate_required).
+        basic: {$ref: '#/components/schemas/SiteBasicResponse'}
+        origin_pool:
+          $ref: '#/components/schemas/OriginPool'
+          required: [balance_method, connect_timeout_ms, read_timeout_ms]
+        package_expires_at:
+          type: [string, 'null']
+          format: date-time
+          readOnly: true
+          description: Period end (ends_at) of the site's package subscription; null without one.
+        package_expired_days:
+          type: [integer, 'null']
+          minimum: 0
+          readOnly: true
+          description: Whole days since package_expires_at passed (0 while valid or within the first day); null without a subscription.
+        package_remaining_days:
+          type: [integer, 'null']
+          minimum: 0
+          readOnly: true
+          description: >-
+            剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from
+            elapsed time, so it does not depend on the display time zone. Null without a subscription.
+        access_readiness:
+          description: 接入状态 (same as the list item's).
+          oneOf:
+            - {$ref: '#/components/schemas/SiteAccessReadiness'}
+            - {type: 'null'}
+        package_unavailable_reason:
+          type: [string, 'null']
+          enum: [no_package, package_disabled, package_deleted, null]
+          readOnly: true
+          description: >-
+            Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are
+            published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid.
+    Origin:
+      type: object
+      additionalProperties: false
+      required: [host, port, weight, enabled]
+      properties:
+        host:
+          type: string
+          minLength: 1
+          maxLength: 253
+          description: Canonical domain, IPv4 address, or unbracketed IPv6 address.
+        port: {type: integer, minimum: 1, maximum: 65535}
+        weight: {type: integer, minimum: 1, maximum: 100}
+        enabled: {type: boolean}
+        level:
+          type: integer
+          minimum: 0
+          maximum: 15
+          default: 0
+          description: >-
+            0 is the primary, 1 backup 1, and so on. The edge uses a level only when every origin of
+            the levels before it (from the pool's active level) is down; within a level the balance
+            method and weights apply, for every balance method.
+        port_inherited:
+          type: boolean
+          default: false
+          description: >-
+            The origin has no port of its own and uses the pool's (http_port, https_port for scheme https); port then
+            carries that port, and a written port is ignored.
+    OriginPool:
+      type: object
+      additionalProperties: false
+      required: [origins, failover_tries]
+      properties:
+        origins:
+          type: array
+          minItems: 1
+          maxItems: 32
+          description: Endpoints must be unique by canonical host and port, with at least one enabled origin.
+          items: {$ref: '#/components/schemas/Origin'}
+        balance_method:
+          type: string
+          enum: [round_robin, ip_hash, url_hash, least_conn, random]
+          description: >-
+            A create may leave it out: the owner's site default (balance_way),
+            then the platform website default, then round_robin. Required in
+            responses and origin updates.
+        failover_tries:
+          type: integer
+          minimum: 1
+          maximum: 32
+          description: Must not exceed the number of enabled origins.
+        connect_timeout_ms:
+          type: integer
+          minimum: 50
+          maximum: 30000
+          description: A create may leave it out (owner's site default, then 3000). Required in responses and origin updates.
+        read_timeout_ms:
+          type: integer
+          minimum: 100
+          maximum: 300000
+          description: A create may leave it out (owner's site default, then 30000). Required in responses and origin updates.
+        scheme:
+          type: string
+          enum: [http, https, follow]
+          default: http
+          description: >-
+            回源协议. http and https connect to the origin with that protocol; follow uses HTTPS on https_port for
+            visits to a TLS listener and HTTP on the origin's port otherwise. follow with follow_port is 跟随协议和端口:
+            both protocols on the port the visitor connected to (http_port and https_port then stay 80 and 443).
+            Accepted on create (添加网站) and on PUT .../origin.
+        http_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          default: 80
+          description: >-
+            HTTP 回源端口: the port of origins with port_inherited for scheme http and follow; must be 80 for https
+            and for follow with follow_port.
+        https_port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+          default: 443
+          description: >-
+            HTTPS 回源端口: follow's HTTPS port, and the port of origins with port_inherited for scheme https; must be
+            443 for http and for follow with follow_port.
+        request_host:
+          type: object
+          additionalProperties: false
+          required: [mode]
+          description: >-
+            回源 Host (absent: visitor). visitor sends the visitor's Host (访问域名, without a port), visitor_port the
+            visitor's host with the port it connected to (访问域名+端口), origin the origin's host[:port] (several origin
+            hosts need round_robin, random or sticky), custom sends value (a hostname or IP with an optional port).
+            Conditional origin pools (PUT .../origin-routing) keep the visitor's Host. Accepted on create (添加网站) and
+            on PUT .../origin.
+          properties:
+            mode: {type: string, enum: [visitor, visitor_port, origin, custom]}
+            value: {type: string, maxLength: 259, description: 'custom only; empty for the other modes.'}
+        failback_mode:
+          type: string
+          enum: [auto, manual]
+          default: auto
+          description: After a higher level recovers, auto returns to it once the origin probe confirms it; manual waits for POST .../origin-failback.
+        health_check_path:
+          type: string
+          default: /
+          pattern: '^/[A-Za-z0-9._~!$&''()*+,;=:@%/?-]{0,255}$'
+          description: Path the control plane probes on every origin (with the pool's origin Host and SNI).
+        follow_redirect:
+          type: object
+          additionalProperties: false
+          required: [enabled]
+          description: >-
+            Origin redirect following (absent: off). For a bodyless GET/HEAD without an upgrade the edge
+            follows the origin's 301/302/303/307/308 and serves the final response (cached under the
+            original URL). A Location on another host than the visitor's, a site domain or a pool origin
+            is followed only with cross_origin (to that host on the pool's origins); a redirect not
+            followed (hops exhausted, another host) is returned to the visitor with Cache-Control:
+            no-store. Requests of a site whose cache uses slices are not followed when cached. Needs node
+            capability ORIGIN_FOLLOW_REDIRECT: publication to nodes without it is refused with the nodes
+            listed.
+          properties:
+            enabled: {type: boolean}
+            max_hops: {type: integer, minimum: 0, maximum: 5, default: 3, description: '0 means the default 3.'}
+            cross_origin: {type: boolean, default: false}
+        search_engine_origin:
+          type: string
+          maxLength: 512
+          default: ''
+          description: >-
+            搜索引擎回源: host[:port] (port 80 by default, plain HTTP) that search engine crawlers, recognized
+            by User-Agent (Googlebot, Bingbot, Baiduspider, Sogou, 360Spider, YisouSpider, Bytespider,
+            YandexBot, DuckDuckBot, Applebot, PetalBot, Slurp), are proxied to with the pool's Host and
+            timeouts. Their requests are never served from or stored in the cache (X-CDN-Cache-Reason:
+            search_engine). Empty: off. Needs node capability SITE_EDGE_OPTIONS.
+        acme_passthrough:
+          type: boolean
+          default: false
+          description: >-
+            源站申请证书: a /.well-known/acme-challenge/<token> request goes to the origin, so the origin can
+            obtain its own certificate over HTTP-01. A token the node holds (a certificate this platform is
+            issuing for the host) is always answered by the node: our issuance wins. Off: such a request
+            the node holds no token for gets 404. Needs SITE_EDGE_OPTIONS.
+        response_buffering:
+          type: boolean
+          default: true
+          description: >-
+            数据实时返回 when false (proxy_buffering off): the origin's response is sent to the client as it
+            arrives. Applies only to requests the cache does not serve (a cached request keeps buffering,
+            so caching is unaffected; turn caching off for paths that must stream). Needs SITE_EDGE_OPTIONS.
+        request_buffering:
+          type: boolean
+          default: true
+          description: >-
+            数据实时发送 when false (proxy_request_buffering off): the client's request body is sent to the
+            origin as it arrives (no retry to another origin once sent). Requests the cache does not serve
+            only. Needs SITE_EDGE_OPTIONS.
+        l2_mode:
+          type: string
+          enum: [package, 'off', custom]
+          default: package
+          description: >-
+            网站 L2 配置 (platform operators only; a tenant's value is ignored and the stored one kept): package uses the L2 of
+            the line group the site is published through, off sends the site straight to its origins,
+            custom keeps only the L2 nodes of l2_config_id among the publication target's L2 endpoints
+            (publication is refused with site_l2_unavailable when none of them is one).
+        l2_config_id:
+          type: [string, 'null']
+          format: uuid
+          description: The L2 configuration (节点管理 → L2配置) of l2_mode custom; null otherwise.
+        origin_auth_enabled:
+          type: boolean
+          default: true
+          description: >-
+            回源鉴权开关: false keeps the site's origin auth rules (/v1/origin-auth/rules) but signs nothing (they are
+            left out of the published site objects and not checked against the pool); true signs again with the next
+            publication.
+        backup_origins:
+          type: array
+          maxItems: 64
+          writeOnly: true
+          items: {type: string, maxLength: 512}
+          description: >-
+            Write only: the backup origins in switch order, one host[:port] per entry (the format of
+            basic.origins). Entry n becomes level n; blank entries are ignored, repeats (and primaries)
+            dropped, at most 15 remain. When present, origins carries only the primaries (level 0).
+    OriginProbeStatus:
+      type: string
+      enum: [healthy, unhealthy, unknown]
+    OriginPoolStatus:
+      type: object
+      additionalProperties: false
+      required: [site_id, failback_mode, active_level, overall, failback_ready, levels, origins, switched_at, checked_at]
+      properties:
+        site_id: {type: string, format: uuid}
+        failback_mode: {type: string, enum: [auto, manual]}
+        active_level: {type: integer, minimum: 0, maximum: 15}
+        overall:
+          $ref: '#/components/schemas/OriginProbeStatus'
+          description: healthy while any level is healthy, unhealthy when every level is, otherwise unknown.
+        failback_ready: {type: boolean, description: 'manual mode: a higher level is healthy again'}
+        levels:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [level, status]
+            properties:
+              level: {type: integer, minimum: 0, maximum: 15}
+              status: {$ref: '#/components/schemas/OriginProbeStatus'}
+        origins:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [position, host, port, level, enabled, status, reason, checked_at]
+            properties:
+              position: {type: integer, minimum: 1, maximum: 32}
+              host: {type: string}
+              port: {type: integer}
+              level: {type: integer}
+              enabled: {type: boolean}
+              status: {$ref: '#/components/schemas/OriginProbeStatus'}
+              reason: {type: string}
+              checked_at: {type: string, format: date-time, nullable: true}
+        switched_at: {type: string, format: date-time, nullable: true}
+        checked_at: {type: string, format: date-time, nullable: true}
+    CreateSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [basic]
+      properties:
+        target_scope_id: {type: string, format: uuid}
+        owner_id: {type: string, format: uuid}
+        basic: {$ref: '#/components/schemas/SiteBasicRequest'}
+        origin_pool:
+          $ref: '#/components/schemas/OriginPool'
+          description: >-
+            Optional atomic rich origin configuration. When omitted, the server
+            derives a pool from basic.origins. When present, its canonical host
+            and port sequence must exactly match basic.origins. A missing
+            balance_method follows the owner's site default (balance_way),
+            then the platform website default, then round_robin. Missing
+            connect_timeout_ms / read_timeout_ms follow the owner's site
+            defaults, then 3000 / 30000.
+        dns_provider_id:
+          type: string
+          format: uuid
+          description: >-
+            建站「DNS API（自动添加记录）」: a verified DNS API account of the
+            owner (needs dns.manage). After the site is created, every domain
+            gets a CNAME to the site CNAME through it (site.auto_dns). A
+            failure there never fails the create; it shows in auto_dns and is
+            retried. 422 dns_provider_unusable: not a verified account of the
+            owner.
+    UpdateSiteRequest:
+      oneOf:
+        - {$ref: '#/components/schemas/UpdateSiteBasicRequest'}
+        - {$ref: '#/components/schemas/UpdateSiteOriginRequest'}
+      discriminator:
+        propertyName: section
+        mapping:
+          basic: '#/components/schemas/UpdateSiteBasicRequest'
+          origin: '#/components/schemas/UpdateSiteOriginRequest'
+    UpdateSiteBasicRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, section, changes]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        section: {type: string, const: basic}
+        changes:
+          $ref: '#/components/schemas/SiteBasicRequest'
+          required: [http_listen_ports, https_listen_ports, ipv6_enabled]
+    UpdateSiteOriginRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, section, changes]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        section: {type: string, const: origin}
+        changes:
+          $ref: '#/components/schemas/OriginPool'
+          required: [balance_method, connect_timeout_ms, read_timeout_ms]
+    LockSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, reason]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    UnlockSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+    TransferSiteRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_version, target_user_id]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        target_user_id: {type: string, format: uuid}
+        target_package_subscription_id: {type: [string, 'null'], format: uuid}
+    TransferSiteItem:
+      type: string
+      enum: [http_policy, cache_policy, certificate, waf_policy, cc_policy, acl_policy, auto_defense, js_challenge]
+    TransferSiteResponse:
+      type: object
+      additionalProperties: false
+      required: [site, from_site_id, from_cname, copied, released]
+      properties:
+        site: {$ref: '#/components/schemas/SiteDetail'}
+        from_site_id: {type: string, format: uuid, description: The deleted website.}
+        from_cname: {type: string, description: The retired CNAME the customer repoints from.}
+        copied:
+          type: array
+          items: {$ref: '#/components/schemas/TransferSiteItem'}
+        released:
+          type: array
+          items: {$ref: '#/components/schemas/TransferSiteItem'}
+    DomainTrustErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id, domain, apex]
+          properties:
+            code: {type: string, enum: [domain_blocked, domain_verified_by_other, domain_ownership_required]}
+            message: {type: string}
+            request_id: {type: string}
+            domain: {type: string}
+            apex: {type: string}
+    BatchSiteActionItem:
+      type: object
+      additionalProperties: false
+      required: [id, expected_version]
+      properties:
+        id: {type: string, format: uuid}
+        expected_version: {type: integer, format: int64, minimum: 1}
+    BatchSiteActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, items]
+      properties:
+        action: {type: string, enum: [enable, disable, delete, regenerate_cname, set_protocols]}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: Site IDs must be unique even when expected versions differ.
+          items: {$ref: '#/components/schemas/BatchSiteActionItem'}
+        protocols: {$ref: '#/components/schemas/BatchSiteProtocols'}
+    BatchSiteProtocols:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: >-
+        Required with set_protocols and rejected with every other action. An
+        omitted key keeps each site's value; tls_prefer_server_ciphers null
+        follows the cipher preset again.
+      properties:
+        http2_enabled: {type: boolean}
+        http3_enabled: {type: boolean}
+        tls_prefer_server_ciphers: {type: [boolean, 'null']}
+    BatchSiteActionError:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          enum:
+            - site_not_found
+            - site_locked
+            - version_conflict
+            - cname_not_configured
+            - cname_not_failed
+            - cname_not_regenerable
+            - permission_denied
+            - entitlement_unavailable
+            - entitlement_state_denied
+            - entitlement_feature_denied
+            - entitlement_quota_denied
+            - entitlement_quota_exceeded
+            - package_subscription_inactive
+            - package_resource_quota_exceeded
+            - package_feature_denied
+    BatchSiteActionItemResult:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [updated, deleted, queued, failed]}
+        site: {$ref: '#/components/schemas/SiteDetail'}
+        error: {$ref: '#/components/schemas/BatchSiteActionError'}
+      description: >-
+        updated includes site, deleted includes neither site nor error, and
+        failed includes error. queued includes a site whose cname_state is
+        pending and whose site.cname_task_id is the durable task identity; it
+        does not mean provider mutation or DNS convergence succeeded.
+        Successful enable and disable actions increment the version even when
+        the requested enabled state already matched.
+    BatchSiteActionResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {$ref: '#/components/schemas/BatchSiteActionItemResult'}
+    ConditionalOriginEndpoint:
+      type: object
+      additionalProperties: false
+      required: [id, host, port, weight]
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+        host:
+          type: string
+          description: Canonical unicast IPv4 or IPv6 literal; DNS names are not accepted by origin-route/v1.
+        port: {type: integer, minimum: 1, maximum: 65535}
+        weight: {type: integer, minimum: 1, maximum: 100}
+    ConditionalOriginPool:
+      type: object
+      additionalProperties: false
+      required: [id, endpoints]
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+        balance_method:
+          type: string
+          default: round_robin
+          enum: [round_robin, ip_hash, url_hash, least_conn, random]
+        endpoints:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items: {$ref: '#/components/schemas/ConditionalOriginEndpoint'}
+    ConditionalOriginRoute:
+      type: object
+      additionalProperties: false
+      required: [id, priority, pool_id]
+      properties:
+        id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+        priority: {type: integer, minimum: -1000, maximum: 1000}
+        path_prefix: {type: string, minLength: 1, maxLength: 2048, pattern: '^/'}
+        node_regions:
+          type: array
+          maxItems: 32
+          items: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+        client_cidrs:
+          type: array
+          maxItems: 32
+          items: {type: string}
+        pool_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+        fallback_pool_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+      description: >-
+        At least one of path_prefix, node_regions, and client_cidrs is required.
+        Evaluation order is priority descending, non-root path specificity,
+        explicit region, longest CIDR prefix, then route ID.
+    ConditionalOriginRetry:
+      type: object
+      additionalProperties: false
+      required: [methods, max_attempts, connect_timeout_ms, read_timeout_ms, total_budget_ms]
+      properties:
+        methods:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: {type: string, enum: [GET, HEAD]}
+        max_attempts: {type: integer, minimum: 1, maximum: 8}
+        connect_timeout_ms: {type: integer, minimum: 10, maximum: 60000}
+        read_timeout_ms: {type: integer, minimum: 10, maximum: 60000}
+        total_budget_ms: {type: integer, minimum: 20, maximum: 120000}
+    ConditionalOriginEffectiveRetry:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      required: [bodyless_only, response_not_started, retry_on]
+      properties:
+        bodyless_only: {type: boolean, const: true}
+        response_not_started: {type: boolean, const: true}
+        retry_on:
+          type: array
+          const: [connect_error, connect_timeout, read_timeout, http_502, http_503, http_504]
+          items:
+            type: string
+            enum: [connect_error, connect_timeout, read_timeout, http_502, http_503, http_504]
+    ConditionalOriginEffectiveL2Fallback:
+      type: object
+      readOnly: true
+      additionalProperties: false
+      description: >-
+        Fixed edge safety semantics for an enabled L1-to-L2 route. This object
+        does not indicate that L2 routing is enabled for the site.
+      required:
+        - direct_origin_only
+        - within_total_budget
+        - probe_interval_ms
+        - failure_threshold
+        - recovery_threshold
+        - single_half_open_probe
+        - max_hops
+      properties:
+        direct_origin_only: {type: boolean, const: true}
+        within_total_budget: {type: boolean, const: true}
+        probe_interval_ms: {type: integer, const: 10000}
+        failure_threshold: {type: integer, const: 3}
+        recovery_threshold: {type: integer, const: 3}
+        single_half_open_probe: {type: boolean, const: true}
+        max_hops: {type: integer, const: 1}
+    ConditionalOriginDocument:
+      type: object
+      additionalProperties: false
+      required: [schema, ingress_source_enabled, pools, default_pool_id, routes, retry]
+      properties:
+        schema: {type: string, const: cdnca.edge.origin-route/v1}
+        ingress_source_enabled: {type: boolean}
+        pools:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {$ref: '#/components/schemas/ConditionalOriginPool'}
+        default_pool_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+        default_fallback_pool_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'}
+        routes:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/ConditionalOriginRoute'}
+        retry: {$ref: '#/components/schemas/ConditionalOriginRetry'}
+    SiteSchedule302Settings:
+      type: object
+      additionalProperties: false
+      required: [enabled, target, keep_path, keep_query, signature_ttl_seconds, https_to_http, extensions, path_prefixes, min_size_bytes]
+      properties:
+        enabled: {type: boolean}
+        target:
+          type: string
+          enum: [address, hostname]
+          description: Redirect to the node's line-group endpoint address, or to its direct hostname (nodes without one are skipped).
+        keep_path: {type: boolean}
+        keep_query: {type: boolean}
+        signature_ttl_seconds: {type: integer, minimum: 10, maximum: 3600}
+        https_to_http:
+          type: boolean
+          description: Also redirect HTTPS requests; they land on plain HTTP (nodes hold no certificate for their address).
+        extensions:
+          type: array
+          maxItems: 64
+          items: {type: string, pattern: '^\.?[A-Za-z0-9]{1,16}$'}
+        path_prefixes:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 256, pattern: '^/'}
+        min_size_bytes:
+          type: integer
+          minimum: 0
+          maximum: 1099511627776
+          description: Redirect only URLs whose response the node already served at least this large (0 off).
+    SiteSchedule302State:
+      type: object
+      additionalProperties: false
+      required: [site_id, version, settings, plain_http, updated_at]
+      properties:
+        site_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        settings: {$ref: '#/components/schemas/SiteSchedule302Settings'}
+        plain_http: {type: boolean}
+        updated_at: {type: [string, 'null'], format: date-time}
+    ConditionalOriginState:
+      type: object
+      additionalProperties: false
+      required: [site_id, version, document, effective_retry, effective_l2_fallback, updated_at]
+      properties:
+        site_id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+        document: {$ref: '#/components/schemas/ConditionalOriginDocument'}
+        effective_retry: {$ref: '#/components/schemas/ConditionalOriginEffectiveRetry'}
+        effective_l2_fallback: {$ref: '#/components/schemas/ConditionalOriginEffectiveL2Fallback'}
+        updated_at: {type: string, format: date-time}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: For a validation_error of a site write, the refused field.
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string}
+                reason: {type: string}
+  responses:
+    BadRequest:
+      description: Invalid JSON, field, or query input.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unauthorized:
+      description: Authentication is required.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Forbidden:
+      description: The principal lacks sites.read or sites.manage.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    NotFound:
+      description: The site is absent, deleted, or outside the tenant scope.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Conflict:
+      description: Domain, version, idempotency, website lock-state, or origin-section conflict.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    TooManyRequests:
+      description: Rate limited; Retry-After gives the seconds to wait.
+      headers:
+        Retry-After: {schema: {type: integer, minimum: 1}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    InternalError:
+      description: The operation failed without exposing internal details.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

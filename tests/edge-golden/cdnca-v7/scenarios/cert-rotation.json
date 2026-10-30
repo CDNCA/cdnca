@@ -1,0 +1,711 @@
+{
+  "name": "cert-rotation",
+  "description": "证书轮换热替换不断连（gap-sweep G4）：同一端口两个 TLS 站点；站点 rotate 发布新证书版本（新序列号，站点修订 +1）以索引激活生效、不重载 OpenResty——轮换前建立的 HTTP/1.1 长连接在轮换后继续同一连接收发（reused），仍是旧证书；新握手拿到新证书且可验证；未轮换的站点 steady 证书与连接不受影响；再次发布同一内容不改变证书。",
+  "covers": [
+    "证书轮换",
+    "热替换",
+    "长连接不断",
+    "同端口他站不受影响"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b2070-0000-4000-8000-000000000001",
+      "source_revision": 1,
+      "config_version_id": "0a1b2070-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "http2",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "ipv6",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 7
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b2070-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "rotate.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18470",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18470,
+              "protocols": [
+                "http1",
+                "http2"
+              ],
+              "tls": {
+                "certificate_version_id": "0a1b2070-0000-4000-8000-0000000000a1"
+              }
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o1",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19701,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2070-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "steady.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18470",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18470,
+              "protocols": [
+                "http1",
+                "http2"
+              ],
+              "tls": {
+                "certificate_version_id": "0a1b2070-0000-4000-8000-0000000000a2"
+              }
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o2",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19702,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        }
+      ]
+    },
+    "node": {
+      "health_port": 18971,
+      "certificates": [
+        {
+          "site_id": "0a1b2070-0000-4000-8000-000000000101",
+          "version_id": "0a1b2070-0000-4000-8000-0000000000a1",
+          "revision": 1,
+          "serial": 701,
+          "names": [
+            "rotate.example.test"
+          ]
+        },
+        {
+          "site_id": "0a1b2070-0000-4000-8000-000000000102",
+          "version_id": "0a1b2070-0000-4000-8000-0000000000a2",
+          "revision": 1,
+          "serial": 702,
+          "names": [
+            "steady.example.test"
+          ]
+        }
+      ]
+    }
+  },
+  "origins": [
+    {
+      "name": "o1",
+      "address": "127.0.0.1:19701"
+    },
+    {
+      "name": "o2",
+      "address": "127.0.0.1:19702"
+    }
+  ],
+  "steps": [
+    {
+      "id": "hs-before",
+      "kind": "tls",
+      "port": 18470,
+      "host": "rotate.example.test"
+    },
+    {
+      "id": "keep-before",
+      "scheme": "https",
+      "port": 18470,
+      "host": "rotate.example.test",
+      "path": "/k1",
+      "connection": "rotate"
+    },
+    {
+      "id": "steady-keep-before",
+      "scheme": "https",
+      "port": 18470,
+      "host": "steady.example.test",
+      "path": "/s1",
+      "connection": "steady"
+    },
+    {
+      "id": "rotate",
+      "kind": "publish",
+      "publish": {
+        "document": {
+          "schema": "cdnca.edge.site-runtime/v2",
+          "configuration_scope_id": "0a1b2070-0000-4000-8000-000000000001",
+          "source_revision": 2,
+          "config_version_id": "0a1b2070-0000-4000-8000-0000000000c2",
+          "required_capabilities": [
+            {
+              "name": "http1",
+              "api_version": 1
+            },
+            {
+              "name": "http2",
+              "api_version": 1
+            },
+            {
+              "name": "ipv4",
+              "api_version": 1
+            },
+            {
+              "name": "ipv6",
+              "api_version": 1
+            },
+            {
+              "name": "site_runtime",
+              "api_version": 7
+            }
+          ],
+          "sites": [
+            {
+              "id": "0a1b2070-0000-4000-8000-000000000101",
+              "revision": 2,
+              "domains": [
+                "rotate.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "l-18470",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18470,
+                  "protocols": [
+                    "http1",
+                    "http2"
+                  ],
+                  "tls": {
+                    "certificate_version_id": "0a1b2070-0000-4000-8000-0000000000b1"
+                  }
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "o1",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19701,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            },
+            {
+              "id": "0a1b2070-0000-4000-8000-000000000102",
+              "revision": 1,
+              "domains": [
+                "steady.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "l-18470",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18470,
+                  "protocols": [
+                    "http1",
+                    "http2"
+                  ],
+                  "tls": {
+                    "certificate_version_id": "0a1b2070-0000-4000-8000-0000000000a2"
+                  }
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "o2",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19702,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            }
+          ]
+        },
+        "certificates": [
+          {
+            "site_id": "0a1b2070-0000-4000-8000-000000000101",
+            "version_id": "0a1b2070-0000-4000-8000-0000000000b1",
+            "revision": 1,
+            "serial": 711,
+            "names": [
+              "rotate.example.test"
+            ]
+          },
+          {
+            "site_id": "0a1b2070-0000-4000-8000-000000000102",
+            "version_id": "0a1b2070-0000-4000-8000-0000000000a2",
+            "revision": 1,
+            "serial": 702,
+            "names": [
+              "steady.example.test"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "keep-after",
+      "scheme": "https",
+      "port": 18470,
+      "host": "rotate.example.test",
+      "path": "/k2",
+      "connection": "rotate",
+      "note": "同一连接，旧证书，不断开"
+    },
+    {
+      "id": "keep-after-2",
+      "scheme": "https",
+      "port": 18470,
+      "host": "rotate.example.test",
+      "path": "/k3",
+      "connection": "rotate"
+    },
+    {
+      "id": "hs-after",
+      "kind": "tls",
+      "port": 18470,
+      "host": "rotate.example.test"
+    },
+    {
+      "id": "fresh-after",
+      "scheme": "https",
+      "port": 18470,
+      "host": "rotate.example.test",
+      "path": "/f"
+    },
+    {
+      "id": "fresh-after-h1",
+      "scheme": "https",
+      "port": 18470,
+      "host": "rotate.example.test",
+      "path": "/f1",
+      "alpn": [
+        "http/1.1"
+      ]
+    },
+    {
+      "id": "steady-keep-after",
+      "scheme": "https",
+      "port": 18470,
+      "host": "steady.example.test",
+      "path": "/s2",
+      "connection": "steady"
+    },
+    {
+      "id": "steady-hs-after",
+      "kind": "tls",
+      "port": 18470,
+      "host": "steady.example.test"
+    },
+    {
+      "id": "republish-same",
+      "kind": "publish",
+      "publish": {
+        "document": {
+          "schema": "cdnca.edge.site-runtime/v2",
+          "configuration_scope_id": "0a1b2070-0000-4000-8000-000000000001",
+          "source_revision": 2,
+          "config_version_id": "0a1b2070-0000-4000-8000-0000000000c2",
+          "required_capabilities": [
+            {
+              "name": "http1",
+              "api_version": 1
+            },
+            {
+              "name": "http2",
+              "api_version": 1
+            },
+            {
+              "name": "ipv4",
+              "api_version": 1
+            },
+            {
+              "name": "ipv6",
+              "api_version": 1
+            },
+            {
+              "name": "site_runtime",
+              "api_version": 7
+            }
+          ],
+          "sites": [
+            {
+              "id": "0a1b2070-0000-4000-8000-000000000101",
+              "revision": 2,
+              "domains": [
+                "rotate.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "l-18470",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18470,
+                  "protocols": [
+                    "http1",
+                    "http2"
+                  ],
+                  "tls": {
+                    "certificate_version_id": "0a1b2070-0000-4000-8000-0000000000b1"
+                  }
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "o1",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19701,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            },
+            {
+              "id": "0a1b2070-0000-4000-8000-000000000102",
+              "revision": 1,
+              "domains": [
+                "steady.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "l-18470",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18470,
+                  "protocols": [
+                    "http1",
+                    "http2"
+                  ],
+                  "tls": {
+                    "certificate_version_id": "0a1b2070-0000-4000-8000-0000000000a2"
+                  }
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "o2",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19702,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            }
+          ]
+        },
+        "certificates": [
+          {
+            "site_id": "0a1b2070-0000-4000-8000-000000000101",
+            "version_id": "0a1b2070-0000-4000-8000-0000000000b1",
+            "revision": 1,
+            "serial": 711,
+            "names": [
+              "rotate.example.test"
+            ]
+          },
+          {
+            "site_id": "0a1b2070-0000-4000-8000-000000000102",
+            "version_id": "0a1b2070-0000-4000-8000-0000000000a2",
+            "revision": 1,
+            "serial": 702,
+            "names": [
+              "steady.example.test"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "hs-republished",
+      "kind": "tls",
+      "port": 18470,
+      "host": "rotate.example.test"
+    },
+    {
+      "id": "keep-after-republish",
+      "scheme": "https",
+      "port": 18470,
+      "host": "rotate.example.test",
+      "path": "/k4",
+      "connection": "rotate"
+    }
+  ]
+}

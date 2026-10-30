@@ -1,0 +1,251 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/bw-request-limits",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "请求方法与大小限制",
+ "description": "方法不在 GET/POST/HEAD/QUERY 之列、请求头超过 100 个或请求体超过 10m 即记录，可改为拦截或挑战。OPTIONS 预检与 WebDAV/REST 站点（PUT/DELETE/PATCH）会命中，按站点关闭对应规则。",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "bw-body-size",
+  "bw-header-count",
+  "bw-method-connect",
+  "bw-method-copy",
+  "bw-method-debug",
+  "bw-method-delete",
+  "bw-method-lock",
+  "bw-method-mkcol",
+  "bw-method-move",
+  "bw-method-options",
+  "bw-method-patch",
+  "bw-method-propfind",
+  "bw-method-proppatch",
+  "bw-method-put",
+  "bw-method-trace",
+  "bw-method-track",
+  "bw-method-unlock"
+ ],
+ "rules": [
+  {
+   "id": "bw-method-connect",
+   "name": "方法 CONNECT 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "CONNECT"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-copy",
+   "name": "方法 COPY 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "COPY"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-debug",
+   "name": "方法 DEBUG 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "DEBUG"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-delete",
+   "name": "方法 DELETE 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "DELETE"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-lock",
+   "name": "方法 LOCK 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "LOCK"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-mkcol",
+   "name": "方法 MKCOL 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "MKCOL"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-move",
+   "name": "方法 MOVE 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "MOVE"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-options",
+   "name": "方法 OPTIONS 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "OPTIONS"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-patch",
+   "name": "方法 PATCH 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "PATCH"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-propfind",
+   "name": "方法 PROPFIND 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "PROPFIND"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-proppatch",
+   "name": "方法 PROPPATCH 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "PROPPATCH"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-put",
+   "name": "方法 PUT 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "PUT"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-trace",
+   "name": "方法 TRACE 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "TRACE"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-track",
+   "name": "方法 TRACK 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "TRACK"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-method-unlock",
+   "name": "方法 UNLOCK 不在允许列表",
+   "waf": {
+    "match": {
+     "method": "UNLOCK"
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-header-count",
+   "name": "请求头超过 100 个",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "header_count",
+       "operator": "gt",
+       "values": [
+        "100"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "bw-body-size",
+   "name": "请求体超过 10m",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "body_length",
+       "operator": "gt",
+       "values": [
+        "10485760"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

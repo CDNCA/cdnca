@@ -1,0 +1,302 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "origin-forwarding",
+  "scenario_sha256": "f3786562f45d75e49bf74900a38633bf4766a898cd367db193980296fec0e66a",
+  "steps": [
+    {
+      "id": "spoofed-headers",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "0a23b4dde41057c27e5fb66e81f6455fc7e37a4d72fc8bc01470637ceb5a28ce",
+            "text": "host bucket.origin.test /x"
+          },
+          "origin": [
+            {
+              "origin": "host",
+              "method": "GET",
+              "uri": "/x",
+              "host": "bucket.origin.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "trusted-proxy-chain",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "0a23b4dde41057c27e5fb66e81f6455fc7e37a4d72fc8bc01470637ceb5a28ce",
+            "text": "host bucket.origin.test /x"
+          },
+          "origin": [
+            {
+              "origin": "host",
+              "method": "GET",
+              "uri": "/x",
+              "host": "bucket.origin.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "203.0.113.9, 127.0.0.7",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "203.0.113.9"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "location-origin",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 302,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "0",
+            "date": "<masked>",
+            "location": "http://host.fwd.example.test/next?x=1",
+            "server": "openresty"
+          },
+          "origin": [
+            {
+              "origin": "host",
+              "method": "GET",
+              "uri": "/redirect",
+              "host": "bucket.origin.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "location-foreign",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 302,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "0",
+            "date": "<masked>",
+            "location": "https://other.example.test/",
+            "server": "openresty"
+          },
+          "origin": [
+            {
+              "origin": "host",
+              "method": "GET",
+              "uri": "/foreign",
+              "host": "bucket.origin.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "backup-when-primary-down",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 32,
+            "sha256": "0e173c2f5e0a6d090c64ce3114439ab0fd9aec8a9c819c12a547b356f79f668f",
+            "text": "spare backup.fwd.example.test /b"
+          },
+          "origin": [
+            {
+              "origin": "spare",
+              "method": "GET",
+              "uri": "/b",
+              "host": "backup.fwd.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sticky-first",
+      "kind": "http",
+      "summary": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "origins": [
+          "a",
+          "b"
+        ],
+        "origin_requests": 4
+      }
+    },
+    {
+      "id": "sticky-pinned",
+      "kind": "http",
+      "summary": {
+        "count": 4,
+        "statuses": {
+          "200": 4
+        },
+        "origins": [
+          "b"
+        ],
+        "origin_requests": 4
+      }
+    },
+    {
+      "id": "ws-foreign-origin",
+      "kind": "websocket",
+      "websocket": {
+        "error": "websocket_bad_handshake",
+        "status": 403,
+        "origin": []
+      }
+    },
+    {
+      "id": "ws-allowed-origin",
+      "kind": "websocket",
+      "websocket": {
+        "status": 101,
+        "echo": "echo:hi",
+        "origin": [
+          {
+            "origin": "ws",
+            "method": "GET",
+            "uri": "/socket",
+            "host": "ws.fwd.example.test",
+            "proto": "HTTP/1.1",
+            "headers": {
+              "connection": "upgrade",
+              "origin": "https://app.fwd.example.test",
+              "sec-websocket-key": "<masked>",
+              "sec-websocket-version": "13",
+              "upgrade": "websocket",
+              "user-agent": "cdnca-edge-golden/1",
+              "x-forwarded-for": "127.0.0.1",
+              "x-forwarded-proto": "http",
+              "x-real-ip": "127.0.0.1"
+            },
+            "peer": "127.0.0.1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "https-origin-system-ca",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "25",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 25,
+            "sha256": "c68eccaf428514aaaadb0fd5d87067b0968fee1e6b340b9e05d516e21cd01d16",
+            "text": "tls secure.origin.test /t"
+          },
+          "origin": [
+            {
+              "origin": "tls",
+              "method": "GET",
+              "uri": "/t",
+              "host": "secure.origin.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1",
+              "sni": "secure.origin.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "origin-host-mode",
+      "kind": "http",
+      "summary": {
+        "count": 6,
+        "statuses": {
+          "200": 6
+        },
+        "origins": [
+          "multi",
+          "multi2"
+        ],
+        "origin_requests": 6
+      }
+    }
+  ]
+}

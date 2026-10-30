@@ -1,0 +1,77 @@
+{
+ "id": "admin-package-traffic-coverage",
+ "prefix": "/v1/admin/package-traffic-coverage",
+ "operations": [
+  {
+   "operation_id": "listAdminPackageTrafficCoverage",
+   "method": "GET",
+   "path": "/v1/admin/package-traffic-coverage",
+   "summary": "查询用户套餐每个周期由全局流量包覆盖的流量（最近周期在前）",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Optional for platform administrators. When omitted, the control API resolves the subscription's owning tenant from subscription_id before authorizing the usage query."
+    },
+    {
+     "name": "subscription_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description": "返回的周期数，默认 12"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "每个周期由流量包覆盖的流量（字节，十进制字符串）与扣量批次",
+     "fields": [
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<PackageTrafficCoverageCycle>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "404",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "408",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误信封"
+    }
+   ]
+  }
+ ]
+}

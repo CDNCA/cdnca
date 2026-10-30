@@ -1,0 +1,285 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Origin Auth Edge Publication API
+  version: 0.1.0
+  description: >-
+    Independently mountable production command and immutable readback contract
+    for encrypted per-node origin authentication snapshots.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications:
+    post:
+      operationId: publishOriginAuthEdgeConfiguration
+      summary: 发布租户作用域的源站鉴权配置
+      description: >-
+        Requires a platform session with edge_publications.manage and origin_auth.manage.
+        If-Match is the exact latest source revision. The server locks each target node and
+        its active recipient key, produces one signed HPKE artifact per node, and commits the
+        immutable config, rollout, deployment commands, and outbox records in one transaction.
+        An outcome_unknown response may be retried only with the unchanged body, path, If-Match, Idempotency-Key, X-Request-ID, X-Correlation-ID, Traceparent, and X-Task-ID.
+      x-required-permissions: [edge_publications.manage, origin_auth.manage]
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishRequest'
+      responses:
+        '201':
+          description: 创建成功，或返回完全相同请求的持久化结果
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/ManifestETag'}
+            Location: {$ref: '#/components/headers/Location'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Publication'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '502': {$ref: '#/components/responses/InvalidUpstreamResponse'}
+        '503': {$ref: '#/components/responses/OutcomeUnknown'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications/{publication_id}:
+    get:
+      operationId: getOriginAuthEdgePublication
+      summary: 读取一个不可变源站鉴权发布结果
+      description: >-
+        Requires edge_publications.read and origin_auth.read. The session and both grants
+        are checked again in the read transaction. The result is reconstructed only from
+        the immutable rollout, config, source snapshot, per-node artifact, recipient-key,
+        and deployment-command facts. Cross-scope or other secret-rollout subtypes are rejected.
+      x-required-permissions: [edge_publications.read, origin_auth.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/PublicationID'
+        - $ref: '#/components/parameters/ReadRequestID'
+      responses:
+        '200':
+          description: 不可变发布结果
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            ETag: {$ref: '#/components/headers/ManifestETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Publication'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '502': {$ref: '#/components/responses/InvalidUpstreamResponse'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    PublicationID:
+      name: publication_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: 当前源配置 revision 的强 ETag，例如 "7"。
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    WriteRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    ReadRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/UUID'}
+    CorrelationID:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/UUID'}
+    Traceparent:
+      name: Traceparent
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+    TaskID:
+      name: X-Task-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+  headers:
+    RequestID:
+      schema: {$ref: '#/components/schemas/UUID'}
+    ManifestETag:
+      description: 不可变 artifact manifest SHA-256 强 ETag。
+      schema:
+        type: string
+        pattern: '^"sha256-[0-9a-f]{64}"$'
+    Location:
+      schema: {type: string}
+    IdempotencyReplayed:
+      schema: {type: string, enum: ['true']}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    SHA256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    PublishRequest:
+      type: object
+      additionalProperties: false
+      required: [node_ids, health_check, deadline]
+      properties:
+        node_ids:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/UUID'}
+        health_check: {$ref: '#/components/schemas/HealthCheck'}
+        deadline: {type: string, format: date-time}
+    HealthCheck:
+      type: object
+      additionalProperties: false
+      required: [activation_timeout_ms, observation_window_ms, required_consecutive_successes]
+      properties:
+        activation_timeout_ms: {type: integer, format: int64, minimum: 1, maximum: 300000}
+        observation_window_ms: {type: integer, format: int64, minimum: 1, maximum: 300000}
+        required_consecutive_successes: {type: integer, format: int32, minimum: 1, maximum: 100}
+    Publication:
+      type: object
+      additionalProperties: false
+      required:
+        - tenant_id
+        - tenant_scope_id
+        - publication_id
+        - source_publication_id
+        - source_revision
+        - config_version_id
+        - rollout_id
+        - config_snapshot_sha256
+        - artifact_manifest_sha256
+        - recipient_binding_sha256
+        - node_count
+        - created_at
+      properties:
+        tenant_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        publication_id: {$ref: '#/components/schemas/UUID'}
+        source_publication_id: {$ref: '#/components/schemas/UUID'}
+        source_revision: {type: integer, format: int64, minimum: 1}
+        config_version_id: {$ref: '#/components/schemas/UUID'}
+        rollout_id: {$ref: '#/components/schemas/UUID'}
+        config_snapshot_sha256: {$ref: '#/components/schemas/SHA256'}
+        artifact_manifest_sha256: {$ref: '#/components/schemas/SHA256'}
+        recipient_binding_sha256: {$ref: '#/components/schemas/SHA256'}
+        node_count: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    RetryBinding:
+      type: object
+      additionalProperties: false
+      required: [method, path, if_match, idempotency_key, body_sha256, request_id, correlation_id, traceparent]
+      properties:
+        method: {type: string, const: POST}
+        path: {type: string}
+        if_match: {type: string}
+        idempotency_key: {type: string}
+        body_sha256: {$ref: '#/components/schemas/SHA256'}
+        request_id: {$ref: '#/components/schemas/UUID'}
+        correlation_id: {$ref: '#/components/schemas/UUID'}
+        traceparent: {type: string}
+        task_id: {type: string}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {$ref: '#/components/schemas/UUID'}
+            retry: {$ref: '#/components/schemas/RetryBinding'}
+  responses:
+    BadRequest:
+      description: 请求格式或参数无效
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Unauthorized:
+      description: 会话无效或已撤销
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Forbidden:
+      description: 作用域或权限拒绝
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: 源配置或发布记录不存在
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    MethodNotAllowed:
+      description: 方法不受支持
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Conflict:
+      description: 幂等键已绑定不同请求
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    PreconditionFailed:
+      description: If-Match 不等于最新源配置 revision
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    UnprocessableEntity:
+      description: 目标节点、接收密钥或源配置当前不可发布
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    InvalidUpstreamResponse:
+      description: 持久化事实未通过严格身份校验
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    OutcomeUnknown:
+      description: >-
+        origin_auth_edge_publication_outcome_unknown; only the exact request described by retry may be repeated.
+      headers:
+        Retry-After: {schema: {type: string}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Unavailable:
+      description: 服务暂不可用
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

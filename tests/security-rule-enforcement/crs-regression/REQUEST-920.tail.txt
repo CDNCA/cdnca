@@ -1,0 +1,6 @@
+🚀 Running go-ftw!
+💥 920100-4 failed in 20.975833ms (RTT 52.386917ms)
+➕ run 428 total tests in 19.666915912s
+⏭ skipped 0 tests
+👎 1 test(s) failed to run: ["920100-4"]
+Error: failed 1 tests

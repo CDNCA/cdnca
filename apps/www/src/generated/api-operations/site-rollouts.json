@@ -1,0 +1,260 @@
+{
+ "id": "site-rollouts",
+ "prefix": "/v1/site-rollouts",
+ "operations": [
+  {
+   "operation_id": "listTenantSiteRollouts",
+   "method": "GET",
+   "path": "/v1/site-rollouts",
+   "summary": "List rollouts in the authenticated tenant scope",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope returned by the immediately preceding page. It is bound to audience, resolved tenant scope, resource kind, and the rollout ID for deployment pages. It cannot be reused across those boundaries or modified."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable tenant rollout page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<TenantRollout>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "description": "Opaque authenticated pagination state. Clients must not parse or construct it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantSiteRollout",
+   "method": "GET",
+   "path": "/v1/site-rollouts/{rollout_id}",
+   "summary": "Get rollout progress in the authenticated tenant scope",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Tenant rollout detail.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: apply / rollback",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / paused / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "RolloutProgress",
+       "required": true
+      },
+      {
+       "name": "can_cancel",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_retry",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_start",
+       "type": "boolean"
+      },
+      {
+       "name": "can_pause",
+       "type": "boolean"
+      },
+      {
+       "name": "can_resume",
+       "type": "boolean"
+      },
+      {
+       "name": "rollout",
+       "type": "RolloutPolicyView"
+      },
+      {
+       "name": "pause_reason",
+       "type": "string:  / operator / failure_threshold"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantSiteRolloutDeployments",
+   "method": "GET",
+   "path": "/v1/site-rollouts/{rollout_id}/deployments",
+   "summary": "List deployment progress without node target metadata",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope returned by the immediately preceding page. It is bound to audience, resolved tenant scope, resource kind, and the rollout ID for deployment pages. It cannot be reused across those boundaries or modified."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Latest deployment attempts with node target IDs omitted.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<TenantDeployment>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "description": "Opaque authenticated pagination state. Clients must not parse or construct it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

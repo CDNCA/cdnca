@@ -1,0 +1,139 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Platform System User Settings API
+  version: 0.1.0
+  description: Platform administrator policies for login, registration, verification, identity and recharge. These settings do not enter the edge request path.
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+servers:
+  - {url: /}
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/system-user-settings:
+    get:
+      summary: Read platform user-related settings
+      operationId: getPlatformSystemUserSettings
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': {description: Current user policy, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+    put:
+      summary: Update platform user-related settings
+      operationId: updatePlatformSystemUserSettings
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/WriteRequest'}}}
+      responses:
+        '200': {description: Saved policy, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '409': {description: Revision or idempotency conflict}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+    RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: On a 400 system_user_settings_validation_error that names the refused field of the save body (value.<field>) and a machine reason.
+              x-description-zh: 能定位字段的 400 system_user_settings_validation_error 附带 field（保存请求体路径 value.<字段>）与 reason 机器码。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string}
+                reason: {type: string}
+              example: {field: value.session_ttl_seconds, reason: out_of_range}
+    Document:
+      type: object
+      additionalProperties: false
+      required: [schema, revision, value]
+      properties:
+        schema: {const: cdnca.platform-system-user-settings/v1}
+        revision: {type: integer, minimum: 0, maximum: 9223372036854775806}
+        updated_at: {type: string, format: date-time}
+        value: {$ref: '#/components/schemas/Settings'}
+    WriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties: {value: {$ref: '#/components/schemas/Settings'}}
+    SecretReference:
+      type: string
+      maxLength: 1024
+      pattern: '^(|vault://.+|kms-envelope://.+)$'
+      description: Empty or an opaque Vault/KMS envelope reference. Plaintext secrets are rejected and never returned.
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [session_ttl_seconds, user_login_domains, admin_login_domains, email_code_login_enabled, sms_code_login_enabled, registration_enabled, registration_success_subject, registration_success_body, password_reset_subject, password_reset_body, verification_template_channel, verification_subject, verification_body, verification_sms_body, verification_sms_template_id, terms_title, terms_body, username_required, email_required, email_verification_required, phone_required, phone_verification_required, qq_required, login_failure_limit_per_hour, login_captcha_threshold_per_hour, session_region_check, email_anti_abuse_mode, sms_anti_abuse_mode, captcha_provider, captcha_secret_id_reference, captcha_secret_key_reference, captcha_app_id, captcha_app_secret_reference, identity_verification_method, enterprise_verification_enabled, enterprise_secret_id_reference, enterprise_secret_key_reference, wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, default_recharge_method, recharge_restriction, default_phone_country_code]
+      properties:
+        session_ttl_seconds: {type: integer, minimum: 300, maximum: 31536000, default: 86400}
+        user_login_domains: {type: string, maxLength: 4096}
+        admin_login_domains: {type: string, maxLength: 4096}
+        email_code_login_enabled: {type: boolean}
+        sms_code_login_enabled: {type: boolean}
+        registration_enabled: {type: boolean}
+        registration_success_subject: {type: string, minLength: 1, maxLength: 256}
+        registration_success_body: {type: string, minLength: 1, maxLength: 65536, description: '{{password}} is prohibited; registration passwords are never sent or stored in a template.'}
+        password_reset_subject: {type: string, minLength: 1, maxLength: 256}
+        password_reset_body: {type: string, minLength: 1, maxLength: 65536, description: '{{password}} is prohibited; reset links or completed-reset notices are used instead.'}
+        verification_template_channel: {type: string, enum: [email, sms]}
+        verification_subject: {type: string, minLength: 1, maxLength: 256}
+        verification_body: {type: string, minLength: 1, maxLength: 65536}
+        verification_sms_body: {type: string, minLength: 1, maxLength: 1024}
+        verification_sms_template_id: {type: string, maxLength: 256}
+        terms_title: {type: string, minLength: 1, maxLength: 256}
+        terms_body: {type: string, minLength: 1, maxLength: 65536}
+        username_required: {type: boolean}
+        email_required: {type: boolean}
+        email_verification_required: {type: boolean, description: Requires email_required=true.}
+        phone_required: {type: boolean}
+        phone_verification_required: {type: boolean, description: Requires phone_required=true.}
+        qq_required: {type: boolean}
+        login_failure_limit_per_hour: {type: integer, minimum: 1, maximum: 1000, default: 30}
+        login_captcha_threshold_per_hour: {type: integer, minimum: 1, maximum: 1000, default: 3, description: Must not exceed login_failure_limit_per_hour.}
+        session_region_check: {type: boolean, default: true, description: 'A signed-in session whose IP moves to another country or province (IP intelligence library) gets 401 session_region_changed until POST /v1/auth/session-region-verifications. Unplaceable addresses are not checked.'}
+        email_anti_abuse_mode: {type: string, enum: [none, native, tencent, geetest_v4]}
+        sms_anti_abuse_mode: {type: string, enum: [none, native, tencent, geetest_v4]}
+        captcha_provider: {type: string, enum: [tencent, geetest_v4]}
+        captcha_secret_id_reference: {$ref: '#/components/schemas/SecretReference'}
+        captcha_secret_key_reference: {$ref: '#/components/schemas/SecretReference'}
+        captcha_app_id: {type: string, maxLength: 256}
+        captcha_app_secret_reference: {$ref: '#/components/schemas/SecretReference'}
+        identity_verification_method: {type: string, enum: [none, alipay, wechat_face, phone_three_factor]}
+        enterprise_verification_enabled: {type: boolean}
+        enterprise_secret_id_reference: {$ref: '#/components/schemas/SecretReference'}
+        enterprise_secret_key_reference: {$ref: '#/components/schemas/SecretReference'}
+        wechat_payment_enabled: {type: boolean}
+        alipay_payment_enabled: {type: boolean}
+        bank_transfer_enabled: {type: boolean}
+        default_recharge_method: {type: string, enum: [none, wechat, alipay, bank_transfer], description: A non-none default method must be enabled.}
+        recharge_restriction: {type: string, enum: [none, individual_verified, enterprise_verified]}
+        default_phone_country_code: {type: string, pattern: '^[1-9][0-9]{0,3}$', default: '86', description: Country/region calling code (digits only) used to complete phone numbers entered without one.}

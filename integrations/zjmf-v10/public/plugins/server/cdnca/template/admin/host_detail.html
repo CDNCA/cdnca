@@ -1,0 +1,9 @@
+<!-- CDNCA CDN 后台产品内页（Cdnca::adminArea） -->
+<div style="padding:12px 0;font-size:14px;color:#303133;">
+  {if $cdnca_ok}
+  <p>CDN 用户名：{$cdnca_username}　套餐：{$cdnca_product}（{$cdnca_period}）　状态：{$cdnca_status}　到期：{$cdnca_ends_at}</p>
+  <p>本周期流量：{$cdnca_traffic} <span style="color:#909399;font-size:12px;">{$cdnca_usage_window}</span></p>
+  {else /}
+  <p role="alert" style="color:#b88230;">暂时无法读取 CDN 服务信息：{$cdnca_error}</p>
+  {/if}
+</div>

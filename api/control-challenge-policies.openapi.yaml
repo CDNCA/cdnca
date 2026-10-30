@@ -1,0 +1,818 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Challenge Policy Control API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable tenant-scoped browser challenge policy contract.
+    Tenant principals can address only their authenticated tenant scope;
+    platform principals must provide an explicit target tenant scope. Writes
+    use revision CAS, durable idempotency, entitlement checks, and transactional
+    audit. Opaque key/provider references are accepted only on writes and are
+    never returned. Publication first delivers a signed, per-node encrypted
+    challenge artifact, exposes bounded rollout state, and promotes the exact
+    healthy revision into the signed Edge configuration. Non-canonical or
+    unmatched paths remain outside this fragment and return 404.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Challenge policies
+    description: Tenant-scoped browser challenge policy facts and lifecycle.
+paths:
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Challenge policies]
+      operationId: listChallengePolicies
+      security: [{bearerAuth: []}]
+      summary: List active challenge policies in one tenant scope
+      description: >-
+        Requires challenge_policies.read. Results use stable keyset ordering;
+        the versioned HMAC-SHA256 cursor is opaque and must be replayed
+        unchanged with the same authenticated actor, target scope, filters,
+        limit, and sort. Invalid cursors return 400 before storage is read.
+        Pages may contain fewer than the requested limit to stay within the
+        default 256 KiB response byte budget; next_cursor resumes after the last
+        emitted item.
+        Soft-deleted policies are excluded. A tenant principal targeting another
+        tenant receives the same 404 shape as an unknown scope.
+      x-required-permissions: [challenge_policies.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/SiteFilter'
+        - $ref: '#/components/parameters/HostFilter'
+        - $ref: '#/components/parameters/EnabledFilter'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [Challenge policies]
+      operationId: createChallengePolicy
+      security: [{bearerAuth: []}]
+      summary: Create a challenge policy for a tenant-owned site and host
+      description: >-
+        Requires challenge_policies.manage and a currently valid, non-grace
+        sites.manage entitlement. The site must belong to the target tenant and
+        the host must equal the site domain or be covered by its wildcard.
+        The request creates immutable revision 1 and a transactional audit
+        event. A completed same-actor, same-scope, same-operation,
+        same-key/same-payload retry returns the frozen stored result before
+        mutable site or entitlement state is rechecked; a new request still
+        performs all current checks. A key reused with another payload returns
+        409.
+      x-required-permissions: [challenge_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePolicyRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/PolicyCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Challenge policies]
+      operationId: getChallengePolicy
+      security: [{bearerAuth: []}]
+      summary: Read one challenge policy
+      description: >-
+        Requires challenge_policies.read. Soft-deleted, unknown, and
+        out-of-tenant policy IDs all return the same 404 response.
+      x-required-permissions: [challenge_policies.read]
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      tags: [Challenge policies]
+      operationId: updateChallengePolicy
+      security: [{bearerAuth: []}]
+      summary: Append a new challenge policy configuration revision
+      description: >-
+        Requires challenge_policies.manage and a currently valid, non-grace
+        sites.manage entitlement. If-Match is compared with the current
+        revision under a row lock. Site and host identity cannot be changed.
+      x-required-permissions: [challenge_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdatePolicyRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      tags: [Challenge policies]
+      operationId: deleteChallengePolicy
+      security: [{bearerAuth: []}]
+      summary: Soft-delete a challenge policy by appending a tombstone revision
+      description: >-
+        Requires challenge_policies.manage. The request body must be empty.
+        Historical revisions remain immutable so future publication references
+        cannot be destroyed. Delete is intentionally allowed during
+        entitlement grace because it reduces active configuration.
+      x-required-permissions: [challenge_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Challenge policies]
+      operationId: enableChallengePolicy
+      security: [{bearerAuth: []}]
+      summary: Enable a challenge policy with revision CAS
+      description: >-
+        Requires challenge_policies.manage and a currently valid, non-grace
+        sites.manage entitlement. The body must be absent or exactly an empty
+        JSON object. Enabling an already enabled policy returns 409.
+      x-required-permissions: [challenge_policies.manage]
+      requestBody:
+        $ref: '#/components/requestBodies/EmptyObject'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Challenge policies]
+      operationId: disableChallengePolicy
+      security: [{bearerAuth: []}]
+      summary: Disable a challenge policy with revision CAS
+      description: >-
+        Requires challenge_policies.manage. The body must be absent or exactly
+        an empty JSON object. Disabling is allowed during entitlement grace
+        because it reduces active configuration. Disabling an already disabled
+        policy returns 409.
+      x-required-permissions: [challenge_policies.manage]
+      requestBody:
+        $ref: '#/components/requestBodies/EmptyObject'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Challenge policies]
+      operationId: publishChallengePolicy
+      security: [{bearerAuth: []}]
+      summary: Publish one exact enabled challenge policy revision to Edge nodes
+      description: >-
+        Requires challenge_policies.manage. The current policy revision is
+        re-authorized and locked before resolving its opaque key reference.
+        The immutable artifact is signed and HPKE-encrypted separately for each
+        eligible node. Missing key material or an unconfigured external adapter
+        fails closed and does not change the active Edge configuration.
+      x-required-permissions: [challenge_policies.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '202': {$ref: '#/components/responses/PublicationAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RolloutID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Challenge policies]
+      operationId: getChallengePolicyPublication
+      security: [{bearerAuth: []}]
+      summary: Read the bounded rollout state for an exact policy artifact
+      description: >-
+        Requires challenge_policies.read. The rollout must belong to the target
+        tenant, policy, and revision; another same-tenant rollout is not
+        relabeled through this path. This read has no publication or promotion
+        side effects.
+      x-required-permissions: [challenge_policies.read]
+      responses:
+        '200': {$ref: '#/components/responses/PublicationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RolloutID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Challenge policies]
+      operationId: promoteChallengePolicyPublication
+      security: [{bearerAuth: []}]
+      summary: Promote an exact healthy challenge rollout into Edge configuration
+      description: >-
+        Requires challenge_policies.manage. Promotion is revision-CAS and
+        idempotent. Only a fully healthy rollout whose immutable artifact binds
+        the same tenant, policy, and revision can advance the signed Edge
+        configuration. Partial, failed, stale, forged, or cross-policy rollouts
+        preserve the current configuration and LKG.
+      x-required-permissions: [challenge_policies.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/PublicationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api-session
+      description: >-
+        Exactly one Bearer header carrying a live control-api session is
+        required. Invalid or revoked sessions return 401; identity dependency
+        failures return 503. The session and exact permission are rechecked in
+        the business transaction before any read or write is allowed.
+  parameters:
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      description: Explicit target tenant access-scope UUID.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    PolicyID:
+      name: policy_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    RolloutID:
+      name: rollout_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      description: Stable request correlation ID; 1 to 128 safe ASCII characters.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    TraceID:
+      name: X-Trace-ID
+      in: header
+      required: true
+      description: Stable trace correlation ID; 1 to 128 safe ASCII characters.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Operation-scoped durable key. Retry an unknown result only with the
+        same key and unchanged business payload.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IfMatchRevision:
+      name: If-Match
+      in: header
+      required: true
+      description: Current positive revision encoded as a quoted decimal ETag, for example "3".
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+        maxLength: 21
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        Opaque URL-safe versioned HMAC-SHA256 envelope returned by the
+        preceding page. It binds key ID, API audience, authenticated actor
+        user/scope/kind, target scope, site/host/enabled filters, limit, fixed
+        sort, and keyset position. Replay it byte-for-byte; wrong key,
+        audience, version, key ID, scope, filter, limit, sort, semantic
+        re-encoding, or an overlong value returns 400 before storage is read.
+      schema:
+        type: string
+        maxLength: 1024
+    SiteFilter:
+      name: site_id
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    HostFilter:
+      name: host
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/ASCIIHost'}
+    EnabledFilter:
+      name: enabled
+      in: query
+      required: false
+      schema: {type: boolean}
+  requestBodies:
+    EmptyObject:
+      required: false
+      description: The body may be absent; when present it must be exactly an empty JSON object.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            maxProperties: 0
+  headers:
+    RequestID:
+      description: Request correlation ID copied from X-Request-ID.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    TraceID:
+      description: Trace correlation ID copied from X-Trace-ID.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    ETag:
+      description: Current positive policy revision encoded as a quoted decimal string.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    Location:
+      description: Canonical path of the created policy.
+      schema: {type: string, maxLength: 512}
+    IdempotentReplay:
+      description: Present as true only when the stored result of an identical request is replayed.
+      schema: {type: string, const: 'true'}
+  responses:
+    PolicyCreated:
+      description: Created policy or the stored result of an identical retry.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        Location: {$ref: '#/components/headers/Location'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ChallengePolicy'}
+    PolicyOK:
+      description: Challenge policy.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ChallengePolicy'}
+    PolicyWriteOK:
+      description: Updated policy or the stored result of an identical retry.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ChallengePolicy'}
+    PolicyPageOK:
+      description: >-
+        Stable byte-budgeted page of non-deleted challenge policies. A non-empty
+        next_cursor resumes after the final item emitted in this response.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ChallengePolicyPage'}
+    PublicationAccepted:
+      description: Signed per-node challenge artifact rollout was durably accepted.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ChallengePublicationStatus'}
+    PublicationOK:
+      description: Exact challenge rollout state, optionally including its promoted Edge publication.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ChallengePublicationStatus'}
+    BadRequest:
+      description: >-
+        Malformed UUID, cursor, query, JSON, body size, media type, duplicate or
+        unknown fields, non-canonical If-Match, or repeated security,
+        correlation, idempotency, or revision headers.
+      $ref: '#/components/responses/ErrorResponse'
+    Unauthorized:
+      description: Authentication is missing, invalid, or revoked.
+      $ref: '#/components/responses/ErrorResponse'
+    Forbidden:
+      description: Permission or entitlement is denied.
+      $ref: '#/components/responses/ErrorResponse'
+    NotFound:
+      description: Scope, site, or policy is absent in the authorized tenant boundary.
+      $ref: '#/components/responses/ErrorResponse'
+    MethodNotAllowed:
+      description: The canonical resource path does not support this HTTP method.
+      $ref: '#/components/responses/ErrorResponse'
+    Conflict:
+      description: Idempotency key or current resource state conflicts.
+      $ref: '#/components/responses/ErrorResponse'
+    PreconditionFailed:
+      description: If-Match does not equal the current revision.
+      $ref: '#/components/responses/ErrorResponse'
+    UnprocessableEntity:
+      description: A syntactically valid field violates policy or site/host rules.
+      $ref: '#/components/responses/ErrorResponse'
+    ServiceUnavailable:
+      description: >-
+        Identity, storage, entitlement state, request context, or another
+        required dependency is unavailable.
+      $ref: '#/components/responses/ErrorResponse'
+    ErrorResponse:
+      description: Stable error envelope without SQL, internal errors, key references, or provider details.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    MetadataID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    ASCIIHost:
+      type: string
+      minLength: 1
+      maxLength: 253
+      pattern: '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?))*$'
+      description: Lowercase ASCII hostname without scheme, port, path, wildcard, or trailing dot.
+    CreatePolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [site_id, host, enabled, config]
+      properties:
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        host: {$ref: '#/components/schemas/ASCIIHost'}
+        enabled: {type: boolean}
+        config: {$ref: '#/components/schemas/ChallengeConfig'}
+    UpdatePolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [config]
+      properties:
+        config: {$ref: '#/components/schemas/ChallengeConfig'}
+    ChallengeConfig:
+      type: object
+      additionalProperties: false
+      required:
+        - priority
+        - mode
+        - challenge_ttl_seconds
+        - pass_ttl_seconds
+        - attempts_per_nonce
+        - failure_window_seconds
+        - max_failures_per_window
+        - ip_binding
+        - key_reference
+      properties:
+        priority: {type: integer, minimum: 1, maximum: 1000000}
+        mode:
+          type: string
+          enum: [delay, click, slider, captcha, external]
+        min_delay_seconds:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 0
+          description: Must be 5 to 10 for delay and 0 for every other mode.
+        challenge_ttl_seconds: {type: integer, minimum: 10, maximum: 300}
+        pass_ttl_seconds: {type: integer, minimum: 1, maximum: 3600}
+        clock_skew_seconds: {type: integer, minimum: 0, maximum: 30, default: 0}
+        attempts_per_nonce: {type: integer, const: 1}
+        failure_window_seconds: {type: integer, minimum: 1, maximum: 3600}
+        max_failures_per_window: {type: integer, minimum: 1, maximum: 20}
+        ip_binding:
+          type: string
+          enum: [none, exact]
+        bind_user_agent: {type: boolean, default: false}
+        bypass_routes:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          default: []
+          items: {$ref: '#/components/schemas/BypassRoute'}
+          description: Paths must be unique even when route kinds differ.
+        key_reference:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^(?:keyref|vault|kms):[A-Za-z0-9][A-Za-z0-9._:/-]{0,119}$'
+          writeOnly: true
+          description: Opaque secret-manager reference. Plain HMAC material is never accepted.
+        external_provider:
+          $ref: '#/components/schemas/ExternalProviderReference'
+      allOf:
+        - if:
+            properties:
+              mode: {const: external}
+            required: [mode]
+          then:
+            required: [external_provider]
+          else:
+            properties:
+              external_provider: false
+      description: >-
+        challenge_ttl_seconds must be greater than min_delay_seconds plus
+        clock_skew_seconds. external is a fail-closed reference-only mode;
+        provider connectivity is outside this contract.
+    BypassRoute:
+      type: object
+      additionalProperties: false
+      required: [kind, path]
+      properties:
+        kind:
+          type: string
+          enum: [exact, prefix]
+        path:
+          type: string
+          minLength: 1
+          maxLength: 512
+          pattern: '^/(?!/)(?!.*//)(?!.*[?%#\\])[\x20-\x7E]*$'
+          description: >-
+            ASCII normalized path without query, fragment, percent, backslash,
+            repeated slash, or dot segments. Prefix paths must end in slash and
+            cannot be root.
+    ExternalProviderReference:
+      type: object
+      additionalProperties: false
+      required: [provider, app_reference]
+      properties:
+        provider:
+          type: string
+          enum: [tencent, geetest-v4]
+        app_reference:
+          type: string
+          minLength: 8
+          maxLength: 128
+          pattern: '^appref:[A-Za-z0-9][A-Za-z0-9._:/-]{0,120}$'
+      writeOnly: true
+      description: Opaque configured-app reference; not evidence of provider integration.
+    ChallengePolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - tenant_scope_id
+        - site_id
+        - host
+        - priority
+        - mode
+        - min_delay_seconds
+        - challenge_ttl_seconds
+        - pass_ttl_seconds
+        - clock_skew_seconds
+        - attempts_per_nonce
+        - failure_window_seconds
+        - max_failures_per_window
+        - ip_binding
+        - bind_user_agent
+        - bypass_routes
+        - key_reference_configured
+        - external_provider_configured
+        - enabled
+        - deleted
+        - revision
+        - created_at
+        - updated_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        host: {$ref: '#/components/schemas/ASCIIHost'}
+        priority: {type: integer, minimum: 1, maximum: 1000000}
+        mode: {type: string, enum: [delay, click, slider, captcha, external]}
+        min_delay_seconds: {type: integer, minimum: 0, maximum: 10}
+        challenge_ttl_seconds: {type: integer, minimum: 10, maximum: 300}
+        pass_ttl_seconds: {type: integer, minimum: 1, maximum: 3600}
+        clock_skew_seconds: {type: integer, minimum: 0, maximum: 30}
+        attempts_per_nonce: {type: integer, const: 1}
+        failure_window_seconds: {type: integer, minimum: 1, maximum: 3600}
+        max_failures_per_window: {type: integer, minimum: 1, maximum: 20}
+        ip_binding: {type: string, enum: [none, exact]}
+        bind_user_agent: {type: boolean}
+        bypass_routes:
+          type: array
+          maxItems: 32
+          items: {$ref: '#/components/schemas/BypassRoute'}
+        key_reference_configured: {type: boolean}
+        external_provider_configured: {type: boolean}
+        enabled: {type: boolean}
+        deleted: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+      description: >-
+        key_reference, provider name, provider app reference, HMAC material,
+        entitlement details, and internal errors are deliberately absent.
+    ChallengePolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/ChallengePolicy'}
+        next_cursor:
+          type: string
+          maxLength: 1024
+    ChallengePublicationStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - policy_id
+        - policy_revision
+        - rollout_id
+        - config_version_id
+        - state
+        - reason
+        - total
+        - pending
+        - running
+        - healthy
+        - failed
+        - cancelled
+        - superseded
+      properties:
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_revision: {type: integer, format: int64, minimum: 1}
+        rollout_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        state:
+          type: string
+          enum: [queued, running, healthy, failed, active]
+        reason:
+          type: string
+          enum: ['-', waiting_for_nodes, node_apply_failed, external_adapter_missing, configuration_publish_failed]
+        total: {type: integer, minimum: 1, maximum: 10000}
+        pending: {type: integer, minimum: 0, maximum: 10000}
+        running: {type: integer, minimum: 0, maximum: 10000}
+        healthy: {type: integer, minimum: 0, maximum: 10000}
+        failed: {type: integer, minimum: 0, maximum: 10000}
+        cancelled: {type: integer, minimum: 0, maximum: 10000}
+        superseded:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Nodes that ignored this secret as an old release (they already run a newer revision, or it was rolled back); not failed.
+        config_publication:
+          type: object
+          additionalProperties: false
+          required: [publication_id, revision]
+          properties:
+            publication_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            revision: {type: integer, format: int64, minimum: 1}
+      description: >-
+        Node counters are bounded and sum exactly to total. config_publication
+        is present if and only if state is active. Secret references, key IDs,
+        request identity, node addresses, and provider credentials are absent.
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id, trace_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - invalid_request
+                - validation_error
+                - permission_denied
+                - entitlement_denied
+                - not_found
+                - resource_conflict
+                - idempotency_conflict
+                - revision_conflict
+                - entitlement_unavailable
+                - request_canceled
+                - service_unavailable
+                - method_not_allowed
+                - challenge_external_adapter_unavailable
+                - challenge_publication_not_ready
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {$ref: '#/components/schemas/MetadataID'}
+            trace_id: {$ref: '#/components/schemas/MetadataID'}

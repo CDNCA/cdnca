@@ -1,0 +1,53 @@
+openapi: 3.1.0
+info: {title: ext, version: '1'}
+security:
+  - extKey: []
+paths:
+  /v1/sites/{id}:
+    get:
+      operationId: getSite
+      summary: 查看站点
+      tags: [sites]
+      security: [{bearerAuth: []}, {extKey: []}]
+      responses: {'200': {description: ok}}
+    delete:
+      operationId: deleteSite
+      summary: 删除站点
+      x-permission: sites.manage | reseller.customers.manage
+      x-required-features: [module.sites]
+      x-requires-recent-reauthentication: true
+      deprecated: true
+      responses: {'204': {description: ok}}
+  /v1/admin/analytics/top:
+    post:
+      operationId: rankTop
+      summary: 排行
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [range]
+              properties:
+                range: {type: string, enum: [1h, 24h]}
+                limit: {type: integer}
+      security: []
+      responses: {'200': {description: ok}}
+  /v1/chain:
+    put:
+      operationId: putChain
+      summary: ' 链式引用 '
+      security: [{mtls: []}]
+      responses: {$ref: '#/components/x-responses/Shared'}
+components:
+  securitySchemes:
+    bearerAuth: {$ref: '#/components/x-shared/bearer'}
+    extKey: {type: apiKey, in: header, name: Authorization}
+    mtls: {type: mutualTLS}
+  x-responses:
+    Shared:
+      '200': {description: ok}
+      '409': {description: Conflict}
+  x-shared:
+    bearer: {type: http, scheme: bearer}

@@ -1,0 +1,21 @@
+DROP TRIGGER admin_impersonation_revocations_no_truncate ON admin_impersonation_revocations;
+DROP TRIGGER admin_impersonation_revocations_append_only ON admin_impersonation_revocations;
+DROP TRIGGER admin_impersonation_sessions_no_truncate ON admin_impersonation_sessions;
+DROP TRIGGER admin_impersonation_sessions_append_only ON admin_impersonation_sessions;
+DROP TRIGGER admin_impersonation_grants_no_truncate ON admin_impersonation_grants;
+DROP TRIGGER admin_impersonation_grants_append_only ON admin_impersonation_grants;
+DROP FUNCTION prevent_admin_impersonation_fact_mutation();
+
+DROP TRIGGER admin_impersonation_revocations_validate_revoker ON admin_impersonation_revocations;
+DROP FUNCTION assert_admin_impersonation_revoker();
+DROP TRIGGER admin_impersonation_sessions_validate_fact ON admin_impersonation_sessions;
+DROP FUNCTION assert_admin_impersonation_session_fact();
+DROP TRIGGER admin_impersonation_grants_validate_principals ON admin_impersonation_grants;
+DROP FUNCTION assert_admin_impersonation_grant_principals();
+
+DROP TABLE admin_impersonation_revocations;
+DROP TABLE admin_impersonation_sessions;
+DROP TABLE admin_impersonation_grants;
+
+DELETE FROM role_permissions WHERE permission_name = 'identity.impersonation.manage';
+DELETE FROM permissions WHERE name = 'identity.impersonation.manage';

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>盾蓝</title>
+  <link rel="icon" href="assets/mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+  <header class="sb-header">
+    <div class="sb-wrap sb-header-row">
+      <a class="sb-brand" href="./"><img src="assets/mark.svg" alt="" width="28" height="28"><span data-bind="brand_name">盾蓝</span></a>
+      <nav class="sb-nav" aria-label="主导航">
+        <a href="#features">产品能力</a>
+        <a href="#pricing">套餐</a>
+        <a href="#faq">常见问题</a>
+      </nav>
+      <div class="sb-actions">
+        <a class="sb-link" href="/dashboard/login" target="_top">登录</a>
+        <a class="sb-button" href="/dashboard/register" target="_top">免费注册</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="sb-hero">
+      <div class="sb-wrap sb-hero-grid">
+        <div>
+          <p class="sb-badge" data-bind="hero_badge">新一代安全加速</p>
+          <h1 data-bind="hero_title">把攻击挡在边缘，让访问更快一步</h1>
+          <p class="sb-lead" data-bind="hero_subtitle">分布式节点就近接入，WAF、CC 防护与智能调度一站完成。</p>
+          <div class="sb-hero-actions">
+            <a class="sb-button sb-button-lg" href="/dashboard/register" target="_top" data-bind="hero_cta">立即开通</a>
+            <a class="sb-ghost" href="#pricing">查看套餐</a>
+          </div>
+        </div>
+        <img class="sb-hero-art" src="assets/hero.svg" alt="" width="480" height="360">
+      </div>
+      <div class="sb-wrap">
+        <dl class="sb-stats" data-list="stats"></dl>
+      </div>
+    </section>
+
+    <section id="features" class="sb-section">
+      <div class="sb-wrap">
+        <h2 class="sb-title" data-bind="features_title">核心能力</h2>
+        <ul class="sb-cards" data-list="features"></ul>
+      </div>
+    </section>
+
+    <section id="pricing" class="sb-section sb-section-alt">
+      <div class="sb-wrap">
+        <h2 class="sb-title">套餐</h2>
+        <ul class="sb-plans" data-list="plans"></ul>
+      </div>
+    </section>
+
+    <section id="faq" class="sb-section">
+      <div class="sb-wrap sb-narrow">
+        <h2 class="sb-title">常见问题</h2>
+        <div data-list="faq"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="sb-footer">
+    <div class="sb-wrap"><span data-bind="footer_text">© 示例公司</span></div>
+  </footer>
+  <script type="module" src="assets/site.js"></script>
+</body>
+</html>

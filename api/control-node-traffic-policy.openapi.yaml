@@ -1,0 +1,295 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Node Traffic Policy API
+  version: 1.0.0
+  description: >-
+    Node-scoped natural-month traffic limits, scheduled suppression, expiring manual
+    overrides, deterministic evaluation evidence, and durable edge configuration sync.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/node-traffic-policies/{node_id}:
+    parameters:
+      - $ref: '#/components/parameters/NodeID'
+      - $ref: '#/components/parameters/ScopeID'
+    get:
+      operationId: getNodeTrafficPolicy
+      summary: Read a node traffic policy and its latest effective-state evidence
+      responses:
+        '200':
+          description: Scope-bound policy state
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyState' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      operationId: putNodeTrafficPolicy
+      summary: Create or replace a node traffic policy using strong revision CAS
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PolicyInput' }
+      responses:
+        '200':
+          description: Persisted policy state
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+            Idempotency-Replayed: { $ref: '#/components/headers/IdempotencyReplayed' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PolicyState' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+  /v1/admin/node-traffic-policies/{node_id}/evaluate:
+    parameters:
+      - $ref: '#/components/parameters/NodeID'
+      - $ref: '#/components/parameters/ScopeID'
+    post:
+      operationId: evaluateNodeTrafficPolicy
+      summary: Evaluate one node at an authoritative snapshot and enqueue required sync
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Durable evaluation and optional durable sync task
+          headers:
+            Idempotency-Replayed: { $ref: '#/components/headers/IdempotencyReplayed' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EvaluationRecord' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/admin/node-traffic-sync-tasks/{task_id}:
+    parameters:
+      - $ref: '#/components/parameters/TaskID'
+    get:
+      operationId: getNodeTrafficSyncTask
+      summary: Read the actual configuration rollout dispatch result
+      responses:
+        '200':
+          description: Durable task state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SyncTask' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    NodeID:
+      name: node_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    TaskID:
+      name: task_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ScopeID:
+      name: scope_id
+      in: query
+      required: true
+      schema: { type: string, format: uuid }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+  headers:
+    ETag:
+      required: true
+      schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+    IdempotencyReplayed:
+      required: true
+      schema: { type: string, enum: ['true', 'false'] }
+  schemas:
+    ScheduleWindow:
+      type: object
+      additionalProperties: false
+      required: [weekday, start_minute, end_minute]
+      properties:
+        weekday: { type: integer, minimum: 0, maximum: 6 }
+        start_minute: { type: integer, minimum: 0, maximum: 1439 }
+        end_minute: { type: integer, minimum: 0, maximum: 1439 }
+    ManualOverride:
+      type: object
+      additionalProperties: false
+      required: [mode, revision, expires_at]
+      properties:
+        mode: { type: string, enum: [none, force_enabled, force_disabled] }
+        revision: { type: integer, format: int64, minimum: 0 }
+        expires_at: { type: [string, 'null'], format: date-time }
+    PolicyInput:
+      type: object
+      additionalProperties: false
+      required: [monthly_limit_bytes, timezone, windows, manual_override]
+      properties:
+        monthly_limit_bytes: { type: integer, format: int64, minimum: 0 }
+        timezone: { type: string, minLength: 1, maxLength: 128, examples: [Asia/Shanghai] }
+        windows:
+          type: array
+          maxItems: 32
+          items: { $ref: '#/components/schemas/ScheduleWindow' }
+        manual_override: { $ref: '#/components/schemas/ManualOverride' }
+    Policy:
+      allOf:
+        - $ref: '#/components/schemas/PolicyInput'
+        - type: object
+          additionalProperties: false
+          required: [id, scope_id, node_id, revision, created_at, updated_at]
+          properties:
+            id: { type: string, format: uuid }
+            scope_id: { type: string, format: uuid }
+            node_id: { type: string, format: uuid }
+            revision: { type: integer, format: int64, minimum: 0 }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    EvaluationSnapshot:
+      type: object
+      additionalProperties: false
+      required: [period_key, suppressed, reason_code, override_revision]
+      properties:
+        period_key: { type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }
+        suppressed: { type: boolean }
+        reason_code: { type: string, minLength: 1, maxLength: 64 }
+        override_revision: { type: integer, format: int64, minimum: 0 }
+    PolicyState:
+      type: object
+      additionalProperties: false
+      required: [policy, admin_state, current_config_version_id, last_evaluation]
+      properties:
+        policy: { $ref: '#/components/schemas/Policy' }
+        admin_state: { type: string, enum: [pending, active, draining, disabled, retired] }
+        current_config_version_id: { type: [string, 'null'], format: uuid }
+        last_evaluation:
+          anyOf:
+            - $ref: '#/components/schemas/EvaluationSnapshot'
+            - type: 'null'
+    EvaluationDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - period_key
+        - period_start
+        - period_end
+        - usage_bytes
+        - monthly_limit_bytes
+        - suppressed
+        - sync_required
+        - reason_code
+        - override_revision
+        - evaluated_at
+        - source_snapshot_at
+        - source_finalized_through
+        - source_digest
+      properties:
+        period_key: { type: string, pattern: '^[0-9]{4}-(0[1-9]|1[0-2])$' }
+        period_start: { type: string, format: date-time }
+        period_end: { type: string, format: date-time }
+        usage_bytes: { type: integer, format: int64, minimum: 0 }
+        monthly_limit_bytes: { type: integer, format: int64, minimum: 0 }
+        suppressed: { type: boolean }
+        sync_required: { type: boolean }
+        reason_code: { type: string, minLength: 1, maxLength: 64 }
+        override_revision: { type: integer, format: int64, minimum: 0 }
+        evaluated_at: { type: string, format: date-time }
+        source_snapshot_at: { type: string, format: date-time }
+        source_finalized_through: { type: string, format: date-time }
+        source_digest: { type: string, pattern: '^[0-9a-f]{64}$' }
+    SyncTask:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, node_id, config_version_id, status, error_code, rollout_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        scope_id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        config_version_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, running, succeeded, failed] }
+        error_code: { type: [string, 'null'], maxLength: 128 }
+        rollout_id: { type: [string, 'null'], format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    EvaluationRecord:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, node_id, decision, sync_task, replayed]
+      properties:
+        id: { type: string, format: uuid }
+        scope_id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        decision: { $ref: '#/components/schemas/EvaluationDecision' }
+        sync_task:
+          anyOf:
+            - $ref: '#/components/schemas/SyncTask'
+            - type: 'null'
+        replayed: { type: boolean }
+    APIError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string }
+  responses:
+    InvalidRequest:
+      description: Invalid request
+      content: { application/json: { schema: { $ref: '#/components/schemas/APIError' } } }
+    Unauthorized:
+      description: Invalid or expired session
+      content: { application/json: { schema: { $ref: '#/components/schemas/APIError' } } }
+    Forbidden:
+      description: Required permission is absent
+      content: { application/json: { schema: { $ref: '#/components/schemas/APIError' } } }
+    NotFound:
+      description: Scope-bound resource does not exist
+      content: { application/json: { schema: { $ref: '#/components/schemas/APIError' } } }
+    Conflict:
+      description: Idempotency or configuration-state conflict
+      content: { application/json: { schema: { $ref: '#/components/schemas/APIError' } } }
+    PreconditionFailed:
+      description: Policy revision no longer matches If-Match
+      content: { application/json: { schema: { $ref: '#/components/schemas/APIError' } } }
+    Unavailable:
+      description: Authoritative usage or deployment dependency is unavailable
+      content: { application/json: { schema: { $ref: '#/components/schemas/APIError' } } }

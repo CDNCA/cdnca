@@ -1,0 +1,29 @@
+#!/bin/bash
+# Stand-in curl: writes a fake installer to the -o path. The fake installer
+# records its arguments, uid and every process command line visible on the
+# host, then runs the real install-node.sh argument parsing and stdin key
+# read (copied to /opt/install-node.sh by the test) and stops there, before
+# the registration request.
+out=''
+while [ "$#" -gt 1 ]; do
+  if [ "$1" = -o ]; then out=$2; shift 2; else shift; fi
+done
+printf '%s\n' "$1" > /tmp/curl-url
+[ -n "$out" ] || exit 2
+cat > "$out" <<'SCRIPT'
+log() { printf '[cdnca-edge] %s\n' "$*"; }
+log "preflight passed"
+echo "noise line that must not be kept"
+printf '%s\n' "$@" > /tmp/install-args
+id -u > /tmp/install-uid
+for f in /proc/[0-9]*/cmdline; do tr '\0' ' ' < "$f" 2>/dev/null; echo; done > /tmp/install-ps
+if [ -f /opt/install-node.sh ]; then
+  source <(sed '/^main "\$@"$/d' /opt/install-node.sh)
+  parse_args "$@"
+  read_enrollment_token
+  printf '%s\n' "$REGISTRATION_KEY" > /tmp/install-key
+fi
+log "edge-agent installed and enrolled"
+[ -f /tmp/install-fail ] && { log "simulated failure"; exit 3; }
+exit 0
+SCRIPT

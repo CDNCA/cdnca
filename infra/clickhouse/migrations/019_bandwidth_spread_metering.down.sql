@@ -1,0 +1,22 @@
+ALTER TABLE l4_session_facts_v1 MODIFY TTL toDateTime(finalized_at, 'UTC') + INTERVAL 30 DAY DELETE;
+DROP VIEW IF EXISTS access_metering_facts_mv_v1;
+DROP TABLE IF EXISTS access_metering_facts_v1 SYNC;
+DROP VIEW IF EXISTS package_metric_access_facts_mv_v1;
+CREATE MATERIALIZED VIEW package_metric_access_facts_mv_v1
+TO package_metric_access_facts_v1 AS
+SELECT
+    metric_version,
+    tenant_id,
+    package_subscription_id,
+    installation_id,
+    event_id,
+    occurred_at,
+    toStartOfHour(occurred_at, 'UTC') AS period_start,
+    toStartOfHour(occurred_at, 'UTC') + INTERVAL 1 HOUR AS period_end,
+    request_bytes,
+    response_bytes,
+    blocked,
+    ingested_at
+FROM access_events
+WHERE package_subscription_id != toUUID('00000000-0000-0000-0000-000000000000');
+ALTER TABLE package_metric_access_facts_v1 DROP COLUMN IF EXISTS duration_us, DROP COLUMN IF EXISTS site_id;

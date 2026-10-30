@@ -1,0 +1,156 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Log Center API
+  version: 0.1.0
+  description: >-
+    Unified operation log (unified-log). Every row carries a server-rendered plain-language summary;
+    clients only display it. Platform administrators (platform.admin) read every scope and may filter by
+    scope_id; tenant users (identity.self.read) read only their own scope. Language follows lang or
+    Accept-Language (zh / en).
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+servers:
+  - {url: /}
+security:
+  - bearerAuth: []
+paths:
+  /v1/audit-logs:
+    get:
+      summary: List rendered operation log rows, newest first
+      operationId: listAuditLogs
+      x-required-permissions: [platform.admin, identity.self.read]
+      parameters: &filters
+        - {$ref: '#/components/parameters/Category'}
+        - {name: exclude_category, in: query, description: Drop one category (the admin log center's operation tab excludes auth), schema: {$ref: '#/components/schemas/Category'}}
+        - {name: scope_id, in: query, description: Platform administrators only; tenants may only pass their own scope, schema: {type: string, format: uuid}}
+        - {name: since, in: query, schema: {type: string, format: date-time}}
+        - {name: until, in: query, schema: {type: string, format: date-time}}
+        - {name: actor, in: query, description: Username (exact, case-insensitive), schema: {type: string, maxLength: 256}}
+        - {name: actor_user_id, in: query, schema: {type: string, format: uuid}}
+        - {name: source_ip, in: query, schema: {type: string}}
+        - {name: resource_type, in: query, schema: {type: string, maxLength: 256}}
+        - {name: resource_id, in: query, schema: {type: string, maxLength: 256}}
+        - {name: result, in: query, schema: {type: string, enum: [success, denied, failure]}}
+        - {name: action, in: query, schema: {type: string, maxLength: 256}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+        - {name: tz, in: query, description: IANA time zone for the rendered time (default Asia/Shanghai), schema: {type: string, maxLength: 64}}
+        - {$ref: '#/components/parameters/Lang'}
+      responses:
+        '200': {description: One page of rows, content: {application/json: {schema: {$ref: '#/components/schemas/Page'}}}}
+        '400': {description: Invalid filter (audit_log_invalid_request), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '503': {description: Log storage unavailable (audit_log_unavailable)}
+  /v1/audit-logs/export:
+    get:
+      summary: Export the filtered rows as UTF-8 CSV (at most 10000 rows; the export itself is audited as system.audit_log.export)
+      operationId: exportAuditLogs
+      x-required-permissions: [platform.admin, identity.self.read]
+      parameters: *filters
+      responses:
+        '200': {description: CSV file, content: {text/csv: {schema: {type: string}}}}
+        '400': {description: Invalid filter (audit_log_invalid_request), content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '503': {description: Log storage or audit unavailable (audit_log_unavailable)}
+  /v1/audit-logs/categories:
+    get:
+      summary: Event categories with labels and default retention days
+      operationId: listAuditLogCategories
+      x-required-permissions: [platform.admin, identity.self.read]
+      parameters:
+        - {$ref: '#/components/parameters/Lang'}
+      responses:
+        '200':
+          description: Categories in display order
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/CategoryInfo'}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    Category: {name: category, in: query, schema: {oneOf: [{$ref: '#/components/schemas/Category'}, {const: all}]}}
+    Lang: {name: lang, in: query, description: Overrides Accept-Language, schema: {type: string}}
+  schemas:
+    Category: {type: string, enum: [admin, user, auth, site, security, rule, finance, package, plugin, node, dns, cert, system, other]}
+    CategoryInfo:
+      type: object
+      additionalProperties: false
+      required: [category, label, default_retention_days, actions]
+      properties:
+        category: {$ref: '#/components/schemas/Category'}
+        label: {type: string}
+        default_retention_days: {type: integer, minimum: 0, maximum: 3650}
+        actions: {type: integer, minimum: 0}
+    Page:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Row'}}
+        next_cursor: {type: string}
+    Row:
+      type: object
+      additionalProperties: false
+      required: [id, occurred_at, time, category, category_label, action, catalogued, actor, actor_kind, source_ip, scope_id, resource_type, resource_id, resource, result, result_label, request_id, summary, changes, fields]
+      properties:
+        id: {type: string, format: uuid}
+        occurred_at: {type: string, format: date-time}
+        time: {type: string, description: occurred_at formatted in tz}
+        category: {$ref: '#/components/schemas/Category'}
+        category_label: {type: string}
+        action: {type: string}
+        catalogued: {type: boolean, description: false when the action is missing from the event catalog}
+        actor: {type: string, description: Display name of who acted}
+        actor_kind: {type: string, enum: [user, system, plugin, node]}
+        actor_user_id: {type: string, format: uuid}
+        actor_ref: {type: string, description: 'plugin:<id>, node:<id>, job:<name>, api_key:<id>'}
+        source_ip: {type: string}
+        scope_id: {type: string, format: uuid}
+        resource_type: {type: string}
+        resource_id: {type: string}
+        resource: {type: string, description: Object display name, the ID when unknown}
+        resource_deleted: {type: boolean, description: The object no longer exists in the row's scope (looked up inside that scope only)}
+        tenant_name: {type: string, description: Display name of the row scope's tenant; absent for the platform scope}
+        actor_username: {type: string, description: Username of the acting user}
+        user_agent: {type: string, description: Browser User-Agent recorded with the event (login rows fall back to the session)}
+        geo_code: {type: string, pattern: '^[A-Z]{2}$', description: Country of source_ip, answered from the control IP library at query time}
+        geo_region: {type: string, description: Province name}
+        geo_city: {type: string, description: City name}
+        result: {type: string, enum: [success, denied, failure]}
+        result_label: {type: string}
+        reason_code: {type: string}
+        reason: {type: string}
+        request_id: {type: string}
+        summary: {type: string, description: Server-rendered plain-language sentence}
+        changes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [field, label, before, after]
+            properties: {field: {type: string}, label: {type: string}, before: {type: string}, after: {type: string}}
+        fields:
+          type: array
+          description: Displayable payload fields from the catalog entry (masked fields already masked)
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, label, value]
+            properties: {key: {type: string}, label: {type: string}, value: {type: string}}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties: {code: {type: string}, request_id: {type: string}}

@@ -1,0 +1,430 @@
+{
+ "id": "l2-conds",
+ "prefix": "/v1/l2-conds",
+ "operations": [
+  {
+   "operation_id": "listL2Conditions",
+   "method": "GET",
+   "path": "/v1/l2-conds",
+   "summary": "查询 L2 匹配条件列表",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "返回当前作用域未删除的全部匹配条件，按 display_id 排序，不分页。",
+   "permissions": [
+    "node_scheduling.read"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "L2 匹配条件列表；无数据时 items 为空数组。",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<L2Condition>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "createL2Condition",
+   "method": "POST",
+   "path": "/v1/l2-conds",
+   "summary": "创建 L2 匹配条件",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，拒绝非 JSON、无效 UTF-8、未知字段及额外 JSON 值。",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Must be the single exact quoted value \"0\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+     },
+     {
+      "name": "rules",
+      "type": "array<L2Rule>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "返回修订 1 的匹配条件对象；名称或幂等键冲突返回 409。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "required": true,
+       "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+      },
+      {
+       "name": "rules",
+       "type": "array<L2Rule>",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateL2Condition",
+   "method": "PUT",
+   "path": "/v1/l2-conds/{id}",
+   "summary": "替换 L2 匹配条件",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "完整替换名称、备注和规则并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。此单项路径不支持 GET。",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "非零 L2 匹配条件 UUID。"
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single quoted positive decimal current revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+     },
+     {
+      "name": "rules",
+      "type": "array<L2Rule>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "返回更新后的匹配条件对象或已完成请求的原结果。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "required": true,
+       "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+      },
+      {
+       "name": "rules",
+       "type": "array<L2Rule>",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteL2Condition",
+   "method": "DELETE",
+   "path": "/v1/l2-conds/{id}",
+   "summary": "删除 L2 匹配条件",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "非零 L2 匹配条件 UUID。"
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single quoted positive decimal current revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "软删除完成或已完成请求的结果被重放。"
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "412",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  }
+ ]
+}

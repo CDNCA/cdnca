@@ -1,0 +1,30 @@
+{
+  "schema": "cdnca.ip-intel.fixture/v1",
+  "sources": [
+    {"id": "fixture-carrier", "name": "test carrier list", "url": "https://example.invalid/carrier", "license": "CC0-1.0",
+     "ref": "fixture-1", "role": "carrier,country",
+     "files": [{"path": "carrier.txt", "sha256": "1111111111111111111111111111111111111111111111111111111111111111", "bytes": 10}]},
+    {"id": "fixture-asn", "name": "test asn table", "url": "https://example.invalid/asn", "license": "CC0-1.0",
+     "ref": "fixture-1", "role": "asn,country,idc",
+     "files": [{"path": "asn.json", "sha256": "2222222222222222222222222222222222222222222222222222222222222222", "bytes": 20}]}
+  ],
+  "notice": "test fixture data, not real allocations",
+  "entries": [
+    {"prefix": "1.0.1.0/24", "tags": ["carrier:cn-telecom"], "country": "CN"},
+    {"prefix": "36.96.0.0/11", "tags": ["carrier:cn-telecom"], "country": "CN"},
+    {"prefix": "36.96.0.0/11", "asn": 4134, "country": "CN", "rank": 1},
+    {"prefix": "240e::/20", "tags": ["carrier:cn-telecom"], "country": "CN"},
+    {"prefix": "240e::/24", "asn": 4134, "country": "CN", "rank": 1},
+    {"prefix": "1.24.0.0/13", "tags": ["carrier:cn-unicom"], "country": "CN"},
+    {"prefix": "1.24.0.0/13", "asn": 4837, "country": "CN", "rank": 1},
+    {"prefix": "2408:8000::/20", "tags": ["carrier:cn-unicom"], "asn": 4837, "country": "CN"},
+    {"prefix": "39.128.0.0/10", "tags": ["carrier:cn-mobile"], "asn": 9808, "country": "CN"},
+    {"prefix": "202.112.0.0/13", "tags": ["carrier:cn-cernet"], "asn": 4538, "country": "CN"},
+    {"prefix": "47.92.0.0/14", "tags": ["idc:cn"], "asn": 37963, "country": "CN", "rank": 1},
+    {"prefix": "2401:b180::/32", "tags": ["idc:cn"], "asn": 37963, "country": "CN", "rank": 1},
+    {"prefix": "3.0.0.0/15", "tags": ["idc:global"], "asn": 16509, "country": "US", "rank": 1},
+    {"prefix": "2600:1f00::/24", "tags": ["idc:global"], "asn": 16509, "country": "US", "rank": 1},
+    {"prefix": "8.8.8.0/24", "asn": 15169, "country": "US", "rank": 1},
+    {"prefix": "1.160.0.0/12", "asn": 3462, "country": "TW", "rank": 1}
+  ]
+}

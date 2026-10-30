@@ -1,0 +1,11 @@
+--- a/agents/edge-agent/internal/siteindex/cmd/cdnca-security-bench/main.go
++++ b/agents/edge-agent/internal/siteindex/cmd/cdnca-security-bench/main.go
+@@ -84,7 +84,7 @@
+ 		"rewrites": []any{map[string]any{"rule_id": "rw", "priority": 10, "match_kind": "exact", "match_path": "/old",
+ 			"target_path": "/new", "preserve_query": true, "preserve_cookie": true}},
+ 		"redirect_allowed_hosts": []string{"bench.test"}, "redirects": []any{map[string]any{"rule_id": "rd", "priority": 10, "match_kind": "exact",
+-			"match_path": "/moved", "status": 301, "target_url": "https://bench.test/new", "preserve_query": false}},
++			"match_path": "/moved", "status": 301, "target_url": "https://bench.test/new", "preserve_query": false, "preserve_path": false}},
+ 		"cors": nil}
+ 	httpRaw, err := json.Marshal(http)
+ 	must(err)

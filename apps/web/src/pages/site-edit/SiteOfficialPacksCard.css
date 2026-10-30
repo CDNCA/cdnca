@@ -1,0 +1,33 @@
+/* 官方系统规则包改为等宽卡片网格。 */
+.site-official-packs-summary { margin-inline-start: auto; align-self: center; }
+.site-official-packs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.site-official-pack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 8px;
+  background: var(--cdnca-color-bg-container);
+}
+.site-official-pack-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.site-official-pack-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-official-pack-head .ant-tag { flex: none; margin: 0; }
+.site-official-pack-desc {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

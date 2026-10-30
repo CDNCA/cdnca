@@ -1,0 +1,1011 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Promotion Control API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable BILL-09 HTTP contract for versioned coupon and
+    automatic promotion policies, tenant quote/reservation operations, and
+    commerce-workload-only reservation transitions and adjustments. Browser
+    principals and commerce workloads use separate authenticators. This
+    fragment is not mounted by control-api main, package-commerce runtime, or
+    either UI. Explicit expiration remains unavailable until the promotion
+    domain exposes a durable audited idempotent command. The current
+    packagecommerce path appends a consumed event and audit only; it does not
+    create a renewal same-price snapshot or bind the newly created
+    subscription, so payment-to-renewal integration is not complete.
+servers:
+  - url: /
+tags:
+  - name: Promotion policies
+    description: Platform-scoped promotion policy publication and revision reads.
+  - name: Tenant promotions
+    description: Tenant-scoped quote preview, reservation, and own-reservation reads.
+  - name: Promotion commerce workload
+    description: Trusted commerce workload state transitions and adjustment decisions.
+paths:
+  /v1/admin/promotion-policies:
+    parameters:
+      - $ref: '#/components/parameters/RequestID'
+    get:
+      tags: [Promotion policies]
+      operationId: listPromotionPolicies
+      summary: List current promotion policy revisions
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.read]
+      parameters:
+        - $ref: '#/components/parameters/PolicyKindFilter'
+        - $ref: '#/components/parameters/ProductKindFilter'
+        - $ref: '#/components/parameters/EnabledFilter'
+        - $ref: '#/components/parameters/ArchivedFilter'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [Promotion policies]
+      operationId: publishPromotionPolicy
+      summary: Publish revision 1 of a coupon or automatic policy
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublishPolicyRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/PolicyCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/promotion-policies/{policy_id}:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+    get:
+      tags: [Promotion policies]
+      operationId: getPromotionPolicy
+      summary: Read the current revision of one promotion policy
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.read]
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      tags: [Promotion policies]
+      operationId: archivePromotionPolicy
+      summary: Archive a promotion policy (one-way; policies are never deleted)
+      description: >-
+        Quotes, reservations and orders pin policy revisions, so a policy is
+        archived instead of deleted. An archived policy no longer applies to new
+        quotes, reservations or orders, cannot be revised, and is hidden from the
+        list unless archived=true. Archiving an archived policy returns 409
+        promotion_archived.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      responses:
+        '200':
+          description: Archived policy, or an identical stored replay.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ArchiveResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/promotion-policies/{policy_id}/history:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+    get:
+      tags: [Promotion policies]
+      operationId: listPromotionPolicyHistory
+      summary: List immutable revisions of one promotion policy
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/promotion-policies/{policy_id}/revisions:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Promotion policies]
+      operationId: publishPromotionPolicyRevision
+      summary: Append a policy revision with revision CAS
+      description: >-
+        The immutable policy kind and coupon code are retained by the domain;
+        a coupon revision may repeat the same code, while an automatic policy
+        omits coupon_code. Product and tenant targets are complete snapshots.
+        tenant_scope_ids is always required; an explicit empty array means all
+        tenants and omission is rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublishPolicyRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/promotion-coupon-usage:
+    get:
+      tags: [Promotion policies]
+      operationId: listPromotionCouponUsage
+      summary: List immutable coupon usage facts
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.read]
+      parameters:
+        - {$ref: '#/components/parameters/UsagePolicyID'}
+        - {$ref: '#/components/parameters/UsageTenantScopeID'}
+        - {$ref: '#/components/parameters/UsageStatus'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200': {$ref: '#/components/responses/CouponUsagePageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/promotion-quotes:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [Tenant promotions]
+      operationId: quotePromotion
+      summary: Preview a tenant promotion quote
+      description: >-
+        The target scope comes from the authenticated tenant principal and
+        must exactly equal the path. An empty coupon_codes array evaluates
+        automatic policies only. Unknown, expired, disabled, out-of-target,
+        quota-exhausted, and otherwise inapplicable coupon codes share the
+        same 422 error and do not disclose coupon existence. Internal price
+        and renewal snapshot identifiers are never returned.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.quote]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuoteRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/QuoteCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/promotion-reservations:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [Tenant promotions]
+      operationId: reservePromotion
+      summary: Reserve quota for the authenticated tenant user quote
+      description: >-
+        Quota is claimed transactionally. If quota is exhausted after quote
+        creation, the response is the same 422 promotion_not_applicable shape
+        used for unknown and otherwise inapplicable coupons.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.redeem]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReserveRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/ReservationCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/promotion-reservations/{reservation_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/ReservationID'
+      - $ref: '#/components/parameters/RequestID'
+    get:
+      tags: [Tenant promotions]
+      operationId: getOwnPromotionReservation
+      summary: Read an authenticated tenant user's own reservation
+      description: >-
+        A reservation owned by another user in the same tenant returns the
+        same 404 shape as an unknown reservation.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [promotions.read]
+      responses:
+        '200': {$ref: '#/components/responses/ReservationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/internal/tenant-scopes/{tenant_scope_id}/promotion-reservations/{reservation_id}/consume:
+    parameters: &workload_parameters
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/ReservationID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+    post:
+      tags: [Promotion commerce workload]
+      operationId: consumePromotionReservation
+      summary: Mark a reserved promotion as consumed
+      description: >-
+        This HTTP operation does not prove that packagecommerce has joined
+        renewal snapshot creation and subscription binding to its purchase
+        transaction. The current packagecommerce implementation writes only
+        the consumed event and audit. Runtime integration remains blocked on
+        the transaction-bound adapter described below.
+      security: [{commerceMutualTLS: []}]
+      x-workload-audience: control.promotion-commerce.v1
+      x-transaction-bound-adapter:
+        status: not-implemented
+        proposed-go-signature: >-
+          ConsumeSnapshotAndBind(ctx context.Context, tx pgx.Tx, actor
+          promotion.Actor, quoteID, reservationID, subscriptionID uuid.UUID,
+          requestID, callbackKey string, now time.Time) error
+        caller-owns-transaction: true
+        atomic-facts:
+          - locked exact quote and reservation
+          - consumed event and audit
+          - canonical renewal-same-price policy subset snapshot
+          - matching newly created subscription binding and audit
+        failure-rule: Any failure rolls back purchase, subscription, consume, snapshot, and binding together.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TransitionRequest'}
+      responses: &transition_responses
+        '200': {$ref: '#/components/responses/ReservationWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/internal/tenant-scopes/{tenant_scope_id}/promotion-reservations/{reservation_id}/release:
+    parameters: *workload_parameters
+    post:
+      tags: [Promotion commerce workload]
+      operationId: releasePromotionReservation
+      summary: Release a reserved promotion before payment consumption
+      security: [{commerceMutualTLS: []}]
+      x-workload-audience: control.promotion-commerce.v1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TransitionRequest'}
+      responses: *transition_responses
+  /v1/internal/tenant-scopes/{tenant_scope_id}/promotion-reservations/{reservation_id}/expire:
+    parameters: *workload_parameters
+    post:
+      tags: [Promotion commerce workload]
+      operationId: expirePromotionReservation
+      summary: Append an explicit expired state transition
+      description: >-
+        Contract-reserved endpoint. The first slice returns 503
+        operation_unavailable because migration 044 has no durable idempotency
+        operation for expiration and the promotion domain exposes no Expire
+        command. Reads still project elapsed reserved facts as expired. Do not
+        retry with a different idempotency key.
+      security: [{commerceMutualTLS: []}]
+      x-workload-audience: control.promotion-commerce.v1
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              maxProperties: 0
+      responses: *transition_responses
+  /v1/internal/tenant-scopes/{tenant_scope_id}/promotion-reservations/{reservation_id}/adjustments:
+    parameters: *workload_parameters
+    post:
+      tags: [Promotion commerce workload]
+      operationId: decidePromotionAdjustment
+      summary: Calculate a refund or void adjustment decision
+      description: >-
+        This operation returns deterministic monetary amounts only. It does
+        not post a ledger entry, refund payment, revoke an entitlement, or
+        return an internal ledger reference. Source event keys are accepted
+        for idempotency but not returned.
+      security: [{commerceMutualTLS: []}]
+      x-workload-audience: control.promotion-commerce.v1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdjustmentRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/AdjustmentCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: session-or-api-principal
+      description: >-
+        The mount adapter must return a live principal with user ID, scope ID,
+        scope kind, and effective permissions. Actor or target scope values
+        are never accepted from request JSON.
+    commerceMutualTLS:
+      type: mutualTLS
+      description: >-
+        A distinct workload authenticator must verify the client identity,
+        exact audience control.promotion-commerce.v1, workload ID, tenant
+        actor binding, and live promotions.redeem permission. Browser bearer
+        credentials are not accepted on internal routes.
+  parameters:
+    PolicyID:
+      name: policy_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      description: Explicit tenant access-scope target that must match the authenticated tenant actor.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    ReservationID:
+      name: reservation_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IfMatchRevision:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+        maxLength: 21
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        Opaque canonical JSON plus HMAC-SHA256 cursor. It binds key ID,
+        authenticated actor user/scope/kind, route kind, filters, limit,
+        ordering, transactionally allocated catalog watermark or read snapshot,
+        and keyset position. Tampering or cross-actor replay returns 400 before storage
+        is queried.
+      schema: {type: string, minLength: 1, maxLength: 1024}
+    PolicyKindFilter:
+      name: kind
+      in: query
+      required: false
+      schema: {type: string, enum: [coupon, automatic]}
+    ProductKindFilter:
+      name: product_kind
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/PolicyProductKind'}
+    EnabledFilter:
+      name: enabled
+      in: query
+      required: false
+      schema: {type: boolean}
+    ArchivedFilter:
+      name: archived
+      in: query
+      required: false
+      description: false (default) lists live policies; true lists only archived ones.
+      schema: {type: boolean, default: false}
+    UsagePolicyID:
+      name: policy_id
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    UsageTenantScopeID:
+      name: tenant_scope_id
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    UsageStatus:
+      name: status
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      schema: {type: string, enum: [reserved, consumed, released, expired]}
+  headers:
+    RequestID:
+      description: Correlation identifier copied from X-Request-ID.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    ETag:
+      description: Current positive revision encoded as a quoted decimal.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    Location:
+      description: Canonical URL of the created resource.
+      schema: {type: string, maxLength: 512}
+    IdempotencyReplayed:
+      description: Present as true only for a stored identical request replay.
+      schema: {type: string, const: 'true'}
+  responses:
+    PolicyPageOK:
+      description: Stable page of current or historical policy revisions.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PolicyPage'}
+    PolicyOK:
+      description: Current promotion policy revision.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Policy'}
+    PolicyCreated:
+      description: Published revision 1 or an identical stored replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        Location: {$ref: '#/components/headers/Location'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Policy'}
+    PolicyWriteOK:
+      description: Published revision or an identical stored replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        Location: {$ref: '#/components/headers/Location'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Policy'}
+    CouponUsagePageOK:
+      description: Stable actor, filter, snapshot, and keyset-bound coupon usage page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CouponUsagePage'}
+    QuoteCreated:
+      description: Immutable quote preview or an identical stored replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Location: {$ref: '#/components/headers/Location'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Quote'}
+    ReservationCreated:
+      description: Reserved quota or an identical stored replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Location: {$ref: '#/components/headers/Location'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Reservation'}
+    ReservationOK:
+      description: Authenticated user's own reservation state.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Reservation'}
+    ReservationWriteOK:
+      description: Workload transition result or an identical stored replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Reservation'}
+    AdjustmentCreated:
+      description: Deterministic adjustment decision or an identical stored replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Adjustment'}
+    BadRequest:
+      description: Malformed path, query, header, JSON, duplicate field, unknown field, or size violation.
+      content: &error_content
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unauthorized:
+      description: Browser or workload authentication is absent or invalid.
+      content: *error_content
+    Forbidden:
+      description: Scope, permission, or workload audience is denied.
+      content: *error_content
+    NotFound:
+      description: Resource is absent inside the authorized boundary.
+      content: *error_content
+    Conflict:
+      description: Idempotency, state, expiry, quota, stacking, or adjustment conflict.
+      content: *error_content
+    PreconditionFailed:
+      description: If-Match does not equal the current policy revision.
+      content: *error_content
+    UnprocessableEntity:
+      description: Coupon or automatic promotion is not applicable without revealing existence.
+      content: *error_content
+    ServiceUnavailable:
+      description: Context, query store, domain dependency, or unwired expiration command is unavailable.
+      content: *error_content
+  schemas:
+    ArchiveResult:
+      type: object
+      additionalProperties: false
+      required: [policy_id, revision, archived_at]
+      properties:
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, minimum: 1}
+        archived_at: {type: string, format: date-time}
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    MetadataID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    ProductKind:
+      type: string
+      enum: [package_subscription, traffic_package]
+    PolicyProductKind:
+      type: string
+      description: package_addon (548) discounts are automatic purchase-only policies applied to add-on purchases; they are never quoted.
+      enum: [package_subscription, traffic_package, package_addon]
+    UserGroupIDs:
+      type: array
+      maxItems: 100
+      uniqueItems: true
+      description: Identity user groups the policy applies to (548); omitted or empty means every user. Combined with tenant_scope_ids by AND.
+      items: {$ref: '#/components/schemas/CanonicalUUID'}
+    UseKind:
+      type: string
+      enum: [purchase, renewal]
+    PublishPolicyRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - name
+        - enabled
+        - product_kind
+        - product_ids
+        - tenant_scope_ids
+        - use_kinds
+        - valid_from
+        - valid_until
+        - total_limit
+        - per_user_limit
+        - discount_kind
+        - fixed_amount_minor
+        - percentage_basis_points
+        - minimum_amount_minor
+        - stacking_mode
+        - priority
+        - renewal_same_price
+        - currency
+      properties:
+        kind: {type: string, enum: [coupon, automatic]}
+        coupon_code:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'
+        name: {type: string, minLength: 1, maxLength: 128}
+        enabled: {type: boolean}
+        product_kind: {$ref: '#/components/schemas/PolicyProductKind'}
+        product_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_ids:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          description: Explicit complete target set; an empty array means all tenants.
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        user_group_ids: {$ref: '#/components/schemas/UserGroupIDs'}
+        use_kinds:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/UseKind'}
+        valid_from: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+        total_limit: {type: integer, format: int64, minimum: 0}
+        per_user_limit: {type: integer, format: int64, minimum: 0}
+        discount_kind: {type: string, enum: [fixed, percentage]}
+        fixed_amount_minor: {type: integer, format: int64, minimum: 0}
+        percentage_basis_points: {type: integer, format: int64, minimum: 0, maximum: 10000}
+        minimum_amount_minor: {type: integer, format: int64, minimum: 0}
+        stacking_mode: {type: string, enum: [stackable, exclusive]}
+        priority: {type: integer, minimum: -1000000, maximum: 1000000}
+        renewal_same_price: {type: boolean}
+        currency: {type: string, const: CNY}
+      oneOf:
+        - title: Coupon policy
+          properties:
+            kind: {const: coupon}
+          required: [coupon_code]
+        - title: Automatic policy
+          properties:
+            kind: {const: automatic}
+          not:
+            required: [coupon_code]
+    Policy:
+      type: object
+      additionalProperties: false
+      required:
+        - policy_id
+        - revision
+        - name
+        - enabled
+        - product_kind
+        - product_ids
+        - use_kinds
+        - valid_from
+        - valid_until
+        - total_limit
+        - per_user_limit
+        - discount_kind
+        - fixed_amount_minor
+        - percentage_basis_points
+        - minimum_amount_minor
+        - stacking_mode
+        - priority
+        - renewal_same_price
+        - currency
+        - created_at
+      properties:
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        coupon_code: {type: string, minLength: 1, maxLength: 64}
+        name: {type: string, minLength: 1, maxLength: 128}
+        enabled: {type: boolean}
+        product_kind: {$ref: '#/components/schemas/PolicyProductKind'}
+        product_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_ids:
+          type: array
+          maxItems: 1000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        user_group_ids: {$ref: '#/components/schemas/UserGroupIDs'}
+        use_kinds:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/UseKind'}
+        valid_from: {type: string, format: date-time}
+        valid_until: {type: string, format: date-time}
+        total_limit: {type: integer, format: int64, minimum: 0}
+        per_user_limit: {type: integer, format: int64, minimum: 0}
+        discount_kind: {type: string, enum: [fixed, percentage]}
+        fixed_amount_minor: {type: integer, format: int64, minimum: 0}
+        percentage_basis_points: {type: integer, format: int64, minimum: 0, maximum: 10000}
+        minimum_amount_minor: {type: integer, format: int64, minimum: 0}
+        stacking_mode: {type: string, enum: [stackable, exclusive]}
+        priority: {type: integer, minimum: -1000000, maximum: 1000000}
+        renewal_same_price: {type: boolean}
+        currency: {type: string, const: CNY}
+        created_at: {type: string, format: date-time}
+    PolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Policy'}
+        next_cursor: {type: string, minLength: 1, maxLength: 1024}
+    CouponUsage:
+      type: object
+      additionalProperties: false
+      required:
+        - reservation_id
+        - quote_id
+        - tenant_scope_id
+        - user_id
+        - policy_id
+        - policy_revision
+        - application_order
+        - policy_name
+        - coupon_code
+        - product_kind
+        - product_id
+        - product_revision
+        - use_kind
+        - currency
+        - original_amount_minor
+        - discount_amount_minor
+        - payable_amount_minor
+        - policy_discount_minor
+        - status
+        - expires_at
+        - reserved_at
+        - updated_at
+      properties:
+        reservation_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        quote_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_revision: {type: integer, format: int64, minimum: 1}
+        application_order: {type: integer, minimum: 0}
+        policy_name: {type: string, minLength: 1, maxLength: 128}
+        coupon_code:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Z0-9][A-Z0-9_-]{0,63}$'
+        product_kind: {$ref: '#/components/schemas/ProductKind'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        use_kind: {$ref: '#/components/schemas/UseKind'}
+        currency: {type: string, const: CNY}
+        original_amount_minor: {type: integer, format: int64, minimum: 0}
+        discount_amount_minor: {type: integer, format: int64, minimum: 0}
+        payable_amount_minor: {type: integer, format: int64, minimum: 0}
+        policy_discount_minor: {type: integer, format: int64, minimum: 0}
+        status: {type: string, enum: [reserved, consumed, released, expired]}
+        expires_at: {type: string, format: date-time}
+        reserved_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CouponUsagePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/CouponUsage'}
+        next_cursor: {type: string, minLength: 1, maxLength: 1024}
+    QuoteRequest:
+      type: object
+      additionalProperties: false
+      required: [product_kind, product_id, product_revision, use_kind, coupon_codes, ttl_seconds]
+      properties:
+        product_kind: {$ref: '#/components/schemas/ProductKind'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        period: {type: string, enum: [month, quarter, year]}
+        use_kind: {$ref: '#/components/schemas/UseKind'}
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        coupon_codes:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+            pattern: '^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$'
+        ttl_seconds: {type: integer, format: int64, minimum: 1, maximum: 1800}
+    AppliedPolicy:
+      type: object
+      additionalProperties: false
+      required: [policy_id, revision, discount_minor, renewal_same_price]
+      properties:
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        coupon_code: {type: string, minLength: 1, maxLength: 64}
+        discount_minor: {type: integer, format: int64, minimum: 0}
+        renewal_same_price: {type: boolean}
+    Quote:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - tenant_scope_id
+        - product_kind
+        - product_id
+        - product_revision
+        - use_kind
+        - currency
+        - original_amount_minor
+        - discount_amount_minor
+        - payable_amount_minor
+        - policies
+        - expires_at
+        - created_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_kind: {$ref: '#/components/schemas/ProductKind'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        period: {type: string, enum: [month, quarter, year]}
+        use_kind: {$ref: '#/components/schemas/UseKind'}
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        currency: {type: string, const: CNY}
+        original_amount_minor: {type: integer, format: int64, minimum: 0}
+        discount_amount_minor: {type: integer, format: int64, minimum: 0}
+        payable_amount_minor: {type: integer, format: int64, minimum: 0}
+        policies:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {$ref: '#/components/schemas/AppliedPolicy'}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+      description: >-
+        price_snapshot_id, renewal_snapshot_id, raw product price documents,
+        ledger references, and internal write facts are deliberately absent.
+    ReserveRequest:
+      type: object
+      additionalProperties: false
+      required: [quote_id]
+      properties:
+        quote_id: {$ref: '#/components/schemas/CanonicalUUID'}
+    TransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [callback_key]
+      properties:
+        callback_key: {$ref: '#/components/schemas/MetadataID'}
+    Reservation:
+      type: object
+      additionalProperties: false
+      required: [id, quote_id, tenant_scope_id, status, revision, expires_at, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        quote_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        status: {type: string, enum: [reserved, consumed, released, expired]}
+        revision: {type: integer, format: int64, minimum: 1}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+      description: User ID, callback key, actor facts, and internal event IDs are not returned.
+    AdjustmentRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, source_event_key, gross_amount_minor]
+      properties:
+        kind: {type: string, enum: [refund, void]}
+        source_event_key: {$ref: '#/components/schemas/MetadataID'}
+        gross_amount_minor: {type: integer, format: int64, minimum: 1}
+    Adjustment:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - reservation_id
+        - tenant_scope_id
+        - kind
+        - gross_amount_minor
+        - ledger_amount_minor
+        - discount_reversal_minor
+        - currency
+        - created_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        reservation_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        kind: {type: string, enum: [refund, void]}
+        gross_amount_minor: {type: integer, format: int64, minimum: 1}
+        ledger_amount_minor: {type: integer, format: int64, minimum: 0}
+        discount_reversal_minor: {type: integer, format: int64, minimum: 0}
+        currency: {type: string, const: CNY}
+        created_at: {type: string, format: date-time}
+      description: Source event key and external/internal ledger references are not returned.
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - invalid_request
+                - permission_denied
+                - not_found
+                - promotion_not_applicable
+                - promotion_mutually_exclusive
+                - promotion_expired
+                - promotion_state_conflict
+                - idempotency_conflict
+                - revision_conflict
+                - adjustment_exceeded
+                - operation_unavailable
+                - request_canceled
+                - route_not_found
+                - method_not_allowed
+                - service_unavailable
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {$ref: '#/components/schemas/MetadataID'}

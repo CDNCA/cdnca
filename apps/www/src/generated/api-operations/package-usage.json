@@ -1,0 +1,337 @@
+{
+ "id": "package-usage",
+ "prefix": "/v1/package-usage",
+ "operations": [
+  {
+   "operation_id": "queryTenantPackageUsage",
+   "method": "GET",
+   "path": "/v1/package-usage",
+   "summary": "查询当前用户套餐用量",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "timezone",
+     "in": "query",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "bucket",
+     "in": "query",
+     "type": "string: hour / day",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "使用冻结数据快照计算的套餐用量",
+     "fields": [
+      {
+       "name": "metric_schema_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "from",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "to",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "timezone",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "bucket",
+       "type": "string: hour / day",
+       "required": true
+      },
+      {
+       "name": "traffic_bytes",
+       "type": "string",
+       "required": true,
+       "description": "七层与四层合计（http_traffic_bytes + l4_traffic_bytes）。"
+      },
+      {
+       "name": "http_traffic_bytes",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "l4_traffic_bytes",
+       "type": "string",
+       "required": true,
+       "description": "四层转发字节；带 site_id 筛选时恒为 0（四层转发不属于网站）。"
+      },
+      {
+       "name": "peak_bandwidth_bps",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "bandwidth_95th_bps",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "connections",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "source_watermark",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "finalized_through",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "delayed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "series",
+       "type": "array<PackageUsagePoint>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "404",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "408",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "502",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误信封"
+    }
+   ]
+  },
+  {
+   "operation_id": "searchTenantPackageUsage",
+   "method": "GET",
+   "path": "/v1/package-usage/search",
+   "summary": "当前租户整体用量曲线（带宽/流量按时间桶聚合）",
+   "auth": [
+    "bearer"
+   ],
+   "description": "仅 tenant 作用域且具有 package_subscriptions.read（或 platform.admin）权限；只统计调用者自己的租户作用域。 口径与 /v1/admin/package-usage/search 相同（access_metering_facts_v1 + l4_session_facts_v1，不新建账本）， 不接受 user_ids / subscription_ids（传入返回400）；service_type、domains、listen_ports 同管理员接口。",
+   "params": [
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "timezone",
+     "in": "query",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "bucket",
+     "in": "query",
+     "type": "string: hour / day",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "service_type",
+     "in": "query",
+     "type": "string: all / site / stream"
+    },
+    {
+     "name": "domains",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "listen_ports",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "有界结果；filters.user_ids 与 subscription_ids 恒为空数组。",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "from",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "to",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "timezone",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "bucket",
+       "type": "string: hour / day",
+       "required": true
+      },
+      {
+       "name": "filters",
+       "type": "UsageSearchFilters",
+       "required": true
+      },
+      {
+       "name": "bandwidth_basis",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "has_data",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "traffic_bytes",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "peak_bandwidth_bps",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "bandwidth_95th_bps",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "series",
+       "type": "array<UsageSearchPoint>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "408",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "502",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误信封"
+    }
+   ]
+  }
+ ]
+}

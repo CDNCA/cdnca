@@ -1,0 +1,256 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+  "title": "CDNCA 领域事件 v1",
+  "description": "插件 Webhook 投递的业务事件正文，兼容 CloudEvents 1.0 structured content。data 按 type 校验：除各事件自身字段外，每条投递还带 subscription_id（本订阅）与 subject_sequence（同一租户、事件类型、subject 内从 1 递增）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "subject",
+    "time",
+    "datacontenttype",
+    "dataschema",
+    "tenant_id",
+    "request_id",
+    "sequence",
+    "data"
+  ],
+  "properties": {
+    "specversion": {"const": "1.0"},
+    "id": {"type": "string", "format": "uuid", "description": "事件 ID：一次事件对一个订阅的唯一标识，重放不变。"},
+    "source": {"const": "/control-plane/plugin-webhooks"},
+    "type": {
+      "enum": ["io.cdnca.certificate.v1.expiry_reached", "io.cdnca.certificate.v1.status_changed",
+        "io.cdnca.deployment.v1.status_changed",
+        "io.cdnca.node.v1.status_changed", "io.cdnca.security.v1.incident_detected", "io.cdnca.site.v1.updated",
+        "io.cdnca.usage.v1.threshold_reached"]
+    },
+    "subject": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,31}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "事件所述资源，如 site/<uuid>、deployment/<uuid>、node/<uuid>、certificate_order/<uuid>、certificate_asset/<uuid>、package_subscription/<uuid>。"
+    },
+    "time": {"type": "string", "format": "date-time", "description": "业务事实发生时间（UTC，微秒精度）。"},
+    "datacontenttype": {"const": "application/json"},
+    "dataschema": {"const": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json"},
+    "tenant_id": {"type": "string", "format": "uuid"},
+    "request_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "源事实 ID：同一业务事实投到多个订阅时相同，可用于跨订阅关联。"
+    },
+    "traceparent": {
+      "type": "string",
+      "pattern": "^00-[0-9a-f]{32}-[0-9a-f]{16}-(00|01)$"
+    },
+    "sequence": {"type": "integer", "minimum": 1, "description": "本订阅内全部事件的投递序号，严格递增。"},
+    "data": {"type": "object"}
+  },
+  "allOf": [
+    {
+      "if": {"type": "object", "properties": {"type": {"const": "io.cdnca.deployment.v1.status_changed"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "subject": {"type": "string", "pattern": "^deployment/"},
+          "data": {"$ref": "#/definitions/deployment_status_changed"}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"type": {"const": "io.cdnca.site.v1.updated"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "subject": {"type": "string", "pattern": "^site/"},
+          "data": {"$ref": "#/definitions/site_updated"}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"type": {"const": "io.cdnca.certificate.v1.expiry_reached"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "subject": {"type": "string", "pattern": "^certificate_asset/"},
+          "data": {"$ref": "#/definitions/certificate_expiry_reached"}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"type": {"const": "io.cdnca.certificate.v1.status_changed"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "subject": {"type": "string", "pattern": "^certificate_order/"},
+          "data": {"$ref": "#/definitions/certificate_status_changed"}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"type": {"const": "io.cdnca.node.v1.status_changed"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "subject": {"type": "string", "pattern": "^node/"},
+          "data": {"$ref": "#/definitions/node_status_changed"}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"type": {"const": "io.cdnca.usage.v1.threshold_reached"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "subject": {"type": "string", "pattern": "^package_subscription/"},
+          "data": {"$ref": "#/definitions/usage_threshold_reached"}
+        }
+      }
+    },
+    {
+      "if": {"type": "object", "properties": {"type": {"const": "io.cdnca.security.v1.incident_detected"}}},
+      "then": {
+        "type": "object",
+        "properties": {
+          "subject": {"type": "string", "pattern": "^site/"},
+          "data": {"$ref": "#/definitions/security_incident_detected"}
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "uuid": {"type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+    "counter": {"type": "integer", "minimum": 0, "maximum": 999999999999999999},
+    "position": {"type": "integer", "minimum": 1, "maximum": 999999999999999999},
+    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?Z$"},
+    "certificate_status_changed": {
+      "description": "租户 ACME 证书订单状态变化（申请、验证、签发、失败、续期、吊销）。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "subject_sequence", "order_id", "status", "revision"],
+      "properties": {
+        "subscription_id": {"$ref": "#/definitions/uuid"},
+        "subject_sequence": {"$ref": "#/definitions/position"},
+        "order_id": {"$ref": "#/definitions/uuid"},
+        "status": {"$ref": "#/definitions/certificate_state"},
+        "previous_status": {"$ref": "#/definitions/certificate_state"},
+        "revision": {"$ref": "#/definitions/counter"},
+        "renewal_of_order_id": {"$ref": "#/definitions/uuid"},
+        "not_after": {"$ref": "#/definitions/timestamp"}
+      }
+    },
+    "certificate_expiry_reached": {
+      "description": "租户正在使用的证书版本临近或已过期：到期前 30 天、7 天、1 天各一次，过期时一次；每个阶段只发一次。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "subject_sequence", "asset_id", "version_id", "stage", "not_after", "source"],
+      "properties": {
+        "subscription_id": {"$ref": "#/definitions/uuid"},
+        "subject_sequence": {"$ref": "#/definitions/position"},
+        "asset_id": {"$ref": "#/definitions/uuid"},
+        "version_id": {"$ref": "#/definitions/uuid"},
+        "stage": {"enum": ["expiring_30d", "expiring_7d", "expiring_1d", "expired"]},
+        "not_after": {"$ref": "#/definitions/timestamp"},
+        "source": {"enum": ["uploaded", "acme"]},
+        "renewal_order_id": {"$ref": "#/definitions/uuid"}
+      }
+    },
+    "certificate_state": {
+      "enum": ["pending", "validating", "issuing", "issued", "deploying", "active", "renewal_due", "failed", "revoked"]
+    },
+    "node_status_changed": {
+      "description": "承载本租户的节点在线状态（presence）或管理状态（admin）变化。不含节点地址。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "subject_sequence", "node_id", "kind", "status", "revision"],
+      "properties": {
+        "subscription_id": {"$ref": "#/definitions/uuid"},
+        "subject_sequence": {"$ref": "#/definitions/position"},
+        "node_id": {"$ref": "#/definitions/uuid"},
+        "kind": {"enum": ["presence", "admin"]},
+        "status": {"$ref": "#/definitions/node_state"},
+        "previous_status": {"$ref": "#/definitions/node_state"},
+        "revision": {"$ref": "#/definitions/counter"}
+      }
+    },
+    "node_state": {"enum": ["online", "offline", "pending", "active", "draining", "disabled", "retired"]},
+    "usage_threshold_reached": {
+      "description": "套餐监控阈值告警触发/恢复（source=monitor），或因超额停用/恢复（source=enforcement）。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "subject_sequence", "package_subscription_id", "source", "metric", "phase",
+        "period_key", "revision"],
+      "properties": {
+        "subscription_id": {"$ref": "#/definitions/uuid"},
+        "subject_sequence": {"$ref": "#/definitions/position"},
+        "package_subscription_id": {"$ref": "#/definitions/uuid"},
+        "source": {"enum": ["monitor", "enforcement"]},
+        "metric": {"enum": ["traffic_bytes", "bandwidth_bps", "connections", "sites", "expiration"]},
+        "phase": {"enum": ["triggered", "recovered", "suspended", "resumed"]},
+        "period_key": {"type": "string", "minLength": 1, "maxLength": 256},
+        "observed_value": {"$ref": "#/definitions/counter"},
+        "revision": {"$ref": "#/definitions/counter"}
+      }
+    },
+    "security_incident_detected": {
+      "description": "安全策略检测到需通知的事件。当前类别 cc_auto_switch：站点 CC 自动切换的一个通知窗口。不含客户端地址。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "subject_sequence", "site_id", "category", "incident_sequence", "node_id",
+        "started_at"],
+      "properties": {
+        "subscription_id": {"$ref": "#/definitions/uuid"},
+        "subject_sequence": {"$ref": "#/definitions/position"},
+        "site_id": {"$ref": "#/definitions/uuid"},
+        "category": {"enum": ["cc_auto_switch"]},
+        "incident_sequence": {"$ref": "#/definitions/position"},
+        "node_id": {"$ref": "#/definitions/uuid"},
+        "started_at": {"$ref": "#/definitions/timestamp"}
+      }
+    },
+    "deployment_status_changed": {
+      "description": "边缘配置在某节点上的发布状态变化。同一 deployment 按 (attempt, transition_sequence) 有序。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "subject_sequence", "deployment_id", "rollout_id", "node_id", "attempt",
+        "transition_sequence", "state"],
+      "properties": {
+        "subscription_id": {"$ref": "#/definitions/uuid"},
+        "subject_sequence": {"$ref": "#/definitions/position"},
+        "deployment_id": {"$ref": "#/definitions/uuid"},
+        "rollout_id": {"$ref": "#/definitions/uuid"},
+        "node_id": {"$ref": "#/definitions/uuid"},
+        "attempt": {"$ref": "#/definitions/counter"},
+        "transition_sequence": {"$ref": "#/definitions/counter"},
+        "state": {
+          "enum": ["queued", "delivered", "agent_queued", "started", "staged", "prechecked", "activated", "healthy",
+            "failed", "reverting", "reverted", "rollback_failed"]
+        }
+      }
+    },
+    "site_updated": {
+      "description": "站点创建、配置变更、启用、停用或删除。只给变更类别，不含配置值。",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["subscription_id", "subject_sequence", "site_id", "change", "changed_fields"],
+      "properties": {
+        "subscription_id": {"$ref": "#/definitions/uuid"},
+        "subject_sequence": {"$ref": "#/definitions/position"},
+        "site_id": {"$ref": "#/definitions/uuid"},
+        "change": {"enum": ["created", "updated", "enabled", "disabled", "deleted"]},
+        "changed_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 32,
+          "items": {
+            "enum": ["domains", "origins", "ports", "https", "line_group", "status", "settings"]
+          }
+        }
+      }
+    }
+  }
+}

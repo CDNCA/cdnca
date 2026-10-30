@@ -1,0 +1,447 @@
+{
+ "id": "cache-policies",
+ "prefix": "/v1/cache-policies",
+ "operations": [
+  {
+   "operation_id": "getTenantCurrentCachePolicy",
+   "method": "GET",
+   "path": "/v1/cache-policies/{site_id}",
+   "summary": "Get the current cache policy for a tenant site",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Cache policy revision.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "binding_mode",
+       "type": "string: inherit / override",
+       "required": true
+      },
+      {
+       "name": "definition_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "definition_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "document",
+       "type": "PolicyDocumentV1 | PolicyDocumentV2",
+       "required": true
+      },
+      {
+       "name": "created_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "publishTenantCachePolicy",
+   "method": "POST",
+   "path": "/v1/cache-policies/{site_id}",
+   "summary": "Publish an immutable cache-policy revision with CAS",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "binding_mode",
+      "type": "object",
+      "description": "Omit for the simple per-site override workflow."
+     },
+     {
+      "name": "definition_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "definition_revision",
+      "type": "integer(int64)"
+     },
+     {
+      "name": "expected_definition_revision",
+      "type": "integer(int64)"
+     },
+     {
+      "name": "document",
+      "type": "PolicyDocumentV1 | PolicyDocumentV2"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created revision or stored identical replay.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "binding_mode",
+       "type": "string: inherit / override",
+       "required": true
+      },
+      {
+       "name": "definition_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "definition_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "document",
+       "type": "PolicyDocumentV1 | PolicyDocumentV2",
+       "required": true
+      },
+      {
+       "name": "created_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload or operation state conflicts."
+    },
+    {
+     "status": "412",
+     "description": "expected_revision no longer matches the current head."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantCachePolicyRevisions",
+   "method": "GET",
+   "path": "/v1/cache-policies/{site_id}/revisions",
+   "summary": "List immutable policy history in the tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "HMAC-authenticated cursor bound to scope, filters, and a committed creation-audit watermark. It freezes membership, not mutable operation state or progress."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable revision page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Policy>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantCachePolicyRevision",
+   "method": "GET",
+   "path": "/v1/cache-policies/{site_id}/revisions/{revision}",
+   "summary": "Get one immutable policy revision in the tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "revision",
+     "in": "path",
+     "type": "integer(int64)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Cache policy revision.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "binding_mode",
+       "type": "string: inherit / override",
+       "required": true
+      },
+      {
+       "name": "definition_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "definition_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "document",
+       "type": "PolicyDocumentV1 | PolicyDocumentV2",
+       "required": true
+      },
+      {
+       "name": "created_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  }
+ ]
+}

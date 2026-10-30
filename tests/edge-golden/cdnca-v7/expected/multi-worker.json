@@ -1,0 +1,176 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "multi-worker",
+  "scenario_sha256": "fd433e27da4041a7530fa79916624612be3cf7b3ed9c9bd353e43bfc2f909ad8",
+  "steps": [
+    {
+      "id": "warm-a",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "200": 24
+        },
+        "origins": [
+          "old"
+        ],
+        "origin_requests": 24
+      }
+    },
+    {
+      "id": "warm-wildcard",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "200": 24
+        },
+        "origins": [
+          "old"
+        ],
+        "origin_requests": 24
+      }
+    },
+    {
+      "id": "warm-b",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "200": 24
+        },
+        "origins": [
+          "b"
+        ],
+        "origin_requests": 24
+      }
+    },
+    {
+      "id": "alias-before",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "421": 24
+        },
+        "origins": [],
+        "origin_requests": 0
+      }
+    },
+    {
+      "id": "cc-limited",
+      "kind": "http",
+      "summary": {
+        "count": 16,
+        "statuses": {
+          "200": 6,
+          "429": 10
+        },
+        "origins": [
+          "o3"
+        ],
+        "origin_requests": 6
+      }
+    },
+    {
+      "id": "switch-origin-add-alias",
+      "kind": "publish"
+    },
+    {
+      "id": "a-after",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "200": 24
+        },
+        "origins": [
+          "new"
+        ],
+        "origin_requests": 24
+      }
+    },
+    {
+      "id": "wildcard-after",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "200": 24
+        },
+        "origins": [
+          "new"
+        ],
+        "origin_requests": 24
+      }
+    },
+    {
+      "id": "alias-after",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "200": 24
+        },
+        "origins": [
+          "b"
+        ],
+        "origin_requests": 24
+      }
+    },
+    {
+      "id": "cc-limited-after",
+      "kind": "http",
+      "summary": {
+        "count": 4,
+        "statuses": {
+          "429": 4
+        },
+        "origins": [],
+        "origin_requests": 0
+      }
+    },
+    {
+      "id": "remove-b",
+      "kind": "publish"
+    },
+    {
+      "id": "b-removed",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "421": 24
+        },
+        "origins": [],
+        "origin_requests": 0
+      }
+    },
+    {
+      "id": "alias-removed",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "421": 24
+        },
+        "origins": [],
+        "origin_requests": 0
+      }
+    },
+    {
+      "id": "a-still",
+      "kind": "http",
+      "summary": {
+        "count": 24,
+        "statuses": {
+          "200": 24
+        },
+        "origins": [
+          "new"
+        ],
+        "origin_requests": 24
+      }
+    }
+  ]
+}

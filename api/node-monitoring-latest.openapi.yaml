@@ -1,0 +1,788 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Node Monitoring Latest API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+paths:
+  /v1/nodes/monitoring/latest:
+    get:
+      operationId: getLatestNodeMonitoring
+      summary: 批量读取节点本机 TCP 探测事实与当前生效策略
+      description: >-
+        Requires a platform principal with nodes.read in the current scope. One
+        read-only repeatable database snapshot covers membership, head/active
+        configuration and probe-only node_metric_latest. Items cover the unique
+        request IDs exactly in request order, with no partial results. Any absent
+        or foreign node returns the same node_monitoring_not_found (404), without
+        leaking sibling facts. Invalid/duplicate/unknown query parameters return
+        validation_error (400); absent session invalid_session (401); non-platform
+        or missing permission permission_denied (403). Unavailable storage or
+        invalid persisted facts return node_monitoring_unavailable (503), not an
+        empty snapshot. The configuration reader checks canonical_schema,
+        canonical_snapshot, canonical bytes and SHA-256; this is no signature
+        claim. It neither locks/creates a stream nor reconciles publications.
+        Policy comes only from active_revision, never the editable head. A
+        disabled policy is a request with no application ACK, not evidence that
+        the node has stopped probing. Samples are actual agent_local_tcp only;
+        host metrics and heartbeats are not probes. Requested HTTP/Ping protocols
+        and distributed monitor groups are not execution proof; an executed
+        pause appears as serving_holds.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: node_id
+          in: query
+          required: true
+          style: form
+          explode: true
+          description: 1–300 unique canonical lowercase nonzero UUIDs; no other query keys are accepted.
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 300
+            uniqueItems: true
+            items: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+      responses:
+        '200':
+          description: 当前生效配置与实际探测事实；缺失数据保持 null。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NodeMonitoringLatest'}
+        '400':
+          description: validation_error
+          content:
+            application/json:
+              schema: {$ref: './openapi/v1/control.yaml#/components/schemas/ErrorEnvelope'}
+        '401':
+          description: invalid_session
+          content:
+            application/json:
+              schema: {$ref: './openapi/v1/control.yaml#/components/schemas/ErrorEnvelope'}
+        '403':
+          description: permission_denied
+          content:
+            application/json:
+              schema: {$ref: './openapi/v1/control.yaml#/components/schemas/ErrorEnvelope'}
+        '404':
+          description: node_monitoring_not_found
+          content:
+            application/json:
+              schema: {$ref: './openapi/v1/control.yaml#/components/schemas/ErrorEnvelope'}
+        '503':
+          description: node_monitoring_unavailable
+          content:
+            application/json:
+              schema: {$ref: './openapi/v1/control.yaml#/components/schemas/ErrorEnvelope'}
+  /v1/nodes/{id}/monitoring/override:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+    get:
+      operationId: getNodeMonitoringOverride
+      summary: 读取单节点监控覆盖与该节点实际生效的监控策略
+      description: >-
+        Requires a platform principal with nodes.read. Returns the node override
+        (null fields inherit the active platform policy), its revision (0 when
+        never saved) and, for an active platform policy, the effective policy and
+        effective_revision = active platform revision + override revision, which
+        is the config_revision delivered to that node. Absent, retired or foreign
+        nodes return node_not_found (404); query parameters return
+        validation_error (400).
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 节点监控覆盖视图
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NodeMonitoringOverrideView'}
+        '400': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '401': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '403': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '404': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '503': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+    put:
+      operationId: putNodeMonitoringOverride
+      summary: 保存单节点监控覆盖（监控开关、检查协议、检查超时、端口）
+      description: >-
+        Requires nodes.manage and an Idempotency-Key header. expected_revision is
+        compare-and-set against the override revision (0 creates). Every changing
+        write advances the revision by one and is audited as
+        node.monitoring_override.update; an unchanged save is a no-op. The node
+        monitoring outbox delivers the effective artifact only to serving nodes
+        (active and with an activated signed edge configuration); a blank node
+        stores the override and receives it once it serves. probe_timeout_ms is
+        100..60000 and at most the active platform probe interval
+        (probe_timeout_exceeds_interval, 422); monitor_port 1..65535. Monitor
+        groups are not supported. monitor_action pause takes the node out of
+        the CNAME/line-group DNS values while monitoring reports it down and
+        restores it after recovery_threshold healthy reports; the last serving
+        endpoint of an address family is kept (see serving_holds).
+        Same key with different input is idempotency_conflict (409); a stale
+        expected_revision is version_conflict (409).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NodeMonitoringOverrideRequest'}
+      responses:
+        '200':
+          description: 保存后的节点监控覆盖视图（重放返回原响应）
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NodeMonitoringOverrideView'}
+        '400': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '401': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '403': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '404': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '409': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '422': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '503': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+  /v1/nodes/serving/events:
+    get:
+      operationId: listScopeNodeServingEvents
+      summary: 切换日志：本作用域全部节点的摘除/恢复记录
+      description: >-
+        Requires a platform principal with nodes.read. Pages the serving hold
+        transitions of every node in the caller's scope newest first, joined with
+        the node name and addresses. Filters: source, event, node_id (canonical
+        UUID; a node outside the scope matches nothing) and ip (exact IPv4/IPv6
+        of the node). Window from/to (RFC 3339, default last 24 hours, at most 31
+        days), page 1..1000, limit 1..100. Zero matches return an empty items
+        array; unknown or invalid parameters return validation_error (400).
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: from, in: query, schema: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}}
+        - {name: to, in: query, schema: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+        - {name: source, in: query, schema: {$ref: '#/components/schemas/NodeServingEventSource'}}
+        - {name: event, in: query, schema: {type: string, enum: [held, released, protected, protection_cleared]}}
+        - {name: node_id, in: query, schema: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}}
+        - {name: ip, in: query, schema: {type: string, maxLength: 45}}
+      responses:
+        '200':
+          description: 切换日志分页
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NodeScopeServingEventPage'}
+        '400': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '401': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '403': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '503': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+  /v1/nodes/{id}/serving/events:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+    get:
+      operationId: getNodeServingEvents
+      summary: 读取单节点暂停/恢复记录（监控暂停、自动禁用、最后节点保护）
+      description: >-
+        Requires a platform principal with nodes.read. Pages the node's serving
+        hold transitions newest first: held, released, protected (kept serving as
+        the last admin-enabled endpoint of its address family in a line group)
+        and protection_cleared, each with source availability_monitor,
+        auto_disable, config_sync or external_probe and a reason_code. Window from/to (RFC 3339, default last 24
+        hours, at most 31 days), page 1..1000, limit 1..100. Absent or foreign
+        nodes return node_monitoring_not_found (404); unknown or invalid query
+        parameters return validation_error (400).
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: from, in: query, schema: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}}
+        - {name: to, in: query, schema: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+      responses:
+        '200':
+          description: 暂停/恢复记录分页
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NodeServingEventPage'}
+        '400': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '401': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '403': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '404': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '503': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+  /v1/nodes/{id}/monitoring/history:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+    get:
+      operationId: getNodeMonitoringHistory
+      summary: 读取单节点可用性监控日志（本机探测或 dnspup 运营商检测点）
+      description: >-
+        Requires a platform principal with nodes.read. source omitted (or local):
+        the Agent-local probe reports, each exactly one check. source=dnspup: the
+        dnspup checkpoint rounds of the node's published addresses
+        (module.probe.dnspup), each row failed_checks /
+        total_checks of the answering checkpoints; group filters the checkpoints
+        by monitoring group (domestic, telecom, unicom, mobile, overseas; only
+        with source=dnspup). source=peer: the controller's
+        external probe plus peer nodes (MARKET_PROBE) per published address,
+        failed_checks / total_checks counting the controller; rows with a
+        failure every round, all-good rows at most every 5 minutes. Window from/to (RFC 3339, default last hour, at most
+        7 days), page 1..1000, limit 1..100, newest first. Absent or foreign
+        nodes return node_monitoring_not_found (404); unknown or invalid query
+        parameters return validation_error (400).
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: from, in: query, schema: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}}
+        - {name: to, in: query, schema: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}}
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100}}
+        - {name: source, in: query, schema: {type: string, enum: [local, dnspup, peer]}}
+        - {name: group, in: query, schema: {type: string, enum: [domestic, telecom, unicom, mobile, overseas]}}
+      responses:
+        '200':
+          description: 本机探测日志、dnspup 检测点日志或节点互拨日志分页
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - {$ref: '#/components/schemas/NodeMonitoringHistoryPage'}
+                  - {$ref: '#/components/schemas/NodeDNSPupHistoryPage'}
+                  - {$ref: '#/components/schemas/NodePeerHistoryPage'}
+        '400': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '401': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '403': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '404': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '503': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+  /v1/admin/probe-dnspup/node-monitoring:
+    get:
+      operationId: getDNSPupNodeMonitoring
+      summary: 读取 dnspup 节点可用性拨测设置、余额与消耗估算
+      description: >-
+        Requires a platform session with system.probe_dnspup.manage (or
+        platform.admin). plugin_active is false while module.probe.dnspup is
+        not licensed, disabled, without a key pair or paused: nodes are then
+        judged by the local probe only. dnspup meters requests (one per probed
+        address and round, any checkpoint count) and only exposes the monthly
+        quota, so balance_unit is request and the estimate counts requests.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 设置与状态
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DNSPupNodeMonitoringStatus'}
+        '401': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '403': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '503': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+    put:
+      operationId: putDNSPupNodeMonitoring
+      summary: 修改 dnspup 节点可用性拨测设置（频率、检测点、判定阈值、预警线）
+      description: >-
+        Requires system.probe_dnspup.manage (or platform.admin) and an
+        Idempotency-Key (same key and body replays the answer, another body is
+        idempotency_conflict 409). Every field is required; invalid values are
+        invalid_input (422). The change is audited
+        (system.probe_dnspup.node_settings).
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DNSPupNodeMonitoringSettings'}
+      responses:
+        '200':
+          description: 保存后的设置与状态
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DNSPupNodeMonitoringStatus'}
+        '400': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '401': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '403': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '409': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '415': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '422': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+        '503': {$ref: '#/components/responses/NodeMonitoringOverrideError'}
+components:
+  responses:
+    NodeMonitoringOverrideError:
+      description: Error envelope
+      content:
+        application/json:
+          schema: {$ref: './openapi/v1/control.yaml#/components/schemas/ErrorEnvelope'}
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    NodeMonitoringCanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    NodeMonitoringUTCTime:
+      type: string
+      format: date-time
+      pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$'
+    NodeMonitoringCounter:
+      type: string
+      description: Exact canonical decimal integer 0..9223372036854775807, never a JavaScript number.
+      maxLength: 19
+      pattern: '^(0|[1-9][0-9]{0,17}|[1-8][0-9]{18}|9[0-1][0-9]{17}|92[0-1][0-9]{16}|922[0-2][0-9]{15}|9223[0-2][0-9]{14}|92233[0-6][0-9]{13}|922337[0-1][0-9]{12}|92233720[0-2][0-9]{10}|922337203[0-5][0-9]{9}|9223372036[0-7][0-9]{8}|92233720368[0-4][0-9]{7}|922337203685[0-3][0-9]{6}|9223372036854[0-6][0-9]{5}|92233720368547[0-6][0-9]{4}|922337203685477[0-4][0-9]{3}|9223372036854775[0-7][0-9]{2}|922337203685477580[0-6]|9223372036854775807)$'
+    NodeMonitoringLatest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, observed_at, configuration, items]
+      properties:
+        schema_version: {type: integer, const: 1}
+        observed_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        configuration: {$ref: '#/components/schemas/NodeMonitoringLatestConfiguration'}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 300
+          description: Exactly one item for each requested ID in the same order; no foreign or duplicate IDs.
+          items: {$ref: '#/components/schemas/NodeMonitoringLatestItem'}
+    NodeMonitoringLatestConfiguration:
+      type: object
+      additionalProperties: false
+      required: [state, head_revision, active_revision, activated_at, policy]
+      description: >-
+        No stream/head zero is unconfigured. A valid nonzero head without an active
+        revision is not_activated. Only active has policy and activation time.
+        head_revision is at least active_revision; a newer head does not replace
+        active policy. Values beyond 9007199254740991 are rejected as unavailable.
+      properties:
+        state: {type: string, enum: [unconfigured, not_activated, active]}
+        head_revision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        active_revision: {type: [integer, 'null'], minimum: 1, maximum: 9007199254740991}
+        activated_at:
+          oneOf:
+            - {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+            - {type: 'null'}
+        policy:
+          oneOf:
+            - {$ref: '#/components/schemas/NodeMonitoringLatestPolicy'}
+            - {type: 'null'}
+      allOf:
+        - if: {properties: {state: {const: unconfigured}}}
+          then:
+            properties:
+              head_revision: {const: 0}
+              active_revision: {type: 'null'}
+              activated_at: {type: 'null'}
+              policy: {type: 'null'}
+        - if: {properties: {state: {const: not_activated}}}
+          then:
+            properties:
+              head_revision: {minimum: 1}
+              active_revision: {type: 'null'}
+              activated_at: {type: 'null'}
+              policy: {type: 'null'}
+        - if: {properties: {state: {const: active}}}
+          then:
+            properties:
+              head_revision: {minimum: 1}
+              active_revision: {type: integer}
+              activated_at: {type: string}
+              policy: {type: object}
+    NodeMonitoringLatestPolicy:
+      type: object
+      additionalProperties: false
+      required: [enabled, requested_protocol, requested_port, probe_interval_ms, probe_timeout_ms, failure_threshold, recovery_threshold, failure_debounce_ms, recovery_debounce_ms]
+      description: >-
+        Existing EffectiveNodeMonitoring defaults only: omitted switch means true,
+        omitted protocol means tcp. Port is explicit monitor_port, else custom_port
+        for custom port mode, else null. No inferred default port. Timeout is at
+        most interval. Policy is not a node application receipt or execution claim.
+      properties:
+        enabled: {type: boolean}
+        requested_protocol: {type: string, enum: [tcp, http, ping]}
+        requested_port: {type: [integer, 'null'], minimum: 1, maximum: 65535}
+        probe_interval_ms: {type: integer, minimum: 1000, maximum: 300000}
+        probe_timeout_ms: {type: integer, minimum: 100, maximum: 60000}
+        failure_threshold: {type: integer, minimum: 1, maximum: 20}
+        recovery_threshold: {type: integer, minimum: 1, maximum: 20}
+        failure_debounce_ms: {type: integer, minimum: 0, maximum: 3600000}
+        recovery_debounce_ms: {type: integer, minimum: 0, maximum: 3600000}
+    NodeMonitoringLatestItem:
+      type: object
+      additionalProperties: false
+      required: [node_id, freshness, revision_state, stale_after_ms, sample]
+      description: >-
+        With active policy, stale_after_ms is interval+timeout+30000, capped at
+        390000; it is null without active policy. Absent sample is not_reported.
+        Observed time more than five seconds after server observed_at is
+        clock_skew. Otherwise a sample within the active threshold is fresh;
+        older samples or samples without active policy are stale. rolled_back
+        takes revision precedence. current requires both sample revisions equal
+        active_revision and sample time at/after activated_at; otherwise different.
+        With no active revision, revision_state is unknown unless rolled_back.
+      properties:
+        node_id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+        freshness: {type: string, enum: [not_reported, fresh, stale, clock_skew]}
+        revision_state: {type: string, enum: [unknown, current, different, rolled_back]}
+        stale_after_ms: {type: [integer, 'null'], minimum: 1, maximum: 390000}
+        sample:
+          oneOf:
+            - {$ref: '#/components/schemas/NodeMonitoringLatestProbeSample'}
+            - {type: 'null'}
+        effective_revision:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+          description: >-
+            Optional; only for a node with a monitoring override under an active
+            policy. The node is current when both sample revisions equal it, and
+            effective_policy (same shape as the platform policy) then drives
+            stale_after_ms and the requested protocol for that node.
+        effective_policy: {$ref: '#/components/schemas/NodeMonitoringLatestPolicy'}
+        serving_holds:
+          type: array
+          minItems: 1
+          maxItems: 2
+          description: >-
+            Optional; present only while a system hold keeps the node out of
+            customer DNS (monitoring pause or auto-disable). protected_groups > 0
+            means the node still serves in that many line groups as the last
+            admin-enabled endpoint of its address family.
+          items: {$ref: '#/components/schemas/NodeServingHold'}
+      dependentRequired:
+        effective_revision: [effective_policy]
+        effective_policy: [effective_revision]
+      allOf:
+        - if: {properties: {sample: {type: 'null'}}}
+          then:
+            properties:
+              freshness: {const: not_reported}
+              revision_state: {const: unknown}
+          else:
+            properties:
+              freshness: {enum: [fresh, stale, clock_skew]}
+    NodeMonitoringLatestProbeSample:
+      type: object
+      additionalProperties: false
+      required: [source, config_revision, active_config_revision, publication_sequence, observed_at, ingested_at, probe_port, healthy, probe_succeeded, consecutive_failures, consecutive_successes, probes_total, probe_failures_total, recovered, recovery_notified, rolled_back]
+      description: >-
+        Whitelist of actual probe-only persisted facts. healthy is the threshold/
+        debounce result; a failed individual probe_succeeded is not necessarily
+        unhealthy. No load-known flag, host metrics, heartbeats or fabricated
+        zero probe. Failure count cannot exceed total. Simultaneous nonzero
+        consecutive failure/success counters are invalid. recovered requires
+        healthy and probe_succeeded; rolled_back requires active_config_revision
+        below config_revision and unsuccessful probe. Publication sequence is
+        positive. All timestamps are UTC, all counters retain their full int64.
+      properties:
+        source: {type: string, const: agent_local_tcp}
+        config_revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+        active_config_revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+        publication_sequence:
+          allOf:
+            - {$ref: '#/components/schemas/NodeMonitoringCounter'}
+            - {not: {const: '0'}}
+        observed_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        ingested_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        probe_port: {type: integer, minimum: 1, maximum: 65535}
+        healthy: {type: boolean}
+        probe_succeeded: {type: boolean}
+        consecutive_failures: {type: integer, minimum: 0, maximum: 20}
+        consecutive_successes: {type: integer, minimum: 0, maximum: 20}
+        probes_total: {$ref: '#/components/schemas/NodeMonitoringCounter'}
+        probe_failures_total: {$ref: '#/components/schemas/NodeMonitoringCounter'}
+        recovered: {type: boolean}
+        recovery_notified: {type: boolean}
+        rolled_back: {type: boolean}
+    NodeServingHold:
+      type: object
+      additionalProperties: false
+      required: [source, reason_code, held_since, protected_groups]
+      properties:
+        source: {$ref: '#/components/schemas/NodeServingEventSource'}
+        reason_code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+        held_since: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        protected_groups: {type: integer, minimum: 0}
+    NodeServingEventSource:
+      type: string
+      enum: [availability_monitor, auto_disable, config_sync, external_probe]
+    NodeScopeServingEventPage:
+      type: object
+      additionalProperties: false
+      required: [schema_version, from, to, page, limit, total, items]
+      properties:
+        schema_version: {type: integer, const: 1}
+        from: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        to: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        page: {type: integer, minimum: 1, maximum: 1000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, source, event, reason_code, hold_revision, detail, occurred_at, node_id, node_name, ipv4, ipv6]
+            properties:
+              id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+              source: {$ref: '#/components/schemas/NodeServingEventSource'}
+              event: {type: string, enum: [held, released, protected, protection_cleared]}
+              reason_code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+              hold_revision: {type: integer, minimum: 1}
+              detail: {type: object}
+              occurred_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+              node_id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+              node_name: {type: string, minLength: 1, maxLength: 128}
+              ipv4: {type: string, maxLength: 15, description: Empty when the node has no IPv4.}
+              ipv6: {type: string, maxLength: 45, description: Empty when the node has no IPv6.}
+    NodeServingEventPage:
+      type: object
+      additionalProperties: false
+      required: [schema_version, node_id, from, to, page, limit, total, items]
+      properties:
+        schema_version: {type: integer, const: 1}
+        node_id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+        from: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        to: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        page: {type: integer, minimum: 1, maximum: 1000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, source, event, reason_code, hold_revision, detail, occurred_at]
+            properties:
+              id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+              source: {$ref: '#/components/schemas/NodeServingEventSource'}
+              event: {type: string, enum: [held, released, protected, protection_cleared]}
+              reason_code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+              hold_revision: {type: integer, minimum: 1}
+              detail: {type: object}
+              occurred_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+    NodeMonitoringOverrideFields:
+      type: object
+      additionalProperties: false
+      required: [monitor_enabled, protocol, probe_timeout_ms, monitor_port, monitor_action]
+      description: null inherits the active platform policy.
+      properties:
+        monitor_enabled: {type: [boolean, 'null']}
+        protocol: {type: [string, 'null'], enum: [tcp, http, ping, null]}
+        probe_timeout_ms: {type: [integer, 'null'], minimum: 100, maximum: 60000}
+        monitor_port: {type: [integer, 'null'], minimum: 1, maximum: 65535}
+        monitor_action: {type: [string, 'null'], enum: [none, pause, null]}
+    NodeMonitoringOverrideRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, override]
+      properties:
+        expected_revision: {type: integer, minimum: 0, maximum: 1048576}
+        override: {$ref: '#/components/schemas/NodeMonitoringOverrideFields'}
+    NodeMonitoringOverrideView:
+      type: object
+      additionalProperties: false
+      required: [schema_version, node_id, revision, updated_at, override, platform_state, platform_revision,
+        effective_revision, effective_policy, effective_action, delivery_state]
+      properties:
+        schema_version: {type: integer, const: 1}
+        node_id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+        revision: {type: integer, minimum: 0, maximum: 1048576}
+        updated_at:
+          oneOf:
+            - {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+            - {type: 'null'}
+        override: {$ref: '#/components/schemas/NodeMonitoringOverrideFields'}
+        platform_state: {type: string, enum: [unconfigured, not_activated, active]}
+        platform_revision: {type: [integer, 'null'], minimum: 1, maximum: 9007199254740991}
+        effective_revision: {type: [integer, 'null'], minimum: 1, maximum: 9007199254740991}
+        effective_policy:
+          oneOf:
+            - {$ref: '#/components/schemas/NodeMonitoringLatestPolicy'}
+            - {type: 'null'}
+        effective_action: {type: string, enum: ['', none, pause]}
+        delivery_state: {type: string, enum: [serving, awaiting_configuration, inactive]}
+    NodeMonitoringHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [schema_version, node_id, from, to, page, limit, total, items]
+      properties:
+        schema_version: {type: integer, const: 1}
+        node_id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+        from: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        to: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        page: {type: integer, minimum: 1, maximum: 1000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [observed_at, config_revision, active_config_revision, probe_port, probe_succeeded, healthy,
+              failed_checks, total_checks]
+            properties:
+              observed_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+              config_revision: {type: integer, minimum: 1}
+              active_config_revision: {type: integer, minimum: 1}
+              probe_port: {type: integer, minimum: 1, maximum: 65535}
+              probe_succeeded: {type: boolean}
+              healthy: {type: boolean}
+              failed_checks: {type: integer, enum: [0, 1]}
+              total_checks: {type: integer, const: 1}
+    NodeDNSPupHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [schema_version, source, node_id, group, from, to, page, limit, total, items]
+      properties:
+        schema_version: {type: integer, const: 1}
+        source: {type: string, const: dnspup}
+        node_id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+        group: {type: string, enum: ['', domestic, telecom, unicom, mobile, overseas]}
+        from: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        to: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        page: {type: integer, minimum: 1, maximum: 1000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [observed_at, address, port, failed, failed_checks, total_checks, checkpoints]
+            properties:
+              observed_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+              address: {type: string, minLength: 2, maxLength: 45}
+              port: {type: integer, minimum: 1, maximum: 65535}
+              failed: {type: boolean}
+              failed_checks: {type: integer, minimum: 0, maximum: 100}
+              total_checks: {type: integer, minimum: 0, maximum: 100}
+              checkpoints:
+                type: array
+                maxItems: 100
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [id, group, ok]
+                  properties:
+                    id: {type: string, minLength: 1, maxLength: 128}
+                    group: {type: string, enum: [domestic, telecom, unicom, mobile, overseas]}
+                    carrier: {type: string, maxLength: 16}
+                    region: {type: string, maxLength: 16}
+                    location: {type: string, maxLength: 128}
+                    ok: {type: boolean}
+                    latency_ms: {type: integer, minimum: 0}
+    NodePeerHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [schema_version, source, node_id, from, to, page, limit, total, items]
+      properties:
+        schema_version: {type: integer, const: 1}
+        source: {type: string, const: peer}
+        node_id: {$ref: '#/components/schemas/NodeMonitoringCanonicalUUID'}
+        from: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        to: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+        page: {type: integer, minimum: 1, maximum: 1000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [observed_at, address, port, failed, controller_ok, failed_checks, total_checks, checkpoints]
+            properties:
+              observed_at: {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+              address: {type: string, minLength: 2, maxLength: 45}
+              port: {type: integer, minimum: 1, maximum: 65535}
+              failed: {type: boolean}
+              controller_ok: {type: [boolean, 'null'], description: 主控探测结果，null 表示主控未探测}
+              failed_checks: {type: integer, minimum: 0, maximum: 100}
+              total_checks: {type: integer, minimum: 1, maximum: 100}
+              checkpoints:
+                type: array
+                maxItems: 100
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [id, ok]
+                  properties:
+                    id: {type: string, minLength: 1, maxLength: 128, description: controller 或互拨节点 ID}
+                    name: {type: string, maxLength: 128}
+                    address: {type: string, maxLength: 45}
+                    groups:
+                      type: array
+                      items: {type: string, enum: [domestic, telecom, unicom, mobile, overseas]}
+                    ok: {type: boolean}
+                    latency_ms: {type: integer, minimum: 0}
+    DNSPupNodeMonitoringSettings:
+      type: object
+      additionalProperties: false
+      required: [interval_seconds, groups, points_per_group, failure_percent, failure_rounds, recovery_rounds, low_balance]
+      properties:
+        interval_seconds: {type: integer, enum: [0, 60, 300, 900], description: 0 关闭；默认 300}
+        groups:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items: {type: string, enum: [domestic, telecom, unicom, mobile, overseas]}
+        points_per_group: {type: integer, minimum: 1, maximum: 20}
+        failure_percent: {type: integer, minimum: 1, maximum: 99, description: 失败检测点超过该比例才算本轮失败}
+        failure_rounds: {type: integer, minimum: 1, maximum: 10}
+        recovery_rounds: {type: integer, minimum: 1, maximum: 10}
+        low_balance: {type: integer, minimum: 0, maximum: 1000000000, description: 剩余月额度低于此值降频（×3）并通知}
+    DNSPupNodeMonitoringStatus:
+      allOf:
+        - {$ref: '#/components/schemas/DNSPupNodeMonitoringSettings'}
+        - type: object
+          required: [revision, plugin_active, licensed, budget_state, effective_interval_seconds, monthly_limit,
+            monthly_used, account_checked_at, paused_until, balance_unit, estimate, max_addresses_per_round]
+          properties:
+            revision: {type: integer, minimum: 0}
+            plugin_active: {type: boolean}
+            licensed: {type: boolean}
+            budget_state: {type: string, enum: [normal, low, exhausted]}
+            effective_interval_seconds: {type: integer, minimum: 0}
+            monthly_limit: {type: integer, minimum: 0, description: 0 表示 dnspup 未限额}
+            monthly_used: {type: integer, minimum: 0}
+            account_checked_at:
+              oneOf:
+                - {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+                - {type: 'null'}
+            paused_until:
+              oneOf:
+                - {$ref: '#/components/schemas/NodeMonitoringUTCTime'}
+                - {type: 'null'}
+            balance_unit: {type: string, const: request}
+            max_addresses_per_round: {type: integer, minimum: 1}
+            estimate:
+              type: object
+              additionalProperties: false
+              required: [addresses, checkpoints_per_round, rounds_per_day, requests_per_day, requests_per_month]
+              properties:
+                addresses: {type: integer, minimum: 0}
+                checkpoints_per_round: {type: integer, minimum: 0}
+                rounds_per_day: {type: integer, minimum: 0}
+                requests_per_day: {type: integer, minimum: 0}
+                requests_per_month: {type: integer, minimum: 0}

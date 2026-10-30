@@ -1,0 +1,334 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "site-traffic-limit",
+  "scenario_sha256": "c5c7435c4757fcd344743863cdebba0a86feb0d6aab2d5465cb911c00b4425d4",
+  "steps": [
+    {
+      "id": "over-custom-page",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 509,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-type": "text/html; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 90,
+            "sha256": "62de6989e004e853b9155d783a0dc69f6dc6b294c25c2f22c16a78d91839b699",
+            "text": "<!DOCTYPE html><html><body><h1>over.example.test 本月流量已用完</h1></body></html>\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "over-post",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 509,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-type": "text/html; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 90,
+            "sha256": "62de6989e004e853b9155d783a0dc69f6dc6b294c25c2f22c16a78d91839b699",
+            "text": "<!DOCTYPE html><html><body><h1>over.example.test 本月流量已用完</h1></body></html>\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "over-acme-exempt",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "ee1a27178227546d3dcc49e611a6d72e4f1c30080ee4493ae4085b58a49e28e6",
+            "text": "<html>\r\n<head><title>404 Not Found</title></head>\r\n<body>\r\n<center><h1>404 Not Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "over-default-page",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 509,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-type": "text/html; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 265,
+            "sha256": "5aa935d496d5c5a1e0176cda2a9e3c3465014379f30436fed4d5fc49953d9547",
+            "text": "<!DOCTYPE html>\n<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>Traffic limit exceeded</title></head>\n<body><h1>网站流量已超出限制</h1><p>The traffic of this website has exceeded its limit. Please contact the website administrator.</p></body></html>\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "within",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "25",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 25,
+            "sha256": "7a7cb219f55be68a07aef8fbac29a1538d298db7af38f67d14c30ac9de6465db",
+            "text": "tl within.example.test /c"
+          },
+          "origin": [
+            {
+              "origin": "tl",
+              "method": "GET",
+              "uri": "/c",
+              "host": "within.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "drain",
+      "kind": "logs",
+      "logs": [
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b2011-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "over.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/a",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 96,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 286,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b2011-0000-4000-8000-000000000101",
+            "status_code": 509,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b2011-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "over.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "POST",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/form",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 119,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 286,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b2011-0000-4000-8000-000000000101",
+            "status_code": 509,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b2011-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "over.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/.well-known/acme-challenge/tokenAAAAAAAAAAAAAAAAAAAAAA",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 149,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 322,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b2011-0000-4000-8000-000000000101",
+            "status_code": 404,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b2011-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "default.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/b",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 99,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 462,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b2011-0000-4000-8000-000000000102",
+            "status_code": 509,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b2011-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "within.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/c",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 98,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 180,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b2011-0000-4000-8000-000000000103",
+            "status_code": 200,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        }
+      ]
+    }
+  ]
+}

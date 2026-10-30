@@ -1,0 +1,177 @@
+openapi: 3.1.0
+info:
+  title: CDNCA notification delivery history API
+  version: 1.0.0
+  description: Immutable administrator delivery facts, separate from current settlements and message content.
+servers:
+  - url: /
+paths:
+  /v1/admin/notifications/delivery-history:
+    get:
+      summary: List redacted immutable notification delivery facts
+      description: >-
+        Platform administrators with system_configuration.read or platform.admin may query all scopes or one exact scope.
+        Session, membership and current permissions are revalidated before query validation and lookup.
+        One row identifies one immutable outbox sequence, including anonymous recipients and replay generations.
+        Filters combine with AND. Without from/to the complete history is queried. Each optional bound
+        is inclusive; when both are supplied, to must be greater than from and the window at most 31 days.
+        The current request uses one consistent database view for cursor validation, total_count and rows.
+        Pages are ordered by observed_at, outbox_id and sequence descending. Cursors identify persisted
+        facts and are validated against the current filters; they do not promise a snapshot across requests.
+        Delivery history never includes message titles, bodies, full recipient contacts, provider response
+        bodies, deduplication keys, lease tokens or credentials. New transport calls record only a masked
+        recipient address and provider_call_started_at. A row sees only an observation in the same attempt
+        through its own sequence; dispatch_started never reads a future settlement observation. Historical
+        rows without observations remain null and are never backfilled from current user contacts.
+        Message content retains its separate administrator message-query contract.
+      operationId: listNotificationDeliveryHistory
+      security: [{ bearerAuth: [] }]
+      x-required-any-permission: [system_configuration.read, platform.admin]
+      parameters:
+        - name: scope_id
+          in: query
+          description: Optional exact scope; omitted means all scopes for an authorized platform administrator.
+          schema: { type: string, format: uuid }
+        - name: channel
+          in: query
+          schema: { type: string, enum: [email, sms] }
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/DeliveryState' }
+        - name: result
+          in: query
+          description: >-
+            success means only delivered; failure means retry_wait, permanent_failed or exhausted.
+            accepted, unknown, lease_unknown and cancelled are neither success nor failure.
+            When state is also supplied, both filters must match; a contradiction returns an empty page.
+          schema: { type: string, enum: [success, failure] }
+        - name: event_type
+          in: query
+          description: Exact persisted notification event type, not a legacy UI alias.
+          schema: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        - name: user_id
+          in: query
+          description: Canonical lowercase nonzero UUID or positive decimal display ID, at most signed int64 maximum; filters recipients, not actors.
+          schema:
+            type: string
+            pattern: '^([1-9][0-9]{0,18}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+        - name: message_id
+          in: query
+          description: Exact immutable notification_events.id, shared by original and replay outboxes.
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          description: Inclusive observed_at lower bound, RFC3339 with optional fractional seconds.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Inclusive observed_at upper bound, RFC3339 with optional fractional seconds.
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 300, default: 50 }
+        - name: cursor
+          in: query
+          description: Returned outbox UUID and positive int32 fact sequence; must identify a fact satisfying the current filters.
+          schema: { $ref: '#/components/schemas/FactID' }
+      responses:
+        '200':
+          description: A consistent current-request page and filtered total, with no cross-request snapshot guarantee.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeliveryHistoryPage' }
+        '400': { $ref: './control-notifications.openapi.yaml#/components/responses/Error' }
+        '401': { $ref: './control-notifications.openapi.yaml#/components/responses/Error' }
+        '403': { $ref: './control-notifications.openapi.yaml#/components/responses/Error' }
+        '405': { $ref: './control-notifications.openapi.yaml#/components/responses/Error' }
+        '500': { $ref: './control-notifications.openapi.yaml#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  schemas:
+    FactID:
+      type: string
+      maxLength: 47
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[1-9][0-9]{0,9}$'
+    DeliveryState:
+      type: string
+      enum: [pending, dispatching, retry_wait, accepted, unknown, delivered, permanent_failed, exhausted, cancelled]
+    DeliveryHistoryFact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - scope_id
+        - outbox_id
+        - sequence
+        - attempt_number
+        - fact_kind
+        - state
+        - failure_code
+        - failure_count
+        - observed_at
+        - message_id
+        - event_type
+        - recipient_user_id
+        - recipient_user_display_id
+        - recipient_kind
+        - channel
+        - generation
+        - replay_of_outbox_id
+        - recipient_address
+        - recipient_address_state
+        - provider_call_started_at
+      properties:
+        id: { $ref: '#/components/schemas/FactID' }
+        scope_id: { type: string, format: uuid }
+        outbox_id: { type: string, format: uuid }
+        sequence: { type: integer, minimum: 1, maximum: 2147483647 }
+        attempt_number: { type: integer, minimum: 0 }
+        fact_kind:
+          type: string
+          enum: [dispatch_started, provider_accepted, provider_unknown, provider_delivered, retry_scheduled, permanent_failed, exhausted, lease_unknown, provider_receipt, cancelled, replay_created]
+        state: { $ref: '#/components/schemas/DeliveryState' }
+        failure_code: { type: [string, 'null'], pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        failure_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Number of distinct positive attempt numbers for this outbox with confirmed failure facts
+            through this row's sequence (result_state retry_wait, permanent_failed or exhausted).
+            Includes permanent failure receipts even when the original attempt outcome was accepted.
+            Excludes unknown outcomes, lease_unknown and cancellations. Later facts never change
+            an earlier row's count; replay outboxes count independently. This is not attempt_count.
+        observed_at: { type: string, format: date-time }
+        message_id: { type: string, format: uuid }
+        event_type: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        recipient_user_id: { type: [string, 'null'], format: uuid }
+        recipient_user_display_id:
+          type: [string, 'null']
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Current display identifier of the referenced user, not a historical recipient contact snapshot; null for anonymous recipients.
+        recipient_kind: { type: string, enum: [member, anonymous] }
+        channel: { type: string, enum: [email, sms] }
+        generation: { type: integer, minimum: 1 }
+        replay_of_outbox_id: { type: [string, 'null'], format: uuid }
+        recipient_address:
+          type: [string, 'null']
+          maxLength: 254
+          description: Masked actual transport recipient, for example m***@example.test or ***1234; null for unknown formats, no transport call, or unrecorded history.
+        recipient_address_state: { type: string, enum: [masked, unavailable] }
+        provider_call_started_at:
+          type: [string, 'null']
+          format: date-time
+          description: UTC local time sampled at the actual ProviderTransport.Send invocation boundary, not acceptance, network completion or confirmed recipient delivery; null when no call was observed or persisted.
+    DeliveryHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [schema, items, total_count]
+      properties:
+        schema: { type: string, const: cdnca.notification-delivery-history/v1 }
+        items:
+          type: array
+          maxItems: 300
+          items: { $ref: '#/components/schemas/DeliveryHistoryFact' }
+        total_count: { type: integer, format: int64, minimum: 0 }
+        next_cursor: { $ref: '#/components/schemas/FactID' }

@@ -1,0 +1,51 @@
+{
+  "api_version": "marketplace.cdnca.io/v1",
+  "kind": "Plugin",
+  "metadata": {
+    "id": "io.cdnca.examples.webhook-audit-sink",
+    "version": "0.1.0",
+    "name": {
+      "zh-CN": "Webhook 审计接收器示例",
+      "en-US": "Webhook Audit Sink Example"
+    },
+    "description": {
+      "zh-CN": "隔离验证签名、幂等、重放和撤销契约的外部进程示例",
+      "en-US": "External process example for signature, idempotency, replay, and revocation acceptance"
+    },
+    "publisher": {
+      "id": "io.cdnca.examples",
+      "name": "CDNCA Examples",
+      "website": "https://example.invalid/cdnca/examples",
+      "support_url": "https://example.invalid/cdnca/examples/support"
+    }
+  },
+  "spec": {
+    "categories": [
+      "analytics_exporter"
+    ],
+    "compatibility": {
+      "control_api": ">=0.1.0 <1.0.0"
+    },
+    "entrypoint": {
+      "type": "external_https",
+      "base_url": "https://webhook-audit-sink.example.invalid",
+      "health_path": "/health/ready"
+    },
+    "permissions": [
+      "events.site.read"
+    ],
+    "subscriptions": [
+      "io.cdnca.site.v1.updated"
+    ],
+    "configuration_schema": {
+      "path": "schemas/config.schema.json",
+      "sha256": "f3ea29ce575d4ab5992e9eb5696d24efa97acb8b739aa26f492ceba6a099f63b"
+    }
+  },
+  "integrity": {
+    "algorithm": "Ed25519",
+    "key_id": "cdnca-example-webhook-audit-sink-2026-01",
+    "payload_sha256": "5700ea2dfab73d9d1e36dde51a7e9595310eeb6e48f39eb9c00c524ddab21e20",
+    "signature": "jKRodm6iqKnNBT21LLS-YVTpoHquwbIUfv1IcGM3UUfuZcLkdthrnk26OgNa9wNcM_s73GaymybmgephteWVDQ"
+  }
+}

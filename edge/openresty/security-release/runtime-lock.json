@@ -1,0 +1,15 @@
+{
+  "advisory_snapshot": {
+    "path": "edge/openresty/security-release/advisory-snapshot.json",
+    "sha256": "f09eeef6fd1ff13c5713c7d220177965235fb34a079397efce3e8166743629fb"
+  },
+  "block_reason": "security_hotfix_advisory_open",
+  "release_eligible": false,
+  "schema": "cdnca.edge.openresty.runtime-lock/v1",
+  "source": {
+    "image_digest": "sha256:035818c9596ce60cdc816fc1941db0414d50398644ec9567b45fded04a76e7d0",
+    "openresty_version": "1.31.1.1",
+    "tarball_sha256": "65b78baadd3f0984055de89bf13f4a1932e5bfe9c31932037a134ea2b1a0ce42",
+    "tarball_url": "https://openresty.org/download/openresty-1.31.1.1.tar.gz"
+  }
+}

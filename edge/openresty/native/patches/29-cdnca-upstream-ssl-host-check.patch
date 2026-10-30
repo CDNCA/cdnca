@@ -1,0 +1,79 @@
+CDNCA patch 29: per request skip of the upstream TLS certificate host name
+check (回源 HTTPS 不校验源站证书, ORIGIN_TLS_NO_VERIFY).
+
+With proxy_ssl_verify on, ngx_http_upstream_ssl_handshake always checks the
+peer certificate against u->ssl_name; ngx_lua has no per request way to turn
+it off. ngx_http_cdnca_upstream_set_ssl_host_check(r, 0), called from
+balancer_by_lua for an attempt, marks the upstream so the check is skipped;
+the chain verdict stays the verify callback's. Unmarked attempts keep the
+stock behaviour.
+
+--- a/src/http/ngx_http_upstream.h
++++ b/src/http/ngx_http_upstream.h
+@@ -425,6 +425,9 @@
+     unsigned                         request_body_blocked:1;
+     unsigned                         header_sent:1;
+     unsigned                         response_received:1;
++
++    /* CDNCA patch 29: the attempt skips the certificate host name check */
++    unsigned                         cdnca_no_ssl_host_check:1;
+ };
+ 
+ 
+@@ -469,6 +472,12 @@
+ extern ngx_conf_bitmask_t  ngx_http_upstream_ignore_headers_masks[];
+ 
+ 
++#if (NGX_HTTP_SSL)
++int ngx_http_cdnca_upstream_set_ssl_host_check(ngx_http_request_t *r,
++    int enable);
++#endif
++
++
+ #ifndef HAVE_BALANCER_STATUS_CODE_PATCH
+ #define HAVE_BALANCER_STATUS_CODE_PATCH
+ #endif
+--- a/src/http/ngx_http_upstream.c
++++ b/src/http/ngx_http_upstream.c
+@@ -1880,7 +1880,11 @@
+                 goto failed;
+             }
+ 
+-            if (ngx_ssl_check_host(c, &u->ssl_name) != NGX_OK) {
++            /* CDNCA patch 29: an attempt marked by
++             * ngx_http_cdnca_upstream_set_ssl_host_check(r, 0) */
++            if (!u->cdnca_no_ssl_host_check
++                && ngx_ssl_check_host(c, &u->ssl_name) != NGX_OK)
++            {
+                 ngx_log_error(NGX_LOG_ERR, c->log, 0,
+                               "upstream SSL certificate does not match \"%V\"",
+                               &u->ssl_name);
+@@ -1930,6 +1934,28 @@
+     ngx_http_set_log_request(c->log, r);
+ 
+     u->peer.save_session(&u->peer, u->peer.data);
++}
++
++
++/*
++ * CDNCA patch 29: proxy_ssl_verify stays on for the location; the request's
++ * current upstream attempt keeps (enable 1) or skips (enable 0) the host
++ * name check after the handshake. The chain is still whatever the verify
++ * callback (proxy_ssl_verify_by_lua) decided. Called from balancer_by_lua
++ * through LuaJIT FFI for every attempt; without the call the stock check
++ * runs. Returns 0, or -1 without an upstream.
++ */
++
++int
++ngx_http_cdnca_upstream_set_ssl_host_check(ngx_http_request_t *r, int enable)
++{
++    if (r == NULL || r->upstream == NULL) {
++        return -1;
++    }
++
++    r->upstream->cdnca_no_ssl_host_check = enable ? 0 : 1;
++
++    return 0;
+ }
+ 
+ 

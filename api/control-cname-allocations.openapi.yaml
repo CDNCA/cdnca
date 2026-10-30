@@ -1,0 +1,221 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild CNAME Allocation Query API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: CNAME allocations
+paths:
+  /v1/cname-allocations:
+    get:
+      tags: [CNAME allocations]
+      operationId: listCnameAllocations
+      summary: List CNAME allocation authority in the active tenant scope
+      x-required-permissions: [dns.read]
+      parameters:
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {$ref: '#/components/responses/ListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cname-allocations/{allocation_id}:
+    get:
+      tags: [CNAME allocations]
+      operationId: getCnameAllocation
+      summary: Get one CNAME allocation in the active tenant scope
+      x-required-permissions: [dns.read]
+      parameters:
+        - {$ref: '#/components/parameters/AllocationID'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {$ref: '#/components/responses/GetOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cname-allocations/diagnose:
+    get:
+      tags: [CNAME allocations]
+      operationId: diagnoseCnameAllocation
+      summary: Diagnose CNAME authority for one site in the active tenant scope
+      x-required-permissions: [dns.read]
+      parameters:
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/Domain'}
+        - {$ref: '#/components/parameters/Hostname'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {$ref: '#/components/responses/DiagnoseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cname-allocations:
+    get:
+      tags: [CNAME allocations]
+      operationId: adminListCnameAllocations
+      summary: List CNAME allocation authority in a selected tenant scope
+      x-required-permissions: [platform.admin]
+      parameters:
+        - {$ref: '#/components/parameters/ScopeID'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {$ref: '#/components/responses/ListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cname-allocations/{allocation_id}:
+    get:
+      tags: [CNAME allocations]
+      operationId: adminGetCnameAllocation
+      summary: Get one CNAME allocation in a selected tenant scope
+      x-required-permissions: [platform.admin]
+      parameters:
+        - {$ref: '#/components/parameters/ScopeID'}
+        - {$ref: '#/components/parameters/AllocationID'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {$ref: '#/components/responses/GetOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cname-allocations/diagnose:
+    get:
+      tags: [CNAME allocations]
+      operationId: adminDiagnoseCnameAllocation
+      summary: Diagnose CNAME authority for one site in a selected tenant scope
+      x-required-permissions: [platform.admin]
+      parameters:
+        - {$ref: '#/components/parameters/ScopeID'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/Domain'}
+        - {$ref: '#/components/parameters/Hostname'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {$ref: '#/components/responses/DiagnoseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ScopeID: {name: scope_id, in: query, required: true, schema: {type: string, format: uuid}}
+    AllocationID: {name: allocation_id, in: path, required: true, schema: {type: string, format: uuid}}
+    SiteID: {name: site_id, in: query, required: true, schema: {type: string, format: uuid}}
+    Domain: {name: domain, in: query, schema: {type: string, minLength: 1, maxLength: 253}}
+    Hostname: {name: hostname, in: query, schema: {type: string, minLength: 1, maxLength: 253}}
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+    Cursor: {name: cursor, in: query, schema: {type: string, format: uuid}}
+    RequestID: {name: X-Request-ID, in: header, schema: {type: string, minLength: 1, maxLength: 128}}
+  headers:
+    RequestID: {description: Stable request correlation identifier., schema: {type: string}}
+    NoStore: {description: Prevents caching tenant authority data., schema: {type: string, const: no-store}}
+    XContentTypeOptions: {description: Prevents MIME sniffing., schema: {type: string, const: nosniff}}
+  schemas:
+    Allocation:
+      type: object
+      additionalProperties: false
+      required: [id, mode, owner_id, provider_id, zone_id, domain, hostname, explicit_hostname, state, job_id, generation, current_revision, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        mode: {type: string, enum: [site, package]}
+        owner_id: {type: string, format: uuid}
+        provider_id: {type: string, format: uuid}
+        zone_id: {type: string, format: uuid}
+        domain: {type: string}
+        hostname: {type: string}
+        explicit_hostname: {type: boolean}
+        state: {type: string, enum: [pending, failed, done]}
+        failure_code: {type: string}
+        job_id: {type: string, format: uuid}
+        generation: {type: integer, format: int64, minimum: 1}
+        current_revision: {type: integer, format: int64, minimum: 1}
+        lkg_revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    AllocationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Allocation'}}
+        next_cursor: {type: string, format: uuid}
+    Diagnosis:
+      type: object
+      additionalProperties: false
+      required: [site_id, ready, reason_codes]
+      properties:
+        site_id: {type: string, format: uuid}
+        mode: {type: string, enum: [site, package]}
+        owner_id: {type: string, format: uuid}
+        allocation_id: {type: string, format: uuid}
+        binding_allocation_id: {type: string, format: uuid}
+        lkg_allocation_id: {type: string, format: uuid}
+        provider_id: {type: string, format: uuid}
+        zone_id: {type: string, format: uuid}
+        domain: {type: string}
+        hostname: {type: string}
+        state: {type: string, enum: [pending, failed, done]}
+        ready: {type: boolean}
+        reason_codes: {type: array, minItems: 1, items: {type: string}}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+  responses:
+    ListOK: {description: Stable CNAME allocation page., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/AllocationPage'}}}}
+    GetOK: {description: One scope-bound CNAME allocation., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Allocation'}}}}
+    DiagnoseOK: {description: Repeatable-read CNAME authority diagnosis., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Diagnosis'}}}}
+    BadRequest: {description: Invalid canonical query., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unauthorized: {description: Authentication is required., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Permission is required., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: The scope-bound authority was not found., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    MethodNotAllowed: {description: Only GET is supported., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    RequestTimeout: {description: The bounded read timed out., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    ServiceUnavailable: {description: The authority reader is unavailable., headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}, Cache-Control: {$ref: '#/components/headers/NoStore'}, X-Content-Type-Options: {$ref: '#/components/headers/XContentTypeOptions'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}

@@ -1,0 +1,3031 @@
+{
+ "_comment": "license_audit_events.action / resource_type 的中英文显示名。单一来源：运营后台操作日志从这里读；services/license-service/internal/licensing/audit_catalog_test.go 扫描所有写审计的地方，缺一个或多一个都会失败。resource_types 里 {} 代表一段 ID；market_routes 对应 marketadminproxy/routes.go，市场代理动作 market.<方法>.<路径> 按路由匹配。 payload_keys 对应 query_store.go redactAuditPayload 白名单（审计详情下发的字段）。",
+ "actions": {
+  "activation_credential.issue": {
+   "zh": "生成激活码",
+   "en": "Issue activation code"
+  },
+  "activation_credential.list": {
+   "zh": "查看激活码列表",
+   "en": "List activation codes"
+  },
+  "activation_credential.revoke": {
+   "zh": "作废激活码",
+   "en": "Revoke activation code"
+  },
+  "artifact_catalog.deliver": {
+   "zh": "下发制品目录",
+   "en": "Deliver artifact catalog"
+  },
+  "audit.list": {
+   "zh": "查看操作日志",
+   "en": "View audit log"
+  },
+  "auth.unified_login": {
+   "zh": "统一登录",
+   "en": "Unified sign-in"
+  },
+  "customer.close": {
+   "zh": "关闭客户",
+   "en": "Close customer"
+  },
+  "customer.create": {
+   "zh": "创建客户",
+   "en": "Create customer"
+  },
+  "customer.identity_proof.manual": {
+   "zh": "管理员手工录入核身结论",
+   "en": "Enter face verification manually"
+  },
+  "customer.list": {
+   "zh": "查看客户列表",
+   "en": "List customers"
+  },
+  "customer.read": {
+   "zh": "查看客户",
+   "en": "View customer"
+  },
+  "customer.resume": {
+   "zh": "恢复客户",
+   "en": "Resume customer"
+  },
+  "customer.suspend": {
+   "zh": "暂停客户",
+   "en": "Suspend customer"
+  },
+  "customer.update": {
+   "zh": "编辑客户基础信息",
+   "en": "Edit customer details"
+  },
+  "customer.verification.list": {
+   "zh": "查看客户实名记录",
+   "en": "View customer verifications"
+  },
+  "customer.verification.revoke": {
+   "zh": "撤销客户实名",
+   "en": "Revoke customer verification"
+  },
+  "customer.verification.set": {
+   "zh": "管理员设置客户实名",
+   "en": "Set customer verification"
+  },
+  "entitlement.usage.report": {
+   "zh": "上报授权用量",
+   "en": "Report entitlement usage"
+  },
+  "identity_proof_provider.list": {
+   "zh": "查看实名认证服务商",
+   "en": "List identity verification providers"
+  },
+  "identity_proof_provider.test": {
+   "zh": "测试实名服务商连接",
+   "en": "Test identity proof provider connection"
+  },
+  "identity_proof_provider.update": {
+   "zh": "修改实名认证服务商",
+   "en": "Update identity verification provider"
+  },
+  "installation.activate": {
+   "zh": "激活主控",
+   "en": "Activate control installation"
+  },
+  "installation.ban": {
+   "zh": "拉黑主控",
+   "en": "Ban control installation"
+  },
+  "installation.ban.lift": {
+   "zh": "解除主控拉黑",
+   "en": "Lift control installation ban"
+  },
+  "installation.ban.list": {
+   "zh": "查看主控黑名单",
+   "en": "List control installation bans"
+  },
+  "installation.encryption_key.register": {
+   "zh": "登记主控加密公钥",
+   "en": "Register installation encryption key"
+  },
+  "installation.endpoints.read": {
+   "zh": "查看主控访问地址",
+   "en": "View installation endpoints"
+  },
+  "installation.endpoints.report": {
+   "zh": "主控上报访问地址",
+   "en": "Installation reported endpoints"
+  },
+  "installation.list": {
+   "zh": "查看主控列表",
+   "en": "List control installations"
+  },
+  "installation.migrate": {
+   "zh": "主控迁移换机",
+   "en": "Migrate control installation"
+  },
+  "installation.reactivation_credential.issue": {
+   "zh": "生成主控重新激活码",
+   "en": "Issue reactivation code"
+  },
+  "installation.reactivation_credential.list": {
+   "zh": "查看主控重新激活码列表",
+   "en": "List reactivation codes"
+  },
+  "installation.reactivation_credential.read": {
+   "zh": "查看主控重新激活码",
+   "en": "View reactivation code"
+  },
+  "installation.reactivation_credential.revoke": {
+   "zh": "作废主控重新激活码",
+   "en": "Revoke reactivation code"
+  },
+  "installation.reinstall": {
+   "zh": "主控重装",
+   "en": "Reinstall control installation"
+  },
+  "installation.resume": {
+   "zh": "恢复主控",
+   "en": "Resume control installation"
+  },
+  "installation.retire": {
+   "zh": "主控 IP 换绑后退役旧主控",
+   "en": "Retire control installation after master IP rebind"
+  },
+  "installation.revoke": {
+   "zh": "吊销主控",
+   "en": "Revoke control installation"
+  },
+  "installation.suspend": {
+   "zh": "暂停主控",
+   "en": "Suspend control installation"
+  },
+  "installation.upgrade_target.set": {
+   "zh": "设置主控升级目标",
+   "en": "Set installation upgrade target"
+  },
+  "installation_client_certificate.issue": {
+   "zh": "签发主控客户端证书",
+   "en": "Issue installation client certificate"
+  },
+  "installation_client_certificate.list": {
+   "zh": "查看主控客户端证书",
+   "en": "List installation client certificates"
+  },
+  "installation_client_certificate.revoke": {
+   "zh": "吊销主控客户端证书",
+   "en": "Revoke installation client certificate"
+  },
+  "installation_upgrade_authorization_state.read": {
+   "zh": "查看主控升级授权状态",
+   "en": "View installation upgrade authorization"
+  },
+  "installation_upgrade_pin_options.list": {
+   "zh": "查看主控可指定版本",
+   "en": "List installation pinnable versions"
+  },
+  "installation_upgrade_target.list": {
+   "zh": "查看主控升级目标",
+   "en": "List installation upgrade targets"
+  },
+  "ip_intel.publish": {
+   "zh": "发布 IP 情报库",
+   "en": "Publish IP intelligence"
+  },
+  "ip_intel.pull_check": {
+   "zh": "检查 IP 情报库更新",
+   "en": "Check IP intelligence update"
+  },
+  "ip_intel.pull_settings": {
+   "zh": "修改 IP 情报库拉取设置",
+   "en": "Update IP intelligence pull settings"
+  },
+  "ip_intel.pull_test": {
+   "zh": "测试 IP 情报库拉取",
+   "en": "Test IP intelligence pull"
+  },
+  "ip_intel.upload": {
+   "zh": "上传 IP 情报库",
+   "en": "Upload IP intelligence"
+  },
+  "ip_intel.view": {
+   "zh": "查看 IP 情报库",
+   "en": "View IP intelligence"
+  },
+  "lease.list": {
+   "zh": "查看授权凭证列表",
+   "en": "List leases"
+  },
+  "lease.read": {
+   "zh": "查看授权凭证",
+   "en": "View lease"
+  },
+  "lease.renew": {
+   "zh": "授权凭证续期",
+   "en": "Renew lease"
+  },
+  "lease.renewal_warning": {
+   "zh": "授权凭证续期预警",
+   "en": "Lease renewal warning"
+  },
+  "lease.revoke": {
+   "zh": "吊销授权凭证",
+   "en": "Revoke lease"
+  },
+  "license.billing.chargeback": {
+   "zh": "授权计费：拒付",
+   "en": "Billing: chargeback"
+  },
+  "license.billing.downgrade": {
+   "zh": "授权计费：降级",
+   "en": "Billing: downgrade"
+  },
+  "license.billing.event.list": {
+   "zh": "查看授权计费事件",
+   "en": "List billing events"
+  },
+  "license.billing.event.read": {
+   "zh": "查看授权计费事件详情",
+   "en": "View billing event"
+  },
+  "license.billing.provider_callback.list": {
+   "zh": "查看支付回调记录",
+   "en": "List billing provider callbacks"
+  },
+  "license.billing.provider_verified": {
+   "zh": "支付回调验签通过",
+   "en": "Billing provider callback verified"
+  },
+  "license.billing.refund": {
+   "zh": "授权计费：退款",
+   "en": "Billing: refund"
+  },
+  "license.billing.renewal": {
+   "zh": "授权计费：续费",
+   "en": "Billing: renewal"
+  },
+  "license.billing.settlement.list": {
+   "zh": "查看授权结算单",
+   "en": "List billing settlements"
+  },
+  "license.billing.settlement.read": {
+   "zh": "查看授权结算单详情",
+   "en": "View billing settlement"
+  },
+  "license.billing.trial_conversion": {
+   "zh": "授权计费：试用转正",
+   "en": "Billing: trial conversion"
+  },
+  "license.billing.upgrade": {
+   "zh": "授权计费：升级",
+   "en": "Billing: upgrade"
+  },
+  "license.billing.void": {
+   "zh": "授权计费：作废",
+   "en": "Billing: void"
+  },
+  "license.convert_to_free": {
+   "zh": "授权转为免费版",
+   "en": "Convert license to free"
+  },
+  "license.convert_to_paid": {
+   "zh": "授权转为付费",
+   "en": "Convert license to paid"
+  },
+  "license.create": {
+   "zh": "创建授权",
+   "en": "Create license"
+  },
+  "license.expiry_warning": {
+   "zh": "授权到期预警",
+   "en": "License expiry warning"
+  },
+  "license.history.list": {
+   "zh": "查看授权变更历史",
+   "en": "View license history"
+  },
+  "license.licensing_mode": {
+   "zh": "修改授权模式",
+   "en": "Change licensing mode"
+  },
+  "license.list": {
+   "zh": "查看授权列表",
+   "en": "List licenses"
+  },
+  "license.master_ip.list": {
+   "zh": "查看主控 IP 绑定列表",
+   "en": "List master IP bindings"
+  },
+  "license.master_ip.master_ip": {
+   "zh": "变更授权主控 IP",
+   "en": "Change master IP"
+  },
+  "license.master_ip.migration_ip": {
+   "zh": "变更授权迁移 IP",
+   "en": "Change migration IP"
+  },
+  "license.master_ip.claim": {
+   "zh": "新主控 IP 上的主控认领授权",
+   "en": "Claim license from the new master IP"
+  },
+  "license.master_ip.read": {
+   "zh": "查看授权主控 IP",
+   "en": "View master IP"
+  },
+  "license.master_ip.set": {
+   "zh": "设置授权主控 IP",
+   "en": "Set master IP"
+  },
+  "license.quota_observations.read": {
+   "zh": "查看授权配额用量",
+   "en": "View license quota usage"
+  },
+  "license.renew": {
+   "zh": "续期授权",
+   "en": "Renew license"
+  },
+  "license.resume": {
+   "zh": "恢复授权",
+   "en": "Resume license"
+  },
+  "license.revoke": {
+   "zh": "吊销授权",
+   "en": "Revoke license"
+  },
+  "license.suspend": {
+   "zh": "暂停授权",
+   "en": "Suspend license"
+  },
+  "license.update_policy": {
+   "zh": "修改授权内容",
+   "en": "Update license policy"
+  },
+  "license.upgrade_from_free": {
+   "zh": "免费版升级为付费",
+   "en": "Upgrade license from free"
+  },
+  "license_backup.encryption_key.set": {
+   "zh": "设置备份加密密钥",
+   "en": "Set backup encryption key"
+  },
+  "license_backup.file.download": {
+   "zh": "下载备份文件",
+   "en": "Download backup file"
+  },
+  "license_backup.restore_plan": {
+   "zh": "生成备份恢复计划",
+   "en": "Create backup restore plan"
+  },
+  "license_backup.run.delete": {
+   "zh": "删除备份记录",
+   "en": "Delete backup run"
+  },
+  "license_backup.run.queue": {
+   "zh": "发起备份",
+   "en": "Queue backup run"
+  },
+  "license_backup.run.read": {
+   "zh": "查看备份记录",
+   "en": "View backup run"
+  },
+  "license_backup.runs.read": {
+   "zh": "查看备份记录列表",
+   "en": "List backup runs"
+  },
+  "license_backup.settings.read": {
+   "zh": "查看备份设置",
+   "en": "View backup settings"
+  },
+  "license_backup.settings.update": {
+   "zh": "修改备份设置",
+   "en": "Update backup settings"
+  },
+  "license_backup.target.create": {
+   "zh": "新增备份目标",
+   "en": "Create backup target"
+  },
+  "license_backup.target.host_key": {
+   "zh": "确认备份目标主机指纹",
+   "en": "Confirm backup target host key"
+  },
+  "license_backup.target.remove": {
+   "zh": "删除备份目标",
+   "en": "Remove backup target"
+  },
+  "license_backup.target.test": {
+   "zh": "测试备份目标",
+   "en": "Test backup target"
+  },
+  "license_backup.target.update": {
+   "zh": "修改备份目标",
+   "en": "Update backup target"
+  },
+  "login_settings.read": {
+   "zh": "查看登录设置",
+   "en": "View login settings"
+  },
+  "login_settings.update": {
+   "zh": "修改登录设置",
+   "en": "Update login settings"
+  },
+  "mail_settings.read": {
+   "zh": "查看邮件发送设置",
+   "en": "View mail settings"
+  },
+  "mail_settings.seed": {
+   "zh": "导入初始邮件发送设置",
+   "en": "Seed mail settings"
+  },
+  "mail_settings.test": {
+   "zh": "发送测试邮件",
+   "en": "Send test mail"
+  },
+  "mail_settings.update": {
+   "zh": "修改邮件发送设置",
+   "en": "Update mail settings"
+  },
+  "operator_account.list": {
+   "zh": "查看运营人员账号",
+   "en": "List operator accounts"
+  },
+  "operator_login_lock.unlock": {
+   "zh": "解除运营人员登录锁定",
+   "en": "Unlock operator sign-in"
+  },
+  "operator_permission.list": {
+   "zh": "查看权限列表",
+   "en": "List permissions"
+  },
+  "operator_role.archive": {
+   "zh": "归档角色",
+   "en": "Archive role"
+  },
+  "operator_role.create": {
+   "zh": "创建角色",
+   "en": "Create role"
+  },
+  "operator_role.list": {
+   "zh": "查看角色列表",
+   "en": "List roles"
+  },
+  "operator_role.restore": {
+   "zh": "恢复角色",
+   "en": "Restore role"
+  },
+  "operator_role.update": {
+   "zh": "修改角色",
+   "en": "Update role"
+  },
+  "operator_roles.assign": {
+   "zh": "分配角色",
+   "en": "Assign roles"
+  },
+  "package.portal_plan.default_modules": {
+   "zh": "设置门户套餐默认模块",
+   "en": "Set portal plan default modules"
+  },
+  "payment.checkout": {
+   "zh": "发起支付",
+   "en": "Start checkout"
+  },
+  "payment.create": {
+   "zh": "创建支付单",
+   "en": "Create payment"
+  },
+  "payment.settle": {
+   "zh": "支付入账",
+   "en": "Settle payment"
+  },
+  "payment.refund.fail": {
+   "zh": "市场退款失败",
+   "en": "Market refund failed"
+  },
+  "payment.refund.request": {
+   "zh": "市场退款原路退回受理",
+   "en": "Accept market refund"
+  },
+  "payment.refund.retry": {
+   "zh": "市场退款重新执行",
+   "en": "Retry market refund"
+  },
+  "payment.refund.succeed": {
+   "zh": "市场退款已原路退回",
+   "en": "Market refund completed"
+  },
+  "payment.refund.settle_offline": {
+   "zh": "市场退款登记线下退款结案",
+   "en": "Record market refund paid offline"
+  },
+  "payment_channel.channel_down": {
+   "zh": "收款通道健康检查失败",
+   "en": "Payment channel down"
+  },
+  "payment_channel.channel_up": {
+   "zh": "收款通道恢复可用",
+   "en": "Payment channel recovered"
+  },
+  "payment_channel.create": {
+   "zh": "新增收款通道",
+   "en": "Create payment channel"
+  },
+  "payment_channel.crypto_pool_import": {
+   "zh": "导入 USDT 收款地址池",
+   "en": "Import USDT address pool"
+  },
+  "payment_channel.failover": {
+   "zh": "收款通道切换到备用",
+   "en": "Payment channel failover"
+  },
+  "payment_channel.read": {
+   "zh": "查看收款通道",
+   "en": "View payment channels"
+  },
+  "payment_channel.update": {
+   "zh": "修改收款通道",
+   "en": "Update payment channel"
+  },
+  "payment_exception.read": {
+   "zh": "查看支付异常",
+   "en": "View payment exceptions"
+  },
+  "payment_exception.resolve": {
+   "zh": "处理支付异常",
+   "en": "Resolve payment exception"
+  },
+  "platform_policy.acknowledge": {
+   "zh": "主控确认平台策略",
+   "en": "Acknowledge platform policy"
+  },
+  "platform_policy.acknowledgement.list": {
+   "zh": "查看平台策略确认记录",
+   "en": "List policy acknowledgements"
+  },
+  "platform_policy.list": {
+   "zh": "查看平台策略列表",
+   "en": "List platform policies"
+  },
+  "platform_policy.preflight": {
+   "zh": "平台策略发布预检",
+   "en": "Preflight platform policy"
+  },
+  "platform_policy.publish": {
+   "zh": "发布平台策略",
+   "en": "Publish platform policy"
+  },
+  "platform_policy.read": {
+   "zh": "查看平台策略",
+   "en": "View platform policy"
+  },
+  "platform_policy.resolve": {
+   "zh": "主控拉取平台策略",
+   "en": "Resolve platform policy"
+  },
+  "platform_policy.rollout.transition": {
+   "zh": "推进平台策略灰度",
+   "en": "Transition policy rollout"
+  },
+  "platform_policy.withdraw": {
+   "zh": "撤回平台策略",
+   "en": "Withdraw platform policy"
+  },
+  "plugin.license.bind": {
+   "zh": "插件授权绑定主控",
+   "en": "Bind plugin license"
+  },
+  "plugin.license.rebind": {
+   "zh": "插件授权改绑主控",
+   "en": "Rebind plugin license"
+  },
+  "plugin.license.unbind": {
+   "zh": "插件授权解绑主控",
+   "en": "Unbind plugin license"
+  },
+  "plugin.listing.update": {
+   "zh": "更新插件上架信息",
+   "en": "Update plugin listing"
+  },
+  "plugin.purchase.sync": {
+   "zh": "同步插件购买",
+   "en": "Sync plugin purchase"
+  },
+  "plugin.rebind_policy.read": {
+   "zh": "查看插件改绑规则",
+   "en": "View plugin rebind policy"
+  },
+  "plugin.rebind_policy.update": {
+   "zh": "修改插件改绑规则",
+   "en": "Update plugin rebind policy"
+  },
+  "plugin_capability_approval.approve": {
+   "zh": "批准插件权限",
+   "en": "Approve plugin capabilities"
+  },
+  "plugin_capability_approval.list": {
+   "zh": "查看插件权限审批",
+   "en": "List plugin capability approvals"
+  },
+  "plugin_capability_approval.read": {
+   "zh": "查看插件权限审批详情",
+   "en": "View plugin capability approval"
+  },
+  "plugin_capability_approval.revoke": {
+   "zh": "撤销插件权限",
+   "en": "Revoke plugin capabilities"
+  },
+  "plugin_capability_runtime_authorization.resolve": {
+   "zh": "插件运行时权限判定",
+   "en": "Resolve plugin runtime authorization"
+  },
+  "plugin_capability_runtime_authorization_receipt.list": {
+   "zh": "查看插件运行时授权回执",
+   "en": "List runtime authorization receipts"
+  },
+  "plugin_catalog.create": {
+   "zh": "新增插件目录",
+   "en": "Create plugin catalog"
+  },
+  "plugin_catalog.disable": {
+   "zh": "停用插件目录",
+   "en": "Disable plugin catalog"
+  },
+  "plugin_catalog.discover": {
+   "zh": "读取插件目录公钥",
+   "en": "Discover plugin catalog key"
+  },
+  "plugin_catalog.list": {
+   "zh": "查看插件目录列表",
+   "en": "List plugin catalogs"
+  },
+  "plugin_catalog.read": {
+   "zh": "查看插件目录",
+   "en": "View plugin catalog"
+  },
+  "plugin_catalog.resync_latest": {
+   "zh": "重新同步插件目录",
+   "en": "Resync plugin catalog"
+  },
+  "plugin_catalog.snapshot.list": {
+   "zh": "查看插件目录快照列表",
+   "en": "List catalog snapshots"
+  },
+  "plugin_catalog.snapshot.read": {
+   "zh": "查看插件目录快照",
+   "en": "View catalog snapshot"
+  },
+  "plugin_catalog.sync": {
+   "zh": "同步插件目录",
+   "en": "Sync plugin catalog"
+  },
+  "plugin_catalog.sync_attempt.list": {
+   "zh": "查看插件目录同步记录",
+   "en": "List catalog sync attempts"
+  },
+  "plugin_catalog.update": {
+   "zh": "修改插件目录",
+   "en": "Update plugin catalog"
+  },
+  "plugin_installation_activation.resolve": {
+   "zh": "插件安装激活判定",
+   "en": "Resolve plugin activation"
+  },
+  "plugin_installation_authorization.controller_confirm": {
+   "zh": "主控确认插件安装",
+   "en": "Controller confirmed plugin install"
+  },
+  "plugin_installation_authorization.create": {
+   "zh": "创建插件安装授权",
+   "en": "Create plugin installation authorization"
+  },
+  "plugin_installation_authorization.list": {
+   "zh": "查看插件安装授权列表",
+   "en": "List plugin installation authorizations"
+  },
+  "plugin_installation_authorization.read": {
+   "zh": "查看插件安装授权",
+   "en": "View plugin installation authorization"
+  },
+  "plugin_installation_authorization.transition": {
+   "zh": "变更插件安装状态",
+   "en": "Transition plugin installation"
+  },
+  "plugin_installation_candidate.read": {
+   "zh": "查看待安装插件",
+   "en": "View plugin installation candidate"
+  },
+  "plugin_installation_lifecycle.sync": {
+   "zh": "同步插件安装生命周期",
+   "en": "Sync plugin installation lifecycle"
+  },
+  "plugin_manifest.verify": {
+   "zh": "校验插件清单",
+   "en": "Verify plugin manifest"
+  },
+  "plugin_manifest_verification.list": {
+   "zh": "查看插件清单校验记录",
+   "en": "List manifest verifications"
+  },
+  "plugin_manifest_verification.read": {
+   "zh": "查看插件清单校验详情",
+   "en": "View manifest verification"
+  },
+  "plugin_publisher.create": {
+   "zh": "新增插件发布者",
+   "en": "Create plugin publisher"
+  },
+  "plugin_publisher.disable": {
+   "zh": "停用插件发布者",
+   "en": "Disable plugin publisher"
+  },
+  "plugin_publisher.list": {
+   "zh": "查看插件发布者列表",
+   "en": "List plugin publishers"
+  },
+  "plugin_publisher.market_key": {
+   "zh": "市场登记发布者公钥",
+   "en": "Market registered publisher key"
+  },
+  "plugin_publisher.read": {
+   "zh": "查看插件发布者",
+   "en": "View plugin publisher"
+  },
+  "plugin_publisher_key.emergency_replace": {
+   "zh": "紧急替换发布者公钥",
+   "en": "Emergency replace publisher key"
+  },
+  "plugin_publisher_key.list": {
+   "zh": "查看发布者公钥",
+   "en": "List publisher keys"
+  },
+  "plugin_publisher_key.retire": {
+   "zh": "停用发布者公钥",
+   "en": "Retire publisher key"
+  },
+  "plugin_publisher_key.rotate": {
+   "zh": "轮换发布者公钥",
+   "en": "Rotate publisher key"
+  },
+  "plugin_runtime_binding.create": {
+   "zh": "创建插件运行时绑定",
+   "en": "Create plugin runtime binding"
+  },
+  "plugin_runtime_binding.list": {
+   "zh": "查看插件运行时绑定",
+   "en": "List plugin runtime bindings"
+  },
+  "plugin_runtime_binding.revoke": {
+   "zh": "撤销插件运行时绑定",
+   "en": "Revoke plugin runtime binding"
+  },
+  "plugin_runtime_projection.resolve": {
+   "zh": "插件运行时投影判定",
+   "en": "Resolve plugin runtime projection"
+  },
+  "plugin_security_advisory.acknowledge": {
+   "zh": "确认插件安全公告",
+   "en": "Acknowledge plugin advisory"
+  },
+  "plugin_security_advisory.publish": {
+   "zh": "发布插件安全公告",
+   "en": "Publish plugin advisory"
+  },
+  "plugin_security_advisory.withdraw": {
+   "zh": "撤回插件安全公告",
+   "en": "Withdraw plugin advisory"
+  },
+  "plugin_service_identity.issue": {
+   "zh": "签发插件服务身份",
+   "en": "Issue plugin service identity"
+  },
+  "plugin_service_identity.revoke": {
+   "zh": "吊销插件服务身份",
+   "en": "Revoke plugin service identity"
+  },
+  "plugin_service_identity.rotate": {
+   "zh": "轮换插件服务身份",
+   "en": "Rotate plugin service identity"
+  },
+  "portal.account.password_change": {
+   "zh": "门户账号修改密码",
+   "en": "Portal password changed"
+  },
+  "portal.account.password_reset": {
+   "zh": "门户账号重置密码",
+   "en": "Portal password reset"
+  },
+  "portal.account.register": {
+   "zh": "门户账号注册",
+   "en": "Portal account registered"
+  },
+  "portal.balance.credit": {
+   "zh": "门户余额充值",
+   "en": "Portal balance credited"
+  },
+  "portal.identity_proof.failed": {
+   "zh": "实名认证未通过",
+   "en": "Identity verification failed"
+  },
+  "portal.identity_proof.passed": {
+   "zh": "实名认证通过",
+   "en": "Identity verification passed"
+  },
+  "portal.identity_proof.start": {
+   "zh": "发起实名认证",
+   "en": "Start identity verification"
+  },
+  "portal.order.purchase": {
+   "zh": "门户购买授权",
+   "en": "Portal purchase"
+  },
+  "portal.order.renew": {
+   "zh": "门户续费授权",
+   "en": "Portal renewal"
+  },
+  "portal.order.trial": {
+   "zh": "门户领取试用",
+   "en": "Portal trial"
+  },
+  "portal.seller_payout_account.record": {
+   "zh": "登记供货商收款账户",
+   "en": "Record seller payout account"
+  },
+  "portal.session.login": {
+   "zh": "门户登录",
+   "en": "Portal sign-in"
+  },
+  "portal.verification.approved": {
+   "zh": "实名审核通过",
+   "en": "Verification approved"
+  },
+  "portal.verification.rejected": {
+   "zh": "实名审核驳回",
+   "en": "Verification rejected"
+  },
+  "portal.verification.submit": {
+   "zh": "提交实名资料",
+   "en": "Submit verification"
+  },
+  "portal_account.create": {
+   "zh": "为客户开通登录账号",
+   "en": "Open customer login account"
+  },
+  "portal_account.list": {
+   "zh": "查看门户账号列表",
+   "en": "List portal accounts"
+  },
+  "portal_account.password_reset": {
+   "zh": "重置门户账号密码",
+   "en": "Reset portal account password"
+  },
+  "portal_account.profile_update": {
+   "zh": "修改登录邮箱/手机号",
+   "en": "Change login e-mail / phone"
+  },
+  "portal_account.read": {
+   "zh": "查看门户账号",
+   "en": "View portal account"
+  },
+  "portal_account.sessions_revoke": {
+   "zh": "强制门户账号下线",
+   "en": "Revoke portal account sessions"
+  },
+  "portal_account.status": {
+   "zh": "修改门户账号状态",
+   "en": "Change portal account status"
+  },
+  "portal_account.update": {
+   "zh": "修改门户账号",
+   "en": "Update portal account"
+  },
+  "portal_licensing.read": {
+   "zh": "查看门户授权设置",
+   "en": "View portal licensing settings"
+  },
+  "portal_licensing.update": {
+   "zh": "修改门户授权设置",
+   "en": "Update portal licensing settings"
+  },
+  "portal_order.list": {
+   "zh": "查看门户订单",
+   "en": "List portal orders"
+  },
+  "portal_plan.create": {
+   "zh": "新增门户套餐",
+   "en": "Create portal plan"
+  },
+  "portal_plan.list": {
+   "zh": "查看门户套餐",
+   "en": "List portal plans"
+  },
+  "portal_plan.update": {
+   "zh": "修改门户套餐",
+   "en": "Update portal plan"
+  },
+  "portal_purchase_identity.read": {
+   "zh": "查看购买授权实名要求",
+   "en": "View purchase identity requirement"
+  },
+  "portal_purchase_identity.update": {
+   "zh": "修改购买授权实名要求",
+   "en": "Update purchase identity requirement"
+  },
+  "portal_verification.list": {
+   "zh": "查看实名审核列表",
+   "en": "List verifications"
+  },
+  "release_artifact.create": {
+   "zh": "登记发布制品",
+   "en": "Create release artifact"
+  },
+  "release_artifact.import": {
+   "zh": "导入发布制品",
+   "en": "Import release artifact"
+  },
+  "release_artifact.list": {
+   "zh": "查看发布制品列表",
+   "en": "List release artifacts"
+  },
+  "release_artifact.publish": {
+   "zh": "发布制品",
+   "en": "Publish release artifact"
+  },
+  "release_artifact.read": {
+   "zh": "查看发布制品",
+   "en": "View release artifact"
+  },
+  "release_artifact.repository_verification.read": {
+   "zh": "查看制品仓库校验",
+   "en": "View repository verification"
+  },
+  "release_artifact.repository_verify": {
+   "zh": "校验制品仓库",
+   "en": "Verify artifact repository"
+  },
+  "release_artifact.size_attest": {
+   "zh": "登记制品大小证明",
+   "en": "Attest artifact size"
+  },
+  "release_artifact.size_attestation.read": {
+   "zh": "查看制品大小证明",
+   "en": "View size attestation"
+  },
+  "release_artifact.upload": {
+   "zh": "上传发布制品",
+   "en": "Upload release artifact"
+  },
+  "release_artifact.withdraw": {
+   "zh": "撤回发布制品",
+   "en": "Withdraw release artifact"
+  },
+  "release_channel.list": {
+   "zh": "查看发布渠道",
+   "en": "List release channels"
+  },
+  "release_channel.target.set": {
+   "zh": "设置发布渠道目标版本",
+   "en": "Set release channel target"
+  },
+  "release_channel_version_range.read": {
+   "zh": "查看发布渠道授权版本范围",
+   "en": "View release channel license version range"
+  },
+  "release_channel_target.list": {
+   "zh": "查看发布渠道目标版本",
+   "en": "List release channel targets"
+  },
+  "rule.intel.candidate.reject": {
+   "zh": "驳回规则情报候选",
+   "en": "Reject rule candidate"
+  },
+  "rule.intel.candidate.restore": {
+   "zh": "恢复规则情报候选",
+   "en": "Restore rule candidate"
+  },
+  "rule.intel.corpus.add": {
+   "zh": "加入规则情报语料",
+   "en": "Add to rule corpus"
+  },
+  "rule.intel.job.run": {
+   "zh": "运行规则情报任务",
+   "en": "Run rule intelligence job"
+  },
+  "rule.intel.merge.abandon": {
+   "zh": "放弃规则并入草稿",
+   "en": "Abandon rule merge"
+  },
+  "rule.intel.merge.create": {
+   "zh": "创建规则并入草稿",
+   "en": "Create rule merge"
+  },
+  "rule.intel.merge.gate": {
+   "zh": "规则并入门禁检查",
+   "en": "Gate rule merge"
+  },
+  "rule.intel.merge.publish": {
+   "zh": "发布规则并入",
+   "en": "Publish rule merge"
+  },
+  "rule.intel.report.ingest": {
+   "zh": "接收规则情报上报",
+   "en": "Ingest rule report"
+  },
+  "rule.intel.rollout.advance": {
+   "zh": "推进规则灰度",
+   "en": "Advance rule rollout"
+  },
+  "rule.intel.rollout.pause": {
+   "zh": "暂停规则灰度",
+   "en": "Pause rule rollout"
+  },
+  "rule.intel.rollout.resume": {
+   "zh": "恢复规则灰度",
+   "en": "Resume rule rollout"
+  },
+  "rule.intel.rollout.rollback": {
+   "zh": "回滚规则灰度",
+   "en": "Roll back rule rollout"
+  },
+  "rule.intel.rule.restore": {
+   "zh": "恢复已撤回规则",
+   "en": "Restore rule"
+  },
+  "rule.intel.rule.withdraw": {
+   "zh": "撤回已发布规则",
+   "en": "Withdraw rule"
+  },
+  "rule.pack.key_wrap": {
+   "zh": "封装规则包密钥",
+   "en": "Wrap rule pack key"
+  },
+  "rule.pack.publish": {
+   "zh": "发布规则包",
+   "en": "Publish rule pack"
+  },
+  "rule.pack.trace": {
+   "zh": "规则包溯源",
+   "en": "Trace rule pack"
+  },
+  "rule_intel.candidate.list": {
+   "zh": "查看规则情报候选",
+   "en": "List rule candidates"
+  },
+  "rule_intel.candidate.read": {
+   "zh": "查看规则情报候选详情",
+   "en": "View rule candidate"
+  },
+  "rule_intel.corpus.list": {
+   "zh": "查看规则情报语料",
+   "en": "List rule corpus"
+  },
+  "rule_intel.merge.list": {
+   "zh": "查看规则并入草稿",
+   "en": "List rule merges"
+  },
+  "rule_intel.merge.read": {
+   "zh": "查看规则并入草稿详情",
+   "en": "View rule merge"
+  },
+  "rule_intel.overview": {
+   "zh": "查看规则情报概览",
+   "en": "View rule intelligence overview"
+  },
+  "rule_intel.rule.list": {
+   "zh": "查看已发布情报规则",
+   "en": "List published rules"
+  },
+  "rule_pack.publish": {
+   "zh": "发布规则包",
+   "en": "Publish rule pack"
+  },
+  "rule_pack.trace": {
+   "zh": "规则包溯源",
+   "en": "Trace rule pack"
+  },
+  "security.custom_rule.report": {
+   "zh": "主控上报自定义安全规则",
+   "en": "Report custom security rules"
+  },
+  "security.custom_rule.report.history": {
+   "zh": "查看自定义安全规则上报历史",
+   "en": "View custom rule report history"
+  },
+  "security.custom_rule.report.latest": {
+   "zh": "查看最新自定义安全规则上报",
+   "en": "View latest custom rule report"
+  },
+  "security.custom_rule.report.read": {
+   "zh": "查看自定义安全规则上报",
+   "en": "View custom rule report"
+  },
+  "security_rule.create": {
+   "zh": "新增安全规则",
+   "en": "Create security rule"
+  },
+  "security_rule.list": {
+   "zh": "查看安全规则列表",
+   "en": "List security rules"
+  },
+  "security_rule.read": {
+   "zh": "查看安全规则",
+   "en": "View security rule"
+  },
+  "security_rule.release": {
+   "zh": "发布安全规则版本",
+   "en": "Release security rule"
+  },
+  "security_rule.target.set": {
+   "zh": "设置安全规则目标版本",
+   "en": "Set security rule target"
+  },
+  "security_rule.update": {
+   "zh": "修改安全规则",
+   "en": "Update security rule"
+  },
+  "signer_revocation.self_approved": {
+   "zh": "签名者吊销自行批准",
+   "en": "Signer revocation self-approved"
+  },
+  "signing_key.bootstrap": {
+   "zh": "初始化签名密钥",
+   "en": "Bootstrap signing key"
+  },
+  "signing_key.fingerprint.backfill": {
+   "zh": "补齐签名密钥指纹",
+   "en": "Backfill key fingerprint"
+  },
+  "signing_key.list": {
+   "zh": "查看签名密钥",
+   "en": "List signing keys"
+  },
+  "signing_key.rotation.activate": {
+   "zh": "启用新签名密钥",
+   "en": "Activate key rotation"
+  },
+  "signing_key.rotation.authorize": {
+   "zh": "授权签名密钥轮换",
+   "en": "Authorize key rotation"
+  },
+  "signing_key.rotation.stage": {
+   "zh": "预置新签名密钥",
+   "en": "Stage key rotation"
+  },
+  "signing_key_custody.activate": {
+   "zh": "启用托管签名密钥",
+   "en": "Activate custodied key"
+  },
+  "signing_key_custody.activation_plan": {
+   "zh": "生成托管密钥启用计划",
+   "en": "Plan custodied key activation"
+  },
+  "signing_key_custody.export": {
+   "zh": "导出托管密钥",
+   "en": "Export custodied key"
+  },
+  "signing_key_custody.import": {
+   "zh": "导入托管密钥",
+   "en": "Import custodied key"
+  },
+  "signing_key_custody.private_key_reveal": {
+   "zh": "查看托管私钥",
+   "en": "Reveal custodied private key"
+  },
+  "signing_key_custody.read": {
+   "zh": "查看密钥托管",
+   "en": "View key custody"
+  },
+  "signing_key_custody.seal": {
+   "zh": "封存托管密钥",
+   "en": "Seal custodied key"
+  },
+  "signing_key_custody.verify": {
+   "zh": "校验托管密钥",
+   "en": "Verify custodied key"
+  },
+  "site_content.asset_read": {
+   "zh": "查看官网素材",
+   "en": "View site asset"
+  },
+  "site_content.asset_upload": {
+   "zh": "上传官网素材",
+   "en": "Upload site asset"
+  },
+  "site_content.delete": {
+   "zh": "删除官网内容",
+   "en": "Delete site content"
+  },
+  "site_content.publish": {
+   "zh": "发布官网内容",
+   "en": "Publish site content"
+  },
+  "site_content.read": {
+   "zh": "查看官网内容",
+   "en": "View site content"
+  },
+  "site_content.save": {
+   "zh": "保存官网内容草稿",
+   "en": "Save site content"
+  },
+  "site_content.unpublish": {
+   "zh": "下线官网内容",
+   "en": "Unpublish site content"
+  },
+  "system.engine_module.import": {
+   "zh": "导入引擎模块",
+   "en": "Import engine module"
+  },
+  "system.signer_trust.publish": {
+   "zh": "发布签名者信任文档",
+   "en": "Publish signer trust"
+  },
+  "upgrade_command_grant.issue": {
+   "zh": "签发升级命令授权",
+   "en": "Issue upgrade command grant"
+  },
+  "upgrade_grant.issue": {
+   "zh": "签发升级授权",
+   "en": "Issue upgrade grant"
+  },
+  "upgrade_grant.list": {
+   "zh": "查看升级授权",
+   "en": "List upgrade grants"
+  },
+  "upgrade_grant.receipt.list": {
+   "zh": "查看升级回执",
+   "en": "List upgrade receipts"
+  },
+  "upgrade_grant.receipt.record": {
+   "zh": "记录升级回执",
+   "en": "Record upgrade receipt"
+  },
+  "upgrade_plan_artifact_bundle.issue": {
+   "zh": "签发升级制品包",
+   "en": "Issue upgrade artifact bundle"
+  },
+  "waf.custom_rule.report": {
+   "zh": "主控上报自定义 WAF 规则",
+   "en": "Report custom WAF rules"
+  },
+  "waf.custom_rule.report.list": {
+   "zh": "查看自定义 WAF 规则上报",
+   "en": "List custom WAF rule reports"
+  },
+  "waf.custom_rule.report.read": {
+   "zh": "查看自定义 WAF 规则上报详情",
+   "en": "View custom WAF rule report"
+  }
+ },
+ "resource_types": {
+  "activation_credential": {
+   "zh": "激活码",
+   "en": "Activation code"
+  },
+  "artifact_catalog_delivery": {
+   "zh": "制品目录下发",
+   "en": "Artifact catalog delivery"
+  },
+  "billing_provider_callbacks/{}": {
+   "zh": "支付回调记录",
+   "en": "Billing provider callbacks"
+  },
+  "customer": {
+   "zh": "客户",
+   "en": "Customer"
+  },
+  "customer/{}": {
+   "zh": "客户",
+   "en": "Customer"
+  },
+  "customer/{}/installations": {
+   "zh": "客户的主控",
+   "en": "Customer installations"
+  },
+  "customer/{}/installations/{}/security-custom-rule-reports": {
+   "zh": "主控的自定义安全规则上报",
+   "en": "Installation custom rule reports"
+  },
+  "customer/{}/installations/{}/security-custom-rule-reports/{}": {
+   "zh": "自定义安全规则上报",
+   "en": "Custom rule report"
+  },
+  "customer/{}/installations/{}/waf-rule-reports": {
+   "zh": "主控的自定义 WAF 规则上报",
+   "en": "Installation WAF rule reports"
+  },
+  "customer/{}/installations/{}/waf-rule-reports/{}": {
+   "zh": "自定义 WAF 规则上报",
+   "en": "WAF rule report"
+  },
+  "customer/{}/license-master-ips": {
+   "zh": "客户的主控 IP 绑定",
+   "en": "Customer master IP bindings"
+  },
+  "customer/{}/licenses": {
+   "zh": "客户的授权",
+   "en": "Customer licenses"
+  },
+  "customer/{}/security-custom-rule-reports": {
+   "zh": "客户的自定义安全规则上报",
+   "en": "Customer custom rule reports"
+  },
+  "customer/{}/verifications": {
+   "zh": "客户实名记录",
+   "en": "Customer verifications"
+  },
+  "customers": {
+   "zh": "客户列表",
+   "en": "Customers"
+  },
+  "edge_signer_trust": {
+   "zh": "签名者信任文档",
+   "en": "Signer trust document"
+  },
+  "engine_module_release": {
+   "zh": "引擎模块版本",
+   "en": "Engine module release"
+  },
+  "entitlement_usage_report": {
+   "zh": "授权用量上报",
+   "en": "Entitlement usage report"
+  },
+  "identity-proof/providers": {
+   "zh": "实名认证服务商",
+   "en": "Identity verification providers"
+  },
+  "identity-proof/providers/{}": {
+   "zh": "实名服务商",
+   "en": "Identity proof provider"
+  },
+  "identity-proof/purchase-policy": {
+   "zh": "购买授权实名要求",
+   "en": "Purchase identity requirement"
+  },
+  "identity/login-settings": {
+   "zh": "登录设置",
+   "en": "Login settings"
+  },
+  "identity/mail-settings": {
+   "zh": "邮件发送设置",
+   "en": "Mail settings"
+  },
+  "identity_proof_provider": {
+   "zh": "实名认证服务商",
+   "en": "Identity verification provider"
+  },
+  "identity_proof_session": {
+   "zh": "实名认证会话",
+   "en": "Identity verification session"
+  },
+  "installation": {
+   "zh": "主控",
+   "en": "Control installation"
+  },
+  "installation/{}": {
+   "zh": "主控",
+   "en": "Control installation"
+  },
+  "installation/{}/client-certificates": {
+   "zh": "主控客户端证书",
+   "en": "Installation client certificates"
+  },
+  "installation/{}/leases": {
+   "zh": "主控的授权凭证",
+   "en": "Installation leases"
+  },
+  "installation/{}/plugin-capability-approvals": {
+   "zh": "主控的插件权限审批",
+   "en": "Installation plugin approvals"
+  },
+  "installation/{}/plugin-capability-approvals/{}": {
+   "zh": "插件权限审批",
+   "en": "Plugin capability approval"
+  },
+  "installation/{}/plugin-installation-candidate/{}": {
+   "zh": "待安装插件",
+   "en": "Plugin installation candidate"
+  },
+  "installation/{}/plugin-installations": {
+   "zh": "主控的插件安装",
+   "en": "Installation plugins"
+  },
+  "installation/{}/plugin-runtime-authorization-receipts": {
+   "zh": "主控的插件运行时授权回执",
+   "en": "Runtime authorization receipts"
+  },
+  "installation/{}/plugin-runtime-bindings": {
+   "zh": "主控的插件运行时绑定",
+   "en": "Plugin runtime bindings"
+  },
+  "installation/{}/reactivation_credentials": {
+   "zh": "主控重新激活码",
+   "en": "Reactivation codes"
+  },
+  "installation/{}/upgrade_grant_receipts": {
+   "zh": "主控升级回执",
+   "en": "Upgrade receipts"
+  },
+  "installation/{}/upgrade_grants": {
+   "zh": "主控升级授权",
+   "en": "Upgrade grants"
+  },
+  "installation/{}/upgrade_pin_options/{}": {
+   "zh": "主控可指定版本",
+   "en": "Pinnable versions"
+  },
+  "installation/{}/upgrade_targets": {
+   "zh": "主控升级目标",
+   "en": "Upgrade targets"
+  },
+  "installation_ban": {
+   "zh": "主控黑名单",
+   "en": "Installation ban"
+  },
+  "installation_client_certificate": {
+   "zh": "主控客户端证书",
+   "en": "Installation client certificate"
+  },
+  "installation_reactivation_credential": {
+   "zh": "主控重新激活码",
+   "en": "Reactivation code"
+  },
+  "installation_upgrade_authorization_state": {
+   "zh": "主控升级授权状态",
+   "en": "Upgrade authorization state"
+  },
+  "installation_upgrade_target": {
+   "zh": "主控升级目标",
+   "en": "Upgrade target"
+  },
+  "ip_intel": {
+   "zh": "IP 情报库",
+   "en": "IP intelligence"
+  },
+  "ip_intel_release": {
+   "zh": "IP 情报库版本",
+   "en": "IP intelligence release"
+  },
+  "lease": {
+   "zh": "授权凭证",
+   "en": "Lease"
+  },
+  "lease/{}": {
+   "zh": "授权凭证",
+   "en": "Lease"
+  },
+  "license": {
+   "zh": "授权",
+   "en": "License"
+  },
+  "license/{}/activation_credentials": {
+   "zh": "授权的激活码",
+   "en": "License activation codes"
+  },
+  "license/{}/billing_event/{}": {
+   "zh": "授权计费事件",
+   "en": "Billing event"
+  },
+  "license/{}/billing_events": {
+   "zh": "授权计费事件",
+   "en": "Billing events"
+  },
+  "license/{}/billing_settlement/{}": {
+   "zh": "授权结算单",
+   "en": "Billing settlement"
+  },
+  "license/{}/billing_settlements": {
+   "zh": "授权结算单",
+   "en": "Billing settlements"
+  },
+  "license/{}/history": {
+   "zh": "授权变更历史",
+   "en": "License history"
+  },
+  "license/{}/quota-observations": {
+   "zh": "授权配额用量",
+   "en": "License quota usage"
+  },
+  "license_audit_events": {
+   "zh": "操作日志",
+   "en": "Audit log"
+  },
+  "license_backup": {
+   "zh": "授权端备份",
+   "en": "License backup"
+  },
+  "licenses/{}/master-ip": {
+   "zh": "授权主控 IP",
+   "en": "License master IP"
+  },
+  "login_settings": {
+   "zh": "登录设置",
+   "en": "Login settings"
+  },
+  "mail_settings": {
+   "zh": "邮件发送设置",
+   "en": "Mail settings"
+  },
+  "market": {
+   "zh": "市场",
+   "en": "Market"
+  },
+  "operator_account": {
+   "zh": "运营人员账号",
+   "en": "Operator account"
+  },
+  "operator_accounts": {
+   "zh": "运营人员账号",
+   "en": "Operator accounts"
+  },
+  "operator_permissions": {
+   "zh": "权限",
+   "en": "Permissions"
+  },
+  "operator_role": {
+   "zh": "角色",
+   "en": "Role"
+  },
+  "operator_roles": {
+   "zh": "角色",
+   "en": "Roles"
+  },
+  "payment-channels": {
+   "zh": "收款通道",
+   "en": "Payment channels"
+  },
+  "payment-exceptions": {
+   "zh": "支付异常",
+   "en": "Payment exceptions"
+  },
+  "payment_channel": {
+   "zh": "收款通道",
+   "en": "Payment channel"
+  },
+  "payment_exception": {
+   "zh": "支付异常",
+   "en": "Payment exception"
+  },
+  "payment_order": {
+   "zh": "支付单",
+   "en": "Payment order"
+  },
+  "platform_policy/global": {
+   "zh": "全局平台策略",
+   "en": "Global platform policy"
+  },
+  "platform_policy/installation/{}": {
+   "zh": "主控平台策略",
+   "en": "Installation platform policy"
+  },
+  "platform_policy_rollout": {
+   "zh": "平台策略灰度",
+   "en": "Platform policy rollout"
+  },
+  "platform_policy_target": {
+   "zh": "平台策略",
+   "en": "Platform policy"
+  },
+  "platform_policy_target/{}": {
+   "zh": "平台策略",
+   "en": "Platform policy"
+  },
+  "platform_policy_target/{}/acknowledgements": {
+   "zh": "平台策略确认记录",
+   "en": "Policy acknowledgements"
+  },
+  "platform_policy_targets": {
+   "zh": "平台策略列表",
+   "en": "Platform policies"
+  },
+  "plugin_capability_approval": {
+   "zh": "插件权限审批",
+   "en": "Plugin capability approval"
+  },
+  "plugin_catalog": {
+   "zh": "插件目录",
+   "en": "Plugin catalog"
+  },
+  "plugin_catalog/{}": {
+   "zh": "插件目录",
+   "en": "Plugin catalog"
+  },
+  "plugin_catalog/{}/snapshot/{}": {
+   "zh": "插件目录快照",
+   "en": "Catalog snapshot"
+  },
+  "plugin_catalog/{}/snapshots": {
+   "zh": "插件目录快照",
+   "en": "Catalog snapshots"
+  },
+  "plugin_catalog/{}/sync_attempts": {
+   "zh": "插件目录同步记录",
+   "en": "Catalog sync attempts"
+  },
+  "plugin_catalog_snapshot": {
+   "zh": "插件目录快照",
+   "en": "Catalog snapshot"
+  },
+  "plugin_catalogs": {
+   "zh": "插件目录列表",
+   "en": "Plugin catalogs"
+  },
+  "plugin_installation_activation": {
+   "zh": "插件安装激活",
+   "en": "Plugin activation"
+  },
+  "plugin_installation_authorization": {
+   "zh": "插件安装授权",
+   "en": "Plugin installation authorization"
+  },
+  "plugin_installation_authorization/{}": {
+   "zh": "插件安装授权",
+   "en": "Plugin installation authorization"
+  },
+  "plugin_manifest": {
+   "zh": "插件清单",
+   "en": "Plugin manifest"
+  },
+  "plugin_manifest_verification": {
+   "zh": "插件清单校验",
+   "en": "Manifest verification"
+  },
+  "plugin_manifest_verification/{}": {
+   "zh": "插件清单校验",
+   "en": "Manifest verification"
+  },
+  "plugin_manifest_verification_attempt": {
+   "zh": "插件清单校验尝试",
+   "en": "Manifest verification attempt"
+  },
+  "plugin_manifest_verifications": {
+   "zh": "插件清单校验记录",
+   "en": "Manifest verifications"
+  },
+  "plugin_market/rebind_policy": {
+   "zh": "插件改绑规则",
+   "en": "Plugin rebind policy"
+  },
+  "plugin_market_entitlement": {
+   "zh": "插件市场权益",
+   "en": "Plugin market entitlement"
+  },
+  "plugin_market_license": {
+   "zh": "插件授权",
+   "en": "Plugin license"
+  },
+  "plugin_market_listing": {
+   "zh": "插件上架信息",
+   "en": "Plugin listing"
+  },
+  "plugin_publisher": {
+   "zh": "插件发布者",
+   "en": "Plugin publisher"
+  },
+  "plugin_publisher/{}": {
+   "zh": "插件发布者",
+   "en": "Plugin publisher"
+  },
+  "plugin_publisher/{}/keys": {
+   "zh": "发布者公钥",
+   "en": "Publisher keys"
+  },
+  "plugin_publisher_key": {
+   "zh": "发布者公钥",
+   "en": "Publisher key"
+  },
+  "plugin_publishers": {
+   "zh": "插件发布者列表",
+   "en": "Plugin publishers"
+  },
+  "plugin_rebind_policy": {
+   "zh": "插件改绑规则",
+   "en": "Plugin rebind policy"
+  },
+  "plugin_runtime_authorization": {
+   "zh": "插件运行时授权",
+   "en": "Plugin runtime authorization"
+  },
+  "plugin_runtime_binding": {
+   "zh": "插件运行时绑定",
+   "en": "Plugin runtime binding"
+  },
+  "plugin_security_advisory": {
+   "zh": "插件安全公告",
+   "en": "Plugin security advisory"
+  },
+  "plugin_service_identity": {
+   "zh": "插件服务身份",
+   "en": "Plugin service identity"
+  },
+  "portal/accounts": {
+   "zh": "门户账号",
+   "en": "Portal accounts"
+  },
+  "portal/licensing-settings": {
+   "zh": "门户授权设置",
+   "en": "Portal licensing settings"
+  },
+  "portal_account": {
+   "zh": "门户账号",
+   "en": "Portal account"
+  },
+  "portal_customer": {
+   "zh": "门户客户",
+   "en": "Portal customer"
+  },
+  "portal_licensing_settings": {
+   "zh": "门户授权设置",
+   "en": "Portal licensing settings"
+  },
+  "portal_order": {
+   "zh": "门户订单",
+   "en": "Portal order"
+  },
+  "portal_plan": {
+   "zh": "门户套餐",
+   "en": "Portal plan"
+  },
+  "portal_verification": {
+   "zh": "实名审核",
+   "en": "Verification"
+  },
+  "reactivation_credential/{}": {
+   "zh": "主控重新激活码",
+   "en": "Reactivation code"
+  },
+  "release_artifact": {
+   "zh": "发布制品",
+   "en": "Release artifact"
+  },
+  "release_artifact/{}": {
+   "zh": "发布制品",
+   "en": "Release artifact"
+  },
+  "release_artifacts": {
+   "zh": "发布制品列表",
+   "en": "Release artifacts"
+  },
+  "release_channel/{}/targets": {
+   "zh": "发布渠道目标版本",
+   "en": "Release channel targets"
+  },
+  "release_channel/{}/version_range": {
+   "zh": "发布渠道授权版本范围",
+   "en": "Release channel license version range"
+  },
+  "release_channel_target": {
+   "zh": "发布渠道目标版本",
+   "en": "Release channel target"
+  },
+  "release_channels": {
+   "zh": "发布渠道",
+   "en": "Release channels"
+  },
+  "rule_intel": {
+   "zh": "规则情报",
+   "en": "Rule intelligence"
+  },
+  "rule_intel_candidate": {
+   "zh": "规则情报候选",
+   "en": "Rule candidate"
+  },
+  "rule_intel_corpus": {
+   "zh": "规则情报语料",
+   "en": "Rule corpus"
+  },
+  "rule_intel_job": {
+   "zh": "规则情报任务",
+   "en": "Rule intelligence job"
+  },
+  "rule_intel_merge": {
+   "zh": "规则并入草稿",
+   "en": "Rule merge"
+  },
+  "rule_intel_report": {
+   "zh": "规则情报上报",
+   "en": "Rule report"
+  },
+  "rule_pack": {
+   "zh": "规则包",
+   "en": "Rule pack"
+  },
+  "security_custom_rule_report": {
+   "zh": "自定义安全规则上报",
+   "en": "Custom rule report"
+  },
+  "security_rule": {
+   "zh": "安全规则",
+   "en": "Security rule"
+  },
+  "security_rule/{}": {
+   "zh": "安全规则",
+   "en": "Security rule"
+  },
+  "security_rules": {
+   "zh": "安全规则列表",
+   "en": "Security rules"
+  },
+  "seller_payout_account": {
+   "zh": "供货商收款账户",
+   "en": "Seller payout account"
+  },
+  "signer_revocation_proposal": {
+   "zh": "签名者吊销提案",
+   "en": "Signer revocation proposal"
+  },
+  "signing_key": {
+   "zh": "签名密钥",
+   "en": "Signing key"
+  },
+  "signing_key_custody": {
+   "zh": "密钥托管",
+   "en": "Key custody"
+  },
+  "signing_keys": {
+   "zh": "签名密钥",
+   "en": "Signing keys"
+  },
+  "site-content": {
+   "zh": "官网内容",
+   "en": "Site content"
+  },
+  "site_content": {
+   "zh": "官网内容",
+   "en": "Site content"
+  },
+  "site_content_asset": {
+   "zh": "官网素材",
+   "en": "Site asset"
+  },
+  "upgrade_command_grant": {
+   "zh": "升级命令授权",
+   "en": "Upgrade command grant"
+  },
+  "upgrade_grant": {
+   "zh": "升级授权",
+   "en": "Upgrade grant"
+  },
+  "upgrade_plan_artifact_bundle": {
+   "zh": "升级制品包",
+   "en": "Upgrade artifact bundle"
+  },
+  "waf_custom_rule_report": {
+   "zh": "自定义 WAF 规则上报",
+   "en": "WAF rule report"
+  }
+ },
+ "market_routes": {
+  "DELETE blacklist": {
+   "zh": "移出节点市场黑名单",
+   "en": "Remove from market blacklist"
+  },
+  "DELETE sellers/{}/listing-suspension": {
+   "zh": "解除供货商上架暂停",
+   "en": "Lift seller listing suspension"
+  },
+  "GET accounts/{}/transfers": {
+   "zh": "查看账户流水",
+   "en": "View account transfers"
+  },
+  "GET agreements": {
+   "zh": "查看市场协议",
+   "en": "List market agreements"
+  },
+  "GET agreements/{}/versions": {
+   "zh": "查看市场协议版本",
+   "en": "List market agreement versions"
+  },
+  "GET agreements/{}/versions/{}": {
+   "zh": "查看市场协议版本正文",
+   "en": "View market agreement version"
+  },
+  "GET blacklist": {
+   "zh": "查看节点市场黑名单",
+   "en": "View market blacklist"
+  },
+  "GET commission-prepaid": {
+   "zh": "查看预付抽成",
+   "en": "View prepaid commission"
+  },
+  "GET commission-prepaid/{}/deductions": {
+   "zh": "查看预付抽成扣减",
+   "en": "View prepaid deductions"
+  },
+  "GET commission-rules": {
+   "zh": "查看抽成规则",
+   "en": "View commission rules"
+  },
+  "GET counts/disputes": {
+   "zh": "查看争议待办计数",
+   "en": "View dispute counts"
+  },
+  "GET counts/finance": {
+   "zh": "查看财务待办计数",
+   "en": "View finance counts"
+  },
+  "GET counts/nodes-review": {
+   "zh": "查看节点审核待办计数",
+   "en": "View node review counts"
+  },
+  "GET counts/overview": {
+   "zh": "查看市场概览计数",
+   "en": "View market overview counts"
+  },
+  "GET counts/plugins-review": {
+   "zh": "查看插件审核待办计数",
+   "en": "View plugin review counts"
+  },
+  "GET dispute-evidence/{}": {
+   "zh": "查看争议证据",
+   "en": "View dispute evidence"
+  },
+  "GET disputes": {
+   "zh": "查看争议列表",
+   "en": "List disputes"
+  },
+  "GET disputes/{}": {
+   "zh": "查看争议详情",
+   "en": "View dispute"
+  },
+  "GET feedback": {
+   "zh": "查看故障反馈单",
+   "en": "List feedback tickets"
+  },
+  "GET feedback/{}": {
+   "zh": "查看故障反馈单详情",
+   "en": "View feedback ticket"
+  },
+  "GET holdback-policy": {
+   "zh": "查看暂扣与保证金策略",
+   "en": "View holdback policy"
+  },
+  "GET holds": {
+   "zh": "查看暂扣记录",
+   "en": "View holds"
+  },
+  "GET licenses": {
+   "zh": "查看插件授权",
+   "en": "List plugin licenses"
+  },
+  "GET members": {
+   "zh": "查看节点市场成员",
+   "en": "List market members"
+  },
+  "GET node-admissions": {
+   "zh": "查看节点准入",
+   "en": "List node admissions"
+  },
+  "GET node-load/suspects": {
+   "zh": "查看疑似超载节点",
+   "en": "View suspect node load"
+  },
+  "GET offers": {
+   "zh": "查看节点报价",
+   "en": "List node offers"
+  },
+  "GET official-plugins": {
+   "zh": "查看官方插件",
+   "en": "List official plugins"
+  },
+  "GET official-plugins/{}/versions": {
+   "zh": "查看官方插件版本",
+   "en": "List official plugin versions"
+  },
+  "GET orders": {
+   "zh": "查看市场订单",
+   "en": "List market orders"
+  },
+  "GET payouts": {
+   "zh": "查看打款单",
+   "en": "List payouts"
+  },
+  "GET platform-balances": {
+   "zh": "查看平台余额",
+   "en": "View platform balances"
+  },
+  "GET plugin-advisories": {
+   "zh": "查看插件安全公告",
+   "en": "List plugin advisories"
+  },
+  "GET plugin-advisories/{}": {
+   "zh": "查看插件安全公告详情",
+   "en": "View plugin advisory"
+  },
+  "GET plugin-reviews": {
+   "zh": "查看插件审核",
+   "en": "List plugin reviews"
+  },
+  "GET plugin-scans": {
+   "zh": "查看插件扫描",
+   "en": "List plugin scans"
+  },
+  "GET plugin-scans/{}": {
+   "zh": "查看插件扫描详情",
+   "en": "View plugin scan"
+  },
+  "GET plugin-versions": {
+   "zh": "查看插件版本",
+   "en": "List plugin versions"
+  },
+  "GET plugins": {
+   "zh": "查看插件列表",
+   "en": "List plugins"
+  },
+  "GET plugins/{}": {
+   "zh": "查看插件详情",
+   "en": "View plugin"
+  },
+  "GET policy": {
+   "zh": "查看市场策略",
+   "en": "View market policy"
+  },
+  "GET price-plans": {
+   "zh": "查看价格方案",
+   "en": "List price plans"
+  },
+  "GET price-plans/{}/review": {
+   "zh": "查看价格方案审核",
+   "en": "View price plan review"
+  },
+  "GET quality": {
+   "zh": "查看节点质量分",
+   "en": "View node quality"
+  },
+  "GET refunds": {
+   "zh": "查看退款",
+   "en": "List refunds"
+  },
+  "GET reports": {
+   "zh": "查看举报",
+   "en": "List reports"
+  },
+  "GET seller-balances": {
+   "zh": "查看供货商余额",
+   "en": "View seller balances"
+  },
+  "GET seller-defaults": {
+   "zh": "查看供货商违约",
+   "en": "List seller defaults"
+  },
+  "GET seller-deposits": {
+   "zh": "查看供货商保证金",
+   "en": "View seller deposits"
+  },
+  "GET seller-faults": {
+   "zh": "查看供货商故障记录",
+   "en": "View seller faults"
+  },
+  "GET sellers": {
+   "zh": "查看供货商列表",
+   "en": "List sellers"
+  },
+  "GET sellers/{}": {
+   "zh": "查看供货商详情",
+   "en": "View seller"
+  },
+  "GET sellers/{}/deposit-mode": {
+   "zh": "查看供货商保证金模式",
+   "en": "View seller deposit mode"
+  },
+  "GET sellers/{}/lookalikes": {
+   "zh": "查看疑似同一供货商",
+   "en": "View seller lookalikes"
+  },
+  "GET settlement-runs": {
+   "zh": "查看结算批次",
+   "en": "List settlement runs"
+  },
+  "GET settlement-runs/{}": {
+   "zh": "查看结算批次详情",
+   "en": "View settlement run"
+  },
+  "GET site-pauses": {
+   "zh": "查看暂停的站点",
+   "en": "List site pauses"
+  },
+  "GET sla-breaches": {
+   "zh": "查看 SLA 违约",
+   "en": "List SLA breaches"
+  },
+  "GET statements": {
+   "zh": "查看结算单",
+   "en": "List statements"
+  },
+  "GET subscriptions": {
+   "zh": "查看订阅",
+   "en": "List subscriptions"
+  },
+  "GET subscriptions/{}": {
+   "zh": "查看订阅详情",
+   "en": "View subscription"
+  },
+  "GET supply-complaints": {
+   "zh": "查看供给投诉",
+   "en": "List supply complaints"
+  },
+  "GET supply-complaints/{}": {
+   "zh": "查看供给投诉详情",
+   "en": "View supply complaint"
+  },
+  "GET supply-domains": {
+   "zh": "查看供给域名",
+   "en": "List supply domains"
+  },
+  "GET usage-statements": {
+   "zh": "查看用量账单",
+   "en": "List usage statements"
+  },
+  "GET usage-statements/{}": {
+   "zh": "查看用量账单详情",
+   "en": "View usage statement"
+  },
+  "POST adjustments": {
+   "zh": "新增账务调整",
+   "en": "Create adjustment"
+  },
+  "POST agreements/{}/versions": {
+   "zh": "发布市场协议新版本",
+   "en": "Publish market agreement version"
+  },
+  "POST blacklist": {
+   "zh": "加入节点市场黑名单",
+   "en": "Add to market blacklist"
+  },
+  "POST disputes/{}/transitions/decide_buyer": {
+   "zh": "争议裁决：支持买方",
+   "en": "Decide dispute for buyer"
+  },
+  "POST disputes/{}/transitions/decide_seller": {
+   "zh": "争议裁决：支持卖方",
+   "en": "Decide dispute for seller"
+  },
+  "POST disputes/{}/transitions/decide_split": {
+   "zh": "争议裁决：双方分担",
+   "en": "Decide dispute split"
+  },
+  "POST feedback/{}/messages": {
+   "zh": "介入故障反馈单",
+   "en": "Answer feedback ticket"
+  },
+  "POST icp/overrides": {
+   "zh": "设置备案例外",
+   "en": "Set ICP override"
+  },
+  "POST licenses/{}/revoke": {
+   "zh": "吊销插件授权",
+   "en": "Revoke plugin license"
+  },
+  "POST members/{}/tier": {
+   "zh": "调整成员等级",
+   "en": "Change member tier"
+  },
+  "POST members/{}/unfreeze": {
+   "zh": "解冻成员",
+   "en": "Unfreeze member"
+  },
+  "POST node-admissions/{}/admit": {
+   "zh": "准入节点",
+   "en": "Admit node"
+  },
+  "POST node-admissions/{}/disqualify": {
+   "zh": "取消节点资格",
+   "en": "Disqualify node"
+  },
+  "POST node-admissions/{}/geo-override": {
+   "zh": "修正节点地区",
+   "en": "Override node region"
+  },
+  "POST node-admissions/{}/quarantine": {
+   "zh": "隔离节点",
+   "en": "Quarantine node"
+  },
+  "POST node-admissions/{}/reject": {
+   "zh": "拒绝节点准入",
+   "en": "Reject node admission"
+  },
+  "POST offers/{}/review": {
+   "zh": "审核节点报价",
+   "en": "Review node offer"
+  },
+  "POST official-plugins": {
+   "zh": "新增官方插件",
+   "en": "Create official plugin"
+  },
+  "POST official-plugins/{}/delist": {
+   "zh": "下架官方插件",
+   "en": "Delist official plugin"
+  },
+  "POST official-plugins/{}/list": {
+   "zh": "上架官方插件",
+   "en": "List official plugin"
+  },
+  "POST official-plugins/{}/price-plans": {
+   "zh": "设置官方插件价格",
+   "en": "Set official plugin prices"
+  },
+  "POST official-plugins/{}/versions": {
+   "zh": "上传官方插件版本",
+   "en": "Upload official plugin version"
+  },
+  "POST payouts/{}/approve": {
+   "zh": "批准打款",
+   "en": "Approve payout"
+  },
+  "POST payouts/{}/mark-failed": {
+   "zh": "标记打款失败",
+   "en": "Mark payout failed"
+  },
+  "POST payouts/{}/offline-record": {
+   "zh": "登记线下打款",
+   "en": "Record offline payout"
+  },
+  "POST payouts/{}/reject": {
+   "zh": "驳回打款",
+   "en": "Reject payout"
+  },
+  "POST payouts/{}/retry": {
+   "zh": "重试打款",
+   "en": "Retry payout"
+  },
+  "POST payouts/{}/second-approve": {
+   "zh": "打款复核通过",
+   "en": "Second-approve payout"
+  },
+  "POST plugin-advisories": {
+   "zh": "新建插件安全公告",
+   "en": "Create plugin advisory"
+  },
+  "POST plugin-advisories/{}/publish": {
+   "zh": "发布插件安全公告",
+   "en": "Publish plugin advisory"
+  },
+  "POST plugin-advisories/{}/withdraw": {
+   "zh": "撤回插件安全公告",
+   "en": "Withdraw plugin advisory"
+  },
+  "POST plugin-namespaces/{}/lock": {
+   "zh": "锁定插件命名空间",
+   "en": "Lock plugin namespace"
+  },
+  "POST plugin-namespaces/{}/unlock": {
+   "zh": "解锁插件命名空间",
+   "en": "Unlock plugin namespace"
+  },
+  "POST plugin-reviews/{}/claim": {
+   "zh": "认领插件审核",
+   "en": "Claim plugin review"
+  },
+  "POST plugin-reviews/{}/decide": {
+   "zh": "完成插件审核",
+   "en": "Decide plugin review"
+  },
+  "POST plugin-sellers/{}/certify": {
+   "zh": "认证插件卖家",
+   "en": "Certify plugin seller"
+  },
+  "POST plugin-sellers/{}/uncertify": {
+   "zh": "取消插件卖家认证",
+   "en": "Uncertify plugin seller"
+  },
+  "POST plugin-versions/{}/delist": {
+   "zh": "下架插件版本",
+   "en": "Delist plugin version"
+  },
+  "POST plugin-versions/{}/rescan": {
+   "zh": "重新扫描插件版本",
+   "en": "Rescan plugin version"
+  },
+  "POST plugin-versions/{}/restore": {
+   "zh": "恢复插件版本",
+   "en": "Restore plugin version"
+  },
+  "POST plugin-versions/{}/revoke": {
+   "zh": "吊销插件版本",
+   "en": "Revoke plugin version"
+  },
+  "POST plugins/{}/suspend": {
+   "zh": "暂停插件",
+   "en": "Suspend plugin"
+  },
+  "POST price-plans/{}/review": {
+   "zh": "审核价格方案",
+   "en": "Review price plan"
+  },
+  "POST refunds": {
+   "zh": "发起退款",
+   "en": "Create refund"
+  },
+  "POST refunds/{}/decide": {
+   "zh": "审批退款",
+   "en": "Decide refund"
+  },
+  "POST reports/{}/resolve": {
+   "zh": "处理举报",
+   "en": "Resolve report"
+  },
+  "POST seller-defaults": {
+   "zh": "登记供货商违约",
+   "en": "Record seller default"
+  },
+  "POST seller-defaults/{}/banned": {
+   "zh": "违约供货商拉黑",
+   "en": "Ban defaulting seller"
+  },
+  "POST seller-defaults/{}/dismiss": {
+   "zh": "撤销供货商违约",
+   "en": "Dismiss seller default"
+  },
+  "POST seller-defaults/{}/execute": {
+   "zh": "执行违约赔付",
+   "en": "Execute seller default"
+  },
+  "POST seller-defaults/{}/remainder": {
+   "zh": "处理违约余款",
+   "en": "Settle default remainder"
+  },
+  "POST sellers/{}/listing-suspension": {
+   "zh": "暂停供货商上架",
+   "en": "Suspend seller listings"
+  },
+  "POST sellers/{}/resume": {
+   "zh": "恢复供货商",
+   "en": "Resume seller"
+  },
+  "POST sellers/{}/roles/{}/review": {
+   "zh": "审核供货商入驻",
+   "en": "Review seller role"
+  },
+  "POST sellers/{}/suspend": {
+   "zh": "暂停供货商",
+   "en": "Suspend seller"
+  },
+  "POST sellers/{}/terminate": {
+   "zh": "终止供货商",
+   "en": "Terminate seller"
+  },
+  "POST settlement-runs": {
+   "zh": "发起结算批次",
+   "en": "Start settlement run"
+  },
+  "POST site-pauses/{}/resume": {
+   "zh": "恢复暂停的站点",
+   "en": "Resume paused site"
+  },
+  "POST sla-breaches/{}/waive": {
+   "zh": "豁免 SLA 违约",
+   "en": "Waive SLA breach"
+  },
+  "POST statements/close": {
+   "zh": "关账生成结算单",
+   "en": "Close statements"
+  },
+  "POST statements/{}/status": {
+   "zh": "修改结算单状态",
+   "en": "Change statement status"
+  },
+  "POST supply-complaints/{}/release": {
+   "zh": "释放投诉暂扣",
+   "en": "Release complaint hold"
+  },
+  "POST supply-complaints/{}/resolve": {
+   "zh": "处理供给投诉",
+   "en": "Resolve supply complaint"
+  },
+  "POST supply-complaints/{}/review": {
+   "zh": "审核供给投诉",
+   "en": "Review supply complaint"
+  },
+  "POST supply-domains": {
+   "zh": "新增供给域名",
+   "en": "Add supply domain"
+  },
+  "POST supply-domains/{}/{}": {
+   "zh": "变更供给域名状态",
+   "en": "Change supply domain"
+  },
+  "PUT commission-rules": {
+   "zh": "修改抽成规则",
+   "en": "Update commission rules"
+  },
+  "PUT holdback-policy": {
+   "zh": "修改暂扣与保证金策略",
+   "en": "Update holdback policy"
+  },
+  "PUT official-plugins/{}": {
+   "zh": "修改官方插件",
+   "en": "Update official plugin"
+  },
+  "PUT official-plugins/{}/price-plans/{}": {
+   "zh": "修改官方插件价格计划（含限免）",
+   "en": "Update official plugin price plan (including limited-time free)"
+  },
+  "PUT official-publisher-keys": {
+   "zh": "登记官方发布者公钥",
+   "en": "Register official publisher key"
+  },
+  "PUT policy": {
+   "zh": "修改市场策略",
+   "en": "Update market policy"
+  },
+  "PUT sellers/{}/deposit-mode": {
+   "zh": "修改供货商保证金模式",
+   "en": "Update seller deposit mode"
+  }
+ },
+ "payload_keys": {
+  "account_kind": {
+   "zh": "账号类型",
+   "en": "Account kind"
+  },
+  "action": {
+   "zh": "动作",
+   "en": "Action"
+  },
+  "active_key_id": {
+   "zh": "当前密钥 ID",
+   "en": "Active key ID"
+  },
+  "after_status": {
+   "zh": "变更后状态",
+   "en": "New status"
+  },
+  "alipay_private_key": {
+   "zh": "支付宝私钥",
+   "en": "Alipay private key"
+  },
+  "already_revoked": {
+   "zh": "已吊销",
+   "en": "Already revoked"
+  },
+  "amount_fen": {
+   "zh": "金额（分）",
+   "en": "Amount (fen)"
+  },
+  "amount_minor": {
+   "zh": "金额（分）",
+   "en": "Amount (minor)"
+  },
+  "artifact_id": {
+   "zh": "制品 ID",
+   "en": "Artifact ID"
+  },
+  "authorization_id": {
+   "zh": "授权记录 ID",
+   "en": "Authorization ID"
+  },
+  "balance_after_fen": {
+   "zh": "变更后余额（分）",
+   "en": "Balance after (fen)"
+  },
+  "before_status": {
+   "zh": "变更前状态",
+   "en": "Previous status"
+  },
+  "billing_cycle": {
+   "zh": "计费周期",
+   "en": "Billing cycle"
+  },
+  "captcha_kind": {
+   "zh": "验证码类型",
+   "en": "Captcha kind"
+  },
+  "captcha_required": {
+   "zh": "需要验证码",
+   "en": "Captcha required"
+  },
+  "catalog_id": {
+   "zh": "目录 ID",
+   "en": "Catalog ID"
+  },
+  "certificate_id": {
+   "zh": "证书 ID",
+   "en": "Certificate ID"
+  },
+  "channel": {
+   "zh": "发布渠道",
+   "en": "Channel"
+  },
+  "channel_id": {
+   "zh": "通道 ID",
+   "en": "Channel ID"
+  },
+  "channel_revision": {
+   "zh": "渠道修订",
+   "en": "Channel revision"
+  },
+  "component": {
+   "zh": "组件",
+   "en": "Component"
+  },
+  "config_changed": {
+   "zh": "修改了配置",
+   "en": "Config changed"
+  },
+  "control_version": {
+   "zh": "主控版本",
+   "en": "Control version"
+  },
+  "created": {
+   "zh": "新建",
+   "en": "Created"
+  },
+  "currency": {
+   "zh": "币种",
+   "en": "Currency"
+  },
+  "current_version": {
+   "zh": "当前版本",
+   "en": "Current version"
+  },
+  "customer_id": {
+   "zh": "客户 ID",
+   "en": "Customer ID"
+  },
+  "decision": {
+   "zh": "决定",
+   "en": "Decision"
+  },
+  "default_method": {
+   "zh": "默认支付方式",
+   "en": "Default method"
+  },
+  "due_at": {
+   "zh": "最晚凭证续期时间",
+   "en": "Renewal due at"
+  },
+  "email_changed": {
+   "zh": "邮箱已变更",
+   "en": "E-mail changed"
+  },
+  "enabled": {
+   "zh": "启用",
+   "en": "Enabled"
+  },
+  "entry_count": {
+   "zh": "条目数",
+   "en": "Entry count"
+  },
+  "error_code": {
+   "zh": "错误代码",
+   "en": "Error code"
+  },
+  "expected_revision": {
+   "zh": "期望修订",
+   "en": "Expected revision"
+  },
+  "expires_at": {
+   "zh": "到期时间",
+   "en": "Expires at"
+  },
+  "fallback_version": {
+   "zh": "回退版本",
+   "en": "Fallback version"
+  },
+  "fee_minor": {
+   "zh": "手续费（分）",
+   "en": "Fee (minor)"
+  },
+  "fixed_version": {
+   "zh": "修复版本",
+   "en": "Fixed version"
+  },
+  "free_licenses_changed": {
+   "zh": "变更的免费授权数",
+   "en": "Free licenses changed"
+  },
+  "free_max_per_customer": {
+   "zh": "每客户免费授权上限",
+   "en": "Free licenses per customer"
+  },
+  "free_node_limit": {
+   "zh": "免费节点上限",
+   "en": "Free node limit"
+  },
+  "free_site_limit": {
+   "zh": "免费网站上限",
+   "en": "Free site limit"
+  },
+  "free_term": {
+   "zh": "免费期限",
+   "en": "Free term"
+  },
+  "from_channel_id": {
+   "zh": "原通道 ID",
+   "en": "From channel ID"
+  },
+  "from_status": {
+   "zh": "原状态",
+   "en": "From status"
+  },
+  "from_version": {
+   "zh": "原版本",
+   "en": "From version"
+  },
+  "grace_until": {
+   "zh": "宽限截止时间",
+   "en": "Grace until"
+  },
+  "http_status": {
+   "zh": "HTTP 状态码",
+   "en": "HTTP status"
+  },
+  "imported": {
+   "zh": "已导入",
+   "en": "Imported"
+  },
+  "installation_id": {
+   "zh": "主控 ID",
+   "en": "Installation ID"
+  },
+  "installed_version": {
+   "zh": "已安装版本",
+   "en": "Installed version"
+  },
+  "key_id": {
+   "zh": "密钥 ID",
+   "en": "Key ID"
+  },
+  "kind": {
+   "zh": "类型",
+   "en": "Kind"
+  },
+  "lease_id": {
+   "zh": "凭证 ID",
+   "en": "Lease ID"
+  },
+  "lease_serial": {
+   "zh": "凭证序列号",
+   "en": "Lease serial"
+  },
+  "license_id": {
+   "zh": "授权 ID",
+   "en": "License ID"
+  },
+  "licenses_converted_to_free": {
+   "zh": "转为免费的授权数",
+   "en": "Licenses converted to free"
+  },
+  "market_license_id": {
+   "zh": "插件授权 ID",
+   "en": "Plugin license ID"
+  },
+  "method": {
+   "zh": "方式",
+   "en": "Method"
+  },
+  "migration_ip_expires_at": {
+   "zh": "迁移 IP 到期时间",
+   "en": "Migration IP expires at"
+  },
+  "mode": {
+   "zh": "模式",
+   "en": "Mode"
+  },
+  "name": {
+   "zh": "名称",
+   "en": "Name"
+  },
+  "new_key_id": {
+   "zh": "新密钥 ID",
+   "en": "New key ID"
+  },
+  "new_revision": {
+   "zh": "新修订",
+   "en": "New revision"
+  },
+  "new_value": {
+   "zh": "新值",
+   "en": "New value"
+  },
+  "note": {
+   "zh": "备注",
+   "en": "Note"
+  },
+  "old_key_id": {
+   "zh": "原密钥 ID",
+   "en": "Old key ID"
+  },
+  "old_value": {
+   "zh": "原值",
+   "en": "Old value"
+  },
+  "openresty_version": {
+   "zh": "OpenResty 版本",
+   "en": "OpenResty version"
+  },
+  "operation": {
+   "zh": "操作",
+   "en": "Operation"
+  },
+  "order_id": {
+   "zh": "订单 ID",
+   "en": "Order ID"
+  },
+  "order_status": {
+   "zh": "订单状态",
+   "en": "Order status"
+  },
+  "pack_id": {
+   "zh": "规则包 ID",
+   "en": "Rule pack ID"
+  },
+  "paid_grace_days": {
+   "zh": "付费宽限天数",
+   "en": "Paid grace days"
+  },
+  "permanent": {
+   "zh": "永久",
+   "en": "Permanent"
+  },
+  "phone_changed": {
+   "zh": "手机号已变更",
+   "en": "Phone changed"
+  },
+  "plan_code": {
+   "zh": "套餐代码",
+   "en": "Plan code"
+  },
+  "plan_id": {
+   "zh": "套餐 ID",
+   "en": "Plan ID"
+  },
+  "plan_revision": {
+   "zh": "套餐修订",
+   "en": "Plan revision"
+  },
+  "plugin_id": {
+   "zh": "插件 ID",
+   "en": "Plugin ID"
+  },
+  "plugin_version": {
+   "zh": "插件版本",
+   "en": "Plugin version"
+  },
+  "policy_count": {
+   "zh": "策略数",
+   "en": "Policy count"
+  },
+  "pow_difficulty": {
+   "zh": "工作量证明难度",
+   "en": "PoW difficulty"
+  },
+  "previous_captcha_kind": {
+   "zh": "原验证码类型",
+   "en": "Previous captcha kind"
+  },
+  "previous_captcha_required": {
+   "zh": "原需要验证码",
+   "en": "Previously required captcha"
+  },
+  "previous_mode": {
+   "zh": "原模式",
+   "en": "Previous mode"
+  },
+  "previous_name": {
+   "zh": "原名称",
+   "en": "Previous name"
+  },
+  "previous_pow_difficulty": {
+   "zh": "原工作量证明难度",
+   "en": "Previous PoW difficulty"
+  },
+  "previous_revision": {
+   "zh": "变更前修订",
+   "en": "Previous revision"
+  },
+  "previous_role": {
+   "zh": "原角色",
+   "en": "Previous role"
+  },
+  "previous_state": {
+   "zh": "原状态",
+   "en": "Previous state"
+  },
+  "previous_status": {
+   "zh": "原状态",
+   "en": "Previous status"
+  },
+  "previous_username": {
+   "zh": "原用户名",
+   "en": "Previous username"
+  },
+  "proposal_id": {
+   "zh": "提案 ID",
+   "en": "Proposal ID"
+  },
+  "provider": {
+   "zh": "服务商",
+   "en": "Provider"
+  },
+  "publisher_id": {
+   "zh": "发布者 ID",
+   "en": "Publisher ID"
+  },
+  "publisher_slug": {
+   "zh": "发布者标识",
+   "en": "Publisher slug"
+  },
+  "purpose": {
+   "zh": "用途",
+   "en": "Purpose"
+  },
+  "reason": {
+   "zh": "原因",
+   "en": "Reason"
+  },
+  "reason_code": {
+   "zh": "原因代码",
+   "en": "Reason code"
+  },
+  "refund_id": {
+   "zh": "退款编号",
+   "en": "Refund ID"
+  },
+  "reference": {
+   "zh": "线下退款凭据",
+   "en": "Offline refund reference"
+  },
+  "referencing_current_scope_count": {
+   "zh": "引用的当前作用域数",
+   "en": "Referencing current scopes"
+  },
+  "referencing_policy_revision_count": {
+   "zh": "引用的策略修订数",
+   "en": "Referencing policy revisions"
+  },
+  "reject_count": {
+   "zh": "驳回数",
+   "en": "Reject count"
+  },
+  "revision": {
+   "zh": "修订",
+   "en": "Revision"
+  },
+  "revoked_count": {
+   "zh": "撤销条数",
+   "en": "Revoked records"
+  },
+  "revoked_lease_count": {
+   "zh": "吊销凭证数",
+   "en": "Revoked leases"
+  },
+  "revoked_sessions": {
+   "zh": "下线会话数",
+   "en": "Revoked sessions"
+  },
+  "risk_acknowledged": {
+   "zh": "已确认风险",
+   "en": "Risk acknowledged"
+  },
+  "role": {
+   "zh": "角色",
+   "en": "Role"
+  },
+  "route": {
+   "zh": "退款路径",
+   "en": "Refund route"
+  },
+  "rollback_min_version": {
+   "zh": "最低回滚版本",
+   "en": "Minimum rollback version"
+  },
+  "rollout_state": {
+   "zh": "灰度状态",
+   "en": "Rollout state"
+  },
+  "rule_id": {
+   "zh": "规则 ID",
+   "en": "Rule ID"
+  },
+  "scene": {
+   "zh": "场景",
+   "en": "Scene"
+  },
+  "scope": {
+   "zh": "作用域",
+   "en": "Scope"
+  },
+  "scope_kind": {
+   "zh": "作用域类型",
+   "en": "Scope kind"
+  },
+  "secrets_changed": {
+   "zh": "修改了密钥",
+   "en": "Secrets changed"
+  },
+  "self_approved": {
+   "zh": "自行批准",
+   "en": "Self-approved"
+  },
+  "serial": {
+   "zh": "序列号",
+   "en": "Serial"
+  },
+  "set_password_email": {
+   "zh": "发送设置密码邮件",
+   "en": "Set-password e-mail sent"
+  },
+  "settlement_state": {
+   "zh": "结算状态",
+   "en": "Settlement state"
+  },
+  "severity": {
+   "zh": "严重程度",
+   "en": "Severity"
+  },
+  "signing_key_id": {
+   "zh": "签名密钥",
+   "en": "Signing key"
+  },
+  "slug": {
+   "zh": "标识",
+   "en": "Slug"
+  },
+  "snapshot_id": {
+   "zh": "快照 ID",
+   "en": "Snapshot ID"
+  },
+  "source": {
+   "zh": "来源",
+   "en": "Source"
+  },
+  "stable_reason_code": {
+   "zh": "原因代码",
+   "en": "Reason code"
+  },
+  "stage": {
+   "zh": "阶段",
+   "en": "Stage"
+  },
+  "state": {
+   "zh": "状态",
+   "en": "State"
+  },
+  "status": {
+   "zh": "状态",
+   "en": "Status"
+  },
+  "system_key": {
+   "zh": "系统标识",
+   "en": "System key"
+  },
+  "target_count": {
+   "zh": "目标数",
+   "en": "Target count"
+  },
+  "target_version": {
+   "zh": "目标版本",
+   "en": "Target version"
+  },
+  "to_channel_id": {
+   "zh": "新通道 ID",
+   "en": "To channel ID"
+  },
+  "to_status": {
+   "zh": "新状态",
+   "en": "To status"
+  },
+  "trade_no": {
+   "zh": "交易号",
+   "en": "Trade number"
+  },
+  "until": {
+   "zh": "截止时间",
+   "en": "Until"
+  },
+  "username": {
+   "zh": "用户名",
+   "en": "Username"
+  },
+  "valid_until": {
+   "zh": "有效期至",
+   "en": "Valid until"
+  },
+  "verification_id": {
+   "zh": "校验 ID",
+   "en": "Verification ID"
+  },
+  "version": {
+   "zh": "版本",
+   "en": "Version"
+  },
+  "warning_level": {
+   "zh": "预警级别",
+   "en": "Warning level"
+  },
+  "warning_reason": {
+   "zh": "预警原因",
+   "en": "Warning reason"
+  },
+  "was_enabled": {
+   "zh": "原已启用",
+   "en": "Was enabled"
+  },
+  "was_published": {
+   "zh": "原已发布",
+   "en": "Was published"
+  },
+  "wechat_api_key": {
+   "zh": "微信支付 API 密钥",
+   "en": "WeChat API key"
+  },
+  "window_days": {
+   "zh": "窗口天数",
+   "en": "Window days"
+  }
+ }
+}

@@ -1,0 +1,284 @@
+openapi: 3.1.0
+info:
+  title: CDNCA TCP Billing API
+  version: 1.0.0
+  description: Versioned TCP traffic factors, finalized cycle snapshots, and append-only corrections.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/tcp-billing:
+    get:
+      operationId: getTCPBillingOverview
+      summary: 读取 TCP 流量计费策略与不可变结算快照
+      responses:
+        '200':
+          description: TCP 计费概览
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TCPBillingOverview'
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/PermissionDenied' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/admin/tcp-billing/factor-revisions:
+    post:
+      operationId: scheduleTCPBillingFactorRevision
+      summary: 新建仅在目标结算周期开始时生效的 TCP 系数修订
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleFactorRequest'
+      responses:
+        '201':
+          description: 已建立新修订；相同请求重放通过 Idempotency-Replayed 标识
+          headers:
+            Idempotency-Replayed:
+              schema: { type: boolean }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyMutation'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/admin/tcp-billing/settlements:
+    post:
+      operationId: settleTCPBillingCycle
+      summary: 使用已冻结的最终计量证据结算一个 TCP 流量周期
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SettlementRequest'
+      responses:
+        '201':
+          description: 已写入不可变结算快照
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementMutation'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /v1/admin/tcp-billing/settlements/{settlement_id}/adjustments:
+    post:
+      operationId: adjustTCPBillingSettlement
+      summary: 追加退款或全额撤销事实，不修改原结算
+      parameters:
+        - name: settlement_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdjustmentRequest'
+      responses:
+        '201':
+          description: 已追加调整事实
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdjustmentMutation'
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: expected_head_revision 的强 ETag，例如 "1"
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+  schemas:
+    Factor:
+      type: string
+      enum: ['1.0', '1.1']
+    PolicyRevision:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, revision, factor, factor_numerator, factor_denominator, effective_at, reason, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        scope_id: { type: string, format: uuid }
+        revision: { type: integer, format: int64, minimum: 1 }
+        factor: { $ref: '#/components/schemas/Factor' }
+        factor_numerator: { type: integer, enum: [1, 11] }
+        factor_denominator: { type: integer, enum: [1, 10] }
+        effective_at: { type: string, format: date-time }
+        reason: { type: string, minLength: 1, maxLength: 512 }
+        created_by_user_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+    Settlement:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, subscription_id, cycle_key, cycle_starts_at, cycle_ends_at, raw_tcp_bytes, billed_tcp_bytes, net_billed_tcp_bytes, factor_revision, factor, source_watermark, finalized_through, settled_at]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_scope_id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        cycle_key: { type: string, minLength: 1, maxLength: 128 }
+        cycle_starts_at: { type: string, format: date-time }
+        cycle_ends_at: { type: string, format: date-time }
+        timezone: { type: string }
+        metric_version: { type: integer, const: 1 }
+        source_watermark: { type: string, minLength: 1, maxLength: 512 }
+        finalized_through: { type: string, format: date-time }
+        evidence_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        raw_tcp_bytes: { type: integer, format: int64, minimum: 0 }
+        billed_tcp_bytes: { type: integer, format: int64, minimum: 0 }
+        net_billed_tcp_bytes: { type: integer, format: int64, minimum: 0 }
+        factor_revision_id: { type: string, format: uuid }
+        factor_revision: { type: integer, format: int64, minimum: 1 }
+        factor: { $ref: '#/components/schemas/Factor' }
+        factor_numerator: { type: integer }
+        factor_denominator: { type: integer }
+        factor_effective_at: { type: string, format: date-time }
+        settled_by_user_id: { type: string, format: uuid }
+        settled_at: { type: string, format: date-time }
+    TCPBillingOverview:
+      type: object
+      additionalProperties: false
+      required: [current, scheduled, history, settlements]
+      properties:
+        current: { $ref: '#/components/schemas/PolicyRevision' }
+        scheduled:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PolicyRevision' }
+        history:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/PolicyRevision' }
+        settlements:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Settlement' }
+    ScheduleFactorRequest:
+      type: object
+      additionalProperties: false
+      required: [factor, effective_at, reason]
+      properties:
+        factor: { $ref: '#/components/schemas/Factor' }
+        effective_at: { type: string, format: date-time }
+        reason: { type: string, minLength: 1, maxLength: 512 }
+    SettlementRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, subscription_id, cycle_key, cycle_starts_at, cycle_ends_at, timezone, metric_version, source_watermark, finalized_through, evidence_sha256, raw_tcp_bytes]
+      properties:
+        tenant_scope_id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        cycle_key: { type: string }
+        cycle_starts_at: { type: string, format: date-time }
+        cycle_ends_at: { type: string, format: date-time }
+        timezone: { type: string }
+        metric_version: { type: integer, const: 1 }
+        source_watermark: { type: string }
+        finalized_through: { type: string, format: date-time }
+        evidence_sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        raw_tcp_bytes: { type: integer, format: int64, minimum: 0 }
+    AdjustmentRequest:
+      type: object
+      additionalProperties: false
+      required: [operation, amount_bytes, reason]
+      properties:
+        operation: { type: string, enum: [refund, void] }
+        amount_bytes: { type: integer, format: int64, minimum: 0 }
+        reason: { type: string, minLength: 1, maxLength: 512 }
+    PolicyMutation:
+      type: object
+      additionalProperties: false
+      required: [policy, replayed]
+      properties:
+        policy: { $ref: '#/components/schemas/PolicyRevision' }
+        replayed: { type: boolean }
+    SettlementMutation:
+      type: object
+      additionalProperties: false
+      required: [settlement, replayed]
+      properties:
+        settlement: { $ref: '#/components/schemas/Settlement' }
+        replayed: { type: boolean }
+    Adjustment:
+      type: object
+      additionalProperties: false
+      required: [id, settlement_id, operation, amount_bytes, reason, created_by_user_id, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        settlement_id: { type: string, format: uuid }
+        operation: { type: string, enum: [refund, void] }
+        amount_bytes: { type: integer, format: int64, minimum: 1 }
+        reason: { type: string }
+        created_by_user_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+    AdjustmentMutation:
+      type: object
+      additionalProperties: false
+      required: [adjustment, settlement, replayed]
+      properties:
+        adjustment: { $ref: '#/components/schemas/Adjustment' }
+        settlement: { $ref: '#/components/schemas/Settlement' }
+        replayed: { type: boolean }
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code]
+          properties:
+            code:
+              type: string
+              enum: [tcp_billing_validation_error, tcp_billing_unauthenticated, tcp_billing_permission_denied, tcp_billing_revision_conflict, tcp_billing_idempotency_conflict, tcp_billing_policy_not_found, tcp_billing_settlement_not_found, tcp_billing_adjustment_exceeds_net, tcp_billing_overflow, tcp_billing_unavailable]
+            request_id: { type: string }
+  responses:
+    ValidationError:
+      description: 输入无效
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unauthenticated:
+      description: 会话无效
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    PermissionDenied:
+      description: 权限不足
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    NotFound:
+      description: 资源不存在
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Conflict:
+      description: tcp_billing_revision_conflict 或 tcp_billing_idempotency_conflict
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unavailable:
+      description: 服务暂不可用
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }

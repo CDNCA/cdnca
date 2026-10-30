@@ -1,0 +1,70 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/bot-scanner-ua",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "漏洞扫描器 UA",
+ "description": "UA 含已知漏洞扫描器标识（不区分大小写）即记录，可改为拦截或挑战。来源 mitchellkrogza/nginx-ultimate-bad-bot-blocker（MIT，Copyright (c) 2017 Mitchell Krog）_generator_lists/bad-user-agents.list",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "scanner-ua-00"
+ ],
+ "rules": [
+  {
+   "id": "scanner-ua-00",
+   "name": "扫描器 UA 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "acunetix",
+        "dirbuster",
+        "fimap",
+        "grabber",
+        "havij",
+        "httrack",
+        "jorgee",
+        "masscan",
+        "nessus",
+        "nikto",
+        "nmap",
+        "nuclei",
+        "openvas",
+        "sqlmap",
+        "whatweb",
+        "wpscan",
+        "zeus",
+        "zgrab",
+        "zmeu"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ },
+ "license_spdx": "MIT"
+}

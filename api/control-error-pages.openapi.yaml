@@ -1,0 +1,1435 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Error Pages API
+  version: 0.1.0
+  description: >-
+    Control-plane asset and rule API for custom error pages. The publication snapshot is a
+    deterministic source contract; it is not an Agent runtime artifact or publication receipt.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+  - cdncaApiKey: []
+tags:
+  - name: Error page assets
+    description: Manage validated custom error page source assets without exposing storage locations.
+  - name: Error page rules
+    description: Manage append-only global and tenant site rule revisions.
+  - name: Error page slots
+    description: Bind the twelve canonical platform error-page slots to ready immutable assets.
+  - name: Error page scope overrides
+    description: Manage node and region overrides; unspecified items inherit node, then region, then global defaults.
+  - name: Error page publication
+    description: Read deterministic control-plane source snapshots for downstream materialization.
+paths:
+  /v1/error-pages/assets/initiate:
+    post:
+      tags: [Error page assets]
+      summary: Initiate a content-addressed asset
+      operationId: initiateErrorPageAsset
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InitiateAssetRequest'
+      responses:
+        '201':
+          description: Asset identity created in initiated state
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetWriteResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/assets:
+    get:
+      tags: [Error page assets]
+      summary: List error page assets
+      operationId: listErrorPageAssets
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+        - $ref: '#/components/parameters/ScopeIDQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AssetStatus'
+      responses:
+        '200':
+          description: Stable cursor page
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetPage'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/assets/{asset_id}:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    get:
+      tags: [Error page assets]
+      summary: Get an error page asset
+      operationId: getErrorPageAsset
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: Asset metadata without storage locators or credentials
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [Error page assets]
+      summary: Mark an unreferenced asset for reconciled deletion
+      operationId: deleteErrorPageAsset
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      responses:
+        '202':
+          description: Database transition committed; object cleanup is pending
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetWriteResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/assets/{asset_id}/content:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    get:
+      tags: [Error page assets]
+      summary: Read a ready asset's content
+      description: >-
+        The stored body of a ready asset (error_pages.read), integrity checked
+        against its sha256, so a site's error page can be edited as text
+        (网站编辑 → 错误页面). A staged, scanning, rejected or deleted asset
+        answers 409.
+      operationId: getErrorPageAssetContent
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: Asset metadata and its UTF-8 body
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetContent'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    put:
+      tags: [Error page assets]
+      summary: Upload bounded asset content to staging
+      operationId: uploadErrorPageAssetContent
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+        - name: Content-Length
+          in: header
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1048576
+      requestBody:
+        required: true
+        content:
+          text/html:
+            schema: { type: string, format: binary, maxLength: 1048576 }
+          text/plain:
+            schema: { type: string, format: binary, maxLength: 1048576 }
+          application/json:
+            schema: { type: string, format: binary, maxLength: 1048576 }
+      responses:
+        '200':
+          description: Content validated and staged
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetWriteResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/assets/{asset_id}/finalize:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    post:
+      tags: [Error page assets]
+      summary: Scan and finalize staged asset content
+      operationId: finalizeErrorPageAsset
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      responses:
+        '200':
+          description: Scanner passed and final object is ready
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetWriteResult'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/slots:
+    get:
+      tags: [Error page slots]
+      summary: List the twelve canonical error-page slots in display order
+      operationId: listErrorPageSlots
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: All canonical slots, including slots that have never been bound
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SlotPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/slots/{slot_key}:
+    parameters:
+      - $ref: '#/components/parameters/SlotKey'
+    get:
+      tags: [Error page slots]
+      summary: Read a slot binding and its verified immutable content
+      operationId: getErrorPageSlot
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: Current binding and UTF-8 content; an unbound slot carries the built-in page in effect
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SlotDocument' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    put:
+      tags: [Error page slots]
+      summary: Append a slot revision that binds a ready immutable asset
+      operationId: bindErrorPageSlot
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/SlotIfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BindSlotRequest' }
+      responses:
+        '200':
+          description: Current binding after compare-and-swap
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SlotWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [Error page slots]
+      summary: Append an unbound revision and restore the built-in default
+      operationId: unbindErrorPageSlot
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/SlotIfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      responses:
+        '200':
+          description: Current unbound slot revision
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SlotWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/scope-overrides:
+    get:
+      tags: [Error page scope overrides]
+      summary: List current node and region error-page overrides
+      operationId: listErrorPageScopeOverrides
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: Active overrides with short display identifiers and no asset UUIDs
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeOverridePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [Error page scope overrides]
+      summary: Create or restore a node or region override
+      operationId: createErrorPageScopeOverride
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateScopeOverrideRequest' }
+      responses:
+        '201':
+          description: Append-only override revision committed
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeOverrideWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/scope-overrides/{override_display_id}:
+    parameters:
+      - $ref: '#/components/parameters/ScopeOverrideDisplayID'
+    get:
+      tags: [Error page scope overrides]
+      summary: Read an override with verified immutable editor content
+      operationId: getErrorPageScopeOverride
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: Override document without asset UUIDs, hashes, receipts, or storage locations
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeOverride' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      tags: [Error page scope overrides]
+      summary: Replace an override item set using compare-and-swap
+      operationId: updateErrorPageScopeOverride
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateScopeOverrideRequest' }
+      responses:
+        '200':
+          description: New current override revision
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeOverrideWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [Error page scope overrides]
+      summary: Append a soft-delete override revision
+      operationId: deleteErrorPageScopeOverride
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      responses:
+        '202':
+          description: Soft-delete revision committed; the target inherits its next available source
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopeOverrideWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/rules:
+    get:
+      tags: [Error page rules]
+      summary: List current error page rule revisions
+      operationId: listErrorPageRules
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+        - $ref: '#/components/parameters/ScopeIDQuery'
+        - name: site_id
+          in: query
+          schema: { $ref: '#/components/schemas/UUID' }
+        - name: enabled
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Stable cursor page
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RulePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [Error page rules]
+      summary: Create an append-only error page rule
+      operationId: createErrorPageRule
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateRuleRequest' }
+      responses:
+        '201':
+          description: Rule revision one and a publication fact were committed
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/rules/{rule_id}:
+    parameters:
+      - $ref: '#/components/parameters/RuleID'
+    get:
+      tags: [Error page rules]
+      summary: Get the current rule revision
+      operationId: getErrorPageRule
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: Current append-only rule projection
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    patch:
+      tags: [Error page rules]
+      summary: Append an updated rule revision
+      operationId: updateErrorPageRule
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RuleFields' }
+      responses:
+        '200':
+          description: New rule and publication revisions
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    delete:
+      tags: [Error page rules]
+      summary: Append a soft-delete rule revision
+      operationId: deleteErrorPageRule
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      responses:
+        '202':
+          description: Soft-delete revision and publication fact committed
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleWriteResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/rules/{rule_id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/RuleID'
+    post:
+      tags: [Error page rules]
+      summary: Append an enabled rule revision
+      operationId: enableErrorPageRule
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      responses:
+        '200': { $ref: '#/components/responses/RuleWriteOK' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/rules/{rule_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/RuleID'
+    post:
+      tags: [Error page rules]
+      summary: Append a disabled rule revision
+      operationId: disableErrorPageRule
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/TraceID'
+      responses:
+        '200': { $ref: '#/components/responses/RuleWriteOK' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/error-pages/publication-snapshot:
+    get:
+      tags: [Error page publication]
+      summary: Read the latest deterministic publication source snapshot
+      operationId: getErrorPagePublicationSnapshot
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceID'
+      responses:
+        '200':
+          description: Snapshot plus its control-plane digest and creation time
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/RequestID' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicationSnapshot' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api-session
+      description: >-
+        Control API session authenticated by identity.AuthenticateSession and authorized by
+        iamlock.AuthorizeSession inside the business PostgreSQL transaction.
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: >-
+        Control API key sent as CdncaKey credentials, authenticated against current database state,
+        and authorized by iamlock.AuthorizeAPIKey inside the business PostgreSQL transaction.
+  parameters:
+    AssetID:
+      name: asset_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    RuleID:
+      name: rule_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    SlotKey:
+      name: slot_key
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/SlotKey' }
+    ScopeOverrideDisplayID:
+      name: override_display_id
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: '^[1-9][0-9]{0,18}$'
+    ScopeIDQuery:
+      name: scope_id
+      in: query
+      schema: { $ref: '#/components/schemas/UUID' }
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 512
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { $ref: '#/components/schemas/CorrelationToken' }
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: { $ref: '#/components/schemas/CorrelationToken' }
+    TraceID:
+      name: X-Trace-ID
+      in: header
+      required: true
+      schema: { $ref: '#/components/schemas/CorrelationToken' }
+    OptionalRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: { $ref: '#/components/schemas/CorrelationToken' }
+    OptionalTraceID:
+      name: X-Trace-ID
+      in: header
+      required: false
+      schema: { $ref: '#/components/schemas/CorrelationToken' }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive decimal rule or asset revision, for example `"3"`.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+        maxLength: 21
+    SlotIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted non-negative slot revision; use `"0"` for a slot that has never been bound.
+      schema:
+        type: string
+        pattern: '^"(?:0|[1-9][0-9]*)"$'
+        maxLength: 21
+  headers:
+    RequestID:
+      description: Accepted or generated request correlation token when available.
+      schema: { $ref: '#/components/schemas/CorrelationToken' }
+    Allow:
+      description: Comma-separated methods supported by the matched path.
+      schema: { type: string }
+  responses:
+    RuleWriteOK:
+      description: New rule and publication revisions
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/RuleWriteResult' }
+    BadRequest:
+      description: Malformed or unknown input
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: Authentication is absent or invalid
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Stable permission denial
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    MethodNotAllowed:
+      description: The authenticated path exists but does not support the request method.
+      headers:
+        Allow: { $ref: '#/components/headers/Allow' }
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Resource is absent or hidden by tenant isolation
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Conflict:
+      description: Idempotency, lifecycle, reference, or rule precedence conflict
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    PreconditionFailed:
+      description: Revision compare-and-swap failed
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unprocessable:
+      description: Quota, static-content, or malware-scan rejection
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unavailable:
+      description: Database, scanner, or content-store dependency is unavailable
+      headers:
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    CorrelationToken:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$'
+    SHA256:
+      type: string
+      minLength: 64
+      maxLength: 64
+      pattern: '^[0-9a-f]{64}$'
+    MIMEType:
+      type: string
+      enum: [text/html, text/plain, application/json]
+    AssetStatus:
+      type: string
+      enum: [initiated, staged, scan_failed, finalizing, ready, rejected, delete_pending, deleted, orphaned]
+    InitiateAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [mime_type, size_bytes, sha256]
+      properties:
+        scope_id:
+          description: Optional for tenant sessions and defaults to their own scope; required for platform sessions.
+          $ref: '#/components/schemas/UUID'
+        name: { type: string, maxLength: 128, description: 'Display name (the uploaded file name, or the page category and status); empty for an asset uploaded before names existed. No control characters, no surrounding blanks.' }
+        mime_type: { $ref: '#/components/schemas/MIMEType' }
+        size_bytes: { type: integer, format: int64, minimum: 1, maximum: 1048576 }
+        sha256: { $ref: '#/components/schemas/SHA256' }
+    AssetContent:
+      type: object
+      additionalProperties: false
+      required: [asset, content]
+      properties:
+        asset: { $ref: '#/components/schemas/Asset' }
+        content:
+          type: string
+          maxLength: 1048576
+          description: The asset body (text/html, text/plain or application/json, UTF-8).
+    Asset:
+      type: object
+      additionalProperties: false
+      required: [id, scope_id, name, mime_type, size_bytes, sha256, status, scan_status, revision, created_by, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        scope_id: { $ref: '#/components/schemas/UUID' }
+        tenant_id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string, maxLength: 128, description: 'Display name (the uploaded file name, or the page category and status); empty for an asset uploaded before names existed. No control characters, no surrounding blanks.' }
+        mime_type: { $ref: '#/components/schemas/MIMEType' }
+        size_bytes: { type: integer, format: int64, minimum: 1, maximum: 1048576 }
+        sha256: { $ref: '#/components/schemas/SHA256' }
+        status: { $ref: '#/components/schemas/AssetStatus' }
+        scan_status: { type: string, enum: [pending, passed, rejected, error] }
+        revision: { type: integer, format: int64, minimum: 1 }
+        created_by: { $ref: '#/components/schemas/UUID' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: string, format: date-time }
+    AssetWriteResult:
+      type: object
+      additionalProperties: false
+      required: [value, replayed]
+      properties:
+        value: { $ref: '#/components/schemas/Asset' }
+        replayed: { type: boolean }
+    AssetPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Asset' }
+        next_cursor: { type: string, maxLength: 512 }
+    SlotKey:
+      type: string
+      enum:
+        - blacklist
+        - http_400
+        - http_403
+        - waf_block
+        - http_502
+        - http_504
+        - traffic_exceeded
+        - package_expired
+        - site_locked
+        - domain_unconfigured
+        - node_ip_access
+        - connection_limit
+    SlotBinding:
+      type: object
+      additionalProperties: false
+      required: [key, revision]
+      allOf:
+        - if: { required: [asset_id] }
+          then: { required: [mime_type, size_bytes, sha256, updated_at] }
+      properties:
+        key: { $ref: '#/components/schemas/SlotKey' }
+        asset_id: { $ref: '#/components/schemas/UUID' }
+        revision: { type: integer, format: int64, minimum: 0 }
+        mime_type: { $ref: '#/components/schemas/MIMEType' }
+        size_bytes: { type: integer, format: int64, minimum: 1, maximum: 1048576 }
+        sha256: { $ref: '#/components/schemas/SHA256' }
+        updated_at: { type: string, format: date-time }
+        publication:
+          description: Set on a bind/unbind response that changed a slot a node page reads; the new error page publication revision and the tenant scopes queued for node republication.
+          type: object
+          additionalProperties: false
+          required: [revision, queued_scopes]
+          properties:
+            revision: { type: integer, format: int64, minimum: 1 }
+            queued_scopes: { type: integer, minimum: 0 }
+    SlotPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 12
+          maxItems: 12
+          description: Canonical display order is fixed by the SlotKey enum order.
+          items: { $ref: '#/components/schemas/SlotBinding' }
+    SlotDocument:
+      type: object
+      additionalProperties: false
+      required: [binding, content, source, delivery]
+      properties:
+        binding: { $ref: '#/components/schemas/SlotBinding' }
+        content:
+          type: string
+          maxLength: 1048576
+          description: The bound asset's content, or the built-in page in effect while unbound (the active theme's).
+        source:
+          type: string
+          enum: [override, builtin]
+        delivery:
+          type: string
+          enum: [theme, fallback, none]
+          description: "What a node answers for the slot while unbound: theme (the content shown), fallback (no theme activated: a short text), none (no node page reads the slot; a save only stores it)."
+    BindSlotRequest:
+      type: object
+      additionalProperties: false
+      required: [asset_id]
+      properties:
+        asset_id: { $ref: '#/components/schemas/UUID' }
+    SlotWriteResult:
+      type: object
+      additionalProperties: false
+      required: [value, replayed]
+      properties:
+        value: { $ref: '#/components/schemas/SlotBinding' }
+        replayed: { type: boolean }
+    ScopeOverrideSlotKey:
+      type: string
+      enum:
+        - http_400
+        - http_403
+        - http_502
+        - http_504
+        - traffic_exceeded
+        - package_expired
+        - site_locked
+        - domain_unconfigured
+        - node_ip_access
+        - connection_limit
+    ScopeOverrideTarget:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      oneOf:
+        - properties:
+            kind: { const: node }
+          required: [node_display_id, node_name]
+        - properties:
+            kind: { const: region }
+          required: [region]
+      properties:
+        kind: { type: string, enum: [node, region] }
+        node_display_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        node_name: { type: string, minLength: 1, maxLength: 128 }
+        node_ip:
+          type: string
+          anyOf: [{ format: ipv4 }, { format: ipv6 }]
+        region: { type: string, minLength: 1, maxLength: 64 }
+    ScopeOverrideItem:
+      type: object
+      additionalProperties: false
+      required: [key]
+      properties:
+        key: { $ref: '#/components/schemas/ScopeOverrideSlotKey' }
+        content: { type: string, minLength: 1, maxLength: 1048576 }
+    ScopeOverride:
+      type: object
+      additionalProperties: false
+      required: [display_id, target, items, revision, updated_at]
+      properties:
+        display_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+        target: { $ref: '#/components/schemas/ScopeOverrideTarget' }
+        items:
+          type: array
+          minItems: 0
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ScopeOverrideItem' }
+        revision: { type: integer, format: int64, minimum: 1 }
+        updated_at: { type: string, format: date-time }
+        deleted: { type: boolean }
+    ScopeOverridePage:
+      type: object
+      additionalProperties: false
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          maxItems: 10000
+          items: { $ref: '#/components/schemas/ScopeOverride' }
+        total: { type: integer, minimum: 0, maximum: 10000 }
+    ScopeOverrideTargetInput:
+      type: object
+      additionalProperties: false
+      required: [kind, node_display_id, region]
+      oneOf:
+        - properties:
+            kind: { const: node }
+            node_display_id: { type: string, pattern: '^[1-9][0-9]{0,18}$' }
+            region: { const: '' }
+        - properties:
+            kind: { const: region }
+            node_display_id: { const: '' }
+            region: { type: string, minLength: 1, maxLength: 64 }
+      properties:
+        kind: { type: string, enum: [node, region] }
+        node_display_id: { type: string }
+        region: { type: string }
+    ScopeOverrideBindingInput:
+      type: object
+      additionalProperties: false
+      required: [key, asset_id]
+      properties:
+        key: { $ref: '#/components/schemas/ScopeOverrideSlotKey' }
+        asset_id: { $ref: '#/components/schemas/UUID' }
+    CreateScopeOverrideRequest:
+      type: object
+      additionalProperties: false
+      required: [target, items]
+      properties:
+        target: { $ref: '#/components/schemas/ScopeOverrideTargetInput' }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ScopeOverrideBindingInput' }
+    UpdateScopeOverrideRequest:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/ScopeOverrideBindingInput' }
+    ScopeOverrideWriteResult:
+      type: object
+      additionalProperties: false
+      required: [value, replayed]
+      properties:
+        value: { $ref: '#/components/schemas/ScopeOverride' }
+        replayed: { type: boolean }
+    RuleTarget:
+      type: object
+      additionalProperties: false
+      required: [kind, scope_id]
+      allOf:
+        - if:
+            properties:
+              kind: { const: site }
+          then:
+            required: [site_id]
+          else:
+            not:
+              required: [site_id]
+      properties:
+        kind: { type: string, enum: [global, site] }
+        scope_id: { $ref: '#/components/schemas/UUID' }
+        site_id: { $ref: '#/components/schemas/UUID' }
+    StatusSelector:
+      type: object
+      additionalProperties: false
+      required: [kind, from]
+      allOf:
+        - if:
+            properties:
+              kind: { const: range }
+          then:
+            required: [to]
+      properties:
+        kind: { type: string, enum: [exact, range] }
+        from: { type: integer, minimum: 400, maximum: 599 }
+        to: { type: integer, minimum: 400, maximum: 599 }
+    RuleFields:
+      type: object
+      additionalProperties: false
+      required: [category, match, asset_id, enabled]
+      properties:
+        category:
+          type: string
+          enum: [origin_response, edge_route, edge_connect, no_host, unknown_site]
+          description: >-
+            unknown_site (global only) is the domain mismatch page: a request
+            for a host no site serves gets it with its one status, 403, 404,
+            410 or 421 (without a rule the node answers a bare 421).
+            no_host is 400; edge_connect 502-504.
+        match: { $ref: '#/components/schemas/StatusSelector' }
+        asset_id: { $ref: '#/components/schemas/UUID' }
+        enabled: { type: boolean }
+    CreateRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [target, fields]
+      properties:
+        target: { $ref: '#/components/schemas/RuleTarget' }
+        fields: { $ref: '#/components/schemas/RuleFields' }
+    Rule:
+      type: object
+      additionalProperties: false
+      required: [id, target, fields, priority, revision, deleted, created_by, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        target: { $ref: '#/components/schemas/RuleTarget' }
+        tenant_id: { $ref: '#/components/schemas/UUID' }
+        fields: { $ref: '#/components/schemas/RuleFields' }
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 200
+          readOnly: true
+          description: Derived specificity; exact is 1 and range priority is its inclusive width.
+        revision: { type: integer, format: int64, minimum: 1 }
+        deleted: { type: boolean }
+        created_by: { $ref: '#/components/schemas/UUID' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RuleWriteResult:
+      type: object
+      additionalProperties: false
+      required: [value, replayed]
+      properties:
+        value: { $ref: '#/components/schemas/Rule' }
+        replayed: { type: boolean }
+    RulePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/Rule' }
+        next_cursor: { type: string, maxLength: 512 }
+    EdgeMatch:
+      type: object
+      additionalProperties: false
+      oneOf:
+        - required: [codes]
+        - required: [ranges]
+      properties:
+        codes:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items: { type: integer, minimum: 400, maximum: 599 }
+        ranges:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to]
+            properties:
+              from: { type: integer, minimum: 400, maximum: 599 }
+              to: { type: integer, minimum: 400, maximum: 599 }
+    EdgeResourceMetadata:
+      type: object
+      additionalProperties: false
+      required: [mime_type, size_bytes, sha256, file]
+      properties:
+        mime_type: { $ref: '#/components/schemas/MIMEType' }
+        size_bytes: { type: integer, format: int64, minimum: 1, maximum: 1048576 }
+        sha256: { $ref: '#/components/schemas/SHA256' }
+        file:
+          type: string
+          pattern: '^sha256/[0-9a-f]{64}$'
+          description: Deterministic logical content address, not a backing-store object key or filesystem path.
+    EdgeRule:
+      type: object
+      additionalProperties: false
+      required: [id, category, match, resource]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 128 }
+        category:
+          type: string
+          enum: [origin_response, edge_route, edge_connect, no_host, unknown_site]
+        match: { $ref: '#/components/schemas/EdgeMatch' }
+        resource: { $ref: '#/components/schemas/EdgeResourceMetadata' }
+    EdgeScope:
+      type: object
+      additionalProperties: false
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          maxItems: 128
+          items: { $ref: '#/components/schemas/EdgeRule' }
+    EdgeSiteScope:
+      type: object
+      additionalProperties: false
+      required: [site_key, rules]
+      properties:
+        site_key: { type: string, minLength: 1, maxLength: 128 }
+        rules:
+          type: array
+          maxItems: 128
+          items: { $ref: '#/components/schemas/EdgeRule' }
+    EdgePolicy:
+      type: object
+      additionalProperties: false
+      required: [schema, version, revision, global, sites]
+      properties:
+        schema: { type: string, const: cdnca.error-pages/v1 }
+        version: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$' }
+        revision: { type: integer, format: int64, minimum: 1 }
+        global: { $ref: '#/components/schemas/EdgeScope' }
+        sites:
+          type: array
+          maxItems: 256
+          items: { $ref: '#/components/schemas/EdgeSiteScope' }
+        theme_package_sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: Theme package active when this revision was made (ADR 0007 §7.3); its default pages fill global categories no platform rule covers.
+        slots:
+          type: array
+          maxItems: 12
+          description: Platform error page slots bound when this revision was made; each replaces the theme default page (category, status) for tenants on the platform theme.
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, category, status, resource]
+            properties:
+              key: { $ref: '#/components/schemas/SlotKey' }
+              category: { type: string }
+              status: { type: integer, minimum: 400, maximum: 599 }
+              resource: { $ref: '#/components/schemas/EdgeResourceMetadata' }
+    PublicationSnapshot:
+      type: object
+      additionalProperties: false
+      required: [policy, snapshot_sha256, created_at]
+      properties:
+        policy: { $ref: '#/components/schemas/EdgePolicy' }
+        snapshot_sha256: { $ref: '#/components/schemas/SHA256' }
+        created_at: { type: string, format: date-time }
+    ErrorPageProductionBundleBinding:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, site_id, category, revision, asset_sha256]
+      properties:
+        tenant_id: { $ref: '#/components/schemas/UUID' }
+        site_id: { $ref: '#/components/schemas/UUID' }
+        category:
+          type: string
+          enum: [origin_response, edge_route, edge_connect]
+        revision: { type: integer, format: int64, minimum: 1 }
+        asset_sha256: { $ref: '#/components/schemas/SHA256' }
+    ErrorPageProductionBundleDescriptor:
+      type: object
+      additionalProperties: false
+      required: [media_type, signing_key_id, sha256, signature_algorithm]
+      properties:
+        media_type:
+          type: string
+          const: application/vnd.cdnca.edge-error-page-bundle+json;version=1
+        signing_key_id:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        sha256: { $ref: '#/components/schemas/SHA256' }
+        signature_algorithm: { type: string, const: ed25519 }
+    ErrorPageActivationFailureCode:
+      type: string
+      enum:
+        - bundle_integrity_failed
+        - binding_mismatch
+        - payload_invalid
+        - precheck_failed
+        - activation_failed
+        - health_failed
+        - rollback_failed
+        - publication_failed
+    ErrorPageActivationReceipt:
+      type: object
+      additionalProperties: false
+      required: [schema, state, binding, bundle_sha256, running_config_unchanged]
+      allOf:
+        - if:
+            properties:
+              state: { const: activated }
+          then:
+            required: [active_digest]
+        - if:
+            properties:
+              state: { const: failed }
+          then:
+            required: [reason_code]
+      properties:
+        schema: { type: string, const: cdnca.edge.error-page-activation-receipt/v1 }
+        state: { type: string, enum: [activated, failed] }
+        reason_code: { $ref: '#/components/schemas/ErrorPageActivationFailureCode' }
+        binding: { $ref: '#/components/schemas/ErrorPageProductionBundleBinding' }
+        bundle_sha256: { $ref: '#/components/schemas/SHA256' }
+        active_digest: { $ref: '#/components/schemas/SHA256' }
+        previous_digest: { $ref: '#/components/schemas/SHA256' }
+        running_config_unchanged: { type: boolean }
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, params, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_request
+                - authentication_required
+                - permission_denied
+                - method_not_allowed
+                - not_found
+                - conflict
+                - revision_conflict
+                - quota_exceeded
+                - unsafe_content
+                - scan_rejected
+                - service_unavailable
+            params:
+              type: object
+              additionalProperties: true
+            request_id: { $ref: '#/components/schemas/CorrelationToken' }

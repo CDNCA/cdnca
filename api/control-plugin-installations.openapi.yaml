@@ -1,0 +1,507 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Plugin Installations API
+  version: 1.0.0
+security:
+  - bearerAuth: []
+paths:
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations:
+    get:
+      operationId: listPluginInstallations
+      summary: List tenant plugin installation authorization state
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+        - name: cursor
+          in: query
+          schema: {type: string, minLength: 1, maxLength: 1024}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/PluginInstallationStatus'}
+        - name: plugin_id
+          in: query
+          schema: {type: string, pattern: '^[a-z0-9][a-z0-9.-]{0,127}$'}
+      responses:
+        '200':
+          description: Stable keyset page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PluginInstallationPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}:
+    get:
+      operationId: getPluginInstallation
+      summary: Read one tenant plugin installation authorization
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/Installation'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/confirm:
+    post:
+      operationId: confirmPluginInstallation
+      summary: Confirm declared and sensitive plugin scopes before installation
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Approval'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/upgrade:
+    post:
+      operationId: upgradePluginInstallation
+      summary: Approve a compatible plugin upgrade and any newly declared scopes
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Approval'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/disable:
+    post:
+      operationId: disablePluginInstallation
+      summary: Protectively disable an installed plugin without consulting License
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Reason'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume:
+    post:
+      operationId: resumePluginInstallation
+      summary: Resume a plugin this controller paused (disable) itself
+      description: >-
+        Requires plugin_installations.manage, If-Match and Idempotency-Key. Before writing, the control plane reads
+        the signed license snapshot: the authorization must still be the installed one (verification, version,
+        digests and scopes unchanged, no new permission to approve) and paused by this controller
+        (paused_by=installation). A platform pause (license operator, market delisting or security advisory)
+        returns 409 plugin_installation_platform_paused and keeps the plugin paused; an unreachable license
+        service returns 503 and keeps it paused. Resume rotates the runtime identity like disable.
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Resume'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall:
+    post:
+      operationId: uninstallPluginInstallation
+      summary: Revoke local plugin identity and record protective uninstall
+      parameters:
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Reason'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations:
+    get:
+      operationId: listPlatformPluginInstallations
+      summary: List tenant plugin installation authorization state in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+        - name: cursor
+          in: query
+          schema: {type: string, minLength: 1, maxLength: 1024}
+        - name: status
+          in: query
+          schema: {$ref: '#/components/schemas/PluginInstallationStatus'}
+        - name: plugin_id
+          in: query
+          schema: {type: string, pattern: '^[a-z0-9][a-z0-9.-]{0,127}$'}
+      responses:
+        '200':
+          description: Stable keyset page
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PluginInstallationPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations/{authorization_id}:
+    get:
+      operationId: getPlatformPluginInstallation
+      summary: Read one tenant plugin installation authorization in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/Installation'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations/{authorization_id}/confirm:
+    post:
+      operationId: confirmPlatformPluginInstallation
+      summary: Confirm declared and sensitive plugin scopes before installation in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Approval'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations/{authorization_id}/upgrade:
+    post:
+      operationId: upgradePlatformPluginInstallation
+      summary: Approve a compatible plugin upgrade and any newly declared scopes in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Approval'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations/{authorization_id}/disable:
+    post:
+      operationId: disablePlatformPluginInstallation
+      summary: Protectively disable an installed plugin without consulting License in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Reason'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/platform/plugin-installations/{authorization_id}/uninstall:
+    post:
+      operationId: uninstallPlatformPluginInstallation
+      summary: Revoke local plugin identity and record protective uninstall in the platform scope of the session (themes, rule data packs; exact plugin_installations.platform permissions)
+      parameters:
+        - $ref: '#/components/parameters/AuthorizationID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody: {$ref: '#/components/requestBodies/Reason'}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    AuthorizationID:
+      name: authorization_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[!-~]+$'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+  requestBodies:
+    Approval:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PluginInstallationApproval'}
+    Reason:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PluginInstallationReason'}
+    Resume:
+      required: true
+      content:
+        application/json:
+          schema:
+            description: Empty object; resume carries no approval and no reason.
+            type: object
+            additionalProperties: false
+  responses:
+    Installation:
+      description: Plugin installation authorization state
+      headers:
+        ETag:
+          schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PluginInstallation'}
+    Mutation:
+      description: Durable mutation snapshot; replay returns the original snapshot
+      headers:
+        ETag:
+          schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [installation]
+            properties:
+              installation: {$ref: '#/components/schemas/PluginInstallation'}
+    Error:
+      description: Stable localized-client error envelope
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    Digest:
+      type: string
+      pattern: '^[a-f0-9]{64}$'
+    Scope:
+      type: string
+      minLength: 3
+      maxLength: 128
+      pattern: '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){1,7}$'
+    Scopes:
+      type: array
+      maxItems: 64
+      uniqueItems: true
+      items: {$ref: '#/components/schemas/Scope'}
+    PluginInstallationStatus:
+      type: string
+      enum: [pending_confirmation, authorized, installing, enabled, disabled, upgrade_failed_lkg_preserved, uninstalled]
+    PluginInstallation:
+      type: object
+      additionalProperties: false
+      required:
+        - schema
+        - tenant_scope_id
+        - authorization_id
+        - installation_id
+        - verification_id
+        - plugin_id
+        - resource_scope
+        - entrypoint_type
+        - version
+        - manifest_sha256
+        - configuration_schema_sha256
+        - manifest_scopes
+        - approved_scopes
+        - sensitive_scopes
+        - new_scopes
+        - status
+        - revision
+        - identity_generation
+        - lkg_verification_id
+        - lkg_version
+        - stable_reason_code
+        - updated_at
+      properties:
+        schema: {const: cdnca.control.plugin-installation/v1}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        authorization_id: {$ref: '#/components/schemas/UUID'}
+        installation_id: {$ref: '#/components/schemas/UUID'}
+        verification_id: {$ref: '#/components/schemas/UUID'}
+        plugin_id: {type: string, minLength: 3, maxLength: 128, pattern: '^[a-z0-9]+(?:[.-][a-z0-9]+)+$'}
+        resource_scope:
+          type: string
+          enum: [platform, tenant]
+          description: Signed by the license service from the verified manifest entrypoint. platform resources (themes, rule data packs) are confirmed only under /v1/platform; tenant plugins only under their tenant scope.
+        entrypoint_type:
+          type: string
+          enum: [theme, rule_pack, external_https, ui_page]
+          description: Plugin type, the verified manifest entrypoint type signed by the license service next to resource_scope (theme and rule_pack are platform resources, external_https and ui_page tenant plugins). Clients link a confirmed theme to theme management and a rule_pack to rule packs; they never infer the type themselves.
+        version: {type: string, minLength: 5, maxLength: 128}
+        manifest_sha256: {$ref: '#/components/schemas/Digest'}
+        configuration_schema_sha256: {$ref: '#/components/schemas/Digest'}
+        manifest_scopes: {$ref: '#/components/schemas/Scopes'}
+        approved_scopes: {$ref: '#/components/schemas/Scopes'}
+        sensitive_scopes: {$ref: '#/components/schemas/Scopes'}
+        new_scopes: {$ref: '#/components/schemas/Scopes'}
+        status: {$ref: '#/components/schemas/PluginInstallationStatus'}
+        revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+        identity_generation: {type: integer, minimum: 0, maximum: 9007199254740991}
+        lkg_verification_id:
+          anyOf: [{$ref: '#/components/schemas/UUID'}, {type: 'null'}]
+        lkg_version:
+          anyOf: [{type: string, minLength: 5, maxLength: 128}, {type: 'null'}]
+        stable_reason_code:
+          anyOf: [{type: string, pattern: '^[a-z][a-z0-9_]{0,127}$'}, {type: 'null'}]
+        updated_at: {type: string, format: date-time}
+        authorization_status:
+          description: >-
+            Platform authorization state reported by the license service. Omitted when the license service was
+            not reachable. A locally enabled plugin whose authorization is disabled is paused by the platform.
+            pending_confirmation marks a purchased market plugin waiting for this controller's administrator:
+            confirm sends the confirmation to the license service and then installs it.
+          type: string
+          enum: [pending_confirmation, authorized, enabled, disabled]
+        paused_by:
+          description: >-
+            Who paused a disabled authorization, from the signed license snapshot. installation is this
+            controller's own pause (resume allowed); operator (license operator) and service (market delisting or
+            security advisory) are platform pauses this controller cannot resume. Omitted otherwise, and a disabled
+            authorization without it is treated as a platform pause.
+          type: string
+          enum: [installation, operator, service]
+        paused_reason:
+          description: The reason recorded with that pause.
+          type: string
+          minLength: 1
+          maxLength: 500
+        available_upgrade:
+          $ref: '#/components/schemas/PluginInstallationAvailableUpgrade'
+    PluginInstallationAvailableUpgrade:
+      description: A newer version the platform already authorized for this installation; submit it to upgrade.
+      type: object
+      additionalProperties: false
+      required: [verification_id, version, manifest_scopes, approved_scopes, sensitive_scopes, new_scopes]
+      properties:
+        verification_id: {$ref: '#/components/schemas/UUID'}
+        version: {type: string, minLength: 5, maxLength: 128}
+        manifest_scopes: {$ref: '#/components/schemas/Scopes'}
+        approved_scopes: {$ref: '#/components/schemas/Scopes'}
+        sensitive_scopes: {$ref: '#/components/schemas/Scopes'}
+        new_scopes: {$ref: '#/components/schemas/Scopes'}
+    PluginInstallationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/PluginInstallation'}
+        next_cursor: {type: string, minLength: 1, maxLength: 1024}
+    PluginInstallationApproval:
+      type: object
+      additionalProperties: false
+      required: [verification_id, approved_scopes, sensitive_permissions_confirmed, new_permissions_confirmed]
+      properties:
+        verification_id: {$ref: '#/components/schemas/UUID'}
+        approved_scopes: {$ref: '#/components/schemas/Scopes'}
+        sensitive_permissions_confirmed: {type: boolean}
+        new_permissions_confirmed: {type: boolean}
+    PluginInstallationReason:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 500}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - permission_denied
+                - invalid_request
+                - plugin_installation_not_found
+                - plugin_installation_revision_conflict
+                - plugin_installation_idempotency_conflict
+                - plugin_installation_scope_approval_required
+                - plugin_installation_platform_paused
+                - plugin_installation_license_unavailable
+                - plugin_installation_state_conflict
+                - plugin_installation_result_unknown
+                - internal_error

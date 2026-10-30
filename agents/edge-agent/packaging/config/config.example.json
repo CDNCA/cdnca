@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "identity_dir": "/etc/cdnca-edge-agent/identity",
+  "ingress_source_ipv4": "192.0.2.20",
+  "ingress_source_ipv6": "2001:db8::20",
+  "artifact_trust_file": "/etc/cdnca-edge-agent/trust/artifacts.json",
+  "deployment_root": "/var/lib/cdnca-edge",
+  "journal_dir": "/var/lib/cdnca-edge-agent/gateway-journal",
+  "gateway": {
+    "address": "gateway.example.invalid:19444",
+    "server_name": "gateway.example.invalid",
+    "root_ca_file": "/etc/cdnca-edge-agent/tls/ca.pem"
+  },
+  "openresty": {
+    "binary": "/usr/local/openresty/bin/openresty",
+    "config_file": "nginx.conf",
+    "health_url": "http://127.0.0.1:18080/healthz",
+    "version": "replace-with-pinned-openresty-version",
+    "http3_probe": "/opt/cdnca-node/current/runtime/bin/h3probe"
+  },
+  "certificate_runtime": {
+    "state_root": "/var/lib/cdnca-edge-agent/certificates",
+    "listen_address": "127.0.0.1",
+    "listen_port": 18443
+  },
+  "telemetry": {
+    "enabled": true,
+    "spool_root": "/var/lib/cdnca-edge-agent/event-spool"
+  },
+  "limits": {
+    "max_command_bytes": 1048576,
+    "max_status_bytes": 262144,
+    "max_artifact_bytes": 134217728,
+    "max_decompressed_bytes": 134217728,
+    "max_artifact_chunk_bytes": 1048576,
+    "max_active_deployments": 128,
+    "command_queue_size": 32,
+    "max_files": 4096,
+    "max_file_bytes": 16777216,
+    "max_total_bytes": 134217728,
+    "retain_releases": 5
+  },
+  "timeouts": {
+    "handshake": "10s",
+    "artifact_fetch": "2m",
+    "initial_backoff": "250ms",
+    "maximum_backoff": "30s",
+    "precheck": "15s",
+    "reload": "15s",
+    "health": "30s",
+    "health_interval": "500ms",
+    "health_request": "2s"
+  }
+}

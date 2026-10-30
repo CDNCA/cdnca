@@ -1,0 +1,995 @@
+{
+ "id": "site-publications",
+ "prefix": "/v1/site-publications",
+ "operations": [
+  {
+   "operation_id": "listTenantSitePublications",
+   "method": "GET",
+   "path": "/v1/site-publications",
+   "summary": "List publications in the authenticated tenant scope",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires a tenant-scoped principal with sites.read. scope_id is not accepted. Signatures, hashes, target snapshot metadata, and platform scope identifiers are omitted from tenant responses.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope returned by the immediately preceding page. It is bound to audience, resolved tenant scope, resource kind, and the rollout ID for deployment pages. It cannot be reused across those boundaries or modified."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable tenant publication page with target metadata redacted.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<TenantPublication>",
+       "required": true
+      },
+      {
+       "name": "current_source_revision",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Current Site/L4 source revision observed with this page."
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "description": "Opaque authenticated pagination state. Clients must not parse or construct it."
+      },
+      {
+       "name": "pending_modules",
+       "type": "array<PendingModule>",
+       "description": "Modules the scope's latest publication uses that the entitlement no longer grants; the scope is pending republication and is republished automatically when they are granted again. Omitted when none."
+      },
+      {
+       "name": "automatic_failure",
+       "type": "AutomaticPublicationFailure",
+       "description": "The scope's latest automatic publication published nothing and no later publication exists. no_target_nodes means no enabled node serves the sites' line groups (their own or their package's primary/backup group); node_capability_unavailable means every target node's agent lacks a capability or JS challenge policy the release needs; node_artifacts_syncing means the target nodes are refused only because a node artifact the release needs (a rule pack, the IP library) is still reaching them through their node artifact set; node_scope_conflict means a target node carries another tenant's configuration this one cannot share (such as its managed WAF), so the request ended instead of retrying, and the next configuration change or a manual publish tries again. The first three are republished automatically once they change. Omitted otherwise."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "publishTenantSiteConfiguration",
+   "method": "POST",
+   "path": "/v1/site-publications",
+   "summary": "Publish the authenticated tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a tenant session with sites.manage. configuration_scope_id must exactly equal the authenticated scope; authorization and scope binding complete before any publication mutation.",
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_source_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "target",
+      "type": "ExplicitNodeTarget | LineGroupSnapshotTarget",
+      "required": true
+     },
+     {
+      "name": "health_check",
+      "type": "HealthCheck",
+      "required": true
+     },
+     {
+      "name": "rollout",
+      "type": "RolloutPolicyInput",
+      "description": "Progressive policy for a target frozen at publication time. Nodes are ordered by UUID bytes, then assigned to the canary and fixed-size cohorts. Commands outside the released cohort remain held. The failure threshold is an absolute failed-node count within the current cohort; reaching it pauses the rollout."
+     },
+     {
+      "name": "max_attempts",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "deadline",
+      "type": "string(date-time)",
+      "required": true,
+      "description": "Future RFC3339 deployment deadline."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created tenant publication, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "rollout_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "TenantPublicationTarget",
+       "required": true
+      },
+      {
+       "name": "node_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "412",
+     "description": "The source or rollout expected revision is stale."
+    },
+    {
+     "status": "422",
+     "description": "Entitlement or target/resource readiness prevents publication."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityPolicyActivationStatus",
+   "method": "GET",
+   "path": "/v1/site-publications/security-activations",
+   "summary": "Get the authoritative security binding and latest activation candidate",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read in the authenticated tenant scope, or a platform session holding security_policies.read or platform.admin, which reads the site's own tenant scope (the site edit page of the platform console). When no binding exists, binding, latest_candidate, and operation are null; clients use binding and active-policy CAS values 0/0 for first publish.",
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "policy_kind",
+     "in": "query",
+     "type": "string: cc / acl / waf",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Authoritative binding and latest candidate from one permission-checked transaction.",
+     "fields": [
+      {
+       "name": "binding",
+       "type": "SecurityActivationBinding | null",
+       "required": true
+      },
+      {
+       "name": "latest_candidate",
+       "type": "SecurityActivationCandidate | null",
+       "required": true
+      },
+      {
+       "name": "operation",
+       "type": "string: activation / rollback / null | null: activation / rollback / null",
+       "required": true
+      },
+      {
+       "name": "failure_reasons",
+       "type": "array<object>",
+       "description": "When latest_candidate failed, each failed node's own failure text (at most 10; message at most 512 bytes)."
+      },
+      {
+       "name": "latest_detach",
+       "type": "boolean",
+       "description": "The latest candidate withdraws the site's library of this kind (sec-rebind)."
+      },
+      {
+       "name": "rollback",
+       "type": "object",
+       "description": "Whether the latest promotion can be rolled back (to the library version active before it), and the rollback request's candidate and source version; reason says why not."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "createSecurityPolicyActivation",
+   "method": "POST",
+   "path": "/v1/site-publications/security-activations",
+   "summary": "Stage a security policy candidate and start its canary rollout",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage in the authenticated tenant scope. A platform session holding security_policies.manage or platform.admin starts it in the site's tenant scope without switching identity; the candidate and the audit event record the platform actor, the audit event's scope is the site's tenant scope. The candidate pins one source revision, config version, signed artifact digest, and target snapshot. The active policy and source revision do not advance until every pinned target reports healthy.",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "policy_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "policy_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "expected_binding_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "expected_active_policy_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "target_node_ids",
+      "type": "array<string(uuid)>",
+      "description": "Omitted or empty targets the active nodes of the site's own and its package's primary/backup line groups (no_target_nodes when there are none)."
+     },
+     {
+      "name": "canary_size",
+      "type": "integer",
+      "description": "0 or omitted is 1 when the targets are resolved from the site."
+     },
+     {
+      "name": "expires_at",
+      "type": "string(date-time)",
+      "required": true,
+      "description": "At most 15 minutes ahead (activation_expiry_too_late)."
+     },
+     {
+      "name": "detach",
+      "type": "boolean",
+      "description": "Withdraw the site's active library of this kind (policy_id/policy_version are the binding's active ones; the library may be deleted). policy_id differing from the binding's library rebinds the site to it; a deleted library cannot be bound (security_policy_deleted)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Candidate claimed and immutable canary rollout created.",
+     "fields": [
+      {
+       "name": "candidate",
+       "type": "SecurityActivationCandidate",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "422",
+     "description": "Entitlement or target/resource readiness prevents publication."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityPolicyRebindStatus",
+   "method": "GET",
+   "path": "/v1/site-publications/security-activations/rebind-status",
+   "summary": "Count bound sites still behind their WAF/CC library and those the package does not entitle",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read in the authenticated tenant scope; a platform session is refused (403), it has no tenant scope to count. A library saved without a site context is republished automatically to every bound site whose binding is behind it (the site's package primary/backup line-group nodes, canary first). pending_sites counts the scope's sites still behind for policy_kind; package_denied_sites counts those whose package does not include the feature (they are retried and publish once it is enabled).",
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "policy_kind",
+     "in": "query",
+     "type": "string: waf / cc",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Counts of the authenticated scope only.",
+     "fields": [
+      {
+       "name": "pending_sites",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "package_denied_sites",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityPolicyActivation",
+   "method": "GET",
+   "path": "/v1/site-publications/security-activations/{candidate_id}",
+   "summary": "Get a security policy activation candidate",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "candidate_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current persisted candidate identity and status.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "binding_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "binding_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "last_bundle_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "last_claimed_policy_version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_active_policy_version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "candidate_source_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "candidate_config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "candidate_artifact_sha256",
+       "type": "array<integer>",
+       "required": true
+      },
+      {
+       "name": "target_snapshot_sha256",
+       "type": "array<integer>",
+       "required": true
+      },
+      {
+       "name": "required_capabilities",
+       "type": "array<SecurityActivationCapability>",
+       "required": true
+      },
+      {
+       "name": "candidate_status",
+       "type": "string: claimed / canary / expanding / healthy / failed / cancelled / expired / promoted",
+       "required": true
+      },
+      {
+       "name": "canary_node_ids",
+       "type": "array<string(uuid)>",
+       "required": true
+      },
+      {
+       "name": "expand_node_ids",
+       "type": "array<string(uuid)>",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "recovered_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "reconcileSecurityPolicyActivation",
+   "method": "POST",
+   "path": "/v1/site-publications/security-activations/{candidate_id}/reconcile",
+   "summary": "Reconcile canary, expansion, recovery, and promotion",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Reuses the candidate config and artifact digest for every phase. Promotion uses the complete expected active, binding, publication, config, artifact, source revision, and target snapshot CAS identity.",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "candidate_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "promotion_cas",
+      "type": "SecurityActivationPromotionCAS",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Reconciled candidate state or identical stored replay.",
+     "fields": [
+      {
+       "name": "candidate",
+       "type": "SecurityActivationCandidate",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string:  / wait / expand / promote / recover / fail / cancel / expire",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "rollbackSecurityPolicyActivation",
+   "method": "POST",
+   "path": "/v1/site-publications/security-activations/{candidate_id}/rollback",
+   "summary": "Clone an old policy into a new monotonic version and stage it",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "candidate_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "source_policy_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "expected_binding_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "expected_active_policy_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "target_node_ids",
+      "type": "array<string(uuid)>",
+      "description": "Omitted or empty targets the candidate site's line-group nodes, as SecurityActivationCreateRequest."
+     },
+     {
+      "name": "canary_size",
+      "type": "integer"
+     },
+     {
+      "name": "expires_at",
+      "type": "string(date-time)",
+      "required": true,
+      "description": "At most 15 minutes ahead (activation_expiry_too_late)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "New monotonic rollback candidate claimed.",
+     "fields": [
+      {
+       "name": "candidate",
+       "type": "SecurityActivationCandidate",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantSitePublication",
+   "method": "GET",
+   "path": "/v1/site-publications/{publication_id}",
+   "summary": "Get one publication in the authenticated tenant scope",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "publication_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Tenant publication detail with internal metadata redacted.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "rollout_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "TenantPublicationTarget",
+       "required": true
+      },
+      {
+       "name": "node_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

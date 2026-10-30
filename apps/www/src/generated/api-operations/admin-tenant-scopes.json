@@ -1,0 +1,172 @@
+{
+ "id": "admin-tenant-scopes",
+ "prefix": "/v1/admin/tenant-scopes",
+ "operations": [
+  {
+   "operation_id": "listTenantScopes",
+   "method": "GET",
+   "path": "/v1/admin/tenant-scopes",
+   "summary": "List tenant scope targets for platform administration",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns a small read-only tenant directory for platform identities. Requires identity.users.manage (or platform.admin) in a platform scope. Billing and other tenant data are intentionally excluded; suspended and closed tenants remain visible with their status.",
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive substring matched against tenant name, stable short tenant ID, tenant UUID, and scope UUID."
+    },
+    {
+     "name": "parent",
+     "in": "query",
+     "type": "string",
+     "description": "Reseller filter: \"none\" = platform customers only; a reseller scope UUID (canonical lower case) = its customers; omitted = all."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable tenant scope page ordered newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<TenantScope>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "setTenantParent",
+   "method": "PUT",
+   "path": "/v1/admin/tenant-scopes/{scope_id}/parent",
+   "summary": "Put a tenant under a reseller, or back to the platform",
+   "auth": [
+    "bearer"
+   ],
+   "description": "parent_scope_id null makes the tenant a platform customer again. The parent must be an active reseller, not the tenant itself; a reseller cannot have a parent (one level); a reseller at its customer_limit refuses new customers. Existing subscriptions are kept until they expire. Requires identity.users.manage in the platform scope.",
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "parent_scope_id",
+      "type": "string(uuid) | null(uuid)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The tenant's reseller.",
+     "fields": [
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "parent_scope_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "422",
+     "description": "The request is well formed but breaks a business rule (error.code names it)."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

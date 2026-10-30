@@ -1,0 +1,17 @@
+{
+  "schema": "cdnca.l401.runner-inputs.v1",
+  "platform": "linux/amd64",
+  "source_date_epoch": 1769904000,
+  "debian_snapshot": "20260201T000000Z",
+  "go_image": "docker.io/library/golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5",
+  "apt_packages": [
+    "ca-certificates",
+    "curl",
+    "findutils",
+    "jq",
+    "openssl",
+    "patchelf",
+    "postgresql-client",
+    "procps"
+  ]
+}

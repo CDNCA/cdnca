@@ -1,0 +1,79 @@
+PASS WAF-OK-1 expected=200 actual=200 正常查询
+PASS WAF-OK-2 expected=200 actual=200 姓名含单引号
+PASS WAF-OK-3 expected=200 actual=200 自然语言含 select/union/or
+PASS WAF-OK-4 expected=200 actual=200 撇号文本
+PASS WAF-OK-5 expected=200 actual=200 技术文章搜索
+PASS WAF-OK-6 expected=200 actual=200 JSON 正常评论
+PASS WAF-OK-7 expected=200 actual=200 表单正常提交
+PASS WAF-OK-8 expected=200 actual=200 参数里是普通 URL
+PASS WAF-PATH expected=403 actual=403 路径前缀规则 /admin（现有能力）
+PASS SQLI-1 expected=403 actual=403 1' OR '1'='1
+PASS SQLI-2 expected=403 actual=403 1' OR 1=1-- -
+PASS SQLI-3 expected=403 actual=403 UNION SELECT
+PASS SQLI-4 expected=403 actual=403 双重 URL 编码
+PASS SQLI-5 expected=403 actual=403 大小写混写 + 注释分隔
+PASS SQLI-6 expected=403 actual=403 堆叠查询
+PASS SQLI-7 expected=403 actual=403 时间盲注
+PASS SQLI-8 expected=403 actual=403 admin'# 注释截断
+PASS SQLI-9 expected=403 actual=403 POST 表单体
+PASS SQLI-10 expected=403 actual=403 JSON 体
+PASS XSS-1 expected=403 actual=403 <script>
+PASS XSS-2 expected=403 actual=403 onerror 事件
+PASS XSS-3 expected=403 actual=403 javascript: 伪协议
+PASS XSS-4 expected=403 actual=403 双重编码 svg onload
+PASS XSS-5 expected=403 actual=403 POST 表单 iframe
+PASS ALL-OK-1 expected=200 actual=200 正常查询
+PASS ALL-OK-2 expected=200 actual=200 含 system 单词的正常页面
+PASS ALL-OK-3 expected=200 actual=200 含 & 与 $ 的正常参数
+PASS ALL-OK-4 expected=200 actual=200 嵌套 JSON
+PASS CMD-1 expected=403 actual=403 命令注入 ;cat
+PASS CMD-2 expected=403 actual=403 命令注入 $()
+PASS LFI-1 expected=403 actual=403 文件包含 /etc/passwd
+PASS LFI-2 expected=blocked actual=blocked URI 目录穿越（编码；nginx 先回 400 或 WAF 回 403）
+PASS RFI-1 expected=403 actual=403 php:// 包装协议
+PASS UPLOAD-1 expected=403 actual=403 URI 带可执行扩展名（注意：PHP 站点会误报，见文档）
+PASS JAVA-1 expected=403 actual=403 JNDI 注入
+PASS JAVA-2 expected=403 actual=403 Runtime.exec
+PASS JSER-1 expected=403 actual=403 Java 序列化魔数
+PASS PHP-1 expected=403 actual=403 PHP 危险函数
+PASS PSER-1 expected=403 actual=403 PHP 序列化对象
+PASS SSTI-1 expected=403 actual=403 {{7*7}}
+PASS SSTI-2 expected=403 actual=403 Python 反射链
+PASS LOG-1 expected=200 actual=200 仅记录模式放行 SQL 注入
+PASS LOG-2 expected=1 actual=1 仅记录模式写入安全日志 action=log
+PASS CC-1 expected=503 actual=503 首个未验证请求弹出验证页
+PASS CC-2 expected=delay actual=delay 验证页类型为 5 秒等待
+PASS CC-3 expected=403 actual=403 未等满 5 秒提交被拒绝
+PASS CC-4 expected=303 /article?id=7 actual=303 /article?id=7 等满 5 秒提交通过并跳回原页面
+PASS CC-5 expected=200 actual=200 通过后携带白名单 Cookie 放行
+PASS CC-6 expected=20 actual=20 白名单内 20 次连续请求全部放行
+PASS CC-7 expected=503 actual=503 伪造 Cookie 重新验证
+PASS CC-8 expected=503 actual=503 Cookie 换 UA 无效
+PASS CC-9 expected=403 actual=403 60 秒内验证失败超过 5 次拉黑
+PASS CC-10 expected=403 actual=403 拉黑期间带 Cookie 也拒绝
+PASS RATE-1 expected=pass(200) actual=pass(200) 5 秒内第 300 次（不同 URL）未超限放行
+PASS RATE-2 expected=blocked actual=blocked 第 301 次超过 300 次阈值被拦截
+PASS RATE-3 expected=blocked actual=blocked 同一 URL 5 秒内第 51 次超过单 URL 50 次阈值被拦截
+SUMMARY section=main failures=0
+PASS G1-page expected=js(503) actual=js(503) 首次访问弹出对应验证
+PASS G1-verify expected=303 actual=303 按页面要求作答后通过
+PASS G1-pass expected=200 actual=200 通过后放行
+PASS G10000-page expected=click(503) actual=click(503) 首次访问弹出对应验证
+PASS G10000-verify expected=303 actual=303 按页面要求作答后通过
+PASS G10000-pass expected=200 actual=200 通过后放行
+PASS G10003-page expected=rotate(503) actual=rotate(503) 首次访问弹出对应验证
+PASS G10003-verify expected=303 actual=303 按页面要求作答后通过
+PASS G10003-pass expected=200 actual=200 通过后放行
+PASS G10004-page expected=easy_click(503) actual=easy_click(503) 首次访问弹出对应验证
+PASS G10004-verify expected=303 actual=303 按页面要求作答后通过
+PASS G10004-pass expected=200 actual=200 通过后放行
+SUMMARY section=modes1 failures=0
+PASS G10005-page expected=easy_slider(503) actual=easy_slider(503) 首次访问弹出对应验证
+PASS G10005-verify expected=303 actual=303 按页面要求作答后通过
+PASS G10005-pass expected=200 actual=200 通过后放行
+PASS G2-page expected=slider(503) actual=slider(503) 首次访问弹出对应验证
+PASS G2-verify expected=303 actual=303 按页面要求作答后通过
+PASS G2-pass expected=200 actual=200 通过后放行
+PASS G4-page expected=captcha(503) actual=captcha(503) 首次访问弹出对应验证
+PASS G4-wrong expected=403 actual=403 验证码答错被拒绝（字符只在 SVG 点阵里，脚本无法直接读出）
+SUMMARY section=modes2 failures=0

@@ -1,0 +1,255 @@
+.shell-account-menu .ant-dropdown-menu {
+  min-width: 108px;
+  padding: 5px 0;
+  border-radius: 4px;
+  box-shadow: var(--cdnca-shadow-popup, 0 1px 6px rgb(0 0 0 / 20%));
+}
+
+.shell-account-menu .ant-dropdown-menu .ant-dropdown-menu-item {
+  padding: 7px 16px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 20px;
+  border-radius: 0;
+}
+
+.shell-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-icon {
+  margin-inline-end: 6px;
+}
+
+/* C02: identity line at the top of the account menu (name, username, side and roles). */
+.shell-account-identity { display: flex; flex-direction: column; gap: 2px; max-width: 260px; color: var(--cdnca-color-text); cursor: default; }
+.shell-account-identity strong { font-weight: 600; overflow-wrap: anywhere; }
+.shell-account-identity small { color: var(--cdnca-color-text-secondary); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
+
+.shell-account-icon {
+  font-family: 'CdnBaselineIcons';
+  font-size: 14px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.shell-account-icon--settings::before { content: '\f2aa'; }
+.shell-account-icon--logout::before { content: '\f21b'; }
+
+.app-shell.is-admin.is-dark .shell-breadcrumb-current {
+  color: var(--cdnca-color-text-dark, #e5e7eb);
+}
+
+.shell-account-menu .ant-dropdown-menu .ant-dropdown-menu-item-divider {
+  margin: 5px 0;
+  background: var(--cdnca-color-border-secondary);
+}
+
+.shell-account-menu .ant-dropdown-menu .ant-dropdown-menu-item:hover {
+  background: var(--cdnca-color-bg-hover, #f3f3f3);
+}
+
+body.i-theme-dark .shell-account-menu .ant-dropdown-menu {
+  background: var(--cdnca-color-surface-dark, #172033);
+}
+
+body.i-theme-dark .shell-account-menu .ant-dropdown-menu-item {
+  color: var(--cdnca-color-text-dark, #e5e7eb);
+}
+
+body.i-theme-dark .shell-account-menu .ant-dropdown-menu-item-divider {
+  background: var(--cdnca-color-border-dark, #273449);
+}
+
+body.i-theme-dark .shell-account-menu .ant-dropdown-menu-item:hover {
+  background: var(--cdnca-color-border-dark, #273449);
+}
+
+@media (min-width: 768px) {
+  .app-shell.is-admin.is-collapsed .app-sidebar {
+    top: 64px;
+  }
+
+  .app-shell.is-admin.is-collapsed .app-header {
+    padding-left: 256px;
+  }
+
+  .app-shell.is-admin.is-collapsed .shell-brand {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 256px;
+    justify-content: center;
+    padding: 0 20px;
+  }
+
+  .app-shell.is-admin.is-collapsed .shell-brand-crop {
+    width: 160.234375px;
+    margin-left: 0;
+  }
+
+  .app-shell.is-admin .shell-menu.ant-menu-inline-collapsed > .ant-menu-item,
+  .app-shell.is-admin .shell-menu.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title {
+    display: flex;
+    width: 100%;
+    height: 52px;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0 !important;
+    line-height: 52px;
+  }
+
+  .app-shell.is-admin .shell-menu.ant-menu-inline-collapsed .ant-menu-title-content {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .app-shell.is-admin .shell-menu.ant-menu-inline-collapsed .ant-menu-submenu-arrow {
+    display: none;
+  }
+
+  .app-shell.is-admin .shell-menu.ant-menu-inline-collapsed > .ant-menu-item-selected {
+    background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 9%, transparent);
+    border-radius: 0 8px 8px 0;
+    box-shadow: inset 3px 0 0 var(--cdnca-color-primary);
+  }
+
+  .app-shell.is-admin .shell-menu.ant-menu-inline-collapsed > .ant-menu-item-selected .shell-nav-icon.ant-menu-item-icon {
+    color: var(--cdnca-color-primary) !important;
+  }
+
+  .app-shell.is-admin.is-dark .shell-menu.ant-menu-inline-collapsed > .ant-menu-item-selected {
+    background: color-mix(in srgb, var(--cdnca-color-primary-dark, #60a5fa) 16%, transparent);
+    box-shadow: inset 3px 0 0 var(--cdnca-color-primary-dark, #60a5fa);
+  }
+
+  .app-shell.is-admin.is-dark .shell-menu.ant-menu-inline-collapsed > .ant-menu-item-selected .shell-nav-icon.ant-menu-item-icon {
+    color: var(--cdnca-color-primary-dark, #60a5fa) !important;
+  }
+}
+
+/* PA-17 themes. The shell chrome below is hard-coded to the default theme in
+   styles.css; with a theme loaded (:root[data-cdnca-theme], set by
+   ThemeProvider) it follows the theme's variables instead. */
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .app-main {
+  background-color: var(--cdnca-color-bg-page);
+  background-image: none;
+}
+
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .shell-menu.ant-menu-inline .ant-menu-item-selected,
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .shell-menu .ant-menu-submenu .ant-menu-item-selected {
+  color: var(--cdnca-color-primary);
+  background: color-mix(in srgb, var(--cdnca-color-primary) 9%, transparent);
+}
+
+/* C21: only top-level items carry the inset bar; submenu items keep their ::before mark. */
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .shell-menu.ant-menu-inline > .ant-menu-item-selected {
+  box-shadow: inset 3px 0 0 var(--cdnca-color-primary);
+}
+
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .shell-menu .ant-menu-submenu .ant-menu-item-selected::before {
+  background: var(--cdnca-color-primary);
+}
+
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .shell-menu.ant-menu-inline > .ant-menu-submenu-selected > .ant-menu-submenu-title,
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .shell-menu .ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon,
+:root[data-cdnca-theme] .app-shell:not(.is-dark) .shell-menu .ant-menu-item-selected .ant-menu-item-icon {
+  color: var(--cdnca-color-primary) !important;
+}
+
+/* layout_slots.sidebar = dark (the page's own dark mode keeps its colors). */
+.app-shell.is-sidebar-dark .app-sidebar,
+.app-shell.is-sidebar-dark .shell-brand,
+.app-shell.is-sidebar-dark .shell-menu.ant-menu,
+.app-shell.is-sidebar-dark .shell-menu .ant-menu-sub {
+  color: color-mix(in srgb, var(--cdnca-color-text-inverse, #ffffff) 72%, transparent);
+  background: var(--cdnca-color-sidebar-dark, #001529) !important;
+  box-shadow: none;
+}
+
+.app-shell.is-sidebar-dark .shell-menu .ant-menu-sub::before {
+  background: color-mix(in srgb, var(--cdnca-color-bg-container, #ffffff) 12%, transparent);
+}
+
+.app-shell.is-sidebar-dark .shell-menu .ant-menu-item,
+.app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu-title {
+  color: color-mix(in srgb, var(--cdnca-color-text-inverse, #ffffff) 72%, transparent);
+}
+
+.app-shell.is-sidebar-dark .shell-menu .ant-menu-item:hover,
+.app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu-title:hover {
+  color: var(--cdnca-color-text-inverse, #ffffff);
+  background: color-mix(in srgb, var(--cdnca-color-bg-container, #ffffff) 8%, transparent);
+}
+
+.app-shell.is-sidebar-dark .shell-menu.ant-menu-inline .ant-menu-item-selected,
+.app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu .ant-menu-item-selected {
+  color: var(--cdnca-color-text-inverse, #ffffff);
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 32%, transparent);
+}
+
+.shell-header-links {
+  display: flex;
+  gap: 16px;
+  margin-left: auto;
+  margin-right: 12px;
+  white-space: nowrap;
+}
+
+.shell-header-links + .shell-theme-toggle {
+  margin-left: 0;
+}
+
+.shell-header-links a {
+  color: var(--cdnca-color-text-secondary, #808695);
+}
+
+.shell-header-links a:hover,
+.shell-header-links a:focus-visible {
+  color: var(--cdnca-color-primary, #2d8cf0);
+}
+
+.app-footer,
+.login-footer {
+  padding: 16px 24px;
+  color: var(--cdnca-color-text-secondary, #808695);
+  font-size: 12px;
+  text-align: center;
+}
+
+.login-page.is-layout-centered .login-container {
+  width: 440px;
+  grid-template-columns: 1fr;
+}
+
+.login-page.is-layout-centered .login-ad,
+.login-page.is-layout-background .login-ad {
+  display: none;
+}
+
+.login-page.is-layout-background .login-container {
+  position: relative;
+  width: 440px;
+  grid-template-columns: 1fr;
+}
+
+.login-background {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.login-page.is-layout-background .login-header,
+.login-page.is-layout-background .login-stage,
+.login-page.is-layout-background .login-footer {
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 767px) {
+  .shell-header-links {
+    display: none;
+  }
+}

@@ -1,0 +1,221 @@
+.jobs-page .jobs-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.jobs-page .jobs-action-group {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.jobs-page .jobs-filter-group {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 190px));
+  gap: 8px;
+}
+
+.jobs-page .jobs-filter-group > .ant-input,
+.jobs-page .jobs-filter-group > .ant-select {
+  width: 190px;
+}
+
+@media (max-width: 1200px) {
+  .jobs-page .jobs-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .jobs-page .jobs-filter-group {
+    flex: 1 1 420px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .jobs-page .jobs-filter-group > .ant-select {
+    width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .jobs-page .jobs-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .jobs-page .jobs-filter-group {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .jobs-page .jobs-filter-group > .ant-input,
+  .jobs-page .jobs-filter-group > .ant-select {
+    width: 100%;
+  }
+}
+
+
+.jobs-page .jobs-start-time-cell,
+.jobs-page .jobs-dependency-cell,
+.jobs-detail-modal .jobs-start-time-cell {
+  display: grid;
+  gap: 2px;
+  line-height: 1.35;
+}
+
+.jobs-page .jobs-start-time-cell small,
+.jobs-page .jobs-dependency-cell small,
+.jobs-detail-modal .jobs-start-time-cell small {
+  color: var(--cdnca-color-neutral58, #8c96a8);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.jobs-page .jobs-task-name-cell,
+.jobs-page .jobs-dependency-cell .ant-btn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.jobs-page .jobs-dependency-cell .ant-btn {
+  height: auto;
+  padding: 0;
+  text-align: left;
+}
+
+.jobs-page .jobs-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+  flex-wrap: wrap;
+}
+
+.jobs-page .jobs-page-number {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jobs-page .jobs-pagination .ant-btn {
+  min-width: 32px;
+  padding-inline: 8px;
+}
+
+.jobs-page .jobs-pagination .jobs-current-page {
+  pointer-events: none;
+}
+
+.jobs-page .jobs-pagination .ant-select {
+  width: 96px;
+}
+
+.jobs-page .jobs-total {
+  color: var(--cdnca-color-neutral63, #7c8799);
+  margin-right: 2px;
+}
+
+.jobs-page .jobs-task-name-cell {
+  display: block;
+  font-weight: 500;
+}
+
+.jobs-page .jobs-muted,
+.jobs-detail-modal .jobs-muted {
+  color: var(--cdnca-color-neutral51, #a0a8b6);
+}
+
+.jobs-page .jobs-badge {
+  display: inline-flex;
+  align-items: center;
+  min-width: 32px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  background: var(--cdnca-color-neutral10, #f1f3f6);
+  color: var(--cdnca-color-neutral69, #5c6577);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jobs-page .jobs-badge--priority {
+  border: 1px solid var(--cdnca-color-neutral34, #dfe3ea);
+  background: var(--cdnca-color-bg-container, #fff);
+  color: var(--cdnca-color-neutral74, #3b4352);
+}
+
+.jobs-page .jobs-badge--duration {
+  background: var(--cdnca-color-blue14, #eaf3ff);
+  color: var(--cdnca-color-primary);
+}
+
+.jobs-page .jobs-state-dot.ant-tag {
+  border: 0;
+  border-radius: 11px;
+  font-weight: 600;
+}
+
+.jobs-page .jobs-state-dot.ant-tag::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  vertical-align: 1px;
+}
+
+.jobs-detail-modal .jobs-detail-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.jobs-detail-modal .jobs-subtask-pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 8px;
+}
+
+.jobs-detail-modal .jobs-subtask-pagination .jobs-current-page {
+  pointer-events: none;
+}
+
+.jobs-detail-modal .jobs-page-size-label {
+  padding: 4px 11px;
+  border: 1px solid var(--cdnca-color-neutral39, #d9d9d9);
+  border-radius: 4px;
+}
+
+.jobs-detail-modal .jobs-detail-records-title {
+  margin: 16px 0 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cdnca-color-neutral19, #eef0f4);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 1080px) {
+  .jobs-detail-modal.ant-modal {
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* COV-04：批量取消失败明细。 */
+.jobs-bulk-failures {
+  margin: 0;
+  padding-left: 18px;
+  overflow-wrap: anywhere;
+}

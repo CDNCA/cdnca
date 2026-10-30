@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info: { title: Cycle A fixture, version: 1.0.0 }
+paths:
+  /v1/hidden:
+    get:
+      operationId: getCycleHidden
+      responses:
+        '400':
+          content:
+            application/json:
+              schema: { type: object }
+components:
+  pathItems:
+    A:
+      $ref: './b.yaml#/components/pathItems/B'

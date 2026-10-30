@@ -1,0 +1,16 @@
+[Unit]
+Description=CDNCA edge agent packaging helper socket
+
+[Socket]
+ListenSequentialPacket=/run/cdnca-edge-agent/helper.sock
+SocketUser=cdnca-edge
+SocketGroup=cdnca-edge
+SocketMode=0600
+DirectoryMode=0711
+Service=cdnca-edge-agent-helper.service
+Accept=no
+Backlog=16
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

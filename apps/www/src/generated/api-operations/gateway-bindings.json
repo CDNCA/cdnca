@@ -1,0 +1,120 @@
+{
+ "id": "gateway-bindings",
+ "prefix": "/v1/gateway-bindings",
+ "operations": [
+  {
+   "operation_id": "completeAgentGatewayBinding",
+   "method": "POST",
+   "path": "/v1/gateway-bindings/complete",
+   "summary": "Gateway installer completes a binding with its one-time token (public, rate limited per source)",
+   "auth": [
+    "none"
+   ],
+   "description": "The installer generated both private keys locally and verified the token's root CA fingerprint against /downloads/gateway-ca.pem first. Returns the client certificate (URI SAN spiffe://cdn-platform/gateway/<gateway_id>, 30 days), the node channel server certificate (90 days), CA bundles and the remote endpoints.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "token",
+      "type": "string",
+      "required": true,
+      "description": "gwt1.<gateway_id>.<root CA SHA-256 first 16 bytes hex>.<secret>"
+     },
+     {
+      "name": "client_csr_der",
+      "type": "string(byte)",
+      "required": true,
+      "description": "Ed25519 CSR."
+     },
+     {
+      "name": "server_csr_der",
+      "type": "string(byte)",
+      "required": true,
+      "description": "ECDSA P-256 CSR."
+     },
+     {
+      "name": "enrollment_port",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "agent_port",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "version",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Bound.",
+     "fields": [
+      {
+       "name": "gateway_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "installation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "workload_uri_san",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "client_certificate_pem",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "server_certificate_pem",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "root_ca_pem",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "node_ca_pem",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "endpoints",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "gateway_binding_token_invalid (unknown"
+    },
+    {
+     "status": "409",
+     "description": "gateway_remote_access_disabled"
+    },
+    {
+     "status": "422",
+     "description": "invalid_input (ports"
+    },
+    {
+     "status": "429",
+     "description": "rate_limited"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,76 @@
+{
+ "id": "admin-site-groups",
+ "prefix": "/v1/admin/site-groups",
+ "operations": [
+  {
+   "operation_id": "listAdminSiteGroups",
+   "method": "GET",
+   "path": "/v1/admin/site-groups",
+   "summary": "List all tenant site groups for a platform administrator",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a live platform identity and both permissions under shared IAM rules. Tenant credentials are rejected even when they contain similarly named permissions. No scope override is accepted. Count and page come from one database snapshot. Groups are ordered by created_at, id, scope_id ascending. A user is returned only when the scope has exactly one non-deleted system tenant_owner with an active membership. Missing or multiple owners are explicit; the actor or first member is never substituted.",
+   "permissions": [
+    "sites.read",
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Complete scoped-resource rows and a real global total.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AdminSiteGroup>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Permission denied."
+    },
+    {
+     "status": "503",
+     "description": "Site group service unavailable."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,168 @@
+{
+ "id": "identity",
+ "prefix": "/v1/identity",
+ "operations": [
+  {
+   "operation_id": "revokeCurrentIdentitySessionFamily",
+   "method": "DELETE",
+   "path": "/v1/identity/session-families/{family_id}",
+   "summary": "撤销当前用户的一个设备会话族",
+   "auth": [
+    "bearer"
+   ],
+   "description": "目标必须属于当前已认证 principal 的同一 scope/user。服务端在同一事务中重新锁定并校验 caller session、账户、membership 和 scope 后锁定整个 family。原 caller 仍有效时，精确重试 返回原响应；相同 Idempotency-Key 改变 family、revision、caller 或 request identity 返回 409。 撤销当前会话时，本次响应成功后当前 Bearer token 立即失效，后续请求先返回 401，不能绕过 caller 认证读取幂等收据。",
+   "params": [
+    {
+     "name": "family_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "列表返回的当前 family revision，必须使用强 ETag 形式"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "已撤销或精确幂等重放",
+     "fields": [
+      {
+       "name": "family_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "current",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "404",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "405",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "409",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "500",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    }
+   ]
+  },
+  {
+   "operation_id": "listCurrentIdentitySessionFamilies",
+   "method": "GET",
+   "path": "/v1/identity/sessions",
+   "summary": "按设备会话族列出当前用户的登录会话",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "绑定当前 scope/user 和首次请求快照的稳定不透明游标"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "当前 principal 的会话族，按最新会话创建时间和 family_id 稳定倒序",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SessionFamily>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "405",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "500",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+    }
+   ]
+  }
+ ]
+}

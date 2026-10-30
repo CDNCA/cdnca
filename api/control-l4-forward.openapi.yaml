@@ -1,0 +1,1922 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Layer-Four Forwarding API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant-owned TCP and UDP forwarding rules with optimistic concurrency,
+    idempotent writes, and immutable publication intents.
+servers:
+  - url: /
+paths:
+  /v1/streams:
+    get:
+      operationId: listStreams
+      summary: List layer-four forwarding rules
+      description: >-
+        Tenant principals see only rules owned by their current user and tenant.
+        Platform principals can list tenant rules after streams.read authorization.
+        All supplied filters are combined with AND and apply to both items and total.
+        Unknown or repeated query parameters are rejected.
+        protocol, enabled, listen_port, upstream, display_id, owner_display_id,
+        publication_state, group_id, package_product_id, cname_domain, cname_hostname, region_id,
+        node_group_id, sync_state and admin_status reject empty values.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: search
+          in: query
+          schema: {type: string, maxLength: 128}
+        - name: protocol
+          in: query
+          description: Exact lowercase tcp or udp matching any primary or additional listener. When listen_port is supplied, both must match the same listener. Whitespace and other spellings are rejected.
+          schema: {$ref: '#/components/schemas/StreamProtocol'}
+        - name: enabled
+          in: query
+          description: Exact lowercase true or false; whitespace, numbers and other spellings are rejected.
+          schema: {type: boolean}
+        - name: listen_port
+          in: query
+          description: Exact listening port, written as a canonical positive decimal integer.
+          schema: {type: integer, minimum: 1, maximum: 65535}
+        - name: upstream
+          in: query
+          description: Case-insensitive literal substring of the upstream IP address or hostname. Surrounding whitespace is trimmed; SQL wildcard characters remain literal. Control characters and invalid UTF-8 are rejected.
+          schema: {type: string, minLength: 1, maxLength: 253}
+        - name: display_id
+          in: query
+          description: Exact display ID as a canonical positive decimal string, at most 9223372036854775807. Display IDs are tenant-scoped.
+          schema: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        - name: owner_display_id
+          in: query
+          description: Exact stable user display number, written as a canonical positive decimal string at most 9223372036854775807. This is not a user UUID. Tenant principals remain restricted to their own scope and user; a different owner number returns an empty page.
+          schema: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        - name: publication_state
+          in: query
+          description: Exact publish_intent.state of the latest intent and its latest automatic publication observation. retry_wait is exposed as retrying; missing or unrecognized observations are unknown. This is not a business eligibility status or an independently inferred edge synchronization result.
+          schema: {type: string, enum: [unknown, pending, leased, retrying, reconciling, succeeded, failed, superseded]}
+        - name: group_id
+          in: query
+          description: Exact active stream group membership in the stream scope. This is a stream group, not a node line group.
+          schema: {type: string, format: uuid}
+        - name: package_product_id
+          in: query
+          description: Exact package product referenced by the stream subscription in the same tenant scope, not a subscription ID.
+          schema: {type: string, format: uuid}
+        - name: cname_domain
+          in: query
+          description: Case-insensitive literal substring of the effective CNAME domain (the stream's own, else its package's).
+          schema: {type: string, minLength: 1, maxLength: 253}
+        - name: cname_hostname
+          in: query
+          description: Case-insensitive literal substring of the package CNAME hostname (按套餐 streams).
+          schema: {type: string, minLength: 1, maxLength: 253}
+        - name: region_id
+          in: query
+          description: 区域. Exact line.region_id (the stream's own region, else its package's). Platform principals only; tenant principals get 403.
+          schema: {type: string, format: uuid}
+        - name: node_group_id
+          in: query
+          description: 线路分组. Exact line.node_group_id (the stream's own line group, else its package's primary group). Platform principals only; tenant principals get 403.
+          schema: {type: string, format: uuid}
+        - name: sync_state
+          in: query
+          description: 同步状态. Exact sync_state, derived from the latest intent's automatic publication and its node deployment receipts.
+          schema: {type: string, enum: [done, pending, failed]}
+        - name: admin_status
+          in: query
+          description: 状态. Exact admin_status.
+          schema: {$ref: '#/components/schemas/StreamAdminStatus'}
+      responses:
+        '200':
+          description: Stable page ordered newest first.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreamListResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createStream
+      summary: Create a forwarding rule and immutable publication intent
+      description: >-
+        Tenant principals are fixed to their current scope and user. Platform
+        principals must provide target_scope_id and owner_id. The committed
+        publication intent does not claim delivery or edge activation.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateStreamRequest'}
+      responses:
+        '201':
+          description: Rule and publication intent committed atomically, or an exact idempotent replay returned.
+          headers:
+            ETag: {$ref: '#/components/headers/RevisionETag'}
+            X-Publish-Intent-Version: {$ref: '#/components/headers/PublishIntentVersion'}
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Stream'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/streams/batch:
+    post:
+      operationId: batchCreateStreams
+      summary: 批量添加 forwarding rules, one per line
+      description: >-
+        Each line is "监听端口|IP|回源端口", e.g. "88 99/udp|1.2.3.4|8080": the first
+        port (default tcp, "/udp" or "/tcp" suffix) is the primary listener, the
+        others additional listeners; the origin is an IP address or a domain name.
+        template holds the fields every line shares (package, remark,
+        timeouts, DNS policy for domain origins, …); its listen and origin fields
+        are ignored. Lines are validated and written in order. With
+        ignore_errors (忽略错误) a failed line is skipped and the others are
+        committed (200). Without it the batch is atomic: one failed line and
+        nothing is written (422, the failed line says why, the rest are skipped).
+        The idempotency key covers the whole batch.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BatchCreateStreamsRequest'}
+      responses:
+        '200':
+          description: Committed; failed lines (only with ignore_errors) are listed with their error.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BatchCreateStreamsResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '422':
+          description: Without ignore_errors a line failed; nothing was written (committed false).
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BatchCreateStreamsResult'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/streams/batch-action:
+    post:
+      operationId: batchStreamAction
+      summary: 更多操作 on selected forwarding rules (platform)
+      description: >-
+        Platform principals only. set_status (设置状态) sets admin_status; a
+        status other than normal takes the stream off the nodes until it is
+        normal again. cname_domain (修改CNAME域名), cname_mode (修改CNAME生成模式)
+        and line_group (修改线路分组: region_id, node_group_id,
+        backup_node_group_id) set the stream's own overrides; "" / an omitted
+        id clears one, so the stream follows its package. A stream's line
+        group (its own, else its package's) adds its nodes to the scope's
+        publication targets. Each item carries its own expected_revision and
+        is applied alone: a missing or stale item fails with its code
+        (stream_not_found, version_conflict, and for cname_regenerate
+        stream_cname_not_overridden / stream_cname_not_failed) and the
+        others are applied.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BatchStreamActionRequest'}
+      responses:
+        '200':
+          description: Per-item results in request order.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BatchStreamActionResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/streams/{id}:
+    get:
+      operationId: getStream
+      summary: Get one layer-four forwarding rule
+      description: Returns the current rule and its latest exact publication intent projection.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.read]
+      parameters:
+        - $ref: '#/components/parameters/StreamID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Current rule and latest exact publication intent.
+          headers:
+            ETag: {$ref: '#/components/headers/RevisionETag'}
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Stream'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    patch:
+      operationId: updateStream
+      summary: Replace a rule and create an immutable publication intent
+      description: >-
+        If-Match and expected_revision must contain the same quoted positive
+        revision. Ownership is retained; no owner or scope field is accepted.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/StreamID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateStreamRequest'}
+      responses:
+        '200':
+          description: Rule and publication intent committed atomically, or an exact idempotent replay returned.
+          headers:
+            ETag: {$ref: '#/components/headers/RevisionETag'}
+            X-Publish-Intent-Version: {$ref: '#/components/headers/PublishIntentVersion'}
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Stream'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteStream
+      summary: Soft-delete a rule and create a deletion publication intent
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/StreamID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Rule deleted and immutable deletion intent committed.
+          headers:
+            X-Publish-Intent-Version: {$ref: '#/components/headers/PublishIntentVersion'}
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/stream-groups:
+    get:
+      operationId: listStreamGroups
+      summary: List layer-four forwarding groups
+      description: >-
+        Tenant principals see only groups owned by their current user and tenant.
+        Platform principals can list tenant groups after streams.read authorization.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: search
+          in: query
+          schema: {type: string, maxLength: 128}
+      responses:
+        '200':
+          description: Stable page ordered newest first; stream_count counts live member rules.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreamGroupListResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createStreamGroup
+      summary: Create a layer-four forwarding group
+      description: >-
+        Tenant principals are fixed to their current scope and user. Platform
+        principals must provide target_scope_id and owner_id. Group membership
+        alone never advances the edge configuration revision.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateStreamGroupRequest'}
+      responses:
+        '201':
+          description: Group committed, or an exact idempotent replay returned.
+          headers:
+            ETag: {$ref: '#/components/headers/RevisionETag'}
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreamGroup'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/stream-groups/{id}:
+    patch:
+      operationId: updateStreamGroup
+      summary: Rename a layer-four forwarding group
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/StreamGroupID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateStreamGroupRequest'}
+      responses:
+        '200':
+          description: Group updated, or an exact idempotent replay returned.
+          headers:
+            ETag: {$ref: '#/components/headers/RevisionETag'}
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreamGroup'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteStreamGroup
+      summary: Delete an unreferenced layer-four forwarding group
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/StreamGroupID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Group deleted after detaching nothing; still-referenced groups conflict.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/user-configs:
+    get:
+      operationId: listUserConfigs
+      summary: List per-user stream defaults
+      description: >-
+        type must be stream. Tenant principals see only their own rows; platform
+        principals see all rows in the selected scope.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: type
+          in: query
+          required: true
+          schema: {type: string, const: stream}
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: search
+          in: query
+          schema: {type: string, maxLength: 128}
+      responses:
+        '200':
+          description: Stable page ordered oldest first; display_id is the row ordinal.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreamUserConfigListResponse'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: createUserConfig
+      summary: Create a per-user stream default
+      description: >-
+        The scope is global, or a forwarding group that must exist in the same
+        scope. New forwards resolve these defaults when the field is omitted.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateStreamUserConfigRequest'}
+      responses:
+        '201':
+          description: Default committed, or an exact idempotent replay returned.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreamUserConfig'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/user-configs/effective:
+    get:
+      operationId: getEffectiveUserConfigs
+      summary: Resolve the stream defaults a new forward draft is prefilled with
+      description: >-
+        type must be stream. The same resolution as creating a forward: the
+        owner's global defaults, overridden by those of the given groups.
+        Tenant principals resolve their own; platform principals must give
+        target_scope_id and owner_id of a tenant member.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: type
+          in: query
+          required: true
+          schema: {type: string, const: stream}
+        - name: target_scope_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: owner_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: group_id
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 32
+            items: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Effective defaults.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/StreamEffectiveDefaults'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/user-configs/{id}:
+    delete:
+      operationId: deleteUserConfig
+      summary: Delete a per-user stream default
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - $ref: '#/components/parameters/StreamUserConfigID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Default deleted.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/l4-live-connections:
+    get:
+      operationId: listAllLiveConnections
+      summary: 实时连接 without a picked forward — live TCP sessions of every reachable forward
+      description: >-
+        Platform sessions reach every enabled TCP forward (tenant_id narrows to one tenant, tenants.id);
+        tenant sessions only their own forwards and must not send tenant_id. The newest 20 matching
+        forwards are asked, each on the nodes of its scope (as /v1/streams/{id}/live-connections); the
+        merged connections are newest first (unregistered starts last), at most 1000.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.read]
+      parameters:
+        - {name: tenant_id, in: query, description: platform only, schema: {type: string, format: uuid}}
+        - {name: stream_id, in: query, schema: {type: string, format: uuid}}
+        - {name: node_id, in: query, schema: {type: string, format: uuid}}
+        - {name: listen_port, in: query, schema: {type: integer, minimum: 1, maximum: 65535}}
+        - {name: client_ip, in: query, description: client address or CIDR, schema: {type: string}}
+        - {name: limit, in: query, description: per node and forward, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+      responses:
+        '200':
+          description: Merged live sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [streams, streams_truncated, truncated, problems, connections]
+                properties:
+                  streams: {type: integer, description: forwards asked}
+                  streams_truncated: {type: boolean, description: more than 20 forwards matched}
+                  truncated: {type: boolean}
+                  problems:
+                    type: array
+                    items:
+                      type: object
+                      required: [node_id, node_name, state]
+                      properties:
+                        node_id: {type: string, format: uuid}
+                        node_name: {type: string}
+                        state: {type: string, enum: [unsupported, offline, error]}
+                        error_code: {type: string}
+                  connections:
+                    type: array
+                    items:
+                      type: object
+                      required: [node_id, node_name, stream_id, stream_name, can_close, session_key, listener_id, listen_port, client_ip, client_port, upstream]
+                      properties:
+                        node_id: {type: string, format: uuid}
+                        node_name: {type: string}
+                        stream_id: {type: string, format: uuid}
+                        stream_name: {type: string}
+                        can_close: {type: boolean}
+                        session_key: {type: string}
+                        listener_id: {type: string}
+                        listen_port: {type: integer}
+                        client_ip: {type: string}
+                        client_port: {type: integer}
+                        peer_ip: {type: string}
+                        upstream: {type: string}
+                        started_at: {type: string, format: date-time}
+                        bytes_received: {type: integer}
+                        bytes_sent: {type: integer}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {description: 'l4_live_unavailable'}
+  /v1/streams/{id}/live-connections:
+    get:
+      operationId: listStreamLiveConnections
+      summary: 实时连接 — the stream's live TCP sessions on every node of its scope
+      description: >-
+        Asks every active node that holds the stream's scope configuration (at most 64, 5 s each) for the
+        stream's TCP sessions. UDP sessions are not listed (each ends with its reply). The real client
+        (PROXY protocol) and start time are known only for streams with session_log_enabled; otherwise the
+        kernel's peer is shown. Nodes whose agent lacks CAPABILITY_NAME_L4_LIVE_CONNECTIONS are reported
+        as unsupported and recover once their session declares it. can_close is false where the agent
+        does not run as root (list only).
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.read]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: client_ip, in: query, description: client address or CIDR, schema: {type: string}}
+        - {name: limit, in: query, description: per node, schema: {type: integer, minimum: 1, maximum: 1000, default: 200}}
+      responses:
+        '200':
+          description: Per-node live sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stream_id, nodes]
+                properties:
+                  stream_id: {type: string, format: uuid}
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                      required: [node_id, node_name, state, can_close, matched, untracked, connections]
+                      properties:
+                        node_id: {type: string, format: uuid}
+                        node_name: {type: string}
+                        state: {type: string, enum: [ok, unsupported, offline, error]}
+                        error_code: {type: string, description: 'unavailable, busy, expired, timeout, refused, invalid_reply, request_failed'}
+                        can_close: {type: boolean}
+                        matched: {type: integer}
+                        untracked: {type: integer}
+                        connections:
+                          type: array
+                          items:
+                            type: object
+                            required: [node_id, session_key, listener_id, listen_port, client_ip, client_port, upstream]
+                            properties:
+                              node_id: {type: string, format: uuid}
+                              session_key: {type: string}
+                              listener_id: {type: string}
+                              listen_port: {type: integer}
+                              client_ip: {type: string}
+                              client_port: {type: integer}
+                              peer_ip: {type: string}
+                              upstream: {type: string}
+                              started_at: {type: string, format: date-time}
+                              bytes_received: {type: integer}
+                              bytes_sent: {type: integer}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {description: 'l4_live_unavailable'}
+  /v1/streams/{id}/live-connections/close:
+    post:
+      operationId: closeStreamLiveConnections
+      summary: 断开实时连接 on one node
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [streams.manage]
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [node_id, session_keys]
+              properties:
+                node_id: {type: string, format: uuid}
+                session_keys: {type: array, minItems: 1, maxItems: 1000, items: {type: string, maxLength: 160}}
+      responses:
+        '200':
+          description: >-
+            state unsupported when the node's agent may only list (not root); per key error_code empty when
+            closed, not_found when it already ended or is not this stream's, unsupported or failed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [node_id, state, results]
+                properties:
+                  node_id: {type: string, format: uuid}
+                  state: {type: string, enum: [ok, unsupported, offline, error]}
+                  error_code: {type: string}
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [session_key]
+                      properties:
+                        session_key: {type: string}
+                        error_code: {type: string, enum: ['', not_found, unsupported, failed]}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {description: 'l4_live_unavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: session-or-access-token
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: CdncaKey credential whose principal still requires the operation permission.
+  parameters:
+    StreamID:
+      name: id
+      in: path
+      required: true
+      description: Exact immutable stream identity.
+      schema: {type: string, format: uuid}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Caller-stable request identity; invalid or absent values are replaced by middleware.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9._-]+$'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Reuse is accepted only for the exact same actor, operation, and normalized input.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9._-]+$'
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive current resource revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    StreamGroupID:
+      name: id
+      in: path
+      required: true
+      description: Exact forward group identity.
+      schema: {type: string, format: uuid}
+    StreamUserConfigID:
+      name: id
+      in: path
+      required: true
+      description: Exact per-user stream default identity.
+      schema: {type: string, format: uuid}
+  headers:
+    RequestID:
+      required: true
+      description: Stable request identity used by the operation and error envelope.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    RevisionETag:
+      required: true
+      description: Quoted positive current resource revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    PublishIntentVersion:
+      required: true
+      description: Monotonic publication-intent version within the tenant scope.
+      schema: {type: integer, format: int64, minimum: 1}
+  schemas:
+    StreamProtocol:
+      type: string
+      enum: [tcp, udp]
+    StreamDNSPolicyZero:
+      type: object
+      additionalProperties: false
+      required: [positive_min_ttl_seconds, positive_max_ttl_seconds, negative_ttl_seconds, stale_if_error_seconds, allow_private_addresses]
+      properties:
+        positive_min_ttl_seconds: {type: integer, const: 0}
+        positive_max_ttl_seconds: {type: integer, const: 0}
+        negative_ttl_seconds: {type: integer, const: 0}
+        stale_if_error_seconds: {type: integer, const: 0}
+        allow_private_addresses: {type: boolean, const: false}
+    StreamDNSPolicy:
+      type: object
+      additionalProperties: false
+      required: [positive_min_ttl_seconds, positive_max_ttl_seconds, negative_ttl_seconds, stale_if_error_seconds, allow_private_addresses]
+      properties:
+        positive_min_ttl_seconds: {type: integer, minimum: 1, maximum: 300}
+        positive_max_ttl_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          description: Must be greater than or equal to positive_min_ttl_seconds.
+        negative_ttl_seconds: {type: integer, minimum: 1, maximum: 3600}
+        stale_if_error_seconds:
+          type: integer
+          minimum: 1
+          maximum: 86400
+          description: Must be greater than or equal to positive_max_ttl_seconds.
+        allow_private_addresses:
+          type: boolean
+          const: false
+          description: Private-address DNS answers and rebinding are rejected fail closed.
+    StreamDNSPolicyState:
+      oneOf:
+        - $ref: '#/components/schemas/StreamDNSPolicyZero'
+        - $ref: '#/components/schemas/StreamDNSPolicy'
+    StreamGeoRegionCIDRs:
+      type: object
+      additionalProperties: false
+      required: [region, cidrs]
+      properties:
+        region: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,31}$'}
+        cidrs:
+          type: array
+          minItems: 1
+          maxItems: 4096
+          uniqueItems: true
+          items: {type: string}
+    StreamGeoPolicy:
+      type: object
+      additionalProperties: false
+      properties:
+        enabled: {type: boolean, default: false}
+        unknown_region_action: {type: string, enum: [allow, block], default: allow}
+        trusted_proxy_cidrs:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string}
+        blocked_regions:
+          type: array
+          maxItems: 256
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,31}$'}
+        region_cidrs:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/StreamGeoRegionCIDRs'}
+      allOf:
+        - if:
+            properties:
+              enabled: {const: false}
+          then:
+            properties:
+              unknown_region_action: {enum: ['', allow]}
+              trusted_proxy_cidrs: {maxItems: 0}
+              blocked_regions: {maxItems: 0}
+              region_cidrs: {maxItems: 0}
+        - if:
+            required: [enabled]
+            properties:
+              enabled: {const: true}
+          then:
+            required: [unknown_region_action, region_cidrs]
+            properties:
+              region_cidrs: {minItems: 1}
+    StreamGeoPolicyState:
+      allOf:
+        - $ref: '#/components/schemas/StreamGeoPolicy'
+        - type: object
+          required: [enabled, unknown_region_action, trusted_proxy_cidrs, blocked_regions, region_cidrs]
+    StreamAttributes:
+      type: object
+      properties:
+        package_subscription_id:
+          type: string
+          format: uuid
+          description: The stream's package subscription (所属套餐). A stream belongs to no website (migration 506); its line, CNAME, usage and stream_ports quota are the package's unless it sets its own line / CNAME.
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 256}
+        protocol: {$ref: '#/components/schemas/StreamProtocol'}
+        listen_address:
+          type: string
+          const: '*'
+          description: The current runtime binds wildcard IPv4 and IPv6 listeners.
+        listen_port: {type: integer, minimum: 1, maximum: 65535}
+        listen_port_end:
+          type: integer
+          minimum: 0
+          maximum: 65535
+          default: 0
+          description: 端口范围. When non-zero the primary listener is listen_port..listen_port_end (greater than listen_port, at most 1000 ports), each port a socket of its own that counts against the package's stream_ports. A range may not cover the node ports 80/443/18080/18443, overlap a website port or another stream's socket of the same protocol, nor be TLS passthrough; such saves are refused with stream_port_conflict whose details say where. v2 streams only. Requires TCP/UDP capability API version 9 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
+        upstream_follow_port:
+          type: boolean
+          default: false
+          description: 跟随端口回源. Connect to the origin on the port the client connected to (for a range, the matching port). upstream_port is then stored as listen_port and may be omitted. v2 streams only. Requires TCP/UDP capability API version 9.
+        additional_listeners:
+          type: array
+          maxItems: 63
+          items: {$ref: '#/components/schemas/StreamAdditionalListener'}
+          description: Extra listeners sharing this stream's endpoint, DNS and Geo policies. IDs are required client-generated UUIDs, globally distinct from every stream and other listener ID; IDs are returned in canonical order. Omitted on create means none; omitted on update preserves existing extras; an explicit empty array removes them. Any UDP listener requires both PROXY flags false. Active protocol and port pairs are reserved globally, including disabled streams, until removal or stream deletion.
+        upstream_address:
+          type: string
+          oneOf:
+            - {format: ipv4}
+            - {format: ipv6}
+            - {maxLength: 0}
+        upstream_host:
+          type: string
+          maxLength: 253
+          description: Canonical lowercase IDNA host in stored responses.
+        upstream_port: {type: integer, minimum: 1, maximum: 65535}
+        dns_policy: {$ref: '#/components/schemas/StreamDNSPolicyState'}
+        geo_policy: {$ref: '#/components/schemas/StreamGeoPolicy'}
+        connect_timeout_ms: {type: integer, minimum: 50, maximum: 30000}
+        response_timeout_ms: {type: integer, minimum: 100, maximum: 600000}
+        max_connections_per_client: {type: integer, minimum: 1, maximum: 10000}
+        proxy_protocol_inbound:
+          type: boolean
+          description: Must be true exactly when enabled geo source resolution uses trusted_proxy_cidrs.
+        proxy_protocol_v1:
+          type: boolean
+          description: Outbound Proxy Protocol v1; TCP only.
+        tls_passthrough:
+          type: boolean
+          default: false
+          description: Forward TLS unterminated and pick this stream by SNI, so several streams, websites and at most one plain TCP stream can share the TCP port. TCP only, including every additional listener. Non-TLS connections go to the plain TCP stream on the port; TLS connections whose SNI matches nothing are closed.
+        server_names:
+          type: array
+          default: []
+          maxItems: 32
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/StreamServerName'}
+          description: SNI of a TLS passthrough stream, 1-32 names, empty otherwise. Exact names win over wildcards. Each (port, name) is reserved globally while the stream is live; "*.a.com" and "x.a.com" are distinct names. Stored responses are lower-case and sorted.
+        max_new_connections_per_client_per_second:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          default: 0
+          description: 单 IP 新建连接速率. New connections (UDP sessions) one client IP may open to this stream per second, shared by all its listeners; 0 is unlimited. The client is the PROXY protocol address when the peer is a trusted proxy. Requires TCP/UDP capability API version 6 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
+        new_connection_burst:
+          type: integer
+          minimum: 0
+          maximum: 100000
+          default: 0
+          description: Connections allowed at once beyond the per-second rate (bucket capacity is rate + burst). Must be 0 when the rate is 0.
+        new_connection_ban_seconds:
+          type: integer
+          minimum: 0
+          maximum: 86400
+          default: 0
+          description: 0 refuses only connections over the rate; otherwise a client over the rate is refused new connections to this stream for this many seconds (node-local). Must be 0 when the rate is 0.
+        toa:
+          type: boolean
+          default: false
+          description: 回源携带客户端 IP via TOA. The node writes the IPv4 client address and port into TCP option 254 (length 8) on the handshake ACK towards the origin; the origin needs a TOA module (docs/user/l4-toa.md). IPv6 clients are forwarded without the option. TCP only (all listeners); excludes proxy_protocol_v1 and proxy_protocol_inbound. Requires capability L4_TOA v1 on every target node (Linux 5.10+ with the node's eBPF probe passing); otherwise publication is refused with node_capability_unavailable naming the nodes.
+        session_log_enabled:
+          type: boolean
+          default: false
+          description: 会话日志. Write a per-session access log (client IP — the PROXY protocol address when the peer is a trusted proxy — upstream, bytes, duration and end reason, refused sessions included) and register live TCP sessions for the real-time connection list. v2 streams only. Requires TCP/UDP capability API version 7 on every target node; otherwise publication is refused with node_capability_unavailable naming the nodes.
+        guard_rules:
+          type: array
+          default: []
+          maxItems: 64
+          items: {$ref: '#/components/schemas/StreamGuardRule'}
+          description: 防护规则. Evaluated in order on each new connection (UDP session) at the node; the first rule whose conditions all hold decides. Omitted or empty is none; responses always carry the array. v2 streams only. Requires TCP/UDP capability API version 10 on every target node; a rule with a geo condition also requires IP_INTEL v2 and a verified IP intelligence library on every target node. Otherwise publication is refused with node_capability_unavailable naming the nodes.
+        origins:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {$ref: '#/components/schemas/StreamOrigin'}
+          description: 源站列表. Several origins on upstream_port, each with a weight (1..100, share of new connections) and down (下线, gets none); at least one up. Several origins are IP addresses; a single origin may be a domain name (then dns_policy applies). When sent, upstream_address/upstream_host are taken from the first origin; omitted keeps the single upstream_address/upstream_host. Responses always carry the list (one entry, weight 1, for a single origin). Not with upstream_follow_port when several. Several origins, or balance_way ip_hash, require TCP/UDP capability API version 11 on every target node.
+        listen_ipv6:
+          type: boolean
+          default: false
+          description: IPv6开启. The node also listens on [::] for the stream's own sockets. Requires TCP/UDP capability API version 11.
+        acl:
+          $ref: '#/components/schemas/StreamACL'
+        enabled: {type: boolean}
+        balance_way: {$ref: '#/components/schemas/StreamBalanceWay'}
+        groups:
+          type: array
+          readOnly: true
+          maxItems: 64
+          items: {$ref: '#/components/schemas/StreamGroupReference'}
+    StreamOrigin:
+      type: object
+      additionalProperties: false
+      required: [address, weight]
+      properties:
+        address: {type: string, minLength: 1, maxLength: 253, description: IP address, or a domain name when it is the only origin.}
+        weight: {type: integer, minimum: 1, maximum: 100}
+        down: {type: boolean, default: false}
+    StreamACL:
+      type: object
+      additionalProperties: false
+      required: [default_action]
+      description: >-
+        访问控制 IP rules. Rules are evaluated in order, the first matching rule
+        decides; otherwise default_action (默认允许 allow / 默认拒绝 deny). The
+        node enforces them as the stream's leading guard rules (client_ip allow /
+        drop), ahead of guard_rules, so they need TCP/UDP capability API version
+        10 and count against the platform ACL rule limit together with
+        guard_rules. Omitted on a write keeps default allow without rules.
+      properties:
+        default_action: {type: string, enum: [allow, deny]}
+        rules:
+          type: array
+          maxItems: 1024
+          default: []
+          items:
+            type: object
+            additionalProperties: false
+            required: [cidr, action]
+            properties:
+              cidr: {type: string, description: An IP address or a network; stored canonical (address/32 or /128, masked network).}
+              action: {type: string, enum: [allow, deny]}
+    StreamAdminStatus:
+      type: string
+      enum: [normal, locked, traffic_exceeded, package_expired]
+      description: 状态 (设置状态). Only normal streams are served.
+    StreamLine:
+      type: object
+      additionalProperties: false
+      readOnly: true
+      required: [region_id, region_name, node_group_id, node_group_name, backup_node_group_id, backup_node_group_name]
+      description: 线路. The region and line groups serving the stream, its own (overrides) first, else its package's.
+      properties:
+        region_id: {oneOf: [{type: string, format: uuid}, {type: 'null'}]}
+        region_name: {type: string}
+        node_group_id: {oneOf: [{type: string, format: uuid}, {type: 'null'}]}
+        node_group_name: {type: string}
+        backup_node_group_id: {oneOf: [{type: string, format: uuid}, {type: 'null'}]}
+        backup_node_group_name: {type: string}
+    StreamOverrides:
+      type: object
+      additionalProperties: false
+      readOnly: true
+      required: [cname_domain, cname_mode, region_id, node_group_id, backup_node_group_id]
+      description: The stream's own CNAME domain / mode and line (migration 499, 更多操作); null follows its package (a stream belongs to no website, migration 506). line and cname_domain are the effective values.
+      properties:
+        cname_domain: {type: [string, 'null']}
+        cname_mode: {type: [string, 'null'], enum: [site, package, null]}
+        region_id: {oneOf: [{type: string, format: uuid}, {type: 'null'}]}
+        node_group_id: {oneOf: [{type: string, format: uuid}, {type: 'null'}]}
+        backup_node_group_id: {oneOf: [{type: string, format: uuid}, {type: 'null'}]}
+    BatchCreateStreamsRequest:
+      type: object
+      additionalProperties: false
+      required: [template, lines]
+      properties:
+        target_scope_id: {type: string, format: uuid, description: Required for platform principals.}
+        owner_id: {type: string, format: uuid, description: Required for platform principals.}
+        group_ids:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, format: uuid}
+        template: {$ref: '#/components/schemas/StreamFields'}
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: {type: string, maxLength: 4096}
+        ignore_errors: {type: boolean, default: false}
+    BatchCreateStreamsResult:
+      type: object
+      additionalProperties: false
+      required: [items, created, failed, committed]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [line, text, status]
+            properties:
+              line: {type: integer, minimum: 1}
+              text: {type: string}
+              status: {type: string, enum: [created, failed, skipped]}
+              stream: {$ref: '#/components/schemas/Stream'}
+              error:
+                type: object
+                additionalProperties: false
+                required: [code]
+                properties:
+                  code: {type: string, enum: [validation_error, stream_port_conflict, stream_name_conflict, stream_shared_port_proxy_protocol, stream_group_not_found, package_resource_quota_exceeded]}
+        created: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        committed: {type: boolean}
+    BatchStreamActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action, items]
+      description: Exactly the action's own value fields are allowed (set_status admin_status; cname_domain cname_domain; cname_mode cname_mode; line_group region_id / node_group_id / backup_node_group_id, the backup group needing a different primary group; cname_regenerate none). While a stream keeps its own CNAME domain or mode it gets its own CNAME hostname, written to DNS by a background job (cname_state pending until the provider write is read back); clearing both, or deleting the stream, removes it from DNS. cname_regenerate retries a failed one.
+      properties:
+        action: {type: string, enum: [set_status, cname_domain, cname_mode, line_group, cname_regenerate]}
+        admin_status: {$ref: '#/components/schemas/StreamAdminStatus'}
+        cname_domain: {type: string, maxLength: 253, description: 'A CNAME domain of 节点管理 > DNS配置, or "" to follow the package.'}
+        cname_mode: {type: string, enum: ['', site, package], description: '按转发生成 (site) / 按套餐生成 (package), or "" to follow the package.'}
+        region_id: {type: string, format: uuid, description: A platform region; omitted to follow the package.}
+        node_group_id: {type: string, format: uuid, description: A live platform general line group; omitted to follow the package.}
+        backup_node_group_id: {type: string, format: uuid, description: A live platform general line group other than node_group_id.}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, expected_revision]
+            properties:
+              id: {type: string, format: uuid}
+              expected_revision: {type: integer, format: int64, minimum: 1}
+    BatchStreamActionResult:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, status]
+            properties:
+              id: {type: string, format: uuid}
+              status: {type: string, enum: [updated, failed]}
+              stream: {$ref: '#/components/schemas/Stream'}
+              error:
+                type: object
+                additionalProperties: false
+                required: [code]
+                properties:
+                  code: {type: string, enum: [stream_not_found, version_conflict, permission_denied]}
+    StreamGuardRule:
+      type: object
+      additionalProperties: false
+      required: [id, action]
+      minProperties: 3
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Client-generated, distinct within the stream; keep it across edits (hit counters are per rule).
+        action:
+          type: string
+          enum: [drop, ban, allow]
+          description: drop closes the connection; ban closes it and, once the client hit the rule threshold times within window_seconds, refuses the client's new connections to this stream for ban_seconds (on sockets the stream alone uses, also in the node kernel); allow stops rule evaluation (the geo policy and new connection rate still apply).
+        first_packet:
+          type: object
+          additionalProperties: false
+          required: [match, value]
+          properties:
+            match: {type: string, enum: [prefix_hex, contains, regex]}
+            value:
+              type: string
+              minLength: 1
+              maxLength: 512
+              description: prefix_hex - lower-case hex bytes (at most 256 bytes); contains - text (at most 256 bytes); regex - an RE2 / PCRE pattern of at most 256 bytes without \C, \p or \P.
+          description: The first data the client sends (first TCP segment within 2.5 seconds, at most 512 bytes; the first UDP datagram). A client that sends nothing in time does not match and is forwarded (server-first protocols such as SSH or MySQL wait up to 2.5 seconds).
+        server_names:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/StreamServerName'}
+          description: TLS SNI; TLS passthrough streams only.
+        client_ip:
+          type: object
+          additionalProperties: false
+          required: [cidrs]
+          properties:
+            cidrs:
+              type: array
+              minItems: 1
+              maxItems: 1024
+              uniqueItems: true
+              items: {type: string, maxLength: 43}
+              description: Network CIDRs (host bits zero); at most 4096 over the stream's rules.
+            negate: {type: boolean, default: false}
+          description: The client address (the PROXY protocol address when the peer is a trusted proxy) is in one of cidrs, or with negate in none.
+        geo:
+          type: array
+          minItems: 1
+          maxItems: 4
+          items:
+            type: object
+            additionalProperties: false
+            required: [field, values]
+            properties:
+              field: {type: string, enum: [tag, asn, country, province, city]}
+              negate: {type: boolean, default: false}
+              values: {type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: {type: string}}
+          description: IP intelligence conditions, all of which must hold (tag - carrier:* / idc:cn / idc:global; country - ISO 3166-1 alpha-2; asn; province / city - GB/T 2260).
+        ban_seconds: {type: integer, minimum: 1, maximum: 86400, description: 'ban only.'}
+        threshold: {type: integer, minimum: 1, maximum: 10000, description: 'ban only; 1 bans at the first hit.'}
+        window_seconds: {type: integer, minimum: 1, maximum: 3600, description: 'ban with threshold > 1 only.'}
+    StreamServerName:
+      type: string
+      maxLength: 255
+      pattern: '^(\*\.)?[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'
+      description: An exact host name or a leading "*." wildcard over at least two labels.
+    StreamFields:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/StreamAttributes'
+        - type: object
+          required:
+            - package_subscription_id
+            - name
+            - protocol
+            - listen_address
+            - listen_port
+            - upstream_port
+            - connect_timeout_ms
+            - response_timeout_ms
+            - max_connections_per_client
+            - proxy_protocol_inbound
+            - proxy_protocol_v1
+            - balance_way
+            - enabled
+          oneOf:
+            - required: [upstream_address]
+              properties:
+                upstream_address:
+                  type: string
+                  oneOf:
+                    - {format: ipv4}
+                    - {format: ipv6}
+                upstream_host: {type: string, maxLength: 0}
+                dns_policy: {$ref: '#/components/schemas/StreamDNSPolicyZero'}
+            - required: [upstream_host, dns_policy]
+              properties:
+                upstream_address: {type: string, maxLength: 0}
+                upstream_host:
+                  type: string
+                  minLength: 1
+                  maxLength: 253
+                  description: Unicode input is canonicalized with IDNA Lookup before persistence.
+                dns_policy: {$ref: '#/components/schemas/StreamDNSPolicy'}
+          allOf:
+            - if:
+                anyOf:
+                  - properties:
+                      protocol: {const: udp}
+                  - required: [additional_listeners]
+                    properties:
+                      additional_listeners:
+                        contains:
+                          required: [protocol]
+                          properties:
+                            protocol: {const: udp}
+              then:
+                properties:
+                  proxy_protocol_inbound: {const: false}
+                  proxy_protocol_v1: {const: false}
+            - if:
+                required: [tls_passthrough]
+                properties:
+                  tls_passthrough: {const: true}
+              then:
+                required: [server_names]
+                properties:
+                  protocol: {const: tcp}
+                  server_names: {minItems: 1}
+                  additional_listeners:
+                    items:
+                      properties:
+                        protocol: {const: tcp}
+              else:
+                properties:
+                  server_names: {maxItems: 0}
+            - if:
+                not:
+                  required: [max_new_connections_per_client_per_second]
+                  properties:
+                    max_new_connections_per_client_per_second: {minimum: 1}
+              then:
+                properties:
+                  new_connection_burst: {const: 0}
+                  new_connection_ban_seconds: {const: 0}
+            - if:
+                required: [toa]
+                properties:
+                  toa: {const: true}
+              then:
+                properties:
+                  protocol: {const: tcp}
+                  proxy_protocol_v1: {const: false}
+                  proxy_protocol_inbound: {const: false}
+                  additional_listeners:
+                    items:
+                      properties:
+                        protocol: {const: tcp}
+    CreateStreamRequest:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/StreamFields'
+        - type: object
+          properties:
+            target_scope_id:
+              type: string
+              format: uuid
+              description: Required for platform principals; tenant principals may omit it or use their current scope.
+            owner_id:
+              type: string
+              format: uuid
+              description: Required for platform principals; tenant principals may omit it or use their current user.
+            group_ids:
+              type: array
+              maxItems: 64
+              uniqueItems: true
+              items: {type: string, format: uuid}
+              description: Groups in the same scope; omitted or empty means ungrouped.
+    UpdateStreamRequest:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/StreamFields'
+        - type: object
+          required: [expected_revision]
+          properties:
+            expected_revision:
+              type: integer
+              format: int64
+              minimum: 1
+              description: Must exactly equal the quoted If-Match revision.
+            group_ids:
+              type: array
+              maxItems: 64
+              uniqueItems: true
+              items: {type: string, format: uuid}
+              description: Omitted keeps current membership; an empty array clears it.
+    StreamOwner:
+      type: object
+      additionalProperties: false
+      required: [id, display_name]
+      properties:
+        id: {type: string, format: uuid}
+        display_name: {type: string}
+    StreamBalanceWay:
+      type: string
+      enum: [rr, ip_hash]
+      description: Origin connection balancing strategy; this is independent of the selected node line group.
+    StreamGroupReference:
+      type: object
+      additionalProperties: false
+      required: [id, name, remark]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        remark: {type: string}
+    StreamGroup:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, scope_id, owner, name, remark, stream_count, revision, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$', readOnly: true}
+        scope_id: {type: string, format: uuid}
+        owner:
+          oneOf:
+            - $ref: '#/components/schemas/StreamOwner'
+            - {type: 'null'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 256}
+        stream_count: {type: integer, format: int64, minimum: 0, readOnly: true}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    StreamGroupFields:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 256}
+    CreateStreamGroupRequest:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/StreamGroupFields'
+        - type: object
+          properties:
+            target_scope_id:
+              type: string
+              format: uuid
+              description: Required for platform principals; tenant principals may omit it or use their current scope.
+            owner_id:
+              type: string
+              format: uuid
+              description: Required for platform principals; tenant principals may omit it or use their current user.
+    UpdateStreamGroupRequest:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/StreamGroupFields'
+        - type: object
+          required: [expected_revision]
+          properties:
+            expected_revision:
+              type: integer
+              format: int64
+              minimum: 1
+              description: Must exactly equal the quoted If-Match revision.
+    StreamGroupListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/StreamGroup'}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1, maximum: 1000000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    StreamUserConfig:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, scope_id, owner, setting_name, setting_value, scope_name, group, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$', readOnly: true}
+        scope_id: {type: string, format: uuid}
+        owner:
+          oneOf:
+            - $ref: '#/components/schemas/StreamOwner'
+            - {type: 'null'}
+        setting_name:
+          type: string
+          enum: [proxy_protocol, listen_protocol, balance_way]
+        setting_value: {type: string}
+        scope_name:
+          type: string
+          enum: [global, group]
+        group:
+          oneOf:
+            - $ref: '#/components/schemas/StreamGroupReference'
+            - {type: 'null'}
+        created_at: {type: string, format: date-time}
+    CreateStreamUserConfigRequest:
+      type: object
+      additionalProperties: false
+      required: [setting_name, setting_value, scope_name]
+      properties:
+        target_scope_id:
+          type: string
+          format: uuid
+          description: Required for platform principals; tenant principals may omit it or use their current scope.
+        owner_id:
+          type: string
+          format: uuid
+          description: Required for platform principals; tenant principals may omit it or use their current user.
+        setting_name:
+          type: string
+          enum: [proxy_protocol, listen_protocol, balance_way]
+        setting_value: {type: string}
+        scope_name:
+          type: string
+          enum: [global, group]
+        group_id:
+          type: string
+          format: uuid
+          description: Required exactly when scope_name is group, and must exist in the same scope.
+    StreamUserConfigListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/StreamUserConfig'}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1, maximum: 1000000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    StreamEffectiveDefaults:
+      type: object
+      additionalProperties: false
+      required: [protocol, proxy_protocol_inbound, balance_way]
+      description: null means no default is set for the item.
+      properties:
+        protocol: {type: [string, 'null'], enum: [tcp, udp, null]}
+        proxy_protocol_inbound: {type: [boolean, 'null']}
+        balance_way: {type: [string, 'null'], enum: [rr, ip_hash, null]}
+    StreamRuntimeListenerV2:
+      type: object
+      additionalProperties: false
+      required: [protocol, address, port]
+      properties:
+        protocol: {$ref: '#/components/schemas/StreamProtocol'}
+        address: {type: string, const: '*'}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        port_end:
+          type: integer
+          minimum: 2
+          maximum: 65535
+          description: Present only for a port range port..port_end. Requires TCP/UDP capability API version 9.
+    StreamAdditionalListener:
+      type: object
+      additionalProperties: false
+      required: [id, protocol, address, port]
+      properties:
+        id: {type: string, format: uuid, not: {const: '00000000-0000-0000-0000-000000000000'}}
+        protocol: {$ref: '#/components/schemas/StreamProtocol'}
+        address: {type: string, const: '*'}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        port_end:
+          type: integer
+          minimum: 2
+          maximum: 65535
+          description: Present for a port range port..port_end (at most 1000 ports), as listen_port_end. Requires TCP/UDP capability API version 9.
+    StreamRuntimeEndpointV2:
+      type: object
+      additionalProperties: false
+      required: [port]
+      oneOf:
+        - required: [address]
+          properties:
+            address:
+              type: string
+              oneOf:
+                - {format: ipv4}
+                - {format: ipv6}
+        - required: [host]
+          properties:
+            host: {type: string, minLength: 1, maxLength: 253}
+      properties:
+        address:
+          type: string
+          oneOf:
+            - {format: ipv4}
+            - {format: ipv6}
+        host: {type: string, minLength: 1, maxLength: 253}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        follow_port:
+          const: true
+          description: Present only for follow-port origins; port then equals listener.port and the node connects on the client's port. Requires TCP/UDP capability API version 9.
+        origins:
+          type: array
+          minItems: 2
+          maxItems: 64
+          description: Present only for several origins (address is the first). Requires TCP/UDP capability API version 11.
+          items:
+            type: object
+            additionalProperties: false
+            required: [address, weight]
+            properties:
+              address: {type: string, oneOf: [{format: ipv4}, {format: ipv6}]}
+              weight: {type: integer, minimum: 1, maximum: 100}
+              down: {const: true}
+        balance:
+          const: ip_hash
+          description: Present only for 定源 (balance_way ip_hash); otherwise weighted round robin. Requires TCP/UDP capability API version 11.
+    StreamRuntimeGeoPolicyV2:
+      type: object
+      additionalProperties: false
+      required: [enabled, tenant_id, stream_id, revision, unknown_region_action, trusted_proxy_cidrs, blocked_regions, region_cidrs]
+      properties:
+        enabled: {type: boolean}
+        tenant_id: {type: string, format: uuid}
+        stream_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1, maximum: 9007199254740991}
+        unknown_region_action: {type: string, enum: [allow, block]}
+        trusted_proxy_cidrs:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string}
+        blocked_regions:
+          type: array
+          maxItems: 256
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z0-9][a-z0-9-]{0,31}$'}
+        region_cidrs:
+          type: array
+          maxItems: 256
+          items: {$ref: '#/components/schemas/StreamGeoRegionCIDRs'}
+      description: tenant_id, stream_id, and revision exactly match the enclosing v2 runtime target.
+    StreamRuntimeSpecV2:
+      type: object
+      additionalProperties: false
+      required: [schema_version, tenant_id, stream_id, revision, listener, endpoint, dns, geo, connect_timeout_ms, response_timeout_ms, max_connections_per_client, drain_timeout_ms, proxy_protocol_inbound, proxy_protocol_outbound]
+      properties:
+        schema_version: {type: string, const: 'cdnca.edge.l4/v2'}
+        tenant_id: {type: string, format: uuid}
+        stream_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1, maximum: 9007199254740991}
+        listener: {$ref: '#/components/schemas/StreamRuntimeListenerV2'}
+        additional_listeners:
+          type: array
+          minItems: 1
+          maxItems: 63
+          items: {$ref: '#/components/schemas/StreamAdditionalListener'}
+          description: Omitted when empty. Canonically sorted by stable listener UUID; the primary listener identity remains stream_id. Requires TCP/UDP capability API version 3 for all protocols in the scope's current and bounded historical listener lifecycle.
+        endpoint: {$ref: '#/components/schemas/StreamRuntimeEndpointV2'}
+        dns: {$ref: '#/components/schemas/StreamDNSPolicyState'}
+        geo: {$ref: '#/components/schemas/StreamRuntimeGeoPolicyV2'}
+        connect_timeout_ms: {type: integer, minimum: 50, maximum: 30000}
+        response_timeout_ms: {type: integer, minimum: 100, maximum: 600000}
+        max_connections_per_client: {type: integer, minimum: 1, maximum: 10000}
+        drain_timeout_ms: {type: integer, minimum: 1000, maximum: 600000}
+        proxy_protocol_inbound: {type: boolean}
+        proxy_protocol_outbound: {type: boolean}
+        tls_passthrough:
+          type: boolean
+          const: true
+          description: Present only for TLS passthrough streams, together with server_names. Requires TCP capability API version 4, as does any v2 socket that shares a port with a website or another stream.
+        server_names:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/StreamServerName'}
+        new_conn_rate:
+          type: object
+          additionalProperties: false
+          required: [rate_per_second, burst, ban_seconds]
+          properties:
+            rate_per_second: {type: integer, minimum: 1, maximum: 100000}
+            burst: {type: integer, minimum: 0, maximum: 100000}
+            ban_seconds: {type: integer, minimum: 0, maximum: 86400}
+          description: Present only for streams with a per-client new connection rate. Requires TCP/UDP capability API version 6.
+        toa:
+          const: true
+          description: Present only for TOA streams (TCP, no PROXY protocol). Requires capability L4_TOA v1.
+        session_log:
+          const: true
+          description: Present only for streams with a session log. Requires TCP/UDP capability API version 7.
+        guard_rules:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {$ref: '#/components/schemas/StreamGuardRule'}
+          description: Present only for streams with guard rules (the ACL's rules first, then the stream's own). Requires TCP/UDP capability API version 10 (and IP_INTEL v2 for geo conditions).
+        listen_ipv6:
+          const: true
+          description: Present only for IPv6开启. Requires TCP/UDP capability API version 11.
+      dependentRequired:
+        tls_passthrough: [server_names]
+        server_names: [tls_passthrough]
+      description: >-
+        Immutable target identity (no site_id since migration 506; every v2
+        stream requires TCP/UDP capability API version 12). tenant_id, stream_id, and revision
+        identify the exact configuration compiled for publication; callers must
+        not substitute a list index or the stream's current revision.
+    StreamRuntimeSpec:
+      oneOf:
+        - $ref: '#/components/schemas/StreamRuntimeSpecV2'
+    StreamPublishIntent:
+      type: object
+      additionalProperties: false
+      required: [id, version, operation, desired_state, resource_revision, configuration_source_revision, runtime_spec, state, automatic_request_id, publication_id, rollout_id, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+        operation: {type: string, enum: [create, update, delete]}
+        desired_state: {type: string, enum: [enabled, disabled, deleted]}
+        resource_revision: {type: integer, format: int64, minimum: 1}
+        configuration_source_revision: {type: integer, format: int64, minimum: 1}
+        runtime_spec: {$ref: '#/components/schemas/StreamRuntimeSpec'}
+        state: {type: string, enum: [unknown, pending, leased, retrying, reconciling, succeeded, failed, superseded]}
+        automatic_request_id:
+          oneOf:
+            - {type: string, format: uuid}
+            - {type: 'null'}
+        publication_id:
+          oneOf:
+            - {type: string, format: uuid}
+            - {type: 'null'}
+        rollout_id:
+          oneOf:
+            - {type: string, format: uuid}
+            - {type: 'null'}
+        created_at: {type: string, format: date-time}
+      description: >-
+        id, version, resource_revision, configuration_source_revision, and
+        runtime_spec identify the immutable intent. publication_id, rollout_id,
+        and state are the exact durable publication result projection; null or
+        unknown never implies edge activation.
+    Stream:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/StreamAttributes'
+        - type: object
+          required:
+            - id
+            - display_id
+            - scope_id
+            - package_subscription_id
+            - eligibility_state
+            - owner
+            - name
+            - remark
+            - protocol
+            - listen_address
+            - listen_port
+            - upstream_address
+            - upstream_host
+            - upstream_port
+            - dns_policy
+            - geo_policy
+            - connect_timeout_ms
+            - response_timeout_ms
+            - max_connections_per_client
+            - proxy_protocol_inbound
+            - proxy_protocol_v1
+            - tls_passthrough
+            - server_names
+            - max_new_connections_per_client_per_second
+            - new_connection_burst
+            - new_connection_ban_seconds
+            - toa
+            - session_log_enabled
+            - guard_rules
+            - origins
+            - listen_ipv6
+            - acl
+            - admin_status
+            - overrides
+            - line
+            - sync_state
+            - enabled
+            - revision
+            - publish_intent
+            - created_at
+            - updated_at
+          properties:
+            id: {type: string, format: uuid}
+            display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$', readOnly: true}
+            scope_id: {type: string, format: uuid}
+            package_name:
+              type: [string, 'null']
+              readOnly: true
+              description: Purchased package snapshot name for this stream scope. List and detail reads resolve the persisted subscription; write and legacy replay responses may omit it or return null.
+            package_expires_at:
+              type: [string, 'null']
+              format: date-time
+              readOnly: true
+              description: Purchased subscription ends_at for this stream scope, not its usage cycle end. List and detail reads resolve the persisted subscription; write and legacy replay responses may omit it or return null.
+            cname:
+              type: [string, 'null']
+              readOnly: true
+              description: Current CNAME hostname. With the stream's own CNAME domain or mode (overrides) it is the stream's own hostname (migration 505) once written to DNS; otherwise 按套餐 (effective cname_mode package) projects the package's allocation, and 按转发 without an override has none (null).
+            cname_domain:
+              type: [string, 'null']
+              readOnly: true
+              description: Effective CNAME domain, the stream's own (overrides.cname_domain), then its own allocation's zone, then its package's.
+            cname_hostname:
+              type: [string, 'null']
+              readOnly: true
+              description: Explicit CNAME hostname; not projected for streams (null).
+            cname_state:
+              type: [string, 'null']
+              enum: [pending, failed, done, null]
+              readOnly: true
+              description: CNAME state (生成中 / 失败可重试 / 已生成) of the stream's own CNAME when it has an override, else of the package's allocation (按套餐 only).
+            cname_failure_code:
+              type: [string, 'null']
+              readOnly: true
+              description: Why the stream's own CNAME failed (cname_state failed), e.g. cname_zone_not_configured, dns_propagation_unconfirmed.
+            geo_policy: {$ref: '#/components/schemas/StreamGeoPolicyState'}
+            eligibility_state: {type: string, enum: [eligible, ineligible]}
+            admin_status: {$ref: '#/components/schemas/StreamAdminStatus'}
+            overrides: {$ref: '#/components/schemas/StreamOverrides'}
+            line: {$ref: '#/components/schemas/StreamLine'}
+            sync_state:
+              type: string
+              enum: [done, pending, failed]
+              readOnly: true
+              description: 同步状态. From the latest intent's automatic publication, whose outcome is every target node's deployment receipt (done = all healthy); pending until then. Never written by clients.
+            owner:
+              oneOf:
+                - $ref: '#/components/schemas/StreamOwner'
+                - {type: 'null'}
+            revision: {type: integer, format: int64, minimum: 1}
+            publish_intent: {$ref: '#/components/schemas/StreamPublishIntent'}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    StreamListResponse:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/Stream'}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1, maximum: 1000000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum: [invalid_session, permission_denied, validation_error, invalid_request, unsupported_media_type, stream_not_found, stream_port_conflict, stream_shared_port_proxy_protocol, stream_name_conflict, stream_group_not_found, stream_group_name_conflict, stream_group_in_use, stream_default_not_found, version_conflict, idempotency_conflict, internal_error]
+            message: {type: string}
+            request_id: {type: string, minLength: 1, maxLength: 128}
+            details:
+              type: object
+              additionalProperties: false
+              required: [protocol, port, with]
+              description: Only on stream_port_conflict when the collision is located. with is reserved (node ports 80/443/18080/18443), self (another listener of this stream), stream or site; name is the other stream or website when it is in the caller's scope.
+              properties:
+                protocol: {$ref: '#/components/schemas/StreamProtocol'}
+                port: {type: integer, minimum: 1, maximum: 65535}
+                port_end: {type: integer, minimum: 2, maximum: 65535}
+                with: {type: string, enum: [reserved, self, stream, site]}
+                name: {type: string}
+  responses:
+    BadRequest:
+      description: Stable invalid request or validation error.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Forbidden:
+      description: The authenticated principal lacks the required permission or owner scope.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    NotFound:
+      description: No visible stream matches the exact immutable stream identity.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Conflict:
+      description: Revision, idempotency, name, or listener-port conflict.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    UnsupportedMediaType:
+      description: Exactly one Content-Type field parsing as application/json is required.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    InternalError:
+      description: Internal operation failure without publication or activation claims.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

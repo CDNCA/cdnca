@@ -1,0 +1,586 @@
+{
+ "id": "regions",
+ "prefix": "/v1/regions",
+ "operations": [
+  {
+   "operation_id": "listPlatformRegions",
+   "method": "GET",
+   "path": "/v1/regions",
+   "summary": "List platform regions",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "regions.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description": "Legacy selector mode. Zero returns the complete platform catalog and cannot be combined with page or page_size."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer",
+     "description": "Table page number. Enables paginated mode together with page_size."
+    },
+    {
+     "name": "page_size",
+     "in": "query",
+     "type": "integer",
+     "description": "Table page size. Enables paginated mode together with page."
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Literal case-insensitive match against name and description."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable list ordered by sort value and immutable short ID",
+     "fields": [
+      {
+       "name": "count",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Total number of regions matching search before pagination or limit is applied."
+      },
+      {
+       "name": "data",
+       "type": "array<Region>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request validation failed (regions_validation_error)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required (regions_unauthenticated)"
+    },
+    {
+     "status": "403",
+     "description": "Required region permission is missing (regions_permission_denied)"
+    },
+    {
+     "status": "503",
+     "description": "Region catalog is unavailable (regions_unavailable)"
+    }
+   ]
+  },
+  {
+   "operation_id": "createPlatformRegion",
+   "method": "POST",
+   "path": "/v1/regions",
+   "summary": "Create a platform region",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "regions.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "country_code",
+      "type": "string",
+      "description": "ISO 3166-1 alpha-2 country code, \"\" = not set (market conditional origins map node regions by it)."
+     },
+     {
+      "name": "province_code",
+      "type": "string",
+      "description": "GB/T 2260 province-level code, only with country_code CN; \"\" = whole country / not set."
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "l2_check_port",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "sort",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Region created or an exact completed request replayed",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "code",
+       "type": "string",
+       "required": true,
+       "description": "Stable lower-case ASCII code of the region, generated when the region is created and never changed (renaming keeps it): the lower-cased name when it fits the pattern and is free, \"default\" for 默认, else region-<id>. Nodes learn their region by it from the control plane; error page region overrides and origin routes' node_regions match on it."
+      },
+      {
+       "name": "country_code",
+       "type": "string",
+       "required": true,
+       "description": "ISO 3166-1 alpha-2 country code, \"\" = not set (market conditional origins map node regions by it)."
+      },
+      {
+       "name": "province_code",
+       "type": "string",
+       "required": true,
+       "description": "GB/T 2260 province-level code, only with country_code CN; \"\" = whole country / not set."
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "l2_check_port",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "sort",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request validation failed (regions_validation_error)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required (regions_unauthenticated)"
+    },
+    {
+     "status": "403",
+     "description": "Required region permission is missing (regions_permission_denied)"
+    },
+    {
+     "status": "409",
+     "description": "Region name"
+    },
+    {
+     "status": "503",
+     "description": "Region catalog is unavailable (regions_unavailable)"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformRegion",
+   "method": "GET",
+   "path": "/v1/regions/{id}",
+   "summary": "Get a platform region",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "regions.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current region",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "code",
+       "type": "string",
+       "required": true,
+       "description": "Stable lower-case ASCII code of the region, generated when the region is created and never changed (renaming keeps it): the lower-cased name when it fits the pattern and is free, \"default\" for 默认, else region-<id>. Nodes learn their region by it from the control plane; error page region overrides and origin routes' node_regions match on it."
+      },
+      {
+       "name": "country_code",
+       "type": "string",
+       "required": true,
+       "description": "ISO 3166-1 alpha-2 country code, \"\" = not set (market conditional origins map node regions by it)."
+      },
+      {
+       "name": "province_code",
+       "type": "string",
+       "required": true,
+       "description": "GB/T 2260 province-level code, only with country_code CN; \"\" = whole country / not set."
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "l2_check_port",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "sort",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request validation failed (regions_validation_error)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required (regions_unauthenticated)"
+    },
+    {
+     "status": "403",
+     "description": "Required region permission is missing (regions_permission_denied)"
+    },
+    {
+     "status": "404",
+     "description": "Region does not exist (regions_not_found)"
+    },
+    {
+     "status": "503",
+     "description": "Region catalog is unavailable (regions_unavailable)"
+    }
+   ]
+  },
+  {
+   "operation_id": "replacePlatformRegion",
+   "method": "PUT",
+   "path": "/v1/regions/{id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ]
+  },
+  {
+   "operation_id": "updatePlatformRegion",
+   "method": "PATCH",
+   "path": "/v1/regions/{id}",
+   "summary": "Replace the editable fields of a platform region",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "regions.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exact strong ETag revision read from the current region."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "country_code",
+      "type": "string",
+      "description": "ISO 3166-1 alpha-2 country code, \"\" = not set (market conditional origins map node regions by it)."
+     },
+     {
+      "name": "province_code",
+      "type": "string",
+      "description": "GB/T 2260 province-level code, only with country_code CN; \"\" = whole country / not set."
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "l2_check_port",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "sort",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Region updated or an exact completed request replayed",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "code",
+       "type": "string",
+       "required": true,
+       "description": "Stable lower-case ASCII code of the region, generated when the region is created and never changed (renaming keeps it): the lower-cased name when it fits the pattern and is free, \"default\" for 默认, else region-<id>. Nodes learn their region by it from the control plane; error page region overrides and origin routes' node_regions match on it."
+      },
+      {
+       "name": "country_code",
+       "type": "string",
+       "required": true,
+       "description": "ISO 3166-1 alpha-2 country code, \"\" = not set (market conditional origins map node regions by it)."
+      },
+      {
+       "name": "province_code",
+       "type": "string",
+       "required": true,
+       "description": "GB/T 2260 province-level code, only with country_code CN; \"\" = whole country / not set."
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "l2_check_port",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "sort",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request validation failed (regions_validation_error)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required (regions_unauthenticated)"
+    },
+    {
+     "status": "403",
+     "description": "Required region permission is missing (regions_permission_denied)"
+    },
+    {
+     "status": "404",
+     "description": "Region does not exist (regions_not_found)"
+    },
+    {
+     "status": "409",
+     "description": "Region name"
+    },
+    {
+     "status": "412",
+     "description": "Region revision changed (regions_revision_conflict)"
+    },
+    {
+     "status": "428",
+     "description": "If-Match is required (regions_precondition_required)"
+    },
+    {
+     "status": "503",
+     "description": "Region catalog is unavailable (regions_unavailable)"
+    }
+   ]
+  },
+  {
+   "operation_id": "deletePlatformRegion",
+   "method": "DELETE",
+   "path": "/v1/regions/{id}",
+   "summary": "Delete an unused platform region",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "regions.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exact strong ETag revision read from the current region."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Region deleted or an exact completed request replayed"
+    },
+    {
+     "status": "400",
+     "description": "Request validation failed (regions_validation_error)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required (regions_unauthenticated)"
+    },
+    {
+     "status": "403",
+     "description": "Required region permission is missing (regions_permission_denied)"
+    },
+    {
+     "status": "404",
+     "description": "Region does not exist (regions_not_found)"
+    },
+    {
+     "status": "409",
+     "description": "Region name"
+    },
+    {
+     "status": "412",
+     "description": "Region revision changed (regions_revision_conflict)"
+    },
+    {
+     "status": "428",
+     "description": "If-Match is required (regions_precondition_required)"
+    },
+    {
+     "status": "503",
+     "description": "Region catalog is unavailable (regions_unavailable)"
+    }
+   ]
+  }
+ ]
+}

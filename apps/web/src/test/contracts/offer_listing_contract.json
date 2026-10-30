@@ -1,0 +1,318 @@
+{
+  "items": [
+    {
+      "name": "never-scored",
+      "description": "",
+      "category": "",
+      "billing_model": "daily_bundle",
+      "allocation": {
+        "http_ports": 2,
+        "stream_ports": 0,
+        "websocket": false,
+        "http3": false
+      },
+      "limits": [
+        {
+          "metric": "domains",
+          "cap": 5,
+          "action": "reject_new"
+        }
+      ],
+      "tags": {
+        "cc_protection": "",
+        "ddos_protection_gbps": 0,
+        "complaint_resistant": false,
+        "tenancy": "",
+        "mobile_reachable": false,
+        "region_block": false
+      },
+      "prepaid_exhausted_action": "",
+      "compliance": {
+        "require_icp": false,
+        "require_kyc": false
+      },
+      "components": null,
+      "pricing": {
+        "currency": "CNY",
+        "daily_minor": 100,
+        "min_days": 1,
+        "max_days": 30
+      },
+      "ip_visibility": "",
+      "access_rules": {},
+      "trial_days": 0,
+      "settlement_mode": "direct",
+      "site_auto_pause": false,
+      "id": "01000000-0000-0000-0000-000000000000",
+      "seller_id": "ee000000-0000-0000-0000-000000000000",
+      "status": "listed",
+      "revision": 1,
+      "created_at": "2026-10-25T08:00:00Z",
+      "plugins_unavailable": []
+    },
+    {
+      "name": "few-samples",
+      "description": "",
+      "category": "",
+      "billing_model": "daily_bundle",
+      "allocation": {
+        "http_ports": 2,
+        "stream_ports": 0,
+        "websocket": false,
+        "http3": false
+      },
+      "limits": [
+        {
+          "metric": "domains",
+          "cap": 5,
+          "action": "reject_new"
+        }
+      ],
+      "tags": {
+        "cc_protection": "",
+        "ddos_protection_gbps": 0,
+        "complaint_resistant": false,
+        "tenancy": "",
+        "mobile_reachable": false,
+        "region_block": false
+      },
+      "prepaid_exhausted_action": "",
+      "compliance": {
+        "require_icp": false,
+        "require_kyc": false
+      },
+      "components": null,
+      "pricing": {
+        "currency": "CNY",
+        "daily_minor": 0,
+        "min_days": 1,
+        "max_days": 30
+      },
+      "ip_visibility": "",
+      "access_rules": {},
+      "trial_days": 0,
+      "settlement_mode": "direct",
+      "site_auto_pause": false,
+      "id": "02000000-0000-0000-0000-000000000000",
+      "seller_id": "ee000000-0000-0000-0000-000000000000",
+      "status": "listed",
+      "revision": 1,
+      "created_at": "2026-10-25T08:00:00Z",
+      "quality": {
+        "score": 1.5,
+        "tier": "insufficient",
+        "regions": [
+          "hk"
+        ],
+        "carriers": [
+          "bgp"
+        ],
+        "serving_nodes": 2,
+        "unit_price": 0,
+        "computed_at": "2026-10-25T08:00:00Z"
+      },
+      "plugins_unavailable": []
+    },
+    {
+      "name": "scored-zero",
+      "description": "",
+      "category": "",
+      "billing_model": "traffic",
+      "allocation": {
+        "http_ports": 2,
+        "stream_ports": 0,
+        "websocket": false,
+        "http3": false
+      },
+      "limits": [
+        {
+          "metric": "domains",
+          "cap": 5,
+          "action": "reject_new"
+        }
+      ],
+      "tags": {
+        "cc_protection": "",
+        "ddos_protection_gbps": 0,
+        "complaint_resistant": false,
+        "tenancy": "",
+        "mobile_reachable": false,
+        "region_block": false
+      },
+      "prepaid_exhausted_action": "",
+      "compliance": {
+        "require_icp": false,
+        "require_kyc": false
+      },
+      "components": null,
+      "pricing": {
+        "currency": "CNY",
+        "daily_minor": 0,
+        "min_days": 0,
+        "max_days": 0,
+        "tiers": [
+          {
+            "up_to_gb": 0,
+            "price_per_gb_minor": 30
+          }
+        ],
+        "deposit_minor": 900
+      },
+      "ip_visibility": "",
+      "access_rules": {},
+      "trial_days": 0,
+      "settlement_mode": "direct",
+      "site_auto_pause": false,
+      "id": "03000000-0000-0000-0000-000000000000",
+      "seller_id": "ee000000-0000-0000-0000-000000000000",
+      "status": "listed",
+      "revision": 1,
+      "created_at": "2026-10-25T08:00:00Z",
+      "quality": {
+        "score": 0,
+        "tier": "low",
+        "regions": [
+          "hk"
+        ],
+        "carriers": [
+          "bgp"
+        ],
+        "serving_nodes": 2,
+        "unit_price": 30,
+        "computed_at": "2026-10-25T08:00:00Z"
+      },
+      "plugins_unavailable": []
+    },
+    {
+      "name": "scored-high",
+      "description": "",
+      "category": "",
+      "billing_model": "bandwidth_95",
+      "allocation": {
+        "http_ports": 2,
+        "stream_ports": 0,
+        "websocket": false,
+        "http3": false
+      },
+      "limits": [
+        {
+          "metric": "domains",
+          "cap": 5,
+          "action": "reject_new"
+        }
+      ],
+      "tags": {
+        "cc_protection": "",
+        "ddos_protection_gbps": 0,
+        "complaint_resistant": false,
+        "tenancy": "",
+        "mobile_reachable": false,
+        "region_block": false
+      },
+      "prepaid_exhausted_action": "",
+      "compliance": {
+        "require_icp": false,
+        "require_kyc": false
+      },
+      "components": null,
+      "pricing": {
+        "currency": "CNY",
+        "daily_minor": 0,
+        "min_days": 0,
+        "max_days": 0,
+        "per_mbps_month_minor": 2000,
+        "deposit_minor": 5000
+      },
+      "ip_visibility": "",
+      "access_rules": {},
+      "trial_days": 0,
+      "settlement_mode": "direct",
+      "site_auto_pause": false,
+      "id": "04000000-0000-0000-0000-000000000000",
+      "seller_id": "ee000000-0000-0000-0000-000000000000",
+      "status": "listed",
+      "revision": 1,
+      "created_at": "2026-10-25T08:00:00Z",
+      "quality": {
+        "score": 2.5,
+        "tier": "high",
+        "regions": [
+          "hk"
+        ],
+        "carriers": [
+          "bgp"
+        ],
+        "serving_nodes": 2,
+        "unit_price": 2000,
+        "computed_at": "2026-10-25T08:00:00Z"
+      },
+      "plugins_unavailable": []
+    },
+    {
+      "name": "peak",
+      "description": "",
+      "category": "",
+      "billing_model": "bandwidth_daily_peak",
+      "allocation": {
+        "http_ports": 2,
+        "stream_ports": 0,
+        "websocket": false,
+        "http3": false
+      },
+      "limits": [
+        {
+          "metric": "domains",
+          "cap": 5,
+          "action": "reject_new"
+        }
+      ],
+      "tags": {
+        "cc_protection": "",
+        "ddos_protection_gbps": 0,
+        "complaint_resistant": false,
+        "tenancy": "",
+        "mobile_reachable": false,
+        "region_block": false
+      },
+      "prepaid_exhausted_action": "",
+      "compliance": {
+        "require_icp": false,
+        "require_kyc": false
+      },
+      "components": null,
+      "pricing": {
+        "currency": "CNY",
+        "daily_minor": 0,
+        "min_days": 0,
+        "max_days": 0,
+        "per_mbps_day_minor": 80,
+        "deposit_minor": 5000
+      },
+      "ip_visibility": "",
+      "access_rules": {},
+      "trial_days": 0,
+      "settlement_mode": "direct",
+      "site_auto_pause": false,
+      "id": "05000000-0000-0000-0000-000000000000",
+      "seller_id": "ee000000-0000-0000-0000-000000000000",
+      "status": "listed",
+      "revision": 1,
+      "created_at": "2026-10-25T08:00:00Z",
+      "quality": {
+        "score": 1.8,
+        "tier": "standard",
+        "regions": [
+          "hk"
+        ],
+        "carriers": [
+          "bgp"
+        ],
+        "serving_nodes": 2,
+        "unit_price": 80,
+        "computed_at": "2026-10-25T08:00:00Z"
+      },
+      "plugins_unavailable": []
+    }
+  ],
+  "next_cursor": null
+}

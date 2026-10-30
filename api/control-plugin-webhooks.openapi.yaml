@@ -1,0 +1,627 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Plugin Webhook Control API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant-scoped plugin webhook subscriptions and delivery operations. This
+    contract documents the control HTTP surface and its mounted shared
+    outbox/NATS runtime composition.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Plugin webhooks
+    description: Subscription lifecycle, one-time secrets and delivery recovery.
+paths:
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+    get:
+      tags: [Plugin webhooks]
+      operationId: listPluginWebhookSubscriptions
+      summary: List webhook subscriptions
+      x-required-permissions: [plugin_webhooks.read]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { $ref: '#/components/responses/SubscriptionPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      tags: [Plugin webhooks]
+      operationId: createPluginWebhookSubscription
+      summary: Create a webhook subscription and one-time secret
+      description: >-
+        The secret is returned only through the encrypted receipt window and
+        must never be persisted by the browser. Reusing the same idempotency
+        key replays the same receipt until it expires.
+      x-required-permissions: [plugin_webhooks.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSubscriptionRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/SubscriptionReceipt' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+    get:
+      tags: [Plugin webhooks]
+      operationId: getPluginWebhookSubscription
+      summary: Get a webhook subscription
+      x-required-permissions: [plugin_webhooks.read]
+      responses:
+        '200': { $ref: '#/components/responses/Subscription' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/test-deliveries:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+    post:
+      tags: [Plugin webhooks]
+      operationId: createPluginWebhookTestDelivery
+      summary: Queue a signed CloudEvents test delivery
+      x-required-permissions: [plugin_webhooks.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '202': { $ref: '#/components/responses/DeliveryReceipt' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/deliveries:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+    get:
+      tags: [Plugin webhooks]
+      operationId: listPluginWebhookDeliveries
+      summary: List subscription deliveries
+      x-required-permissions: [plugin_webhooks.read]
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { $ref: '#/components/responses/DeliveryPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/deliveries/{delivery_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+      - $ref: '#/components/parameters/DeliveryID'
+    get:
+      tags: [Plugin webhooks]
+      operationId: getPluginWebhookDelivery
+      summary: Get a delivery status
+      x-required-permissions: [plugin_webhooks.read]
+      responses:
+        '200': { $ref: '#/components/responses/Delivery' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/deliveries/{delivery_id}/replays:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+      - $ref: '#/components/parameters/DeliveryID'
+    post:
+      tags: [Plugin webhooks]
+      operationId: replayPluginWebhookDelivery
+      summary: Replay a delivered or dead-lettered delivery
+      x-required-permissions: [plugin_webhooks.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '202': { $ref: '#/components/responses/DeliveryReceipt' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/delivery-replays:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+    post:
+      tags: [Plugin webhooks]
+      operationId: replayPluginWebhookDeliveryRange
+      summary: Replay the terminal deliveries of a time range
+      description: >-
+        Re-sends every original (non-replay) delivery of this subscription
+        created in [from, to) with a matching status and event type, up to
+        limit. Each replay has the single-delivery guarantees: same event ID,
+        new delivery ID, audit, rate limit, and the database re-checks that the
+        bound installation still holds the event permission and the site
+        filter still selects the event. A per-delivery idempotency key is
+        derived from Idempotency-Key, so retrying the call never replays a
+        delivery twice. Events from before the subscription existed are never
+        sent.
+      x-required-permissions: [plugin_webhooks.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReplayRangeRequest' }
+      responses:
+        '202':
+          description: Replay batch outcome.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReplayRangeResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/secret-rotations:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+    post:
+      tags: [Plugin webhooks]
+      operationId: rotatePluginWebhookSecret
+      summary: Generate a pending secret rotation
+      x-required-permissions: [plugin_webhooks.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '201': { $ref: '#/components/responses/RotationReceipt' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: '#/components/responses/Unprocessable' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/secret-rotations/{rotation_id}/activate:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+      - $ref: '#/components/parameters/RotationID'
+    post:
+      tags: [Plugin webhooks]
+      operationId: activatePluginWebhookSecret
+      summary: Activate a pending secret rotation
+      x-required-permissions: [plugin_webhooks.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '200': { $ref: '#/components/responses/SubscriptionResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/SubscriptionID'
+    post:
+      tags: [Plugin webhooks]
+      operationId: revokePluginWebhookSubscription
+      summary: Revoke a webhook subscription and fence new deliveries
+      x-required-permissions: [plugin_webhooks.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmptyObject' }
+      responses:
+        '200': { $ref: '#/components/responses/SubscriptionResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    SubscriptionID:
+      name: subscription_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    DeliveryID:
+      name: delivery_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    RotationID:
+      name: rotation_id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/UUID' }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string, maxLength: 1024 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+  schemas:
+    UUID: { type: string, format: uuid }
+    EventType:
+      type: string
+      pattern: '^io\\.cdnca\\.[a-z][a-z0-9_]*\\.v[1-9][0-9]*\\.[a-z][a-z0-9_]*$'
+      maxLength: 160
+      description: >-
+        Subscribable event types: the test event and the available domain
+        events of extension-catalog.json. Reserved catalog entries are not
+        subscribable.
+      enum:
+        - io.cdnca.certificate.v1.expiry_reached
+        - io.cdnca.certificate.v1.status_changed
+        - io.cdnca.deployment.v1.status_changed
+        - io.cdnca.node.v1.status_changed
+        - io.cdnca.security.v1.incident_detected
+        - io.cdnca.site.v1.updated
+        - io.cdnca.usage.v1.threshold_reached
+        - io.cdnca.webhook.v1.test
+    EmptyObject:
+      type: object
+      additionalProperties: false
+    CreateSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [name, target_url, event_types]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        target_url:
+          type: string
+          format: uri
+          minLength: 1
+          maxLength: 2048
+          pattern: '^https://(?=[A-Za-z0-9.-]{1,253}(?::443)?(?:/|$))(?![0-9.]+(?::443)?(?:/|$))(?:(?![Xx][Nn]--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+(?![Xx][Nn]--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?::443)?(?:/[^?#]*)?$'
+          description: >-
+            HTTPS target using an ASCII DNS hostname and either no explicit
+            port or port 443. IP literals, IDNA xn-- labels, userinfo, query
+            strings, fragments and other ports are forbidden. This pattern
+            constrains request syntax only; server/runtime validation remains
+            authoritative for public DNS resolution, address ranges,
+            certificates, redirects and canonical paths.
+        event_types:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EventType' }
+        installation_authorization_id:
+          allOf: [{ $ref: '#/components/schemas/UUID' }]
+          description: >-
+            Optional enabled tenant installation authorization. Required when
+            subscribing to non-test domain events; test-only subscriptions must
+            omit it.
+        site_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/UUID' }
+          description: >-
+            Optional site filter. When present the subscription receives only
+            site-bound events (site.updated, security.incident_detected) of
+            these tenant sites and no tenant-level events; at least one
+            site-bound event type is required. Omit for all events. Immutable.
+    Subscription:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, name, target_url, event_types, status, revision, active_secret_version_id, created_at, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        tenant_scope_id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string, minLength: 1, maxLength: 128 }
+        target_url: { type: string, format: uri, maxLength: 2048 }
+        event_types:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EventType' }
+        status: { type: string, enum: [active, revoked] }
+        revision: { type: integer, minimum: 1, maximum: 18446744073709551615 }
+        active_secret_version_id: { $ref: '#/components/schemas/UUID' }
+        installation_authorization_id:
+          allOf: [{ $ref: '#/components/schemas/UUID' }]
+          description: Bound tenant installation authorization for domain events.
+        installation_id:
+          allOf: [{ $ref: '#/components/schemas/UUID' }]
+          description: Bound tenant installation identity for domain events.
+        plugin_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Bound plugin manifest identifier for domain events.
+        site_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/UUID' }
+          description: Site filter; absent means all events.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ReplayRangeRequest:
+      type: object
+      additionalProperties: false
+      required: [from, to, limit]
+      properties:
+        from: { type: string, format: date-time, description: 'Original delivery created at or after this time.' }
+        to: { type: string, format: date-time, description: 'Original delivery created before this time; at most 31 days after from.' }
+        statuses:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: { type: string, enum: [delivered, dead_lettered] }
+          description: Defaults to both terminal states; [dead_lettered] re-sends only failed deliveries.
+        event_types:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EventType' }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+    ReplayRangeResult:
+      type: object
+      additionalProperties: false
+      required: [items, remaining]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [replay_of, outcome]
+            properties:
+              replay_of: { $ref: '#/components/schemas/UUID' }
+              delivery: { $ref: '#/components/schemas/Delivery' }
+              outcome: { type: string, enum: [replayed, already_replayed, permission_denied, rate_limited] }
+        remaining:
+          type: boolean
+          description: More matching deliveries exist, or a rate limit stopped the batch; retry with the same Idempotency-Key.
+    Delivery:
+      type: object
+      additionalProperties: false
+      required: [id, subscription_id, event_id, status, attempt_count, created_at]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        subscription_id: { $ref: '#/components/schemas/UUID' }
+        event_id: { $ref: '#/components/schemas/UUID' }
+        replay_of: { $ref: '#/components/schemas/UUID' }
+        status: { type: string, enum: [pending, queued, claimed, retry_scheduled, delivered, dead_letter_pending, dead_lettered, revoked] }
+        attempt_count: { type: integer, minimum: 0, maximum: 5 }
+        next_attempt_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+    SubscriptionPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/Subscription' } }
+        next_cursor: { type: string, maxLength: 1024 }
+    DeliveryPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/Delivery' } }
+        next_cursor: { type: string, maxLength: 1024 }
+    SubscriptionReceipt:
+      type: object
+      additionalProperties: false
+      required: [subscription, secret]
+      properties:
+        subscription: { $ref: '#/components/schemas/Subscription' }
+        secret:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$'
+          description: >-
+            One-time unpadded base64url secret. Strictly decode it as
+            base64url-no-padding, require exactly 32 raw bytes, and use those
+            bytes as the HMAC-SHA256 key; keep it only in an approved secret
+            manager.
+    DeliveryReceipt:
+      type: object
+      additionalProperties: false
+      required: [delivery]
+      properties:
+        delivery: { $ref: '#/components/schemas/Delivery' }
+    RotationReceipt:
+      type: object
+      additionalProperties: false
+      required: [rotation_id, key_id, status, expires_at, secret, subscription_revision]
+      properties:
+        rotation_id: { $ref: '#/components/schemas/UUID' }
+        key_id: { $ref: '#/components/schemas/UUID' }
+        status: { type: string, const: pending }
+        expires_at: { type: string, format: date-time }
+        secret:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$'
+          description: >-
+            Strictly base64url-no-padding decode to exactly 32 raw bytes before
+            using the bytes as the HMAC-SHA256 key.
+        subscription_revision: { type: integer, minimum: 1, maximum: 18446744073709551615 }
+    SubscriptionResult:
+      type: object
+      additionalProperties: false
+      required: [subscription]
+      properties:
+        subscription: { $ref: '#/components/schemas/Subscription' }
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id, params]
+      properties:
+        code: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        params: { type: object, additionalProperties: true }
+        message: { type: string, maxLength: 1024 }
+        request_id:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: { $ref: '#/components/schemas/ErrorDetail' }
+  responses:
+    SubscriptionPage: { description: Subscription page, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionPage' } } } }
+    Subscription: { description: Subscription, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } }
+    SubscriptionReceipt: { description: Created subscription with one-time secret, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionReceipt' } } } }
+    DeliveryPage: { description: Delivery page, content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPage' } } } }
+    Delivery: { description: Delivery, content: { application/json: { schema: { $ref: '#/components/schemas/Delivery' } } } }
+    DeliveryReceipt: { description: Accepted delivery, content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryReceipt' } } } }
+    RotationReceipt: { description: Pending secret rotation and one-time secret, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/RotationReceipt' } } } }
+    SubscriptionResult: { description: Updated subscription, headers: { ETag: { $ref: '#/components/headers/ETag' } }, content: { application/json: { schema: { $ref: '#/components/schemas/SubscriptionResult' } } } }
+    BadRequest: { description: Validation failed, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    Unauthorized: { description: Authentication required, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    Forbidden: { description: Permission or tenant scope denied, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    NotFound: { description: Resource not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    Conflict: { description: State or idempotency conflict, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    PreconditionFailed: { description: Revision mismatch, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    PreconditionRequired: { description: If-Match is required, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    Unprocessable: { description: Target or entitlement rejected, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    RateLimited: { description: Rate limited, headers: { Retry-After: { schema: { type: integer, minimum: 1, maximum: 3600 } } }, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+    Unavailable: { description: 'Store, secret, or write result unavailable', content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } } }
+  headers:
+    ETag:
+      description: Strong quoted subscription revision for If-Match writes.
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+x-cdnca-shared-mounts: MOUNTED
+x-cdnca-receiver-verification:
+  shared_secret:
+    encoded_length: 43
+    encoding: base64url-no-padding
+    strict_decode: true
+    decoded_length_bytes: 32
+    hmac_sha256_key: decoded_raw_bytes
+  timestamp_tolerance_seconds: 300
+  timestamp_bounds_inclusive: true
+  verification_order: [body_sha256, hmac_sha256, json]
+  delivery_deduplication:
+    header: X-CDNCA-Webhook-Delivery-Id
+    minimum_retention_days: 30
+    description: Attempts share one delivery ID; an explicit replay receives a new delivery ID.
+x-cdnca-signature-example:
+  test_key_notice: The hex key exists only for this public deterministic test vector; never configure it as a production webhook secret.
+  public_test_key_hex: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+  canonical_request_path: /cdnca/hooks
+  canonical_body_bytes: 612
+  canonical_body: |-
+    {"specversion":"1.0","id":"018cc251-f400-7def-8000-000000000001","source":"/control-plane/plugin-webhooks","type":"io.cdnca.webhook.v1.test","subject":"webhook_subscription/018cc251-f400-7def-8000-000000000010","time":"2024-01-01T00:00:00Z","datacontenttype":"application/json","dataschema":"https://schemas.cdnca.example/marketplace/v1/webhook-test-event.schema.json","tenant_id":"018cc251-f400-7def-8000-000000000030","request_id":"request-084","traceparent":"00-11111111111111111111111111111111-2222222222222222-01","sequence":1,"data":{"subscription_id":"018cc251-f400-7def-8000-000000000010","test":true}}
+  headers:
+    Content-Type: application/cloudevents+json
+    X-CDNCA-Webhook-Event-Id: 018cc251-f400-7def-8000-000000000001
+    X-CDNCA-Webhook-Delivery-Id: 018cc251-f400-7def-8000-000000000002
+    X-CDNCA-Webhook-Timestamp: '1704067200'
+    X-CDNCA-Webhook-Content-Sha256: a151948885c16b99e9baf2836b61a9ad29ebf5bb3e993f2517cf8901120662a3
+    X-CDNCA-Webhook-Key-Id: 018cc251-f400-7def-8000-000000000011
+    X-CDNCA-Webhook-Signature-Version: v2
+    X-CDNCA-Webhook-Signature: v2=VgARCiCHvvwQHdzbKrvVyC5bP-6px3-tRz1z4rS2LQo
+    X-CDNCA-Idempotency-Key: plugin-webhook-v2-557dba69d2d1f24d0dc523fbde9c672431d21702e1428a9a53596df4bb90c911
+    X-CDNCA-Webhook-Attempt: '1'
+  signing_input: |-
+    cdnca.webhook.signature/v2
+    POST
+    /cdnca/hooks
+    1704067200
+    018cc251-f400-7def-8000-000000000001
+    018cc251-f400-7def-8000-000000000002
+    018cc251-f400-7def-8000-000000000011
+    a151948885c16b99e9baf2836b61a9ad29ebf5bb3e993f2517cf8901120662a3

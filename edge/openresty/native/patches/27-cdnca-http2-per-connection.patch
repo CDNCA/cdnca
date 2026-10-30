@@ -1,0 +1,67 @@
+CDNCA per connection HTTP/2.  Original CDNCA change, not upstream.  With
+one shared server{} per port (docs/adr/0009) the ALPN callback only sees
+the port's "http2" setting, so a site could not turn HTTP/2 off while
+another site on the same port keeps it.  ssl_client_hello_by_lua runs
+before OpenSSL's ALPN callback (OpenSSL 3.5 tls_early_post_process_client_hello
+calls the client hello callback first; ALPN is chosen in final_alpn for
+TLS 1.3 and after the certificate callback for TLS 1.2) and calls
+ngx_http_cdnca_ssl_set_http2() for the SNI's site; a connection marked off
+offers only http/1.1.  Without the call the stock behaviour is unchanged.
+QUIC (h3) does not take this path.
+
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -152,6 +152,7 @@
+     unsigned                    early_preread:1;
+     unsigned                    write_blocked:1;
+     unsigned                    sni_accepted:1;
++    unsigned                    cdnca_no_http2:1;  /* CDNCA patch 27 */
+ };
+ 
+ 
+--- a/src/http/modules/ngx_http_ssl_module.c
++++ b/src/http/modules/ngx_http_ssl_module.c
+@@ -510,7 +510,8 @@
+ #if (NGX_HTTP_V2)
+         h2scf = ngx_http_get_module_srv_conf(hc->conf_ctx, ngx_http_v2_module);
+ 
+-        if (h2scf->enable || hc->addr_conf->http2) {
++        /* CDNCA patch 27: a connection the site turned HTTP/2 off for */
++        if ((h2scf->enable || hc->addr_conf->http2) && !c->ssl->cdnca_no_http2) {
+             srv = (unsigned char *) NGX_HTTP_V2_ALPN_PROTO NGX_HTTP_ALPN_PROTOS;
+             srvlen = sizeof(NGX_HTTP_V2_ALPN_PROTO NGX_HTTP_ALPN_PROTOS) - 1;
+ 
+@@ -536,8 +537,33 @@
+ }
+ 
+ #endif
++
++
++/*
++ * CDNCA patch 27: per connection HTTP/2.  One shared server{} per port
++ * serves many sites; ssl_client_hello_by_lua knows the SNI's site and calls
++ * this (LuaJIT FFI, the symbol is exported with -Wl,-E) before OpenSSL runs
++ * the ALPN callback, so a site with HTTP/2 off negotiates http/1.1 only.
++ * Returns 0, or -1 for an SSL object without an nginx connection.
++ */
++
++int
++ngx_http_cdnca_ssl_set_http2(ngx_ssl_conn_t *ssl_conn, int enable)
++{
++    ngx_connection_t  *c;
+ 
++    c = ngx_ssl_get_connection(ssl_conn);
+ 
++    if (c == NULL || c->ssl == NULL) {
++        return -1;
++    }
++
++    c->ssl->cdnca_no_http2 = enable ? 0 : 1;
++
++    return 0;
++}
++
++
+ static ngx_int_t
+ ngx_http_ssl_static_variable(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data)

@@ -1,0 +1,18 @@
+{
+  "allowed_scanner_images": [
+    "registry.example.invalid/security/scanner:1.0.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  ],
+  "max_database_age_seconds": 172800,
+  "max_report_age_seconds": 86400,
+  "minimum_version": "1.0.0",
+  "required_protocol_regressions": [
+    "cache-refresh",
+    "http1",
+    "http2",
+    "http3",
+    "range206",
+    "rewrite",
+    "websocket"
+  ],
+  "schema": "cdnca.edge.security-policy/v1"
+}

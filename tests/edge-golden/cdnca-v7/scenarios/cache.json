@@ -1,0 +1,662 @@
+{
+  "name": "cache",
+  "description": "缓存：override 命中/未命中（X-CDN-Cache）、别名共享与否、查询串保留/忽略、Set-Cookie/no-store/私有响应、非 GET 不缓存、高级规则（扩展名缓存、前缀不缓存）、follow_origin 按源站 Cache-Control、缓存对象键、清理（URL/目录/全站）与预热任务。",
+  "covers": [
+    "缓存",
+    "缓存键",
+    "查询串",
+    "follow_origin",
+    "清理",
+    "预热"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b2005-0000-4000-8000-000000000001",
+      "source_revision": 7,
+      "config_version_id": "0a1b2005-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "ipv6",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 6
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b2005-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "cache.example.test",
+            "alias.cache.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18084",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18084,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o1",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19251,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          },
+          "cache": {
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000001",
+            "domain": "cache.example.test",
+            "policy": {
+              "revision": 3,
+              "mode": "override",
+              "rules": [],
+              "query_mode": "preserve",
+              "query_names": [],
+              "vary_headers": [],
+              "disk_quota_bytes": 67108864
+            }
+          }
+        },
+        {
+          "id": "0a1b2005-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "ignoreq.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18084",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18084,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o2",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19252,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          },
+          "cache": {
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000001",
+            "domain": "ignoreq.example.test",
+            "policy": {
+              "revision": 3,
+              "mode": "override",
+              "rules": [],
+              "query_mode": "ignore",
+              "query_names": [],
+              "vary_headers": [],
+              "disk_quota_bytes": 67108864
+            }
+          }
+        },
+        {
+          "id": "0a1b2005-0000-4000-8000-000000000103",
+          "revision": 1,
+          "domains": [
+            "rules.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18084",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18084,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o3",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19253,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          },
+          "cache": {
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000001",
+            "domain": "rules.example.test",
+            "policy": {
+              "revision": 4,
+              "mode": "override",
+              "rules": [
+                {
+                  "order": 1,
+                  "extensions": [
+                    ".css"
+                  ],
+                  "action": "cache",
+                  "ttl_seconds": 60
+                },
+                {
+                  "order": 2,
+                  "path_prefix": "/api/",
+                  "action": "no_cache",
+                  "ttl_seconds": 0
+                }
+              ],
+              "query_mode": "preserve",
+              "query_names": [],
+              "vary_headers": [],
+              "disk_quota_bytes": 67108864,
+              "schema_version": 2
+            }
+          }
+        },
+        {
+          "id": "0a1b2005-0000-4000-8000-000000000104",
+          "revision": 1,
+          "domains": [
+            "follow.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18084",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18084,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o4",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19254,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          },
+          "cache": {
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000001",
+            "domain": "follow.example.test",
+            "policy": {
+              "revision": 3,
+              "mode": "follow_origin",
+              "rules": [],
+              "query_mode": "preserve",
+              "query_names": [],
+              "vary_headers": [],
+              "disk_quota_bytes": 67108864
+            }
+          }
+        }
+      ]
+    },
+    "node": {
+      "health_port": 18904
+    }
+  },
+  "origins": [
+    {
+      "name": "simple",
+      "address": "127.0.0.1:19251",
+      "routes": [
+        {
+          "path": "/cookie.css",
+          "body": "with cookie",
+          "headers": {
+            "Set-Cookie": "k=v"
+          }
+        },
+        {
+          "path": "/nostore.css",
+          "body": "no store",
+          "headers": {
+            "Cache-Control": "no-store"
+          }
+        },
+        {
+          "path": "/404.css",
+          "status": 404,
+          "body": "missing"
+        }
+      ]
+    },
+    {
+      "name": "ignoreq",
+      "address": "127.0.0.1:19252"
+    },
+    {
+      "name": "rules",
+      "address": "127.0.0.1:19253"
+    },
+    {
+      "name": "follow",
+      "address": "127.0.0.1:19254",
+      "routes": [
+        {
+          "path": "/max-age",
+          "body": "cacheable",
+          "headers": {
+            "Cache-Control": "max-age=60"
+          }
+        },
+        {
+          "path": "/private",
+          "body": "private",
+          "headers": {
+            "Cache-Control": "private"
+          }
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "miss",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/a.css"
+    },
+    {
+      "id": "hit",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/a.css"
+    },
+    {
+      "id": "alias-same-path",
+      "port": 18084,
+      "host": "alias.cache.example.test",
+      "path": "/a.css"
+    },
+    {
+      "id": "query-variant",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/a.css?v=2"
+    },
+    {
+      "id": "query-variant-hit",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/a.css?v=2"
+    },
+    {
+      "id": "head-after-get",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/a.css",
+      "method": "HEAD"
+    },
+    {
+      "id": "post-bypasses",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/a.css",
+      "method": "POST",
+      "body": "x"
+    },
+    {
+      "id": "set-cookie-1",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/cookie.css"
+    },
+    {
+      "id": "set-cookie-2",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/cookie.css"
+    },
+    {
+      "id": "no-store-1",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/nostore.css"
+    },
+    {
+      "id": "no-store-2",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/nostore.css"
+    },
+    {
+      "id": "status-404-1",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/404.css"
+    },
+    {
+      "id": "status-404-2",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/404.css"
+    },
+    {
+      "id": "ignore-query-1",
+      "port": 18084,
+      "host": "ignoreq.example.test",
+      "path": "/i.js?a=1"
+    },
+    {
+      "id": "ignore-query-2",
+      "port": 18084,
+      "host": "ignoreq.example.test",
+      "path": "/i.js?a=2"
+    },
+    {
+      "id": "rule-css-1",
+      "port": 18084,
+      "host": "rules.example.test",
+      "path": "/s.css"
+    },
+    {
+      "id": "rule-css-2",
+      "port": 18084,
+      "host": "rules.example.test",
+      "path": "/s.css"
+    },
+    {
+      "id": "rule-api-1",
+      "port": 18084,
+      "host": "rules.example.test",
+      "path": "/api/x"
+    },
+    {
+      "id": "rule-api-2",
+      "port": 18084,
+      "host": "rules.example.test",
+      "path": "/api/x"
+    },
+    {
+      "id": "rule-other-1",
+      "port": 18084,
+      "host": "rules.example.test",
+      "path": "/other.html"
+    },
+    {
+      "id": "rule-other-2",
+      "port": 18084,
+      "host": "rules.example.test",
+      "path": "/other.html"
+    },
+    {
+      "id": "follow-max-age-1",
+      "port": 18084,
+      "host": "follow.example.test",
+      "path": "/max-age"
+    },
+    {
+      "id": "follow-max-age-2",
+      "port": 18084,
+      "host": "follow.example.test",
+      "path": "/max-age"
+    },
+    {
+      "id": "follow-private-1",
+      "port": 18084,
+      "host": "follow.example.test",
+      "path": "/private"
+    },
+    {
+      "id": "follow-private-2",
+      "port": 18084,
+      "host": "follow.example.test",
+      "path": "/private"
+    },
+    {
+      "id": "entries-simple",
+      "kind": "cache_entries",
+      "site_id": "0a1b2005-0000-4000-8000-000000000101"
+    },
+    {
+      "id": "purge-url",
+      "kind": "task",
+      "task": {
+        "action": "purge_exact",
+        "site_id": "0a1b2005-0000-4000-8000-000000000101",
+        "targets": [
+          "http://cache.example.test:18084/a.css"
+        ]
+      }
+    },
+    {
+      "id": "after-purge-url",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/a.css"
+    },
+    {
+      "id": "purge-dir",
+      "kind": "task",
+      "task": {
+        "action": "purge_prefix",
+        "site_id": "0a1b2005-0000-4000-8000-000000000101",
+        "targets": [
+          "http://cache.example.test:18084/"
+        ]
+      }
+    },
+    {
+      "id": "entries-after-dir",
+      "kind": "cache_entries",
+      "site_id": "0a1b2005-0000-4000-8000-000000000101"
+    },
+    {
+      "id": "prewarm",
+      "kind": "task",
+      "task": {
+        "action": "prewarm",
+        "site_id": "0a1b2005-0000-4000-8000-000000000101",
+        "targets": [
+          "http://cache.example.test:18084/warm.css"
+        ]
+      }
+    },
+    {
+      "id": "prewarmed-hit",
+      "port": 18084,
+      "host": "cache.example.test",
+      "path": "/warm.css"
+    },
+    {
+      "id": "purge-site",
+      "kind": "task",
+      "task": {
+        "action": "purge_site",
+        "site_id": "0a1b2005-0000-4000-8000-000000000101"
+      }
+    },
+    {
+      "id": "entries-after-site",
+      "kind": "cache_entries",
+      "site_id": "0a1b2005-0000-4000-8000-000000000101"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+[Unit]
+Description=CDNCA edge control agent (native root runtime)
+Documentation=file:///usr/share/doc/cdnca-edge-agent/README.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+UMask=0077
+EnvironmentFile=/etc/cdnca-edge-agent/agent.env
+ExecStartPre=/usr/libexec/cdnca-edge-agent/preflight.sh
+ExecStart=/usr/lib/cdnca-edge-agent/current/edge-agent -config ${CDNCA_EDGE_CONFIG}
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=45s
+# Stop/restart signal only the Agent itself. The L4 OpenResty master it
+# starts must survive Agent restarts and upgrades without dropping
+# established TCP/UDP sessions; the next Agent adopts it by its pid file and
+# kernel identity. uninstall.sh stops what remains in this unit's cgroup.
+KillMode=process
+# The auto defense decision loop raises its own thread to nice -5 (ADR 0010
+# section 10.4, user 10-26 fix-adload): a flood takes the node's CPU through
+# the OpenResty workers, and the loop deciding the defence must not starve.
+# The OpenResty masters the Agent starts come from other threads and keep the
+# default nice. RLIMIT_NICE allows it without CAP_SYS_NICE (non-root unit).
+LimitNICE=-5
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=read-only
+ProtectSystem=full
+BindPaths=/var/lib/cdnca-edge-agent-backups/active-state:/var/lib/cdnca-edge-agent:norbind
+ReadWritePaths=/etc/cdnca-edge-agent
+ReadOnlyPaths=/etc/cdnca-edge-agent/package-signing.pem -/etc/cdnca-edge-agent/helper-receipt-public.json
+
+[Install]
+WantedBy=multi-user.target

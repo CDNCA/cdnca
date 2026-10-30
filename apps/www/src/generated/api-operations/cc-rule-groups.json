@@ -1,0 +1,86 @@
+{
+ "id": "cc-rule-groups",
+ "prefix": "/v1/cc-rule-groups",
+ "operations": [
+  {
+   "operation_id": "listCCRuleGroupsForOpenRestyConfig",
+   "method": "GET",
+   "path": "/v1/cc-rule-groups",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "System groups are identified by system_rule_key, falling back to system_rule_id for legacy projections. Custom policy groups retain their UUID IDs."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "summarizeCCRuleGroups",
+   "method": "GET",
+   "path": "/v1/cc-rule-groups/summary",
+   "summary": "CC rule group pill counts over every group",
+   "auth": [
+    "bearer"
+   ],
+   "description": "System groups count from the signed rule catalog once it has synced, else from the per-tenant projection; custom groups are the scope's CC policies. visible/disabled are enabled/disabled groups of both kinds.",
+   "permissions": [
+    "openresty_security.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Counts.",
+     "fields": [
+      {
+       "name": "all",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "system",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "custom",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "disabled",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  }
+ ]
+}

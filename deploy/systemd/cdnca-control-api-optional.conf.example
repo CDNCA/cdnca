@@ -1,0 +1,6 @@
+# /etc/systemd/system/cdnca-control-api.service.d/60-optional.conf
+# Loads operator settings for optional control-api runtimes after the generated
+# environment files (later EnvironmentFile entries win). See
+# deploy/systemd/cdnca-control-optional.env.example and docs/runbooks/release-1.0.34.md.
+[Service]
+EnvironmentFile=/etc/cdnca-control/optional.env

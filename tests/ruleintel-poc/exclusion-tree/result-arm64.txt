@@ -1,0 +1,109 @@
+# tests/ruleintel-poc/exclusion-tree/run.sh, cdnca-native-runtime:edge-golden arm64, 2026-10-20 (ri-03d)
+# run 1: MODES='a c' BUCKET=128 SITES='0 1000 10000' ROUNDS=3 REQUESTS=2000
+n0: hooks.conf        1 lines 4 KiB; buckets        0 of <= 128 sites
+n1000: hooks.conf     1536 lines 1552 KiB; buckets        8 of <= 128 sites
+n10000: hooks.conf    10546 lines 15544 KiB; buckets       79 of <= 128 sites
+runtime: nginx version: openresty/1.31.1.1
+sites with 32 exclusions each; 1 worker per instance
+== configuration test, start and reload (RSS kB)
+a0: test 89 ms, reload (HUP until a new worker) 50 ms, master RSS 32368 kB, worker RSS 24204 kB
+a1000: test 189 ms, reload (HUP until a new worker) 270 ms, master RSS 44120 kB, worker RSS 36200 kB
+a10000: test 1410 ms, reload (HUP until a new worker) 1220 ms, master RSS 141328 kB, worker RSS 133048 kB
+c0: test 70 ms, reload (HUP until a new worker) 100 ms, master RSS 32168 kB, worker RSS 24336 kB
+c1000: test 139 ms, reload (HUP until a new worker) 99 ms, master RSS 43548 kB, worker RSS 35196 kB
+c10000: test 940 ms, reload (HUP until a new worker) 1380 ms, master RSS 145976 kB, worker RSS 137972 kB
+== correctness on a10000
+PASS a-HOT-EXCLUDED expected=200 actual=200  本站排除 (942100,q)：q 上命中被移除
+PASS a-HOT-OTHER-PARAM expected=403 actual=403  本站同一载荷在 r 上：拦截
+PASS a-OTHER-SITE expected=403 actual=403  别的站（同桶，有自己的排除）：q 上拦截，不串站
+PASS a-SAME-BUCKET expected=403 actual=403  末两位相同的别站：拦截
+PASS a-SAME-L1 expected=403 actual=403  末位相同的别站：拦截
+PASS a-COLD-SITE expected=403 actual=403  无排除的冷站：拦截
+PASS a-SPOOF-ARG expected=403 actual=403  客户端参数不影响站点选择
+PASS a-HOT-AGAIN-COLD expected=403 actual=403  热站请求之后冷站：事务级，不残留
+PASS a-B-SET-URI-ARGS expected=403 actual=403  方案 B：Lua set_uri_args 去掉 q 后 ModSecurity 仍按 r->unparsed_uri 看到 q：仍拦截
+== correctness on c10000
+PASS c-HOT-EXCLUDED expected=200 actual=200  本站排除 (942100,q)：q 上命中被移除
+PASS c-HOT-OTHER-PARAM expected=403 actual=403  本站同一载荷在 r 上：拦截
+PASS c-OTHER-SITE expected=403 actual=403  别的站（同桶，有自己的排除）：q 上拦截，不串站
+PASS c-SAME-BUCKET expected=403 actual=403  末两位相同的别站：拦截
+PASS c-SAME-L1 expected=403 actual=403  末位相同的别站：拦截
+PASS c-COLD-SITE expected=403 actual=403  无排除的冷站：拦截
+PASS c-SPOOF-ARG expected=403 actual=403  客户端参数不影响站点选择
+PASS c-HOT-AGAIN-COLD expected=403 actual=403  热站请求之后冷站：事务级，不残留
+PASS c-B-SET-URI-ARGS expected=403 actual=403  方案 B：Lua set_uri_args 去掉 q 后 ModSecurity 仍按 r->unparsed_uri 看到 q：仍拦截
+== cost: clean request /c?q=world&p1_1=a, 2000 sequential (interleaved rounds)
+RESULT exclusion-tree failures=0
+# medians (p50/p99 ms over rounds)
+a0       cold   p50 0.834 p99 2.055  (3 rounds)
+a1000    cold   p50 0.745 p99 2.287  (3 rounds)
+a1000    first  p50 0.750 p99 1.225  (3 rounds)
+a1000    hot    p50 0.755 p99 5.881  (3 rounds)
+a1000    last   p50 0.752 p99 1.928  (3 rounds)
+a10000   cold   p50 1.335 p99 5.795  (3 rounds)
+a10000   first  p50 1.106 p99 6.133  (3 rounds)
+a10000   hot    p50 0.861 p99 3.088  (3 rounds)
+a10000   last   p50 1.053 p99 5.839  (3 rounds)
+c0       cold   p50 0.666 p99 1.435  (3 rounds)
+c1000    cold   p50 0.673 p99 1.161  (3 rounds)
+c1000    first  p50 0.734 p99 1.073  (3 rounds)
+c1000    hot    p50 0.695 p99 1.815  (3 rounds)
+c1000    last   p50 0.775 p99 1.845  (3 rounds)
+c10000   cold   p50 0.717 p99 2.239  (3 rounds)
+c10000   first  p50 0.707 p99 1.276  (3 rounds)
+c10000   hot    p50 0.707 p99 1.863  (3 rounds)
+c10000   last   p50 0.783 p99 1.629  (3 rounds)
+
+# run 2: MODES=c BUCKET=128 SITES='0 10000' ROUNDS=4 REQUESTS=3000 (rounds varied widely: c0 baseline p50 1.5 ms in this run)
+== configuration test, start and reload (RSS kB)
+c0: test 160 ms, reload (HUP until a new worker) 50 ms, master RSS 32648 kB, worker RSS 24292 kB
+c10000: test 1229 ms, reload (HUP until a new worker) 420 ms, master RSS 146292 kB, worker RSS 138040 kB
+RESULT exclusion-tree failures=0
+c0       cold   p50 1.511 p99 9.540  (4 rounds)
+c10000   cold   p50 0.841 p99 7.147  (4 rounds)
+c10000   first  p50 1.530 p99 7.357  (4 rounds)
+c10000   hot    p50 2.234 p99 7.476  (4 rounds)
+c10000   last   p50 0.782 p99 4.579  (4 rounds)
+
+# run 3: MODES=c BUCKET=32 SITES='0 10000' ROUNDS=4 REQUESTS=3000
+== configuration test, start and reload (RSS kB)
+c0: test 160 ms, reload (HUP until a new worker) 50 ms, master RSS 32400 kB, worker RSS 24316 kB
+c10000: test 1220 ms, reload (HUP until a new worker) 110 ms, master RSS 167572 kB, worker RSS 159464 kB
+RESULT exclusion-tree failures=0
+c0       cold   p50 0.669 p99 1.611  (4 rounds)
+c10000   cold   p50 0.744 p99 2.017  (4 rounds)
+c10000   first  p50 0.734 p99 2.125  (4 rounds)
+c10000   hot    p50 0.724 p99 1.603  (4 rounds)
+c10000   last   p50 0.744 p99 2.467  (4 rounds)
+
+# run 4 (chosen): MODES=c BUCKET=32 SITES='0 1000 10000' ROUNDS=5 REQUESTS=3000
+n0: hooks.conf        1 lines 4 KiB; buckets        0 of <= 32 sites
+n1000: hooks.conf     1536 lines 1552 KiB; buckets       32 of <= 32 sites
+n10000: hooks.conf    10546 lines 15544 KiB; buckets      313 of <= 32 sites
+runtime: nginx version: openresty/1.31.1.1
+sites with 32 exclusions each; 1 worker per instance
+== configuration test, start and reload (RSS kB)
+c0: test 100 ms, reload (HUP until a new worker) 209 ms, master RSS 32472 kB, worker RSS 24268 kB
+c1000: test 160 ms, reload (HUP until a new worker) 209 ms, master RSS 45708 kB, worker RSS 37544 kB
+c10000: test 939 ms, reload (HUP until a new worker) 50 ms, master RSS 167532 kB, worker RSS 159464 kB
+== correctness on c10000
+PASS c-HOT-EXCLUDED expected=200 actual=200  本站排除 (942100,q)：q 上命中被移除
+PASS c-HOT-OTHER-PARAM expected=403 actual=403  本站同一载荷在 r 上：拦截
+PASS c-OTHER-SITE expected=403 actual=403  别的站（同桶，有自己的排除）：q 上拦截，不串站
+PASS c-SAME-BUCKET expected=403 actual=403  末两位相同的别站：拦截
+PASS c-SAME-L1 expected=403 actual=403  末位相同的别站：拦截
+PASS c-COLD-SITE expected=403 actual=403  无排除的冷站：拦截
+PASS c-SPOOF-ARG expected=403 actual=403  客户端参数不影响站点选择
+PASS c-HOT-AGAIN-COLD expected=403 actual=403  热站请求之后冷站：事务级，不残留
+PASS c-B-SET-URI-ARGS expected=403 actual=403  方案 B：Lua set_uri_args 去掉 q 后 ModSecurity 仍按 r->unparsed_uri 看到 q：仍拦截
+== cost: clean request /c?q=world&p1_1=a, 3000 sequential (interleaved rounds)
+RESULT exclusion-tree failures=0
+c0       cold   p50 0.673 p99 1.351  (5 rounds)
+c1000    cold   p50 0.695 p99 1.327  (5 rounds)
+c1000    first  p50 0.722 p99 1.274  (5 rounds)
+c1000    hot    p50 0.713 p99 1.404  (5 rounds)
+c1000    last   p50 0.717 p99 1.264  (5 rounds)
+c10000   cold   p50 0.741 p99 1.324  (5 rounds)
+c10000   first  p50 0.756 p99 1.403  (5 rounds)
+c10000   hot    p50 0.750 p99 1.416  (5 rounds)
+c10000   last   p50 0.766 p99 1.299  (5 rounds)

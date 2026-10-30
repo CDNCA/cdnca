@@ -1,0 +1,661 @@
+{
+  "name": "load-balancing",
+  "description": "负载均衡：轮询（等权/加权，单 worker 下顺序确定）、ip_hash、url_hash（同 URL 同源）、random（只录汇总）、least_conn。",
+  "covers": [
+    "负载均衡",
+    "权重",
+    "ip_hash",
+    "url_hash",
+    "random",
+    "least_conn"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b2002-0000-4000-8000-000000000001",
+      "source_revision": 7,
+      "config_version_id": "0a1b2002-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "ipv6",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 6
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b2002-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "rr.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18081",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18081,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o0",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19211,
+                  "weight": 1
+                },
+                {
+                  "id": "o1",
+                  "position": 1,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19212,
+                  "weight": 1
+                },
+                {
+                  "id": "o2",
+                  "position": 2,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19213,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2002-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "weighted.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18081",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18081,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o0",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19214,
+                  "weight": 3
+                },
+                {
+                  "id": "o1",
+                  "position": 1,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19215,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2002-0000-4000-8000-000000000103",
+          "revision": 1,
+          "domains": [
+            "iphash.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18081",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18081,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "ip_hash",
+              "origins": [
+                {
+                  "id": "o0",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19216,
+                  "weight": 1
+                },
+                {
+                  "id": "o1",
+                  "position": 1,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19217,
+                  "weight": 1
+                },
+                {
+                  "id": "o2",
+                  "position": 2,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19218,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2002-0000-4000-8000-000000000104",
+          "revision": 1,
+          "domains": [
+            "urlhash.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18081",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18081,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "url_hash",
+              "origins": [
+                {
+                  "id": "o0",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19219,
+                  "weight": 1
+                },
+                {
+                  "id": "o1",
+                  "position": 1,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19220,
+                  "weight": 1
+                },
+                {
+                  "id": "o2",
+                  "position": 2,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19221,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2002-0000-4000-8000-000000000105",
+          "revision": 1,
+          "domains": [
+            "random.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18081",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18081,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "random",
+              "origins": [
+                {
+                  "id": "o0",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19222,
+                  "weight": 1
+                },
+                {
+                  "id": "o1",
+                  "position": 1,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19223,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2002-0000-4000-8000-000000000106",
+          "revision": 1,
+          "domains": [
+            "leastconn.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18081",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18081,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "least_conn",
+              "origins": [
+                {
+                  "id": "o0",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19224,
+                  "weight": 1
+                },
+                {
+                  "id": "o1",
+                  "position": 1,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19225,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        }
+      ]
+    },
+    "node": {
+      "health_port": 18901
+    }
+  },
+  "origins": [
+    {
+      "name": "rr-0",
+      "address": "127.0.0.1:19211"
+    },
+    {
+      "name": "rr-1",
+      "address": "127.0.0.1:19212"
+    },
+    {
+      "name": "rr-2",
+      "address": "127.0.0.1:19213"
+    },
+    {
+      "name": "w-0",
+      "address": "127.0.0.1:19214"
+    },
+    {
+      "name": "w-1",
+      "address": "127.0.0.1:19215"
+    },
+    {
+      "name": "ip-0",
+      "address": "127.0.0.1:19216"
+    },
+    {
+      "name": "ip-1",
+      "address": "127.0.0.1:19217"
+    },
+    {
+      "name": "ip-2",
+      "address": "127.0.0.1:19218"
+    },
+    {
+      "name": "url-0",
+      "address": "127.0.0.1:19219"
+    },
+    {
+      "name": "url-1",
+      "address": "127.0.0.1:19220"
+    },
+    {
+      "name": "url-2",
+      "address": "127.0.0.1:19221"
+    },
+    {
+      "name": "rand-0",
+      "address": "127.0.0.1:19222"
+    },
+    {
+      "name": "rand-1",
+      "address": "127.0.0.1:19223"
+    },
+    {
+      "name": "lc-0",
+      "address": "127.0.0.1:19224"
+    },
+    {
+      "name": "lc-1",
+      "address": "127.0.0.1:19225"
+    }
+  ],
+  "steps": [
+    {
+      "id": "round-robin",
+      "port": 18081,
+      "host": "rr.example.test",
+      "path": "/",
+      "repeat": 6
+    },
+    {
+      "id": "weighted",
+      "port": 18081,
+      "host": "weighted.example.test",
+      "path": "/",
+      "repeat": 8
+    },
+    {
+      "id": "ip-hash-a",
+      "port": 18081,
+      "host": "iphash.example.test",
+      "path": "/a",
+      "repeat": 4
+    },
+    {
+      "id": "ip-hash-b",
+      "port": 18081,
+      "host": "iphash.example.test",
+      "path": "/b",
+      "repeat": 2,
+      "source": "127.0.0.9"
+    },
+    {
+      "id": "url-hash-a",
+      "port": 18081,
+      "host": "urlhash.example.test",
+      "path": "/one",
+      "repeat": 3
+    },
+    {
+      "id": "url-hash-b",
+      "port": 18081,
+      "host": "urlhash.example.test",
+      "path": "/two",
+      "repeat": 3
+    },
+    {
+      "id": "url-hash-c",
+      "port": 18081,
+      "host": "urlhash.example.test",
+      "path": "/three?q=1",
+      "repeat": 3
+    },
+    {
+      "id": "random",
+      "port": 18081,
+      "host": "random.example.test",
+      "path": "/",
+      "repeat": 20,
+      "summary": true
+    },
+    {
+      "id": "least-conn",
+      "port": 18081,
+      "host": "leastconn.example.test",
+      "path": "/",
+      "repeat": 4
+    }
+  ]
+}

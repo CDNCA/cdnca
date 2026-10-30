@@ -1,0 +1,984 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Security Policy Control API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant-isolated CC, ACL, and WAF policy management. Writes use durable
+    idempotency, revision CAS, and transactional audit. ACL bulk import is
+    normalized into canonical rules before persistence; imported allow rules
+    always precede block rules. Rule expiration is evaluated against the
+    control-plane clock and reported by stable rule ID.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Security policies
+    description: Tenant-isolated CC, ACL, and WAF policy lifecycle and preview.
+paths:
+  /v1/security-policies:
+    get:
+      tags: [Security policies]
+      operationId: listSecurityPolicies
+      summary: List visible security policies
+      x-required-permissions: [security_policies.read]
+      parameters:
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Kind'}
+        - {$ref: '#/components/parameters/Status'}
+        - {$ref: '#/components/parameters/Name'}
+        - {$ref: '#/components/parameters/Owner'}
+      responses:
+        '200':
+          description: Stable page of policies
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PolicyPage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      tags: [Security policies]
+      operationId: createSecurityPolicy
+      summary: Create a security policy
+      description: >-
+        Tenant actors are bound to their authenticated scope and owner.
+        Platform actors must supply target_scope_id and owner_id. acl_import is
+        transient and mutually exclusive with rules. A completed retry with the
+        same key and body returns the original policy and does not duplicate
+        audit events.
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePolicyRequest'}
+      responses:
+        '201':
+          description: Policy created or replayed
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Policy'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ACLImportInvalid'}
+  /v1/security-policies/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/PolicyID'}
+    get:
+      tags: [Security policies]
+      operationId: getSecurityPolicy
+      summary: Read one visible policy
+      x-required-permissions: [security_policies.read]
+      responses:
+        '200':
+          description: Policy found
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Policy'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    patch:
+      tags: [Security policies]
+      operationId: updateSecurityPolicy
+      summary: Append a policy revision
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PolicyFields'}
+      responses:
+        '200':
+          description: Updated or replayed policy
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Policy'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ACLImportInvalid'}
+    delete:
+      tags: [Security policies]
+      operationId: deleteSecurityPolicy
+      summary: Delete a policy with revision CAS
+      description: >-
+        Refused with 409 security_policy_in_use while a site still enforces the
+        policy (its active binding version is enabled, or an activation of it is
+        in flight); the message and error.details.sites name up to five sites. Switch those sites to another policy or withdraw it from them
+        first (security activation rebind / detach).
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      responses:
+        '204': {description: Deleted or idempotently replayed}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/PolicyDeleteConflict'}
+  /v1/security-policies/ip-intel-status:
+    get:
+      tags: [Security policies]
+      operationId: getSecurityPolicyIPIntelStatus
+      summary: Whether the control plane holds a verified IP intelligence library
+      description: >-
+        Turning a WAF quick block on needs it (revision 0 means none yet).
+        Publishing additionally needs every target node to have loaded a
+        verified library; nodes without it are refused by name.
+      x-required-permissions: [security_policies.read]
+      responses:
+        '200':
+          description: Library readiness
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/IPIntelStatus'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/security-policies/{id}/quick-block:
+    parameters:
+      - {$ref: '#/components/parameters/PolicyID'}
+    put:
+      tags: [Security policies]
+      operationId: setSecurityPolicyQuickBlock
+      summary: Replace a WAF policy's quick block switches
+      description: >-
+        One-click switches of a custom WAF policy whose default action is
+        allow: block CN IDC (idc:cn), global IDC (idc:global) and chosen
+        carriers (carrier:*), with allowed search engine crawlers (the WAF geo
+        trusted crawler contract: networks and user agent prefixes). The
+        switches expand to system-managed rules placed before the user's
+        rules (priority 1, reserved rule IDs): one block-and-continue rule per
+        tag kind, then one allow-and-continue rule per crawler network that
+        cancels the quick block for a request from that network whose
+        User-Agent starts with a listed prefix. A later user allow rule still
+        overrides the quick block. PATCH cannot change these rules: they are
+        re-derived from the stored switches. Appends a policy version; the
+        site runs it once published. Turning any block on needs the control
+        plane's verified IP intelligence library.
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/IfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuickBlock'}
+      responses:
+        '200':
+          description: Updated or replayed policy
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Policy'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: >-
+            quick_block_ip_intel_unavailable (no verified library yet),
+            quick_block_unsupported_policy (not a custom default-allow WAF
+            policy), quick_block_last_rules (turning it off would leave no
+            rule), quick_block_rule_budget (more than 100 rules) or
+            quick_block_site_override_conflict (the new version cannot carry
+            the own quick block of sites bound to the policy; the message
+            names them).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /v1/sites/{site_id}/quick-block:
+    parameters:
+      - {$ref: '#/components/parameters/SiteID'}
+    get:
+      tags: [Security policies]
+      operationId: getSiteQuickBlock
+      summary: Get a site's own quick block over its WAF rule library
+      description: >-
+        The site's override (each item null to inherit the WAF rule library
+        bound to the site, or the site's value), the library's latest quick
+        block and the effective result. Sites without an override follow the
+        library. Tenant principals only reach sites of their scope. ETag is
+        the shared site version.
+      x-required-permissions: [security_policies.read]
+      responses:
+        '200':
+          description: The site's quick block
+          headers:
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteQuickBlockState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [Security policies]
+      operationId: replaceSiteQuickBlock
+      summary: Replace a site's own quick block override
+      description: >-
+        Each item is null (inherit), or the site's own value: switches on or
+        off; carriers and allowed crawlers replace the library's list as a
+        whole, an empty list being off. Only this site changes; every other
+        site bound to the library keeps following it. An override that
+        inherits everything removes the site's override. The write advances
+        the site version: a manual scope shows it pending, an automatic scope
+        publishes it as its automatic publication policy's actor. Turning an
+        item on needs the control plane's verified IP intelligence library.
+        The write and its security.site_quick_block.update audit event commit
+        in one transaction; a refused write is audited as denied with its
+        reason code.
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/SiteIfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteQuickBlockOverride'}
+      responses:
+        '200':
+          description: Updated or replayed state
+          headers:
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteQuickBlockState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: version_conflict, idempotency_conflict or site_locked (tenant writes to a locked site).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '422':
+          description: >-
+            quick_block_no_library (no WAF rule library bound to the site),
+            quick_block_ip_intel_unavailable, quick_block_unsupported_policy,
+            quick_block_last_rules or quick_block_rule_budget (the override
+            cannot apply to the library version the site publishes or to its
+            latest version).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /v1/security-policies/crs-profiles:
+    get:
+      tags: [Security policies]
+      operationId: listCRSProfiles
+      summary: List the CRS profile packs a managed WAF may select
+      description: >-
+        The OWASP CRS profile packs (system/crs-<level>) this control plane
+        downloaded and may use, each with the scoring rule IDs a site may
+        exclude. A managed WAF rule names one by pack_id.
+      x-required-permissions: [security_policies.read]
+      responses:
+        '200':
+          description: Profiles by pack ID
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: {$ref: '#/components/schemas/CRSProfileSummary'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/sites/{site_id}/crs:
+    parameters:
+      - {$ref: '#/components/parameters/SiteID'}
+    get:
+      tags: [Security policies]
+      operationId: getSiteCRS
+      summary: Get a site's own OWASP CRS profile and exclusions
+      description: >-
+        The site's override (profile / exclusions null to inherit the managed
+        WAF of the WAF rule library bound to the site), the library's values,
+        the effective result and the CRS profile packs this control plane has
+        downloaded (each with the rule IDs a site may exclude). ETag is the
+        shared site version.
+      x-required-permissions: [security_policies.read]
+      responses:
+        '200':
+          description: The site's CRS settings
+          headers:
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteCRSState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      tags: [Security policies]
+      operationId: replaceSiteCRS
+      summary: Replace a site's own OWASP CRS override
+      description: >-
+        profile is null (inherit) or a downloaded CRS profile pack ID
+        (system/crs-<level>); exclusions null (inherit) or the scoring rule
+        IDs the site does not evaluate, replacing the library's list as a
+        whole (each must be exported by the effective profile; applied per
+        request with ctl:ruleRemoveById, no node reload). The write advances
+        the site version and publishes it as every site setting; it and its
+        rule.site_crs.update audit event commit in one transaction, a refused
+        write is audited as denied with its reason code. apps are the site's
+        application types (OWASP CRS official application exclusion plugins,
+        system/app-<key>; none by default): each selected pack is loaded with
+        the site's CRS profile and narrows CRS only for the site's requests; a
+        change also writes rule.site_crs_apps.update.
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/SiteIfMatch'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteCRSOverride'}
+      responses:
+        '200':
+          description: Updated or replayed state
+          headers:
+            ETag: {$ref: '#/components/headers/SiteETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteCRSState'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: version_conflict, idempotency_conflict or site_locked (tenant writes to a locked site).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+        '422':
+          description: >-
+            crs_no_managed_waf (the site's WAF rule library runs no CRS managed
+            WAF), crs_profile_unavailable (the profile pack is not downloaded),
+            crs_exclusion_not_exported or crs_app_unavailable (an application
+            type's pack is not downloaded).
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  /v1/security-policies/{id}/evaluate:
+    parameters:
+      - {$ref: '#/components/parameters/PolicyID'}
+      - {$ref: '#/components/parameters/IfMatch'}
+    post:
+      tags: [Security policies]
+      operationId: evaluateSecurityPolicy
+      summary: Preview the exact policy revision
+      description: >-
+        Uses the control-plane clock. Rules expired at or before that instant
+        are skipped and returned in expired_rule_ids.
+      x-required-permissions: [security_policies.read]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RequestFacts'}
+      responses:
+        '200':
+          description: Deterministic evaluation result
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Evaluation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PolicyID:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 1, default: 1}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Kind:
+      name: kind
+      in: query
+      schema: {$ref: '#/components/schemas/PolicyKind'}
+    Status:
+      name: status
+      in: query
+      schema: {type: string, enum: [enabled, disabled]}
+    Name:
+      name: name
+      in: query
+      schema: {type: string, maxLength: 128}
+    Owner:
+      name: owner
+      in: query
+      description: Platform actors only.
+      schema: {type: string, maxLength: 128}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    SiteIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted site version (sites.revision).
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  headers:
+    ETag:
+      description: Quoted policy version.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    SiteETag:
+      description: Quoted site version (sites.revision).
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  responses:
+    BadRequest:
+      description: Invalid request or policy fields
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Forbidden:
+      description: Permission denied
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    NotFound:
+      description: Policy absent or outside the authenticated tenant
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Conflict:
+      description: Revision, name, or idempotency conflict
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    PolicyDeleteConflict:
+      description: Revision or idempotency conflict, or security_policy_in_use with details.sites
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PolicyDeleteErrorEnvelope'}
+    ACLImportInvalid:
+      description: ACL import rejected atomically with every detected line error
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ACLImportErrorEnvelope'}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+    PolicyKind:
+      type: string
+      enum: [cc, acl, waf]
+    Decision:
+      type: string
+      enum: [allow, block]
+    Condition:
+      type: object
+      additionalProperties: false
+      required: [field, operator, values]
+      properties:
+        field:
+          type: string
+          enum: [client_ip, host, path, method, header, country, asn, ja4, port, distinct_user_agents, status_404_count,
+            carrier, ip_tag, province, city, args, query, body, request_uri, cookie, user_agent, referer]
+        operator: {type: string, minLength: 1, maxLength: 64}
+        key: {type: string, maxLength: 128}
+        values:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {type: string, maxLength: 256}
+    Rule:
+      type: object
+      additionalProperties: false
+      required: [name, priority, enabled, conditions, action, flow, action_config]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        priority: {type: integer, minimum: 1, maximum: 1000000}
+        enabled: {type: boolean}
+        comment: {type: string, minLength: 1, maxLength: 256}
+        expires_at:
+          type: string
+          format: date-time
+          pattern: '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items: {$ref: '#/components/schemas/Condition'}
+        action:
+          type: string
+          enum: [allow, block, rate_limit, challenge, log]
+        flow:
+          type: string
+          enum: [continue, stop]
+        action_config:
+          type: object
+          description: Action-specific rate-limit or challenge configuration.
+        count_by:
+          type: array
+          minItems: 1
+          maxItems: 2
+          description: "CC only (CC API v4). One or two keys counted together; omitted means the client IP. Keys are stored in the order client_ip, client_cidr, host, uri, uri_path, ja4; client_ip with client_cidr and uri with uri_path are rejected. A request without a TLS fingerprint is not counted by a ja4 rule."
+          items: {$ref: '#/components/schemas/CountKey'}
+        action_target:
+          type: string
+          enum: [client_ip, count_key]
+          description: CC temporary_ban with count_by only. count_key bans the counted bucket (for example one TLS fingerprint); omitted bans the client.
+    CountKey:
+      type: object
+      additionalProperties: false
+      required: [key]
+      properties:
+        key: {type: string, enum: [client_ip, client_cidr, host, uri, uri_path, ja4]}
+        ipv4_prefix: {type: integer, minimum: 8, maximum: 32, description: client_cidr only; default 24.}
+        ipv6_prefix: {type: integer, minimum: 32, maximum: 128, description: client_cidr only; default 64.}
+    PolicyFields:
+      type: object
+      additionalProperties: false
+      required: [kind, name, enabled, default_action, rules]
+      properties:
+        kind: {$ref: '#/components/schemas/PolicyKind'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1000, default: ''}
+        enabled: {type: boolean}
+        default_action: {$ref: '#/components/schemas/Decision'}
+        acl_import:
+          type: string
+          maxLength: 65536
+          description: >-
+            ACL only. One allow or block CIDR per line, followed optionally by
+            expires=YYYY-MM-DDTHH:MM:SSZ and a # comment. Mutually exclusive
+            with non-empty rules and omitted from stored responses.
+        rules:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Rule'}
+    CreatePolicyRequest:
+      allOf:
+        - {$ref: '#/components/schemas/PolicyFields'}
+        - type: object
+          properties:
+            target_scope_id: {$ref: '#/components/schemas/UUID'}
+            owner_id: {$ref: '#/components/schemas/UUID'}
+    Policy:
+      allOf:
+        - {$ref: '#/components/schemas/PolicyFields'}
+        - type: object
+          required: [id, scope_id, version, created_at, updated_at]
+          properties:
+            id: {$ref: '#/components/schemas/UUID'}
+            scope_id: {$ref: '#/components/schemas/UUID'}
+            owner:
+              type: object
+              required: [id, display_name]
+              properties:
+                id: {$ref: '#/components/schemas/UUID'}
+                display_name: {type: string}
+            version: {type: integer, minimum: 1}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+            quick_block:
+              $ref: '#/components/schemas/QuickBlock'
+              description: WAF only; absent when never configured. Read-only here (PUT .../quick-block).
+            protected: {type: boolean, description: A subscribed platform WAF rule library copy (read only).}
+            library_id:
+              $ref: '#/components/schemas/UUID'
+              description: Subscribed WAF copies only; the platform rule library (GET /v1/waf-rule-libraries id) it was copied from.
+    QuickBlock:
+      type: object
+      additionalProperties: false
+      required: [block_idc_cn, block_idc_global, carriers, allowed_crawlers]
+      properties:
+        block_idc_cn: {type: boolean, description: Block clients the IP intelligence library tags idc:cn.}
+        block_idc_global: {type: boolean, description: Block clients tagged idc:global.}
+        carriers:
+          type: array
+          maxItems: 7
+          uniqueItems: true
+          items:
+            type: string
+            enum: [carrier:cn-telecom, carrier:cn-unicom, carrier:cn-mobile, carrier:cn-cernet, carrier:cn-cstnet, carrier:cn-drpeng, carrier:cn-cbn]
+        allowed_crawlers:
+          type: array
+          maxItems: 64
+          description: At most 32 networks in total (one allow rule each).
+          items:
+            type: object
+            additionalProperties: false
+            required: [networks, user_agent_prefixes]
+            properties:
+              networks:
+                type: array
+                minItems: 1
+                maxItems: 32
+                items: {type: string, description: Canonical non-overlapping CIDR.}
+              user_agent_prefixes:
+                type: array
+                minItems: 1
+                maxItems: 64
+                items: {type: string, minLength: 1, maxLength: 128}
+    SiteQuickBlockOverride:
+      type: object
+      additionalProperties: false
+      description: Each item null (inherit the library) or the site's own value.
+      properties:
+        block_idc_cn: {type: [boolean, 'null']}
+        block_idc_global: {type: [boolean, 'null']}
+        carriers:
+          type: [array, 'null']
+          description: Replaces the library's carriers; [] is off.
+          maxItems: 7
+          uniqueItems: true
+          items:
+            type: string
+            enum: [carrier:cn-telecom, carrier:cn-unicom, carrier:cn-mobile, carrier:cn-cernet, carrier:cn-cstnet, carrier:cn-drpeng, carrier:cn-cbn]
+        allowed_crawlers:
+          type: [array, 'null']
+          description: >-
+            Replaces the library's crawler networks as a whole ([] allows no
+            crawler); same contract and limits as QuickBlock.allowed_crawlers.
+          maxItems: 64
+          items:
+            type: object
+            additionalProperties: false
+            required: [networks, user_agent_prefixes]
+            properties:
+              networks:
+                type: array
+                minItems: 1
+                maxItems: 32
+                items: {type: string}
+              user_agent_prefixes:
+                type: array
+                minItems: 1
+                maxItems: 64
+                items: {type: string, minLength: 1, maxLength: 128}
+    SiteQuickBlockState:
+      type: object
+      additionalProperties: false
+      required: [site_id, version, override, library, effective, updated_at]
+      properties:
+        site_id: {$ref: '#/components/schemas/UUID'}
+        version: {type: integer, minimum: 1, description: Site version (ETag / If-Match).}
+        override: {$ref: '#/components/schemas/SiteQuickBlockOverride'}
+        library:
+          description: The site's WAF rule library; null when none is bound.
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [policy_id, version, active_version, supported, quick_block]
+              properties:
+                policy_id: {$ref: '#/components/schemas/UUID'}
+                version: {type: integer, minimum: 1, description: Latest library version.}
+                active_version: {type: integer, minimum: 0, description: Version the site's binding publishes (0 none).}
+                supported: {type: boolean, description: The library can carry a quick block that blocks anything.}
+                quick_block: {$ref: '#/components/schemas/QuickBlock'}
+        effective:
+          description: The library's latest quick block with the override applied; null without a library.
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/QuickBlock'
+        updated_at: {type: [string, 'null'], format: date-time}
+    SiteCRSOverride:
+      type: object
+      additionalProperties: false
+      description: Each item null (inherit the library) or the site's own value.
+      properties:
+        profile: {type: [string, 'null'], pattern: '^system/crs-[a-z0-9][a-z0-9-]{0,59}$'}
+        exclusions:
+          type: [array, 'null']
+          maxItems: 256
+          uniqueItems: true
+          items: {type: integer, minimum: 900000, maximum: 999999}
+        apps:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          description: Application types (site only, not inherited); omitted or empty = none.
+          items: {type: string, pattern: '^system/app-[a-z0-9][a-z0-9-]{0,47}$'}
+    SiteCRSValues:
+      type: object
+      additionalProperties: false
+      required: [policy_id, version, profile, exclusions]
+      properties:
+        policy_id: {$ref: '#/components/schemas/UUID'}
+        version: {type: integer, minimum: 1}
+        profile: {type: string}
+        exclusions: {type: array, items: {type: integer}}
+    SiteCRSState:
+      type: object
+      additionalProperties: false
+      required: [site_id, version, override, library, effective, profiles, apps, updated_at, rule_pack_suspensions]
+      properties:
+        site_id: {$ref: '#/components/schemas/UUID'}
+        version: {type: integer, minimum: 1, description: Site version (ETag / If-Match).}
+        rule_pack_suspensions:
+          description: >
+            The site's ModSecurity rule pack mounts suspended because the effective CRS profile does not
+            cover them. A profile change never waits for its rule packs: the uncovered mounts are suspended in
+            the same transaction (the profile takes effect with the automatic publication) and come back by
+            themselves once the profile covers them again (or after another pack version is published).
+          type: array
+          items: {$ref: '#/components/schemas/RulePackSuspension'}
+        rule_pack_change:
+          description: Update responses only; what this write suspended and restored.
+          type: object
+          additionalProperties: false
+          required: [suspended, restored]
+          properties:
+            suspended: {type: array, items: {$ref: '#/components/schemas/RulePackSuspension'}}
+            restored: {type: array, items: {$ref: '#/components/schemas/RulePackSuspension'}}
+        override: {$ref: '#/components/schemas/SiteCRSOverride'}
+        library:
+          description: The managed WAF of the site's WAF rule library; null when it runs none.
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/SiteCRSValues'
+        effective:
+          oneOf:
+            - type: 'null'
+            - $ref: '#/components/schemas/SiteCRSValues'
+        profiles:
+          type: array
+          items: {$ref: '#/components/schemas/CRSProfileSummary'}
+        apps:
+          type: array
+          description: Selectable application types (downloaded application exclusion packs).
+          items: {$ref: '#/components/schemas/CRSAppSummary'}
+        updated_at: {type: [string, 'null'], format: date-time}
+    RulePackSuspension:
+      type: object
+      additionalProperties: false
+      required: [pack_id, version, reason, crs_profile, detail, suspended_at]
+      properties:
+        pack_id: {type: string}
+        version: {type: string}
+        reason: {type: string, enum: [out_of_profile]}
+        crs_profile: {type: string, description: The profile it was suspended under ('' = the site runs no managed WAF).}
+        detail: {type: string, maxLength: 1000}
+        suspended_at: {type: string, format: date-time}
+    CRSAppSummary:
+      type: object
+      additionalProperties: false
+      required: [pack_id, key, name, version, description]
+      properties:
+        pack_id: {type: string}
+        key: {type: string}
+        name: {type: string}
+        version: {type: string}
+        description: {type: string}
+    CRSProfileSummary:
+      type: object
+      additionalProperties: false
+      required: [pack_id, version, name, description, exports]
+      properties:
+        pack_id: {type: string}
+        version: {type: string}
+        name: {type: string}
+        description: {type: string}
+        exports: {type: array, items: {type: integer}}
+    IPIntelStatus:
+      type: object
+      additionalProperties: false
+      required: [ready, revision]
+      properties:
+        ready: {type: boolean}
+        revision: {type: integer, minimum: 0}
+    PolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit, counts]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Policy'}}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        counts:
+          description: Policies under every filter but status, over every page.
+          type: object
+          additionalProperties: false
+          required: [all, enabled, disabled]
+          properties:
+            all: {type: integer, minimum: 0}
+            enabled: {type: integer, minimum: 0}
+            disabled: {type: integer, minimum: 0}
+    RequestFacts:
+      type: object
+      additionalProperties: false
+      required: [client_ip, host, path, method, headers, country, asn, ja4, port, distinct_user_agents, status_404_count]
+      properties:
+        client_ip: {type: string}
+        host: {type: string}
+        path: {type: string}
+        method: {type: string}
+        headers:
+          type: object
+          description: Header names are case-insensitive; arrays preserve repeated field values. Scalar values remain accepted for legacy clients.
+          additionalProperties:
+            oneOf:
+              - {type: string, maxLength: 4096}
+              - {type: array, minItems: 1, maxItems: 100, items: {type: string, maxLength: 4096}}
+        country: {type: string}
+        asn: {type: integer, minimum: 0}
+        ja4: {type: string}
+        port: {type: integer, minimum: 0, maximum: 65535}
+        distinct_user_agents: {type: integer, minimum: 0}
+        status_404_count: {type: integer, minimum: 0}
+    Evaluation:
+      type: object
+      additionalProperties: false
+      required: [policy_id, policy_version, action, matched_rule_ids, used_default]
+      properties:
+        policy_id: {$ref: '#/components/schemas/UUID'}
+        policy_version: {type: integer, minimum: 1}
+        action: {type: string, enum: [allow, block, rate_limit, challenge, log]}
+        matched_rule_ids: {type: array, items: {$ref: '#/components/schemas/UUID'}}
+        expired_rule_ids: {type: array, items: {$ref: '#/components/schemas/UUID'}}
+        terminal_rule_id: {$ref: '#/components/schemas/UUID'}
+        used_default: {type: boolean}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: >-
+                On a 400 validation_error that names the refused field of the policy body: field is the JSON path as sent
+                (name, rules[1].conditions[0].values, rules[0].action_config.rate_limit.window_seconds,
+                cc_settings.auto_switch.qps_total, acl_import); reason is a machine code (required, too_long, invalid_format,
+                out_of_range, duplicate, invalid). A refusal that cannot name one field has no details.
+              x-description-zh: 能定位字段的 400 validation_error 附带 field（策略请求体 JSON 路径，规则按提交顺序编号）与 reason 机器码；无法定位单个字段时不带 details。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$'
+                reason:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_]{0,63}$'
+              example: {field: 'rules[1].conditions[0].values', reason: invalid_format}
+    PolicyDeleteErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: Present for security_policy_in_use.
+              type: object
+              additionalProperties: false
+              required: [sites]
+              properties:
+                sites:
+                  description: Up to five sites still running the policy (may be empty).
+                  type: array
+                  maxItems: 5
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [id, domain]
+                    properties:
+                      id: {$ref: '#/components/schemas/UUID'}
+                      domain: {type: string}
+    ACLImportLineError:
+      type: object
+      additionalProperties: false
+      required: [line, code]
+      properties:
+        line: {type: integer, minimum: 1}
+        code:
+          type: string
+          enum: [invalid_action, invalid_cidr, invalid_expiry, invalid_comment, invalid_syntax, duplicate_cidr, too_many_entries, invalid_size, empty_import]
+    ACLImportErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id, line_errors]
+          properties:
+            code: {const: acl_import_invalid}
+            message: {type: string}
+            request_id: {type: string}
+            line_errors:
+              type: array
+              minItems: 1
+              items: {$ref: '#/components/schemas/ACLImportLineError'}

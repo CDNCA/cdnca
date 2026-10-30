@@ -1,0 +1,19 @@
+REQUEST-942 total=1032 passed=1032 failed=0
+REQUEST-941 total=263 passed=263 failed=0
+REQUEST-932 total=1089 passed=1089 failed=0
+REQUEST-930 total=83 passed=83 failed=0
+REQUEST-931 total=42 passed=42 failed=0
+REQUEST-944 total=1176 passed=1176 failed=0
+REQUEST-920 total=428 passed=427 failed=1
+REQUEST-921 total=117 passed=117 failed=0
+REQUEST-922 total=47 passed=47 failed=0
+REQUEST-933 total=442 passed=442 failed=0
+REQUEST-934 total=282 passed=282 failed=0
+
+# 2026-10-16 r135-wafdual：CRS 规则文本改由签名目录数据提供（引擎扩展不含规则），942/941/932/930/931/944 复测
+REQUEST-942 total=1032 passed=1032 failed=0
+REQUEST-941 total=263 passed=263 failed=0
+REQUEST-932 total=1089 passed=1089 failed=0
+REQUEST-930 total=83 passed=83 failed=0
+REQUEST-931 total=42 passed=42 failed=0
+REQUEST-944 total=1176 passed=1176 failed=0

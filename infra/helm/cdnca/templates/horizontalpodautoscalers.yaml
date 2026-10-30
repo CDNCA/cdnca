@@ -1,0 +1,51 @@
+{{- $root := . -}}
+{{- $components := list
+  (dict "component" "control-api" "values" .Values.controlApi)
+  (dict "component" "agent-gateway" "values" .Values.agentGateway)
+  (dict "component" "web" "values" .Values.web)
+-}}
+{{- range $item := $components }}
+{{- if and $item.values.enabled $item.values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" $root "component" $item.component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" $root "component" $item.component) | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "cdnca.componentFullname" (dict "root" $root "component" $item.component) }}
+  minReplicas: {{ $item.values.autoscaling.minReplicas }}
+  maxReplicas: {{ $item.values.autoscaling.maxReplicas }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $item.values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ $item.values.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}
+{{- end }}
+

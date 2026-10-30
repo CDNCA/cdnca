@@ -1,0 +1,81 @@
+<!-- CDNCA CDN 前台购买页（Cdnca::clientProductConfigOption）。只选周期；价格由 cartCalculatePrice 计算。 -->
+<style>
+  .cdnca-goods { max-width: 640px; padding: 20px 24px; font-size: 14px; color: #303133; background: #fff; border-radius: 6px; }
+  .cdnca-goods fieldset { border: 0; padding: 0; margin: 0 0 20px; }
+  .cdnca-goods legend { margin-bottom: 10px; color: #606266; }
+  .cdnca-goods label { display: inline-flex; align-items: center; gap: 6px; margin: 0 12px 10px 0; padding: 8px 14px; border: 1px solid #dcdfe6; border-radius: 4px; cursor: pointer; }
+  .cdnca-goods label.on { border-color: #2f6bff; color: #2f6bff; }
+  .cdnca-goods .actions { display: flex; gap: 12px; }
+  .cdnca-goods .btn { padding: 8px 20px; border: 1px solid #2f6bff; border-radius: 4px; background: #2f6bff; color: #fff; cursor: pointer; }
+  .cdnca-goods .btn.plain { background: #fff; color: #2f6bff; }
+  .cdnca-goods .btn:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+  .cdnca-goods .err { margin-top: 10px; color: #f56c6c; }
+</style>
+<div class="cdnca-goods">
+  {if empty($cdnca_cycles)}
+  <p role="alert">该商品尚未配置 CDN 套餐或售价，暂不能购买。</p>
+  {else /}
+  <p>套餐：{$cdnca_product_name}</p>
+  <fieldset>
+    <legend>购买周期</legend>
+    <div id="cdnca-cycles"></div>
+  </fieldset>
+  <div class="actions">
+    <button type="button" class="btn" id="cdnca-buy">立即购买</button>
+    <button type="button" class="btn plain" id="cdnca-cart">加入购物车</button>
+  </div>
+  <div class="err" id="cdnca-goods-error" role="alert" aria-live="polite"></div>
+  {/if}
+</div>
+{if !empty($cdnca_cycles)}
+<script>
+(function () {
+  var cycles = {$cdnca_cycles_json|raw};
+  var productId = {$cdnca_product_id};
+  var box = document.getElementById('cdnca-cycles');
+  var errorBox = document.getElementById('cdnca-goods-error');
+  var selected = cycles[0].duration;
+  cycles.forEach(function (c, i) {
+    var label = document.createElement('label');
+    var input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'cdnca_duration';
+    input.value = c.duration;
+    input.checked = i === 0;
+    input.addEventListener('change', function () {
+      selected = c.duration;
+      Array.prototype.forEach.call(box.querySelectorAll('label'), function (l) { l.className = ''; });
+      label.className = 'on';
+    });
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(c.billing_cycle + ' ¥' + Number(c.price).toFixed(2)));
+    label.className = i === 0 ? 'on' : '';
+    box.appendChild(label);
+  });
+  // 与系统通用商品一致：config_options 原样作为 cartCalculatePrice 的 custom 参数。
+  function order() {
+    return { product_id: productId, config_options: { duration: selected }, qty: 1, customfield: {}, self_defined_field: {} };
+  }
+  document.getElementById('cdnca-buy').addEventListener('click', function () {
+    sessionStorage.setItem('product_information', JSON.stringify(order()));
+    location.href = '/cart/settlement.htm?id=' + productId;
+  });
+  document.getElementById('cdnca-cart').addEventListener('click', function () {
+    errorBox.textContent = '';
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/console/v1/cart');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    var jwt = window.localStorage ? localStorage.getItem('jwt') : '';
+    if (jwt) { xhr.setRequestHeader('Authorization', 'Bearer ' + jwt); }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      if (data && data.status === 200) { location.href = '/cart/shoppingCar.htm'; return; }
+      errorBox.textContent = (data && data.msg) || ('加入购物车失败（HTTP ' + xhr.status + '）');
+    };
+    xhr.send(JSON.stringify(order()));
+  });
+})();
+</script>
+{/if}

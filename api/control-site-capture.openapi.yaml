@@ -1,0 +1,176 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Site Telemetry Capture API
+  version: 1.0.0
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+  description: >-
+    Tenant-scoped, revisioned site telemetry capture policy. Capture is off by
+    default; enabled policies select explicit fields and optional method/URI
+    predicates. Durable implementations atomically persist the policy CAS,
+    idempotency receipt, canonical evidence digest, and audit fact.
+servers: [{url: /}]
+tags:
+  - name: SiteCapture
+    description: Controlled and structurally redacted site telemetry capture.
+paths:
+  /v1/tenant-scopes/{scope_id}/sites/{site_id}/telemetry-capture-policy:
+    parameters:
+      - {$ref: '#/components/parameters/ScopeID'}
+      - {$ref: '#/components/parameters/SiteID'}
+    get:
+      tags: [SiteCapture]
+      operationId: getSiteCapturePolicy
+      security: [{bearerAuth: []}]
+      x-required-permissions: [site_capture.read]
+      description: >-
+        A readable site that never saved a policy answers 200 with
+        state=unconfigured, revision 0 and the default (capture off) document;
+        create it with expected_revision 0. 404 means the site is missing,
+        deleted or not visible to the caller.
+      responses:
+        '200': {$ref: '#/components/responses/PolicyReadOK'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    put:
+      tags: [SiteCapture]
+      operationId: updateSiteCapturePolicy
+      security: [{bearerAuth: []}]
+      x-required-permissions: [site_capture.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/TraceID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/WriteOK'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    ScopeID: {name: scope_id, in: path, required: true, schema: {type: string, format: uuid}}
+    SiteID: {name: site_id, in: path, required: true, schema: {type: string, format: uuid}}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    TraceID:
+      name: X-Trace-ID
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+  schemas:
+    PolicyDocument:
+      type: object
+      additionalProperties: false
+      required: [enabled, methods, uri_prefixes, request_header_allowlist, response_header_allowlist, request_body_field_allowlist, response_body_field_allowlist, max_value_bytes, max_body_bytes, max_event_bytes]
+      properties:
+        enabled: {type: boolean, default: false}
+        methods:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string, enum: [GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS]}
+        uri_prefixes:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 1024, pattern: '^/[^?#]*$'}
+        request_header_allowlist: {$ref: '#/components/schemas/CaptureNames'}
+        response_header_allowlist: {$ref: '#/components/schemas/CaptureNames'}
+        request_body_field_allowlist: {$ref: '#/components/schemas/CaptureNames'}
+        response_body_field_allowlist: {$ref: '#/components/schemas/CaptureNames'}
+        max_value_bytes: {type: integer, minimum: 1, maximum: 16384, default: 4096}
+        max_body_bytes: {type: integer, minimum: 1, maximum: 1048576, default: 65536}
+        max_event_bytes: {type: integer, minimum: 256, maximum: 1048576, default: 1048576}
+    CaptureNames:
+      type: array
+      maxItems: 128
+      uniqueItems: true
+      items: {type: string, minLength: 1, maxLength: 128}
+    Policy:
+      type: object
+      additionalProperties: false
+      required: [scope_id, site_id, revision, document, evidence_digest, updated_at, updated_by, request_id]
+      properties:
+        scope_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        document: {$ref: '#/components/schemas/PolicyDocument'}
+        evidence_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        updated_at: {type: string, format: date-time}
+        updated_by: {type: string, format: uuid}
+        request_id: {type: string, minLength: 1, maxLength: 128}
+    UnconfiguredPolicy:
+      type: object
+      additionalProperties: false
+      required: [scope_id, site_id, state, revision, document]
+      properties:
+        scope_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        state: {type: string, const: unconfigured}
+        revision: {type: integer, const: 0}
+        document: {$ref: '#/components/schemas/PolicyDocument'}
+    UpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, document]
+      properties:
+        expected_revision: {type: integer, minimum: 0}
+        document: {$ref: '#/components/schemas/PolicyDocument'}
+    WriteResult:
+      type: object
+      additionalProperties: false
+      required: [policy, replayed]
+      properties:
+        policy: {$ref: '#/components/schemas/Policy'}
+        replayed: {type: boolean}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code: {type: string, minLength: 1, maxLength: 128}
+            request_id: {type: string, minLength: 1, maxLength: 128}
+  responses:
+    PolicyReadOK:
+      description: Current authoritative policy, or the explicit unconfigured default.
+      headers: {ETag: {schema: {type: string}}}
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - {$ref: '#/components/schemas/Policy'}
+              - {$ref: '#/components/schemas/UnconfiguredPolicy'}
+    WriteOK:
+      description: Policy CAS committed or idempotently replayed.
+      headers:
+        ETag: {schema: {type: string}}
+        X-Idempotent-Replay: {schema: {type: string, const: 'true'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/WriteResult'}}}
+    Error:
+      description: Stable localized-by-client error response.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

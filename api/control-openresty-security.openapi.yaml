@@ -1,0 +1,467 @@
+openapi: 3.1.0
+info:
+  title: CDNCA OpenResty CC and WAF Configuration API
+  version: 1.0.0
+  description: Canonical authenticated-scope CC/WAF configuration, sparse region/node overrides, effective resolution, and immutable publication outbox. The target scope is always derived from the authenticated principal.
+servers: [{url: /}]
+security: [{bearerAuth: []}]
+paths:
+  /v1/openresty-security/configs/global:
+    get:
+      operationId: getGlobalOpenRestySecurityConfig
+      x-required-permissions: [openresty_security.read]
+      responses:
+        '200': {$ref: '#/components/responses/Document'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    patch:
+      operationId: patchGlobalOpenRestySecurityConfig
+      description: Applies the smallest auto-save patch. A logical retry must reuse the same Idempotency-Key.
+      x-required-permissions: [openresty_security.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [patch]
+              properties: {patch: {$ref: '#/components/schemas/Config'}}
+      responses:
+        '200': {$ref: '#/components/responses/Document'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+  /v1/openresty-security/overrides:
+    get:
+      operationId: listOpenRestySecurityOverrides
+      x-required-permissions: [openresty_security.read]
+      parameters:
+        - {name: scope_type, in: query, schema: {type: string, enum: [region, node]}}
+        - {name: query, in: query, schema: {type: string, maxLength: 128}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: Stable page ordered by update time
+          content: {application/json: {schema: {$ref: '#/components/schemas/OverridePage'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createOpenRestySecurityOverride
+      x-required-permissions: [openresty_security.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [scope_type, scope_id, config]
+              properties:
+                scope_type: {type: string, enum: [region, node]}
+                scope_id: {type: string, minLength: 1, maxLength: 64}
+                config: {$ref: '#/components/schemas/OverrideConfig'}
+      responses:
+        '201': {$ref: '#/components/responses/Document'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/openresty-security/overrides/{id}:
+    parameters:
+      - {name: id, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    patch:
+      operationId: patchOpenRestySecurityOverride
+      x-required-permissions: [openresty_security.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [patch]
+              properties:
+                patch: {$ref: '#/components/schemas/OverrideConfig'}
+                removed_fields:
+                  type: array
+                  minItems: 1
+                  maxItems: 24
+                  uniqueItems: true
+                  items: {$ref: '#/components/schemas/OverrideFieldName'}
+      responses:
+        '200': {$ref: '#/components/responses/Document'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+    delete:
+      operationId: deleteOpenRestySecurityOverride
+      x-required-permissions: [openresty_security.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '204': {description: Deleted; a replay returns the same result}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+  /v1/openresty-security/targets:
+    get:
+      operationId: searchOpenRestySecurityTargets
+      x-required-permissions: [openresty_security.read]
+      parameters:
+        - {name: scope_type, in: query, required: true, schema: {type: string, enum: [region, node]}}
+        - {name: query, in: query, schema: {type: string, maxLength: 128}}
+        - {$ref: '#/components/parameters/Page'}
+        - {$ref: '#/components/parameters/PageSize'}
+      responses:
+        '200':
+          description: Remote node or distinct-region search results
+          content: {application/json: {schema: {$ref: '#/components/schemas/TargetPage'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/openresty-security/effective:
+    get:
+      operationId: getEffectiveOpenRestySecurityConfig
+      description: Resolves the deterministic node-over-region-over-global configuration.
+      x-required-permissions: [openresty_security.read]
+      parameters:
+        - {name: node_id, in: query, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+      responses:
+        '200': {$ref: '#/components/responses/Document'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/cc-rule-groups:
+    get:
+      operationId: listCCRuleGroupsForOpenRestyConfig
+      x-required-permissions: [openresty_security.read]
+      responses:
+        '200':
+          description: System groups are identified by system_rule_key, falling back to system_rule_id for legacy projections. Custom policy groups retain their UUID IDs.
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: '#/components/schemas/RuleGroup'}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/cc-rule-groups/summary:
+    get:
+      operationId: summarizeCCRuleGroups
+      summary: CC rule group pill counts over every group
+      description: >-
+        System groups count from the signed rule catalog once it has synced,
+        else from the per-tenant projection; custom groups are the scope's CC
+        policies. visible/disabled are enabled/disabled groups of both kinds.
+      x-required-permissions: [openresty_security.read]
+      responses:
+        '200':
+          description: Counts.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RuleGroupSummary'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/cc-rule-groups/{id}/enable:
+    post:
+      operationId: enableCCRuleGroup
+      summary: Enable a system CC rule group
+      x-required-permissions: [openresty_security.manage]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Stable system_rule_key. Legacy system_rule_id values are also accepted.
+          schema: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        '200': {description: System rule group enabled., content: {application/json: {schema: {$ref: '#/components/schemas/RuleGroupState'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/cc-rule-groups/{id}/disable:
+    post:
+      operationId: disableCCRuleGroup
+      summary: Disable a system CC rule group
+      x-required-permissions: [openresty_security.manage]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Stable system_rule_key. Legacy system_rule_id values are also accepted.
+          schema: {type: string, minLength: 1, maxLength: 128}
+      responses:
+        '200': {description: System rule group disabled., content: {application/json: {schema: {$ref: '#/components/schemas/RuleGroupState'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/openresty-security/actions/download-cc-image:
+    post:
+      operationId: queueCCImageDownload
+      x-required-permissions: [openresty_security.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '202': {description: Durable download_cc_img task queued}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}}
+    RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+    Page: {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+    PageSize: {name: page_size, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+  headers:
+    ETag: {description: Quoted desired revision, schema: {type: string, pattern: '^"[0-9]+"$'}}
+  responses:
+    Document:
+      description: Current redacted configuration document
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        Idempotent-Replay: {schema: {type: string, enum: ['true']}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}
+    BadRequest: {description: 'Invalid field, conditional value, range, or relationship', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unauthorized: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: Target absent or hidden across tenant boundary, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: Duplicate target or idempotency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    PreconditionFailed: {description: If-Match revision conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  schemas:
+    UUID: {type: string, format: uuid}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            request_id: {type: string, minLength: 1, maxLength: 128}
+    AutoSwitch:
+      type: object
+      additionalProperties: false
+      required: [enable, qps_50x, qps_total, rule, seconds]
+      properties:
+        enable: {type: boolean}
+        qps_50x: {type: integer, minimum: 0, maximum: 2147483647}
+        qps_total: {type: integer, minimum: 0, maximum: 2147483647}
+        rule: {type: string, maxLength: 128}
+        seconds: {type: integer, minimum: 0, maximum: 2147483647}
+    LogConfig:
+      type: object
+      additionalProperties: false
+      required: [log_level, debug_ip]
+      properties:
+        log_level: {type: string, enum: [info, debug]}
+        debug_ip: {type: string, maxLength: 128}
+    InternalRule:
+      type: object
+      additionalProperties: false
+      required: [period, reqs]
+      properties:
+        period: {type: integer, minimum: 0, maximum: 2147483647}
+        reqs: {type: integer, minimum: 0, maximum: 2147483647}
+    SecretValue:
+      type: string
+      maxLength: 4096
+      writeOnly: true
+    WAFResourceLimits:
+      type: object
+      additionalProperties: false
+      required: [candidate_per_param, candidate_per_request, ffi_per_request, json_max_leaves, json_max_nodes,
+        json_max_depth, json_max_string_bytes, json_body_bytes, multipart_max_parts, body_scan_bytes]
+      properties:
+        candidate_per_param: {type: integer, minimum: 256, maximum: 4096, default: 2048}
+        candidate_per_request: {type: integer, minimum: 1024, maximum: 16384, default: 4096}
+        ffi_per_request: {type: integer, minimum: 2048, maximum: 32768, default: 8192}
+        json_max_leaves: {type: integer, minimum: 64, maximum: 4096, default: 2048}
+        json_max_nodes: {type: integer, minimum: 1024, maximum: 32768, default: 9216}
+        json_max_depth: {type: integer, minimum: 16, maximum: 128, default: 64}
+        json_max_string_bytes: {type: integer, minimum: 16384, maximum: 1048576, default: 262144}
+        json_body_bytes: {type: integer, minimum: 262144, maximum: 4194304, default: 1048576}
+        multipart_max_parts: {type: integer, minimum: 16, maximum: 512, default: 128}
+        body_scan_bytes: {type: integer, minimum: 1048576, maximum: 67108864, default: 16777216}
+      x-constraints:
+        - json_max_leaves <= candidate_per_param
+        - candidate_per_param <= candidate_per_request
+        - json_body_bytes <= body_scan_bytes
+    Config:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties: &configProperties
+        cc_enable: {type: boolean}
+        block_time: {type: integer, minimum: 0, maximum: 2147483647, default: 3600}
+        white_time: {type: integer, minimum: 600, maximum: 2147483647, default: 21600}
+        default_block_way: {type: string, enum: [ipset, exit, page], default: exit}
+        ipset_auto_enable: {type: boolean, default: true}
+        site_block_qps: {type: integer, minimum: 0, maximum: 2147483647, default: 200}
+        block_page_num_limit: {type: integer, minimum: 0, maximum: 2147483647, default: 200}
+        block_page_not_counted: {type: boolean, default: true}
+        tmp_white_total_limit: {type: integer, minimum: 0, maximum: 2147483647}
+        tmp_white_per_limit: {type: integer, minimum: 0, maximum: 2147483647}
+        custom_white: {type: string, maxLength: 1048576}
+        custom_black: {type: string, maxLength: 1048576}
+        ssl_handshake_limit: {type: integer, minimum: 0, maximum: 2147483647}
+        default_page_refuse: {type: boolean}
+        force_default_page_cc: {type: string, enum: [force, auto]}
+        auto_default_page_cc_qps: {type: integer, minimum: 0, maximum: 2147483647}
+        default_page_rule: {type: string, maxLength: 128}
+        icmp_drop: {type: boolean}
+        key: {$ref: '#/components/schemas/SecretValue'}
+        auto_delete_access_log: {type: integer, enum: [0, 1, 2]}
+        auto_switch: {$ref: '#/components/schemas/AutoSwitch'}
+        cc_img_url_type: {type: string, enum: [system, custom]}
+        cc_img_url: {type: string, maxLength: 2048}
+        at_hour: {type: integer, minimum: 0, maximum: 23}
+        slider_html: {type: string, maxLength: 2097152}
+        captcha_html: {type: string, maxLength: 2097152}
+        click_html: {type: string, maxLength: 2097152}
+        delay_jump_html: {type: string, maxLength: 2097152}
+        rotate_html: {type: string, maxLength: 2097152}
+        easy_click_html: {type: string, maxLength: 2097152}
+        easy_slider_html: {type: string, maxLength: 2097152}
+        log: {$ref: '#/components/schemas/LogConfig'}
+        well_known_auto_protect_count: {type: integer, minimum: 0, maximum: 2147483647}
+        internal_qps: {type: integer, minimum: 0, maximum: 2147483647}
+        internal_res_block_time: {type: integer, minimum: 0, maximum: 2147483647}
+        internal_rule: {type: array, minItems: 3, maxItems: 3, items: {$ref: '#/components/schemas/InternalRule'}}
+        waf_enable: {type: boolean}
+        waf_resource_limits: {$ref: '#/components/schemas/WAFResourceLimits'}
+    OverrideConfig:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: Sparse override allowlist of exactly the 24 observed selectable configuration groups.
+      properties:
+        waf_enable: {type: boolean}
+        waf_resource_limits: {$ref: '#/components/schemas/WAFResourceLimits'}
+        cc_enable: {type: boolean}
+        block_time: {type: integer, minimum: 0, maximum: 2147483647}
+        white_time: {type: integer, minimum: 600, maximum: 2147483647}
+        tmp_white_total_limit: {type: integer, minimum: 0, maximum: 2147483647}
+        tmp_white_per_limit: {type: integer, minimum: 0, maximum: 2147483647}
+        custom_white: {type: string, maxLength: 1048576}
+        custom_black: {type: string, maxLength: 1048576}
+        ssl_handshake_limit: {type: integer, minimum: 0, maximum: 2147483647}
+        default_page_refuse: {type: boolean}
+        default_page_rule: {type: string, maxLength: 128}
+        icmp_drop: {type: boolean}
+        key: {$ref: '#/components/schemas/SecretValue'}
+        auto_delete_access_log: {type: integer, enum: [0, 1, 2]}
+        auto_switch: {$ref: '#/components/schemas/AutoSwitch'}
+        slider_html: {type: string, maxLength: 2097152}
+        captcha_html: {type: string, maxLength: 2097152}
+        click_html: {type: string, maxLength: 2097152}
+        delay_jump_html: {type: string, maxLength: 2097152}
+        rotate_html: {type: string, maxLength: 2097152}
+        easy_click_html: {type: string, maxLength: 2097152}
+        easy_slider_html: {type: string, maxLength: 2097152}
+        log: {$ref: '#/components/schemas/LogConfig'}
+    OverrideFieldName:
+      type: string
+      enum: [waf_enable, waf_resource_limits, cc_enable, block_time, white_time, tmp_white_total_limit,
+        tmp_white_per_limit, custom_white, custom_black, ssl_handshake_limit, default_page_refuse,
+        default_page_rule, icmp_drop, key, auto_delete_access_log, auto_switch, slider_html, captcha_html,
+        click_html, delay_jump_html, rotate_html, easy_click_html, easy_slider_html, log]
+    Document:
+      type: object
+      additionalProperties: false
+      required: [id, scope_type, scope_id, revision, config, key_configured, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        scope_type: {type: string, enum: [global, region, node]}
+        scope_id: {type: string, minLength: 1, maxLength: 64}
+        scope_label: {type: string, minLength: 1, maxLength: 128}
+        revision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        config: {$ref: '#/components/schemas/Config'}
+        key_configured: {type: boolean}
+        updated_at: {type: string, format: date-time}
+        sources:
+          description: Effective documents only (GET /v1/openresty-security/effective) - the layer each config field comes from.
+          type: object
+          additionalProperties: {type: string, enum: [global, region, node]}
+    OverridePage:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Document'}}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+    Target:
+      type: object
+      additionalProperties: false
+      required: [value, label]
+      properties:
+        value: {type: string, minLength: 1, maxLength: 128}
+        label: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 256}
+    TargetPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Target'}}
+        page: {type: integer, minimum: 1}
+        page_size: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, minimum: 0}
+    RuleGroupSummary:
+      type: object
+      additionalProperties: false
+      required: [all, system, custom, visible, disabled]
+      properties:
+        all: {type: integer, minimum: 0}
+        system: {type: integer, minimum: 0}
+        custom: {type: integer, minimum: 0}
+        visible: {type: integer, minimum: 0}
+        disabled: {type: integer, minimum: 0}
+    RuleGroup:
+      type: object
+      additionalProperties: false
+      required: [id, name, enabled]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        name: {type: string, minLength: 1, maxLength: 128}
+        enabled: {type: boolean}
+        kind: {type: string, enum: [system, custom]}
+        system_rule: {type: boolean}
+        system_rule_id: {type: string, maxLength: 32}
+        system_rule_key: {type: string, maxLength: 128}
+        owner: {type: string, maxLength: 128}
+        created_at: {type: string, format: date-time}
+        sort: {type: integer, minimum: 1, maximum: 10000}
+    RuleGroupState:
+      type: object
+      additionalProperties: false
+      required: [id, enabled]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 128}
+        enabled: {type: boolean}

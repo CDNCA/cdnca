@@ -1,0 +1,2239 @@
+{
+ "id": "error-pages",
+ "prefix": "/v1/error-pages",
+ "operations": [
+  {
+   "operation_id": "listErrorPageAssets",
+   "method": "GET",
+   "path": "/v1/error-pages/assets",
+   "summary": "List error page assets",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: initiated / staged / scan_failed / finalizing / ready / rejected / delete_pending / deleted / orphaned"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable cursor page",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Asset>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "initiateErrorPageAsset",
+   "method": "POST",
+   "path": "/v1/error-pages/assets/initiate",
+   "summary": "Initiate a content-addressed asset",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "scope_id",
+      "type": "string(uuid)",
+      "description": "Optional for tenant sessions and defaults to their own scope; required for platform sessions."
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "description": "Display name (the uploaded file name, or the page category and status); empty for an asset uploaded before names existed. No control characters, no surrounding blanks."
+     },
+     {
+      "name": "mime_type",
+      "type": "string: text/html / text/plain / application/json",
+      "required": true
+     },
+     {
+      "name": "size_bytes",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "sha256",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Asset identity created in initiated state",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Asset",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "422",
+     "description": "Quota, static-content, or malware-scan rejection"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getErrorPageAsset",
+   "method": "GET",
+   "path": "/v1/error-pages/assets/{asset_id}",
+   "summary": "Get an error page asset",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Asset metadata without storage locators or credentials",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true,
+       "description": "Display name (the uploaded file name, or the page category and status); empty for an asset uploaded before names existed. No control characters, no surrounding blanks."
+      },
+      {
+       "name": "mime_type",
+       "type": "string: text/html / text/plain / application/json",
+       "required": true
+      },
+      {
+       "name": "size_bytes",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: initiated / staged / scan_failed / finalizing / ready / rejected / delete_pending / deleted / orphaned",
+       "required": true
+      },
+      {
+       "name": "scan_status",
+       "type": "string: pending / passed / rejected / error",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteErrorPageAsset",
+   "method": "DELETE",
+   "path": "/v1/error-pages/assets/{asset_id}",
+   "summary": "Mark an unreferenced asset for reconciled deletion",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal rule or asset revision, for example `\"3\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "Database transition committed; object cleanup is pending",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Asset",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getErrorPageAssetContent",
+   "method": "GET",
+   "path": "/v1/error-pages/assets/{asset_id}/content",
+   "summary": "Read a ready asset's content",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "The stored body of a ready asset (error_pages.read), integrity checked against its sha256, so a site's error page can be edited as text (网站编辑 → 错误页面). A staged, scanning, rejected or deleted asset answers 409.",
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Asset metadata and its UTF-8 body",
+     "fields": [
+      {
+       "name": "asset",
+       "type": "Asset",
+       "required": true
+      },
+      {
+       "name": "content",
+       "type": "string",
+       "required": true,
+       "description": "The asset body (text/html, text/plain or application/json, UTF-8)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "uploadErrorPageAssetContent",
+   "method": "PUT",
+   "path": "/v1/error-pages/assets/{asset_id}/content",
+   "summary": "Upload bounded asset content to staging",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Content-Length",
+     "in": "header",
+     "type": "integer",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "text/html",
+     "text/plain",
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Content validated and staged",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Asset",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "422",
+     "description": "Quota, static-content, or malware-scan rejection"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "finalizeErrorPageAsset",
+   "method": "POST",
+   "path": "/v1/error-pages/assets/{asset_id}/finalize",
+   "summary": "Scan and finalize staged asset content",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Scanner passed and final object is ready",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Asset",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "422",
+     "description": "Quota, static-content, or malware-scan rejection"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getErrorPagePublicationSnapshot",
+   "method": "GET",
+   "path": "/v1/error-pages/publication-snapshot",
+   "summary": "Read the latest deterministic publication source snapshot",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Snapshot plus its control-plane digest and creation time",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "EdgePolicy",
+       "required": true
+      },
+      {
+       "name": "snapshot_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "listErrorPageRules",
+   "method": "GET",
+   "path": "/v1/error-pages/rules",
+   "summary": "List current error page rule revisions",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "enabled",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable cursor page",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Rule>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "createErrorPageRule",
+   "method": "POST",
+   "path": "/v1/error-pages/rules",
+   "summary": "Create an append-only error page rule",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target",
+      "type": "RuleTarget",
+      "required": true
+     },
+     {
+      "name": "fields",
+      "type": "RuleFields",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Rule revision one and a publication fact were committed",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Rule",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "422",
+     "description": "Quota, static-content, or malware-scan rejection"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getErrorPageRule",
+   "method": "GET",
+   "path": "/v1/error-pages/rules/{rule_id}",
+   "summary": "Get the current rule revision",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "rule_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current append-only rule projection",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "RuleTarget",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "fields",
+       "type": "RuleFields",
+       "required": true
+      },
+      {
+       "name": "priority",
+       "type": "integer",
+       "required": true,
+       "description": "Derived specificity; exact is 1 and range priority is its inclusive width."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "deleted",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateErrorPageRule",
+   "method": "PATCH",
+   "path": "/v1/error-pages/rules/{rule_id}",
+   "summary": "Append an updated rule revision",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "rule_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal rule or asset revision, for example `\"3\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "category",
+      "type": "string: origin_response / edge_route / edge_connect / no_host / unknown_site",
+      "required": true,
+      "description": "unknown_site (global only) is the domain mismatch page: a request for a host no site serves gets it with its one status, 403, 404, 410 or 421 (without a rule the node answers a bare 421). no_host is 400; edge_connect 502-504."
+     },
+     {
+      "name": "match",
+      "type": "StatusSelector",
+      "required": true
+     },
+     {
+      "name": "asset_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "New rule and publication revisions",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Rule",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "422",
+     "description": "Quota, static-content, or malware-scan rejection"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteErrorPageRule",
+   "method": "DELETE",
+   "path": "/v1/error-pages/rules/{rule_id}",
+   "summary": "Append a soft-delete rule revision",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "rule_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal rule or asset revision, for example `\"3\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "Soft-delete revision and publication fact committed",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Rule",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "disableErrorPageRule",
+   "method": "POST",
+   "path": "/v1/error-pages/rules/{rule_id}/disable",
+   "summary": "Append a disabled rule revision",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "rule_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal rule or asset revision, for example `\"3\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "New rule and publication revisions",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Rule",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "enableErrorPageRule",
+   "method": "POST",
+   "path": "/v1/error-pages/rules/{rule_id}/enable",
+   "summary": "Append an enabled rule revision",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "rule_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal rule or asset revision, for example `\"3\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "New rule and publication revisions",
+     "fields": [
+      {
+       "name": "value",
+       "type": "Rule",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "422",
+     "description": "Quota, static-content, or malware-scan rejection"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "listErrorPageScopeOverrides",
+   "method": "GET",
+   "path": "/v1/error-pages/scope-overrides",
+   "summary": "List current node and region error-page overrides",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Active overrides with short display identifiers and no asset UUIDs",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ScopeOverride>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "createErrorPageScopeOverride",
+   "method": "POST",
+   "path": "/v1/error-pages/scope-overrides",
+   "summary": "Create or restore a node or region override",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target",
+      "type": "object | object",
+      "required": true
+     },
+     {
+      "name": "items",
+      "type": "array<ScopeOverrideBindingInput>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Append-only override revision committed",
+     "fields": [
+      {
+       "name": "value",
+       "type": "ScopeOverride",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getErrorPageScopeOverride",
+   "method": "GET",
+   "path": "/v1/error-pages/scope-overrides/{override_display_id}",
+   "summary": "Read an override with verified immutable editor content",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "override_display_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Override document without asset UUIDs, hashes, receipts, or storage locations",
+     "fields": [
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "object | object",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<ScopeOverrideItem>",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateErrorPageScopeOverride",
+   "method": "PATCH",
+   "path": "/v1/error-pages/scope-overrides/{override_display_id}",
+   "summary": "Replace an override item set using compare-and-swap",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "override_display_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal rule or asset revision, for example `\"3\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "items",
+      "type": "array<ScopeOverrideBindingInput>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "New current override revision",
+     "fields": [
+      {
+       "name": "value",
+       "type": "ScopeOverride",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteErrorPageScopeOverride",
+   "method": "DELETE",
+   "path": "/v1/error-pages/scope-overrides/{override_display_id}",
+   "summary": "Append a soft-delete override revision",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "override_display_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal rule or asset revision, for example `\"3\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "Soft-delete revision committed; the target inherits its next available source",
+     "fields": [
+      {
+       "name": "value",
+       "type": "ScopeOverride",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "listErrorPageSlots",
+   "method": "GET",
+   "path": "/v1/error-pages/slots",
+   "summary": "List the twelve canonical error-page slots in display order",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "All canonical slots, including slots that have never been bound",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SlotBinding>",
+       "required": true,
+       "description": "Canonical display order is fixed by the SlotKey enum order."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getErrorPageSlot",
+   "method": "GET",
+   "path": "/v1/error-pages/slots/{slot_key}",
+   "summary": "Read a slot binding and its verified immutable content",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "slot_key",
+     "in": "path",
+     "type": "string: blacklist / http_400 / http_403 / waf_block / http_502 / http_504 / traffic_exceeded / package_expired / site_locked / domain_unconfigured / node_ip_access / connection_limit",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current binding and UTF-8 content; an unbound slot carries the built-in page in effect",
+     "fields": [
+      {
+       "name": "binding",
+       "type": "SlotBinding",
+       "required": true
+      },
+      {
+       "name": "content",
+       "type": "string",
+       "required": true,
+       "description": "The bound asset's content, or the built-in page in effect while unbound (the active theme's)."
+      },
+      {
+       "name": "source",
+       "type": "string: override / builtin",
+       "required": true
+      },
+      {
+       "name": "delivery",
+       "type": "string: theme / fallback / none",
+       "required": true,
+       "description": "What a node answers for the slot while unbound: theme (the content shown), fallback (no theme activated: a short text), none (no node page reads the slot; a save only stores it)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "bindErrorPageSlot",
+   "method": "PUT",
+   "path": "/v1/error-pages/slots/{slot_key}",
+   "summary": "Append a slot revision that binds a ready immutable asset",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "slot_key",
+     "in": "path",
+     "type": "string: blacklist / http_400 / http_403 / waf_block / http_502 / http_504 / traffic_exceeded / package_expired / site_locked / domain_unconfigured / node_ip_access / connection_limit",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted non-negative slot revision; use `\"0\"` for a slot that has never been bound."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "asset_id",
+      "type": "string(uuid)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current binding after compare-and-swap",
+     "fields": [
+      {
+       "name": "value",
+       "type": "SlotBinding",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "unbindErrorPageSlot",
+   "method": "DELETE",
+   "path": "/v1/error-pages/slots/{slot_key}",
+   "summary": "Append an unbound revision and restore the built-in default",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "slot_key",
+     "in": "path",
+     "type": "string: blacklist / http_400 / http_403 / waf_block / http_502 / http_504 / traffic_exceeded / package_expired / site_locked / domain_unconfigured / node_ip_access / connection_limit",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted non-negative slot revision; use `\"0\"` for a slot that has never been bound."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Trace-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current unbound slot revision",
+     "fields": [
+      {
+       "name": "value",
+       "type": "SlotBinding",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed or unknown input"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Stable permission denial"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or hidden by tenant isolation"
+    },
+    {
+     "status": "405",
+     "description": "The authenticated path exists but does not support the request method."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, reference, or rule precedence conflict"
+    },
+    {
+     "status": "412",
+     "description": "Revision compare-and-swap failed"
+    },
+    {
+     "status": "503",
+     "description": "Database, scanner, or content-store dependency is unavailable"
+    }
+   ]
+  }
+ ]
+}

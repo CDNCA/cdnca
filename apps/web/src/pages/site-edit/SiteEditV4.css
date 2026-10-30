@@ -1,0 +1,1001 @@
+/* site-parity4: 网站管理 7 个标签页重设计（DESIGN-site-edit.md）。
+   Every rule sits under .site-edit-v4 or a component new in this task, so
+   the base declarations stay as they were (DefaultLookLock). Colors come
+   from the shared --cdnca-* variables only. */
+
+/* ---- page shell: soft panel, white section cards ---- */
+.site-edit-v4 {
+  overflow: visible;
+}
+
+.site-edit-v4 .site-edit-tab-panel {
+  padding: 16px 20px 20px;
+  background: var(--cdnca-color-bg-soft);
+}
+
+/* ---- 本页摘要 ---- */
+.site-tab-summary {
+  margin: 0 0 16px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.site-tab-summary > ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-tab-summary li {
+  min-width: 0;
+  border-left: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.site-tab-summary li:first-child {
+  border-left: 0;
+}
+
+.site-tab-summary li > button,
+.site-tab-summary li > div {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 16px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+}
+
+.site-tab-summary li > button {
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.site-tab-summary li > button:hover {
+  background: var(--cdnca-color-primary-bg-soft);
+}
+
+.site-tab-summary li > button:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: -2px;
+}
+
+.site-tab-summary-label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.site-tab-summary-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-tab-summary-value.is-on { color: var(--cdnca-color-success); }
+.site-tab-summary-value.is-off { color: var(--cdnca-color-text-secondary); font-weight: 500; }
+.site-tab-summary-value.is-warn { color: var(--cdnca-color-warning); }
+.site-tab-summary-value.is-error { color: var(--cdnca-color-error); }
+
+/* ---- section cards (basic/origin tab sections) ---- */
+.site-edit-v4 .site-basic-section,
+.site-edit-v4 .site-setting-section {
+  margin: 0 0 16px;
+  padding: 20px 24px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.site-edit-v4 .site-basic-section:last-of-type,
+.site-edit-v4 .site-setting-section:last-child {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--cdnca-color-border-card);
+}
+
+.site-edit-v4 .site-basic-section > h2,
+.site-edit-v4 .site-basic-section > h3,
+.site-edit-v4 .site-setting-section > h2,
+.site-edit-v4 .site-basic-title-line > h2,
+.site-edit-v4 .site-basic-title-line > h3 {
+  margin: 0;
+  padding-left: 10px;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+  border-left: 3px solid var(--cdnca-color-primary);
+  scroll-margin-top: 16px;
+}
+
+.site-edit-v4 .site-basic-section > h2:focus,
+.site-edit-v4 .site-basic-section > h3:focus {
+  outline: none;
+}
+
+.site-edit-v4 .site-basic-title-line > span,
+.site-edit-v4 .site-setting-section-help {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.site-edit-v4 .site-form-row-help {
+  font-size: 13px;
+}
+
+/* ---- compact option cards ---- */
+.site-edit-v4 .site-origin-choice-grid.is-two,
+.site-edit-v4 .site-origin-choice-grid.is-three {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* 负载方式: the seven cards share one row
+   (up to 200px each, down to 96px, where the short line wraps), wrapping only when even that does not
+   fit; title + one short line, the full explanation stays in the tooltip.
+   The row control drops the 640px form cap so the cards can use the width. */
+.site-edit-v4 .site-form-row-control:has(> [role='radiogroup'] > .is-balance) {
+  max-width: none;
+}
+
+.site-edit-v4 .site-form-row-control > [role='radiogroup']:has(> .is-balance) {
+  width: 100%;
+  max-width: 1448px;
+}
+
+.site-edit-v4 .site-origin-choice-grid.is-balance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(96px, 100%), 1fr));
+  gap: 8px;
+}
+
+.site-edit-v4 .site-balance-choice {
+  display: flex;
+  min-width: 0;
+}
+
+.site-edit-v4 .site-origin-choice-grid.is-balance .site-origin-choice.ant-radio-wrapper {
+  width: 100%;
+  min-height: 60px;
+  margin-inline-end: 0;
+  padding: 10px 12px;
+}
+
+
+.site-balance-tip {
+  max-width: 340px;
+}
+
+.site-balance-tip p {
+  margin: 4px 0 0;
+  line-height: 20px;
+}
+
+.site-edit-v4 .site-origin-choice.ant-radio-wrapper {
+  position: relative;
+  width: 236px;
+  min-height: 64px;
+  padding: 12px 14px;
+  border-radius: 6px;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.site-edit-v4 .site-origin-choice.ant-radio-wrapper:hover {
+  border-color: var(--cdnca-color-primary);
+}
+
+.site-edit-v4 .site-origin-choice.ant-radio-wrapper-checked {
+  background: var(--cdnca-color-primary-bg);
+  border-color: var(--cdnca-color-primary);
+  box-shadow: inset 0 0 0 1px var(--cdnca-color-primary);
+}
+
+/* the corner check replaces the radio dot (the input stays for the keyboard and screen readers) */
+.site-edit-v4 .site-origin-choice > .ant-radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.site-edit-v4 .site-origin-choice > .ant-radio + span {
+  padding-inline: 0;
+}
+
+.site-edit-v4 .site-origin-choice.ant-radio-wrapper:has(:focus-visible) {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* the check badge in the corner of the chosen card: ::before is the badge, ::after the tick */
+.site-edit-v4 .site-origin-choice.ant-radio-wrapper-checked::before {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 22px;
+  height: 20px;
+  background: var(--cdnca-color-primary);
+  border-radius: 0 6px 0 6px;
+  content: '';
+}
+
+.site-edit-v4 .site-origin-choice.ant-radio-wrapper-checked::after {
+  position: absolute;
+  top: 3px;
+  right: 7px;
+  display: block;
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid var(--cdnca-color-text-inverse);
+  border-bottom: 2px solid var(--cdnca-color-text-inverse);
+  transform: rotate(45deg);
+  content: '';
+}
+
+.site-edit-v4 .site-origin-choice strong {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.site-edit-v4 .site-origin-choice span span {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+/* number + unit + help on one line; several small inputs side by side */
+.site-edit-v4 .site-form-inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px 32px;
+}
+
+.site-edit-v4 .site-form-inline-row > .site-form-row {
+  min-width: 0;
+}
+
+.site-edit-v4 .site-form-row-pair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 32px;
+}
+
+.site-edit-v4 .site-form-row-control > .ant-input-number,
+.site-edit-v4 .site-form-row-control > .ant-input-number-group-wrapper {
+  width: 168px;
+}
+
+/* ---- sticky save bar ---- */
+.site-edit-savebar {
+  position: sticky;
+  z-index: 5;
+  bottom: 0;
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px;
+  background: var(--cdnca-color-bg-container);
+  border-top: 1px solid var(--cdnca-color-border-card);
+  border-radius: 0 0 4px 4px;
+  transition: background-color 150ms ease;
+}
+
+.site-edit-savebar.is-dirty {
+  background: var(--cdnca-color-warning-bg);
+  border-top-color: var(--cdnca-color-warning);
+}
+
+.site-edit-savebar-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--cdnca-color-text);
+}
+
+.site-edit-savebar-status .ant-tag {
+  margin: 0;
+}
+
+.site-edit-savebar-clean {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.site-edit-savebar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.site-edit-savebar-actions .ant-btn {
+  min-width: 96px;
+  height: 36px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-edit-savebar,
+  .site-tab-summary li > button,
+  .site-edit-v4 .site-origin-choice.ant-radio-wrapper {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .site-edit-v4 .site-edit-tab-panel { padding: 12px; }
+  .site-edit-v4 .site-basic-section,
+  .site-edit-v4 .site-setting-section { padding: 16px; }
+  .site-edit-v4 .site-origin-choice.ant-radio-wrapper { width: 100%; }
+  .site-tab-summary li { border-left: 0; border-top: 1px solid var(--cdnca-color-border-secondary); }
+}
+
+/* ---- 基本配置 ---- */
+/* the two save blocks (站点与监听 / 源站与故障切换) read as group titles above their cards */
+.site-edit-v4 .site-basic-block + .site-basic-block {
+  margin-top: 24px;
+  border-top: 0;
+}
+
+.site-edit-v4 .site-basic-block-head {
+  min-height: 32px;
+  margin-bottom: 12px;
+  padding-top: 0;
+}
+
+.site-edit-v4 .site-basic-block-head h2 {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.site-edit-v4 .site-basic-block .site-basic-section h3 {
+  padding-left: 10px;
+  border-left: 3px solid var(--cdnca-color-primary);
+  scroll-margin-top: 16px;
+}
+
+.site-edit-v4 .site-basic-block .site-basic-section h3:focus {
+  outline: none;
+}
+
+.site-edit-v4 .site-basic-facts {
+  /* 窄屏（390 宽容器约 266px）列宽不超过容器，避免横向溢出。 */
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+  gap: 4px 32px;
+}
+
+.site-edit-v4 .site-basic-fact {
+  min-height: 44px;
+  grid-template-columns: 96px minmax(0, 1fr);
+}
+
+.site-edit-v4 .site-basic-fact .ant-select {
+  width: min(320px, 100%);
+}
+
+.site-edit-v4 .site-basic-access-card {
+  border-color: var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.site-edit-v4 .site-basic-section-heading p,
+.site-edit-v4 .site-basic-access-content p {
+  font-size: 13px;
+}
+
+.site-edit-v4 .site-basic-origin-row {
+  border-radius: 6px;
+}
+
+/* ---- HTTPS 设置 ---- */
+.site-edit-v4 .site-https-subsection {
+  margin: 28px 0 0;
+  padding-top: 20px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+  border-top: 1px dashed var(--cdnca-color-border-secondary);
+  scroll-margin-top: 16px;
+}
+
+.site-edit-v4 .site-https-subsection:focus {
+  outline: none;
+}
+
+.site-edit-v4 .site-https-switch-line {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.site-edit-v4 .site-https-off-warning,
+.site-edit-v4 .site-https-certificate-required {
+  max-width: 640px;
+  margin-top: 8px;
+}
+
+.site-edit-v4 .site-https-disabled-note {
+  max-width: 640px;
+  font-size: 13px;
+}
+
+.site-edit-v4 .site-https-tab .site-setting-control > .ant-select {
+  width: min(320px, 100%);
+}
+
+/* ---- 缓存设置 ---- */
+.site-edit-v4 .cache-policy-tab {
+  padding: 16px 20px 20px;
+  background: var(--cdnca-color-bg-soft);
+}
+
+.site-edit-v4 .cache-policy-heading,
+.site-edit-v4 .cache-policy-section {
+  margin: 0 0 16px;
+  padding: 20px 24px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.site-edit-v4 .cache-policy-heading {
+  margin-bottom: 0;
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+}
+
+.site-edit-v4 .cache-policy-heading + * .cache-policy-rules-section,
+.site-edit-v4 .cache-policy-rules-section {
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+
+.site-edit-v4 .cache-policy-heading h2,
+.site-edit-v4 .cache-policy-section h3 {
+  padding-left: 10px;
+  font-size: 15px;
+  line-height: 24px;
+  border-left: 3px solid var(--cdnca-color-primary);
+  scroll-margin-top: 16px;
+}
+
+.site-edit-v4 .cache-policy-heading h2:focus,
+.site-edit-v4 .cache-policy-section h3:focus {
+  outline: none;
+}
+
+/* 清空全部缓存: high-impact, its own red card */
+.site-edit-v4 .cache-policy-flush-section {
+  background: var(--cdnca-color-error-bg);
+  border-color: var(--cdnca-color-error);
+}
+
+.site-edit-v4 .cache-policy-flush-section h3 {
+  border-left-color: var(--cdnca-color-error);
+}
+
+.site-edit-v4 .cache-policy-tab > .cache-policy-status {
+  margin: 0;
+  padding: 0 24px 8px;
+  background: var(--cdnca-color-bg-container);
+  border-inline: 1px solid var(--cdnca-color-border-card);
+}
+
+.site-edit-v4 .cache-policy-tab > .cache-policy-status + .cache-policy-rules-section {
+  padding-top: 4px;
+}
+
+/* ---- CC 防护 / WAF 防护：白卡分区 ---- */
+.site-edit-v4 .site-protection-page > .site-protection-section {
+  margin: 0 0 16px;
+  padding: 20px 24px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.site-edit-v4 .site-protection-page > .site-protection-section > h2,
+.site-edit-v4 .site-protection-page > .site-protection-section > .site-protection-section-head h2 {
+  padding-left: 10px;
+  font-size: 15px;
+  line-height: 24px;
+  border-left: 3px solid var(--cdnca-color-primary);
+  scroll-margin-top: 16px;
+}
+
+.site-edit-v4 .site-protection-page h2:focus,
+.site-edit-v4 .site-protection-page strong:focus {
+  outline: none;
+}
+
+.site-edit-v4 .site-protection-control > p,
+.site-edit-v4 .site-protection-rule-summary span,
+.site-edit-v4 .site-protection-section-head span,
+.site-edit-v4 .site-protection-feature-card small,
+.site-edit-v4 .site-protection-toggle-card small {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+/* 默认防护 / 搜索引擎爬虫: compact equal-width chips, chosen one bordered, tinted and ticked */
+.site-edit-v4 .site-protection-choice-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 128px);
+  gap: 8px;
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn {
+  position: relative;
+  width: 128px;
+  height: 40px;
+  padding-inline: 12px;
+  font-size: 14px;
+  transition: border-color 150ms ease;
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn:not(:disabled):hover {
+  border-color: var(--cdnca-color-primary);
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active,
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active:disabled {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+  background: var(--cdnca-color-primary-bg);
+  border-color: var(--cdnca-color-primary);
+  box-shadow: inset 0 0 0 1px var(--cdnca-color-primary);
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active::before,
+.site-edit-v4 .site-protection-region-grid button.is-active::before {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 22px;
+  height: 20px;
+  background: var(--cdnca-color-primary);
+  border-radius: 0 6px 0 6px;
+  content: '';
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active::after,
+.site-edit-v4 .site-protection-region-grid button.is-active::after {
+  position: absolute;
+  top: 3px;
+  right: 7px;
+  display: block;
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid var(--cdnca-color-text-inverse);
+  border-bottom: 2px solid var(--cdnca-color-text-inverse);
+  transform: rotate(45deg);
+  content: '';
+}
+
+/* 区域屏蔽: fixed-width cards, not stretched across the row */
+.site-edit-v4 .site-protection-region-grid {
+  grid-template-columns: repeat(auto-fill, 220px);
+}
+
+.site-edit-v4 .site-protection-region-grid button {
+  min-height: 64px;
+  border-radius: 6px;
+  transition: border-color 150ms ease;
+}
+
+.site-edit-v4 .site-protection-region-grid button:not(:disabled):hover {
+  border-color: var(--cdnca-color-primary);
+}
+
+.site-edit-v4 .site-protection-region-grid button.is-active {
+  background: var(--cdnca-color-primary-bg);
+  box-shadow: inset 0 0 0 1px var(--cdnca-color-primary);
+}
+
+.site-edit-v4 .site-protection-region-grid button.is-active strong {
+  color: var(--cdnca-color-primary);
+}
+
+.site-edit-v4 .site-protection-region-grid small {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.site-edit-v4 .site-protection-toggle-card {
+  max-width: 676px;
+}
+
+/* ---- WAF 防护 ---- */
+/* the panel already pads 20px; the base 20px side margins would double it */
+.site-edit-v4 .site-waf-protection > :not(.site-protection-section) {
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.site-edit-v4 .site-waf-protection > .site-protection-feature-card {
+  width: 100%;
+  margin-bottom: 16px;
+  padding: 20px 24px;
+  border-color: var(--cdnca-color-border-card);
+}
+
+.site-edit-v4 .site-waf-protection > .site-protection-feature-card strong {
+  font-size: 15px;
+  line-height: 24px;
+  scroll-margin-top: 16px;
+}
+
+.site-edit-v4 .site-protection-auto-ban-card {
+  background: var(--cdnca-color-bg-container);
+}
+
+.site-edit-v4 .site-protection-auto-ban-fields label {
+  font-size: 13px;
+}
+
+.site-edit-v4 .site-protection-auto-ban-fields .ant-input-number {
+  width: 120px;
+}
+
+/* 规则库未启用: WAF is not running, so the library card carries the warning edge */
+.site-edit-v4 .site-waf-library-card.is-warn {
+  background: var(--cdnca-color-warning-bg);
+  border-color: var(--cdnca-color-warning);
+  border-left-width: 4px;
+}
+
+.site-edit-v4 .site-waf-protection > .site-protection-order-note {
+  margin: 0 0 16px;
+  border-radius: 0 6px 6px 0;
+}
+
+.site-edit-v4 .site-waf-protection > .ant-alert {
+  margin-bottom: 8px;
+}
+
+.site-edit-v4 .site-protection-section-head h2 span {
+  display: inline;
+  margin-top: 0;
+  font-size: 15px;
+}
+
+.site-edit-v4 .site-protection-module-grid button strong {
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-edit-v4 .site-protection-choice-list .ant-btn,
+  .site-edit-v4 .site-protection-region-grid button {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .site-edit-v4 .site-protection-choice-list,
+  .site-edit-v4 .site-protection-region-grid {
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  }
+
+  .site-edit-v4 .site-protection-choice-list .ant-btn {
+    width: 100%;
+  }
+}
+
+/* ---- 高级设置 ---- */
+/* base h2 has a 16px bottom margin and the help line pulls up 12px; with the
+   title bar the two overlapped, so the help sits under the title instead */
+.site-edit-v4 .site-advanced-tab .site-setting-section > h2 {
+  margin-bottom: 4px;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-section > h2 + .site-setting-section-help {
+  margin: 0 0 12px;
+  padding-left: 13px;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-section > h2:focus {
+  outline: none;
+}
+
+.site-edit-v4 .site-advanced-tab .site-setting-group {
+  border-color: var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+/* ---- 整页利用横向空间 ---- */
+/* 回源设置: protocol and Host cards keep the full row; the four small
+   sections (超时 / 连接复用 / 回源鉴权 / 其它) pair up two per row. */
+.site-edit-v4 .site-origin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.site-edit-v4 .site-origin-grid > .site-basic-section {
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+.site-edit-v4 .site-origin-grid > .is-wide {
+  grid-column: 1 / -1;
+}
+
+.site-edit-v4 .site-origin-grid .site-form-row-label {
+  min-width: 96px;
+}
+
+.site-edit-v4 .site-origin-grid .site-form-row-control > .ant-input-number,
+.site-edit-v4 .site-origin-grid .site-form-row-control > .ant-input-number-group-wrapper {
+  width: 140px;
+}
+
+.site-edit-v4 .site-origin-grid .site-form-inline-row > .site-form-row {
+  margin-top: 16px;
+}
+
+.site-edit-v4 .site-origin-grid .site-form-inline-row .site-form-row-control > .ant-input,
+.site-edit-v4 .site-origin-grid .site-form-inline-row .site-form-row-control > .ant-select {
+  width: 280px;
+}
+
+/* a half-width card: the help line wraps under the title instead of squeezing it */
+.site-edit-v4 .site-origin-grid .site-basic-title-line {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.site-edit-v4 .site-origin-grid .site-basic-title-line > h2 {
+  white-space: nowrap;
+}
+
+.site-edit-v4 .site-origin-conditional {
+  margin-top: 16px;
+}
+
+/* HTTPS 设置: with HTTPS on, the setting rows pair up two per row; titles,
+   the access row with its warnings and notes keep the full width. */
+@media (min-width: 1200px) {
+  .site-edit-v4 .site-https-tab > .site-setting-section {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    column-gap: 40px;
+  }
+
+  .site-edit-v4 .site-https-tab > .site-setting-section > :not(.site-setting-row),
+  .site-edit-v4 .site-https-tab > .site-setting-section > h2 + .site-setting-row,
+  .site-edit-v4 .site-https-tab > .site-setting-section > .site-setting-row:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+/* 缓存设置: the field grids fill the row (2 columns at 1280/1440, 4 at 1920) */
+.site-edit-v4 .cache-policy-section .cache-policy-form-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
+  gap: 12px 24px;
+}
+
+@media (max-width: 960px) {
+  .site-edit-v4 .site-origin-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A wrapper that only listens for blur / Enter (instant save); it takes no layout box. */
+.site-instant-contents {
+  display: contents;
+}
+
+/* ---- 网站编辑页收紧字号、行距与控件尺寸 ----
+   取值：标签列 120px / 13px / 20px，
+   行间距 20px，选项 34px 高（6px 12px）、圆角 6px，说明 12px / 22px，分区标题 14px，
+   区域卡片 10px 12px，名单工具按钮 24px。字体沿用主控字体栈，颜色只用 --cdnca-* 变量。 */
+.site-edit-v4 .site-edit-tab-panel {
+  padding: 12px 16px 16px;
+}
+
+.site-edit-v4 .site-tab-summary li > button,
+.site-edit-v4 .site-tab-summary li > div {
+  min-height: 52px;
+  padding: 8px 14px;
+}
+
+.site-edit-v4 .site-tab-summary-value {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.site-edit-v4 .site-tab-summary-label {
+  font-size: 12px;
+}
+
+.site-edit-v4 .site-basic-section,
+.site-edit-v4 .site-setting-section,
+.site-edit-v4 .site-protection-page > .site-protection-section,
+.site-edit-v4 .site-waf-protection > .site-protection-feature-card {
+  margin-bottom: 12px;
+  padding: 16px 20px;
+}
+
+.site-edit-v4 .site-basic-section > h2,
+.site-edit-v4 .site-basic-section > h3,
+.site-edit-v4 .site-setting-section > h2,
+.site-edit-v4 .site-basic-title-line > h2,
+.site-edit-v4 .site-basic-title-line > h3,
+.site-edit-v4 .site-protection-page > .site-protection-section > h2,
+.site-edit-v4 .site-protection-page > .site-protection-section > .site-protection-section-head h2,
+.site-edit-v4 .site-waf-protection > .site-protection-feature-card strong,
+.site-edit-v4 .site-protection-section-head h2 span {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* 标签列：13px / 控件首行居中 */
+.site-edit-v4 .site-protection-setting-row {
+  margin-top: 16px;
+}
+
+.site-edit-v4 .site-protection-label,
+.site-edit-v4 .site-form-row-label {
+  font-size: 13px;
+  line-height: 32px;
+}
+
+.site-edit-v4 .site-form-row-label {
+  min-height: 32px;
+}
+
+/* 说明文字：12px，紧贴控件 */
+.site-edit-v4 .site-protection-control > p,
+.site-edit-v4 .site-protection-rule-summary span,
+.site-edit-v4 .site-protection-section-head span,
+.site-edit-v4 .site-protection-feature-card small,
+.site-edit-v4 .site-protection-toggle-card small,
+.site-edit-v4 .site-basic-title-line > span,
+.site-edit-v4 .site-setting-section-help,
+.site-edit-v4 .site-form-row-help,
+.site-edit-v4 .site-protection-region-grid small {
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.site-edit-v4 .site-protection-control > p {
+  margin-top: 6px;
+}
+
+/* 选项按钮：按文字宽度，34px 高，圆角 6px（choice chip） */
+.site-edit-v4 .site-protection-choice-list {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn {
+  width: auto;
+  min-width: 64px;
+  height: 32px;
+  padding-inline: 14px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active,
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active:disabled {
+  font-weight: 500;
+  box-shadow: none;
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active::before {
+  width: 16px;
+  height: 14px;
+  border-radius: 0 6px 0 6px;
+}
+
+.site-edit-v4 .site-protection-choice-list .ant-btn.is-active::after {
+  top: 1px;
+  right: 5px;
+  width: 4px;
+  height: 7px;
+}
+
+/* 区域屏蔽卡片：10px 12px，三列等宽 */
+.site-edit-v4 .site-protection-region-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 260px));
+  gap: 8px;
+}
+
+.site-edit-v4 .site-protection-region-grid button {
+  min-height: 56px;
+  padding-block: 8px;
+}
+
+/* 黑白名单卡片：工具按钮（整理/去重/清空）靠右，24px 高 */
+.site-protection-ip-card-tools {
+  display: flex;
+  gap: 6px;
+}
+
+.site-edit-v4 .site-protection-ip-card-head .site-protection-ip-card-tools .ant-btn {
+  height: 24px;
+  margin: 0;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+@media (max-width: 720px) {
+  .site-edit-v4 .site-protection-choice-list .ant-btn {
+    width: auto;
+  }
+
+  /* CU-UI-01：窄屏时卡片说明与状态/操作纵排；状态块（标签、开关、按钮）可换行，说明文字可收缩，
+     不再把标题挤成逐字一列。卡片内边距随断点收窄。 */
+  .site-edit-v4 .site-waf-protection > .site-protection-feature-card {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .site-edit-v4 .site-waf-protection > .site-protection-feature-card > div {
+    min-width: 0;
+  }
+
+  .site-edit-v4 .site-waf-protection .site-protection-feature-state {
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+
+  .site-edit-v4 .site-waf-protection .site-protection-feature-state .ant-tag {
+    max-width: 100%;
+    margin-inline-end: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .site-edit-v4 .site-protection-auto-ban-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  /* 带操作按钮的提示条：按钮换到文字下方，文字占满宽度 */
+  .site-edit-v4 .site-protection-page .ant-alert:has(.ant-alert-action) {
+    flex-wrap: wrap;
+  }
+
+  .site-edit-v4 .site-protection-page .ant-alert:has(.ant-alert-action) .ant-alert-content {
+    min-width: 0;
+    flex: 1 1 calc(100% - 32px);
+  }
+
+  .site-edit-v4 .site-protection-page .ant-alert .ant-alert-action {
+    margin-top: 8px;
+    margin-inline-start: auto;
+  }
+}
+
+.site-protection-ip-card-tools .ant-btn > span {
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}

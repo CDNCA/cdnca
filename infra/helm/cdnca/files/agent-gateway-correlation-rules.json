@@ -1,0 +1,49 @@
+{
+  "groups": [
+    {
+      "name": "cdnca-agent-gateway-correlation",
+      "rules": [
+        {
+          "alert": "CDNCAAgentGatewayCorrelationMetricsAbsent",
+          "expr": "absent(cdnca_agent_gateway_correlation_accepted_total) == 1",
+          "for": "5m",
+          "labels": {"severity": "critical"},
+          "annotations": {
+            "summary": "Agent Gateway 关联指标缺失",
+            "description": "连续五分钟未抓取到关联指标，请检查 metrics Service、NetworkPolicy 和 Gateway health 监听器。"
+          }
+        },
+        {
+          "alert": "CDNCAAgentGatewayCorrelationPublishFailures",
+          "expr": "sum(rate(cdnca_agent_gateway_correlation_publish_failed_total[5m])) > 0",
+          "for": "2m",
+          "labels": {"severity": "critical"},
+          "annotations": {
+            "summary": "Agent 状态持久发布失败",
+            "description": "Gateway 无法把携带请求、任务和追踪身份的状态持久发布到 JetStream；现有边缘配置不受影响，但新状态确认可能停滞。"
+          }
+        },
+        {
+          "alert": "CDNCAAgentGatewayCorrelationMetadataRejected",
+          "expr": "sum(rate(cdnca_agent_gateway_correlation_rejected_total[10m])) > 0",
+          "for": "5m",
+          "labels": {"severity": "warning"},
+          "annotations": {
+            "summary": "Agent 状态关联信息被拒绝",
+            "description": "Gateway 检测到无效或与持久事实冲突的关联信息；按稳定原因码排查，不要把原始标识加入指标标签。"
+          }
+        },
+        {
+          "alert": "CDNCAEdgeActivationFailureRatioHigh",
+          "expr": "sum(rate(cdnca_agent_gateway_correlation_terminal_failed_total[15m])) > 0 and (sum(rate(cdnca_agent_gateway_correlation_terminal_failed_total[15m])) / clamp_min(sum(rate(cdnca_agent_gateway_correlation_terminal_failed_total[15m])) + sum(rate(cdnca_agent_gateway_correlation_terminal_succeeded_total[15m])), 0.001)) > 0.05",
+          "for": "10m",
+          "labels": {"severity": "warning"},
+          "annotations": {
+            "summary": "边缘激活失败率持续偏高",
+            "description": "十五分钟窗口内终态失败率超过百分之五；先确认失败状态的安全错误码，再按发布批次暂停或回滚。"
+          }
+        }
+      ]
+    }
+  ]
+}

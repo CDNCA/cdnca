@@ -1,0 +1,74 @@
+{{- if .Values.agentGateway.enabled }}
+{{- $component := "agent-gateway" -}}
+{{- $observability := "agent-gateway-correlation" -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}-metrics
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+    cdnca.io/observability: {{ $observability }}
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: {{ .Values.agentGateway.service.healthPort | quote }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.agentGateway.service.healthPort }}
+      targetPort: health
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}-metrics
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              cdnca.io/metrics-access: "true"
+      ports:
+        - port: {{ .Values.agentGateway.service.healthPort }}
+          protocol: TCP
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}-correlation
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      cdnca.io/observability: {{ $observability }}
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+{{- end }}
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1/PrometheusRule" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}-correlation
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+{{ (.Files.Get "files/agent-gateway-correlation-rules.json" | fromJson | toYaml) | nindent 2 }}
+{{- end }}
+{{- end }}

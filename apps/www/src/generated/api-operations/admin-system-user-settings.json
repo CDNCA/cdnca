@@ -1,0 +1,157 @@
+{
+ "id": "admin-system-user-settings",
+ "prefix": "/v1/admin/system-user-settings",
+ "operations": [
+  {
+   "operation_id": "getPlatformSystemUserSettings",
+   "method": "GET",
+   "path": "/v1/admin/system-user-settings",
+   "summary": "Read platform user-related settings",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current user policy",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.platform-system-user-settings/v1",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "value",
+       "type": "Settings",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "500",
+     "description": "Unexpected internal failure"
+    },
+    {
+     "status": "503",
+     "description": "Settings storage or policy is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "updatePlatformSystemUserSettings",
+   "method": "PUT",
+   "path": "/v1/admin/system-user-settings",
+   "summary": "Update platform user-related settings",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "value",
+      "type": "Settings",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved policy",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.platform-system-user-settings/v1",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "value",
+       "type": "Settings",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Validation error"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Revision or idempotency conflict"
+    },
+    {
+     "status": "500",
+     "description": "Unexpected internal failure"
+    },
+    {
+     "status": "503",
+     "description": "Settings storage or policy is unavailable"
+    }
+   ]
+  }
+ ]
+}

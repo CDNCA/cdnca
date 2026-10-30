@@ -1,0 +1,198 @@
+{{- if .Values.agentGateway.enabled }}
+{{- if or (eq (int .Values.agentGateway.service.healthPort) (int .Values.agentGateway.service.enrollmentPort)) (eq (int .Values.agentGateway.service.healthPort) (int .Values.agentGateway.service.agentPort)) }}
+{{- fail "agentGateway health, enrollment, and Agent ports must differ" }}
+{{- end }}
+{{- $component := "agent-gateway" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  {{- if not .Values.agentGateway.autoscaling.enabled }}
+  replicas: {{ .Values.agentGateway.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+      annotations:
+        cdnca.io/secret-rollout: {{ .Values.agentGateway.rolloutNonce | quote }}
+    spec:
+      serviceAccountName: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.agentGateway.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "cdnca.podSecurityContext" . | nindent 8 }}
+      topologySpreadConstraints:
+        {{- include "cdnca.topologySpreadConstraints" (dict "root" . "component" $component) | nindent 8 }}
+      {{- include "cdnca.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: agent-gateway
+          image: {{ include "cdnca.image" .Values.agentGateway.image | quote }}
+          imagePullPolicy: {{ .Values.agentGateway.image.pullPolicy }}
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: enrollment
+              containerPort: {{ .Values.agentGateway.service.enrollmentPort }}
+              protocol: TCP
+            - name: agent
+              containerPort: {{ .Values.agentGateway.service.agentPort }}
+              protocol: TCP
+            - name: health
+              containerPort: {{ .Values.agentGateway.service.healthPort }}
+              protocol: TCP
+          env:
+            - name: CDNCA_GATEWAY_ENROLLMENT_ADDR
+              value: ":{{ .Values.agentGateway.service.enrollmentPort }}"
+            - name: CDNCA_GATEWAY_AGENT_ADDR
+              value: ":{{ .Values.agentGateway.service.agentPort }}"
+            - name: CDNCA_GATEWAY_AGENT_PUBLIC_ENDPOINT
+              value: {{ .Values.agentGateway.agentPublicEndpoint | quote }}
+            - name: CDNCA_GATEWAY_HEALTH_ADDR
+              value: ":{{ .Values.agentGateway.service.healthPort }}"
+            - name: CDNCA_GATEWAY_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            - name: CDNCA_GATEWAY_VERSION
+              value: {{ .Values.agentGateway.gatewayVersion | quote }}
+            - name: CDNCA_CONTROL_ADDRESS
+              value: "{{ include "cdnca.componentFullname" (dict "root" . "component" "control-api") }}:{{ .Values.controlApi.service.internalGRPCPort }}"
+            - name: CDNCA_CONTROL_SERVER_NAME
+              value: {{ default (include "cdnca.componentFullname" (dict "root" . "component" "control-api")) .Values.agentGateway.controlServerName | quote }}
+            - name: CDNCA_CONTROL_CLIENT_WORKLOAD_URI_SAN
+              value: {{ .Values.agentGateway.workloadURISAN | quote }}
+            - name: CDNCA_GATEWAY_TLS_CERT_FILE
+              value: /var/run/secrets/cdnca/gateway/tls.crt
+            - name: CDNCA_GATEWAY_TLS_KEY_FILE
+              value: /var/run/secrets/cdnca/gateway/tls.key
+            - name: CDNCA_GATEWAY_AGENT_CLIENT_CA_FILE
+              value: /var/run/secrets/cdnca/gateway/agent-client-ca.crt
+            - name: CDNCA_CONTROL_CLIENT_CERT_FILE
+              value: /var/run/secrets/cdnca/gateway/control-client.crt
+            - name: CDNCA_CONTROL_CLIENT_KEY_FILE
+              value: /var/run/secrets/cdnca/gateway/control-client.key
+            - name: CDNCA_CONTROL_SERVER_CA_FILE
+              value: /var/run/secrets/cdnca/gateway/control-server-ca.crt
+            - name: CDNCA_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentGateway.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.agentGateway.dataStoresSecret.keys.redisURL }}
+            - name: CDNCA_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentGateway.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.agentGateway.dataStoresSecret.keys.natsURL }}
+            - name: CDNCA_TELEMETRY_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentGateway.telemetryNATSSecret.existingSecret }}
+                  key: {{ .Values.agentGateway.telemetryNATSSecret.keys.url }}
+            - name: CDNCA_TELEMETRY_NATS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentGateway.telemetryNATSSecret.existingSecret }}
+                  key: {{ .Values.agentGateway.telemetryNATSSecret.keys.username }}
+            - name: CDNCA_TELEMETRY_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.agentGateway.telemetryNATSSecret.existingSecret }}
+                  key: {{ .Values.agentGateway.telemetryNATSSecret.keys.password }}
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: health
+              scheme: HTTP
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: health
+              scheme: HTTP
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: health
+              scheme: HTTP
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.agentGateway.resources | nindent 12 }}
+          volumeMounts:
+            - name: runtime
+              mountPath: /var/run/secrets/cdnca/gateway
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime
+          secret:
+            secretName: {{ .Values.agentGateway.runtimeSecret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.agentGateway.runtimeSecret.keys.serverCertificate }}
+                path: tls.crt
+              - key: {{ .Values.agentGateway.runtimeSecret.keys.serverPrivateKey }}
+                path: tls.key
+              - key: {{ .Values.agentGateway.runtimeSecret.keys.agentClientCA }}
+                path: agent-client-ca.crt
+              - key: {{ .Values.agentGateway.runtimeSecret.keys.controlClientCertificate }}
+                path: control-client.crt
+              - key: {{ .Values.agentGateway.runtimeSecret.keys.controlClientPrivateKey }}
+                path: control-client.key
+              - key: {{ .Values.agentGateway.runtimeSecret.keys.controlServerCA }}
+                path: control-server-ca.crt
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+  {{- with .Values.agentGateway.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.agentGateway.service.type }}
+  {{- if eq .Values.agentGateway.service.type "LoadBalancer" }}
+  externalTrafficPolicy: {{ .Values.agentGateway.service.externalTrafficPolicy }}
+  loadBalancerSourceRanges:
+    {{- toYaml .Values.agentGateway.service.loadBalancerSourceRanges | nindent 4 }}
+  {{- end }}
+  selector:
+    {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 4 }}
+  ports:
+    - name: enrollment
+      port: {{ .Values.agentGateway.service.enrollmentPort }}
+      targetPort: enrollment
+      protocol: TCP
+    - name: agent
+      port: {{ .Values.agentGateway.service.agentPort }}
+      targetPort: agent
+      protocol: TCP
+{{- end }}

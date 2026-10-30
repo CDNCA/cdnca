@@ -1,0 +1,24 @@
+{
+  "specversion": "1.0",
+  "id": "019b143c-7e64-7cc6-b886-a1354a006281",
+  "source": "/control-plane/plugin-webhooks",
+  "type": "io.cdnca.site.v1.updated",
+  "subject": "site/019b143c-7e64-7cc6-b886-a1354a006282",
+  "time": "2026-07-23T08:30:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+  "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+  "request_id": "019b143c-7e64-7cc6-b886-a1354a006284",
+  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "sequence": 17,
+  "data": {
+    "subscription_id": "019b143c-7e64-7cc6-b886-a1354a006285",
+    "subject_sequence": 4,
+    "site_id": "019b143c-7e64-7cc6-b886-a1354a006282",
+    "change": "updated",
+    "changed_fields": [
+      "origins"
+    ],
+    "api_token": "sensitive-fixture-value-must-not-appear-in-journal"
+  }
+}

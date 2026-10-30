@@ -1,0 +1,310 @@
+{
+ "id": "observability",
+ "prefix": "/v1/observability",
+ "operations": [
+  {
+   "operation_id": "recordObservabilityFrontendEvent",
+   "method": "POST",
+   "path": "/v1/observability/frontend-events",
+   "summary": "Append a sanitized frontend event",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant sessions append only to their own actor and subject scope. Platform sessions require platform.admin and one explicit target_scope_id. Source IP, actor, and request ID are derived from the trusted request and session.",
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "event_code",
+      "type": "string: route_error / api_error / render_error",
+      "required": true
+     },
+     {
+      "name": "route",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "reason_code",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "result_code",
+      "type": "string: success / denied / failure",
+      "required": true
+     },
+     {
+      "name": "release",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Event accepted into the durable audit fact stream."
+    },
+    {
+     "status": "400",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code without raw dependency messages."
+    }
+   ]
+  },
+  {
+   "operation_id": "listObservabilityLogs",
+   "method": "GET",
+   "path": "/v1/observability/logs",
+   "summary": "List authorized observability facts",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant sessions are restricted to their own scope and facts where they are the actor or subject. Platform sessions require platform.admin and one explicit target_scope_id. Platform automation may capture a signed opaque audit boundary, then query an exact actor after that boundary without exposing stream positions; notification facts cannot be mixed into boundary queries.",
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "array<string: login / operation / notification / frontend>"
+    },
+    {
+     "name": "result",
+     "in": "query",
+     "type": "array<string>"
+    },
+    {
+     "name": "action",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "action_verb",
+     "in": "query",
+     "type": "string: create / update / delete"
+    },
+    {
+     "name": "resource_type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "resource_id",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "change",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "source_ip",
+     "in": "query",
+     "type": "string(ipv4) | string(ipv6) | string"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "audit_boundary",
+     "in": "query",
+     "type": "string",
+     "description": "Capture a signed target-scope audit head. Must be used alone with target_scope_id by a platform administrator."
+    },
+    {
+     "name": "after_audit_boundary",
+     "in": "query",
+     "type": "string",
+     "description": "Signed boundary returned by a prior capture. Must be paired with actor_user_id and resent unchanged on cursor pages."
+    },
+    {
+     "name": "actor_user_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Exact browser actor for platform filtering. A signed-boundary query must pair this parameter with after_audit_boundary; subject-only notification matching is not permitted in that mode."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable snapshot-bound keyset page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<LogFact>",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "total_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "audit_boundary",
+       "type": "string",
+       "description": "Signed opaque boundary; internal stream positions are never exposed."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code without raw dependency messages."
+    }
+   ]
+  },
+  {
+   "operation_id": "exportObservabilityLogs",
+   "method": "GET",
+   "path": "/v1/observability/logs/export",
+   "summary": "Export authorized observability facts as bounded CSV",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant sessions are restricted to their own scope and facts where they are the actor or subject. Platform sessions require platform.admin and one explicit target_scope_id.",
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "array<string: login / operation / notification / frontend>"
+    },
+    {
+     "name": "result",
+     "in": "query",
+     "type": "array<string>"
+    },
+    {
+     "name": "action",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "action_verb",
+     "in": "query",
+     "type": "string: create / update / delete"
+    },
+    {
+     "name": "resource_type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "resource_id",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "change",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "source_ip",
+     "in": "query",
+     "type": "string(ipv4) | string(ipv6) | string"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "RFC 4180 CSV limited to 8 MiB with a digest of the exact safe bytes."
+    },
+    {
+     "status": "400",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code without raw dependency messages."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code without raw dependency messages."
+    }
+   ]
+  }
+ ]
+}

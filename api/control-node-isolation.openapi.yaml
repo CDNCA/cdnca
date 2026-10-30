@@ -1,0 +1,228 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Node Isolation API Fragment
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+paths:
+  /v1/admin/node-isolations:
+    get:
+      operationId: listNodeIsolationStates
+      summary: 查询当前作用域内持久化的节点配置同步隔离状态
+      security:
+        - sessionBearer: []
+      parameters:
+        - in: query
+          name: node_id
+          description: 可重复；省略时返回当前作用域内全部已有隔离状态事实。
+          schema:
+            type: array
+            maxItems: 100
+            uniqueItems: true
+            items: {$ref: '#/components/schemas/UUID'}
+          style: form
+          explode: true
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: 状态按节点 ID 稳定排序；没有状态事实的节点不在结果中。
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 4096
+                    items: {$ref: '#/components/schemas/IsolationState'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/internal/node-isolation/results/{node_id}:
+    post:
+      operationId: recordNodeIsolationSyncResult
+      summary: 记录节点配置同步结果并原子推进隔离或恢复状态
+      description: >-
+        仅接受绑定到相同 scope_id/node_id 且含 node_isolation.report 的工作负载身份。
+        desired identity 会在事务中与控制面的当前 node_config_state 再次核对；未知提交结果必须视为 fail closed。
+      security:
+        - workloadMTLS: []
+      parameters:
+        - in: path
+          name: node_id
+          required: true
+          schema: {$ref: '#/components/schemas/UUID'}
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SyncResultInput'}
+      responses:
+        '200':
+          description: 持久状态和同事务审计/告警事实已提交，或返回完全相同报告的幂等回放。
+          headers:
+            Idempotency-Replayed:
+              schema: {type: string, const: 'true'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SyncResultResponse'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    sessionBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-session
+    workloadMTLS:
+      type: mutualTLS
+  parameters:
+    RequestID:
+      in: header
+      name: X-Request-ID
+      required: false
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+  responses:
+    Error:
+      description: 稳定错误码；界面必须按 locale 映射，不得直接展示 message。
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    SHA256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    ActiveConfigIdentity:
+      type: object
+      additionalProperties: false
+      required: [schema, config_version_id, artifact_sha256]
+      properties:
+        schema: {type: integer, const: 1}
+        config_version_id: {$ref: '#/components/schemas/UUID'}
+        artifact_sha256: {$ref: '#/components/schemas/SHA256'}
+    HealthEvidence:
+      type: object
+      additionalProperties: false
+      required: [session_epoch, sequence, observed_at, active]
+      properties:
+        session_epoch: {type: integer, minimum: 1, maximum: 9223372036854775807}
+        sequence: {type: integer, minimum: 1, maximum: 9223372036854775807}
+        observed_at: {type: string, format: date-time}
+        active: {$ref: '#/components/schemas/ActiveConfigIdentity'}
+    SyncResultInput:
+      type: object
+      additionalProperties: false
+      required: [report_id, desired, outcome, error_code, health]
+      properties:
+        report_id: {$ref: '#/components/schemas/UUID'}
+        desired: {$ref: '#/components/schemas/ActiveConfigIdentity'}
+        outcome: {type: string, enum: [succeeded, failed, unknown]}
+        error_code:
+          type: string
+          pattern: '^$|^[a-z][a-z0-9_.-]{0,63}$'
+        health:
+          oneOf:
+            - {$ref: '#/components/schemas/HealthEvidence'}
+            - {type: 'null'}
+      allOf:
+        - if:
+            properties: {outcome: {const: succeeded}}
+          then:
+            properties:
+              error_code: {const: ''}
+              health: {$ref: '#/components/schemas/HealthEvidence'}
+          else:
+            properties:
+              error_code: {pattern: '^[a-z][a-z0-9_.-]{0,63}$'}
+              health: {type: 'null'}
+    IsolationState:
+      type: object
+      additionalProperties: false
+      required:
+        - scope_id
+        - node_id
+        - status
+        - desired
+        - consecutive_failures
+        - consecutive_healthy
+        - last_session_epoch
+        - last_health_sequence
+        - last_report_id
+        - last_outcome
+        - last_error_code
+        - reason_code
+        - revision
+        - isolated_at
+        - recovered_at
+        - updated_at
+      properties:
+        scope_id: {$ref: '#/components/schemas/UUID'}
+        node_id: {$ref: '#/components/schemas/UUID'}
+        status: {type: string, enum: [active, isolated]}
+        desired: {$ref: '#/components/schemas/ActiveConfigIdentity'}
+        consecutive_failures: {type: integer, minimum: 0, maximum: 100}
+        consecutive_healthy: {type: integer, minimum: 0, maximum: 100}
+        last_session_epoch: {type: integer, minimum: 0, maximum: 9223372036854775807}
+        last_health_sequence: {type: integer, minimum: 0, maximum: 9223372036854775807}
+        last_report_id: {$ref: '#/components/schemas/UUID'}
+        last_outcome: {type: string, enum: [succeeded, failed, unknown]}
+        last_error_code: {type: string, maxLength: 64}
+        reason_code:
+          type: string
+          enum:
+            - healthy
+            - sync_failure_pending
+            - sync_failure_threshold
+            - sync_outcome_unknown
+            - active_config_identity_mismatch
+            - health_evidence_stale
+            - recovery_confirmation_pending
+            - recovered
+            - operation_outcome_uncertain
+        revision: {type: integer, minimum: 1, maximum: 9223372036854775807}
+        isolated_at:
+          oneOf: [{type: string, format: date-time}, {type: 'null'}]
+        recovered_at:
+          oneOf: [{type: string, format: date-time}, {type: 'null'}]
+        updated_at: {type: string, format: date-time}
+    SyncResultResponse:
+      type: object
+      additionalProperties: false
+      required: [state, publication_allowed, reason_code, replayed]
+      properties:
+        state: {$ref: '#/components/schemas/IsolationState'}
+        publication_allowed: {type: boolean}
+        reason_code: {type: string}
+        replayed: {type: boolean}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}

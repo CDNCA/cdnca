@@ -1,0 +1,8 @@
+/* fix-stoppolicy2: node detail status area, frozen node. */
+.node-frozen-detail {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  color: var(--cdnca-color-text-secondary, #808695);
+  line-height: 1.6;
+}

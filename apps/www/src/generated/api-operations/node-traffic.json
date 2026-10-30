@@ -1,0 +1,101 @@
+{
+ "id": "node-traffic",
+ "prefix": "/v1/node-traffic",
+ "operations": [
+  {
+   "operation_id": "getNodeTraffic",
+   "method": "GET",
+   "path": "/v1/node-traffic",
+   "summary": "Read interval node traffic, not cumulative lifetime counters",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read or platform.admin in a platform scope. external_only differences each NIC before selecting the current sample's default-route devices. A route change therefore cannot create a lifetime-counter spike. At least two known snapshots with a baseline for each selected NIC are required. Missing evidence is not a zero. Explicitly excluded NICs are omitted after automatic selection. This is monitoring, not billable usage.",
+   "params": [
+    {
+     "name": "node",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "external_only",
+     "in": "query",
+     "type": "boolean",
+     "description": "Literal true or false, at most once. Default false preserves old API callers. The management UI explicitly sends true by default. Filters bandwidth/traffic by each sample's reported network_selection; missing or unavailable selection never means all interfaces. Other metric types are unchanged. False exposes all original NIC facts for manual diagnostics."
+    },
+    {
+     "name": "start",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Start of a window no longer than 31 days; defaults to one hour ago for realtime and one day ago for traffic."
+    },
+    {
+     "name": "end",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Defaults to now; must not precede start."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "excl_nic",
+     "in": "query",
+     "type": "string",
+     "description": "Space-separated interface names to exclude. excluded_nic is a compatible alias; both sets are combined."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Interval bytes at each sample time, without billing settlement claims.",
+     "fields": [
+      {
+       "name": "msg",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "code",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "data",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid parameters; validation_error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Platform scope and nodes.read or platform.admin required."
+    },
+    {
+     "status": "404",
+     "description": "Node absent from the caller scope; node_metrics_not_found."
+    },
+    {
+     "status": "503",
+     "description": "Metrics runtime unavailable; node_metrics_unavailable."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,786 @@
+{
+ "id": "jobs",
+ "prefix": "/v1/jobs",
+ "operations": [
+  {
+   "operation_id": "listTenantJobs",
+   "method": "GET",
+   "path": "/v1/jobs",
+   "summary": "Page through jobs in the authenticated tenant scope",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires a tenant-scoped identity with jobs.read. Scope is derived only from the authenticated identity. Supplying tenant_id is an attempted scope override and returns 403.",
+   "permissions": [
+    "jobs.read"
+   ],
+   "params": [
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Inclusive RFC3339 creation-time bound."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 creation-time bound; from-to may not exceed 31 days."
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "array<string: queued / running / succeeded / partial_failed / failed / cancelled>",
+     "description": "Comma-separated job states; duplicates are rejected."
+    },
+    {
+     "name": "task_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Exact task UUID filter."
+    },
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "resource",
+     "in": "query",
+     "type": "string",
+     "description": "Exact match against the canonical job subject/reference, or a case-insensitive match against a node UUID assigned to one of the job's items, so node pages can deep-link to the tasks executed on that node."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque, authenticated, versioned HMAC-SHA256 keyset cursor from the preceding response, bound to route scope, endpoint, task, and filters. Reuse with changed inputs or any token modification returns 400."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer",
+     "description": "Explicit canonical positive decimal page number, mutually exclusive with cursor even if cursor is empty. Count and rows use one read-only repeatable-read snapshot. Different requests are live snapshots and may move rows as jobs are inserted or change state. A page beyond the end returns an empty data array, the requested number and the exact total."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Authenticated keyset page or explicit numbered page with a same-snapshot exact total.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<Job>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "Page | NumberedPage",
+       "required": true
+      },
+      {
+       "name": "query",
+       "type": "QueryWindow",
+       "required": true
+      },
+      {
+       "name": "task_metadata",
+       "type": "array<TaskMetadata>",
+       "description": "Present only in explicit numbered-page mode, including an empty array for an empty page."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantJobKinds",
+   "method": "GET",
+   "path": "/v1/jobs/kinds",
+   "summary": "Read the integrated producer catalog as a tenant",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires a tenant-scoped identity with jobs.read. Accepts no query parameters. Contains no tenant jobs or counts and does not claim runtime availability. Runtime status remains unknown until separately verified.",
+   "permissions": [
+    "jobs.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Registered source-backed producer kinds, independent of current job rows or runtime enablement.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<JobKind>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantJob",
+   "method": "GET",
+   "path": "/v1/jobs/{task_id}",
+   "summary": "Read a job in the authenticated tenant scope",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "A missing or cross-tenant task_id returns the same 404 response.",
+   "permissions": [
+    "jobs.read"
+   ],
+   "params": [
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the background job."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Job projection without producer payload or credentials.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Job",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "404",
+     "description": "job_not_found: the task does not exist or is outside the authenticated tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantJobAttempts",
+   "method": "GET",
+   "path": "/v1/jobs/{task_id}/attempts",
+   "summary": "Page through a tenant job's immutable attempt history",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "jobs.read"
+   ],
+   "params": [
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the background job."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque, authenticated, versioned HMAC-SHA256 keyset cursor from the preceding response, bound to route scope, endpoint, task, and filters. Reuse with changed inputs or any token modification returns 400."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Attempt history ordered by attempt number descending.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<Attempt>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "Page",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "404",
+     "description": "job_not_found: the task does not exist or is outside the authenticated tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelTenantJob",
+   "method": "POST",
+   "path": "/v1/jobs/{task_id}/cancel",
+   "summary": "Cancel a queued or running job in the authenticated tenant",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires jobs.manage. Scope is derived only from the authenticated identity. The transition, audit, and receipt commit atomically. The same actor and Idempotency-Key return the immutable first successful snapshot with replayed=true; reuse for another command returns 409.",
+   "permissions": [
+    "jobs.manage"
+   ],
+   "params": [
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the background job."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Strong ETag value returned by the latest job detail or command response."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable cancelled or queued command result snapshot.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Job",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true,
+       "description": "True when this response came from the durable command receipt."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "404",
+     "description": "job_not_found: the task does not exist or is outside the authenticated tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "409",
+     "description": "job_idempotency_conflict, job_invalid_transition, job_retries_exhausted, or job_producer_command_required: the key was reused for another command, the job changed or is ineligible, no retry attempt remains, or the job's producer owns the command. cache.operation cancel/retry is executed by the cache module (same audit and receipt as the cache operation API); job_producer_command_required is returned only for its replay, or when cache control is not enabled."
+    },
+    {
+     "status": "412",
+     "description": "job_revision_conflict: the If-Match revision is stale; refresh the job before retrying."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantJobDeadLetters",
+   "method": "GET",
+   "path": "/v1/jobs/{task_id}/dead-letters",
+   "summary": "Page through dead letters in the authenticated tenant",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "jobs.read"
+   ],
+   "params": [
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the background job."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque, authenticated, versioned HMAC-SHA256 keyset cursor from the preceding response, bound to route scope, endpoint, task, and filters. Reuse with changed inputs or any token modification returns 400."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Dead letters ordered by terminal attempt descending.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<DeadLetter>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "Page",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "404",
+     "description": "job_not_found: the task does not exist or is outside the authenticated tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantJobSettlementReceipts",
+   "method": "GET",
+   "path": "/v1/jobs/{task_id}/receipts",
+   "summary": "Page through immutable settlement receipts in the authenticated tenant",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "jobs.read"
+   ],
+   "params": [
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the background job."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque, authenticated, versioned HMAC-SHA256 keyset cursor from the preceding response, bound to route scope, endpoint, task, and filters. Reuse with changed inputs or any token modification returns 400."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Settlement receipts ordered by attempt descending then ordinal ascending.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<SettlementReceipt>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "Page",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "404",
+     "description": "job_not_found: the task does not exist or is outside the authenticated tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantJobResults",
+   "method": "GET",
+   "path": "/v1/jobs/{task_id}/results",
+   "summary": "Page through current per-item and per-node result projections",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "node_id, failure_code, and completed_at are omitted when the underlying projection has no corresponding fact. No task payload is returned.",
+   "permissions": [
+    "jobs.read"
+   ],
+   "params": [
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the background job."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque, authenticated, versioned HMAC-SHA256 keyset cursor from the preceding response, bound to route scope, endpoint, task, and filters. Reuse with changed inputs or any token modification returns 400."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current item projections ordered by immutable ordinal ascending.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<ItemResult>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "Page",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "404",
+     "description": "job_not_found: the task does not exist or is outside the authenticated tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "retryTenantJob",
+   "method": "POST",
+   "path": "/v1/jobs/{task_id}/retry",
+   "summary": "Retry failed items in a tenant job",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires jobs.manage, a failed or partially failed state, and an available attempt. The transition, audit, and receipt commit atomically. The same actor and Idempotency-Key return the immutable first successful snapshot with replayed=true; reuse for another command returns 409.",
+   "permissions": [
+    "jobs.manage"
+   ],
+   "params": [
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the background job."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Strong ETag value returned by the latest job detail or command response."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable cancelled or queued command result snapshot.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Job",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true,
+       "description": "True when this response came from the durable command receipt."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "job_invalid_request: invalid UUID, query input, Idempotency-Key, content type, or exact empty JSON command body."
+    },
+    {
+     "status": "401",
+     "description": "job_authentication_required: authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "job_permission_denied or job_scope_forbidden: permission is missing, audience is incompatible, or the caller attempted a scope override."
+    },
+    {
+     "status": "404",
+     "description": "job_not_found: the task does not exist or is outside the authenticated tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "job_request_cancelled: the inbound request context was cancelled."
+    },
+    {
+     "status": "409",
+     "description": "job_idempotency_conflict, job_invalid_transition, job_retries_exhausted, or job_producer_command_required: the key was reused for another command, the job changed or is ineligible, no retry attempt remains, or the job's producer owns the command. cache.operation cancel/retry is executed by the cache module (same audit and receipt as the cache operation API); job_producer_command_required is returned only for its replay, or when cache control is not enabled."
+    },
+    {
+     "status": "412",
+     "description": "job_revision_conflict: the If-Match revision is stale; refresh the job before retrying."
+    },
+    {
+     "status": "502",
+     "description": "job_store_invalid_response or job_response_too_large: stored facts were invalid or the bounded response was too large."
+    },
+    {
+     "status": "503",
+     "description": "job_store_unavailable: PostgreSQL or the configured Reader is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "job_query_timeout: the bounded request timed out."
+    }
+   ]
+  }
+ ]
+}

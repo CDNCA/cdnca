@@ -1,0 +1,13 @@
+.node-market-flagged > td {
+  background: var(--cdnca-color-red3, #fff1f0);
+}
+
+/* 5-minute usage curve (MetricTrendChart has no height of its own). */
+.node-market-curve .metric-chart {
+  height: 220px;
+}
+
+/* ADR 0015 §12: balances below the alert line and the 7-day spend bars. */
+.node-market-row-alert > td { background: var(--ant-color-warning-bg, var(--cdnca-color-green7, #fffbe6)); }
+.node-market-spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 18px; }
+.node-market-spark > span { display: inline-block; width: 4px; background: var(--ant-color-primary, var(--cdnca-color-blue42, #1677ff)); border-radius: 1px; }

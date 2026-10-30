@@ -1,0 +1,905 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Origin Authentication Control API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable tenant-scoped control contract for encrypted
+    S3/S3-compatible, OSS, and COS origin credentials, source-bound signing
+    rules, rotation, and deterministic publication snapshots. This fragment is
+    not mounted by control-api main and does not produce HPKE artifacts, write
+    Edge secret files, or publish to Gateway or Agent.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Origin credentials
+    description: Encrypted provider credential revisions and lifecycle.
+  - name: Origin rules
+    description: Tenant, site, and source-bound signing rules.
+  - name: Origin publications
+    description: Deterministic secret-free control snapshots.
+paths:
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Origin credentials]
+      operationId: listOriginAuthCredentials
+      summary: List redacted credential heads in one tenant
+      x-required-permissions: [origin_auth.read]
+      parameters:
+        - $ref: '#/components/parameters/ProviderFilter'
+        - $ref: '#/components/parameters/CredentialStatusFilter'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/CredentialPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [Origin credentials]
+      operationId: createOriginAuthCredential
+      summary: Encrypt and append credential revision 1
+      description: >-
+        Requires origin_auth.manage and a valid sites.manage entitlement.
+        The credential remains pending until an injected real verifier accepts
+        it. Same-key same-payload retries replay the stored redacted response.
+      x-required-permissions: [origin_auth.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateCredentialRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CredentialCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/CredentialID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Origin credentials]
+      operationId: getOriginAuthCredential
+      summary: Read one redacted credential head
+      x-required-permissions: [origin_auth.read]
+      responses:
+        '200': {$ref: '#/components/responses/CredentialOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      tags: [Origin credentials]
+      operationId: deleteOriginAuthCredential
+      summary: Append a credential tombstone revision
+      description: >-
+        The body must be exactly an empty JSON object. A credential referenced
+        by a currently enabled rule cannot be deleted. Historical publication
+        rows and prior encrypted revisions are not mutated.
+      x-required-permissions: [origin_auth.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/CredentialWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}/replace:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/CredentialID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Origin credentials]
+      operationId: replaceOriginAuthCredential
+      summary: Encrypt replacement material with the active envelope key
+      x-required-permissions: [origin_auth.manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReplaceCredentialRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/CredentialWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}/verify:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/CredentialID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Origin credentials]
+      operationId: verifyOriginAuthCredential
+      summary: Invoke the injected verifier and append a verified revision
+      description: >-
+        The body must be exactly an empty JSON object. If no real verifier is
+        configured, the response is 503 and the credential remains pending.
+        This endpoint never treats schema validation or a synthetic network
+        probe as successful provider verification.
+      x-required-permissions: [origin_auth.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/CredentialWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/CredentialID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Origin credentials]
+      operationId: disableOriginAuthCredential
+      summary: Append a disabled credential revision
+      description: >-
+        The body must be exactly an empty JSON object. A credential referenced
+        by an enabled rule must first be removed from or disabled in that rule.
+      x-required-permissions: [origin_auth.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/CredentialWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Origin rules]
+      operationId: listOriginAuthRules
+      summary: List current rule revisions
+      x-required-permissions: [origin_auth.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteFilter'
+        - $ref: '#/components/parameters/EnabledFilter'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/RulePageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [Origin rules]
+      operationId: createOriginAuthRule
+      summary: Create a tenant, site, and source-bound rule
+      description: >-
+        The source must be an HTTPS port 443 source in the same tenant and its
+        host must exactly equal the normalized endpoint host. An enabled rule
+        can reference only a verified credential revision with matching
+        provider and sufficient validity.
+      x-required-permissions: [origin_auth.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateRuleRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/RuleCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RuleID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Origin rules]
+      operationId: getOriginAuthRule
+      summary: Read one current rule revision
+      x-required-permissions: [origin_auth.read]
+      responses:
+        '200': {$ref: '#/components/responses/RuleOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      tags: [Origin rules]
+      operationId: updateOriginAuthRule
+      summary: Append a rule configuration revision
+      x-required-permissions: [origin_auth.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateRuleRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RuleWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      tags: [Origin rules]
+      operationId: deleteOriginAuthRule
+      summary: Append a rule tombstone revision
+      x-required-permissions: [origin_auth.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/RuleWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RuleID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Origin rules]
+      operationId: enableOriginAuthRule
+      summary: Enable a rule after verified credential gates pass
+      x-required-permissions: [origin_auth.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/RuleWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RuleID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Origin rules]
+      operationId: disableOriginAuthRule
+      summary: Disable a rule by revision CAS
+      x-required-permissions: [origin_auth.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/RuleWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}/rotate:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RuleID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [Origin rules]
+      operationId: rotateOriginAuthRuleCredential
+      summary: Schedule current and previous credential cutover
+      description: >-
+        The new current and prior current revisions must be distinct, verified,
+        provider-matched, and valid through activation plus signature TTL.
+        Activation must be in the future and no more than 30 days away.
+      x-required-permissions: [origin_auth.manage]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RotateRuleRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RuleWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/tenant-scopes/{tenant_scope_id}/origin-auth/publications:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [Origin publications]
+      operationId: getLatestOriginAuthPublication
+      summary: Read the latest deterministic secret-free snapshot
+      x-required-permissions: [origin_auth.read]
+      responses:
+        '200': {$ref: '#/components/responses/PublicationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [Origin publications]
+      operationId: createOriginAuthPublication
+      summary: Append the next tenant publication snapshot
+      description: >-
+        If-Match is the current publication revision and may be "0" for the
+        first snapshot. The body must be exactly an empty JSON object. The
+        snapshot contains Edge-aligned public rule fields and opaque credential
+        revision references only. It is not an Edge secret file or deployment.
+      x-required-permissions: [origin_auth.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchPublicationRevision'
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '201': {$ref: '#/components/responses/PublicationCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: access-session
+      description: >-
+        Accepts only a Bearer access session. The package runtime authenticates
+        the session on every request with identity.AuthenticateSession, then
+        reauthorizes that same session inside the business PostgreSQL transaction
+        with iamlock.AuthorizeSession for the requested tenant scope, target scope,
+        and permission. No other bearer credential kind is accepted.
+  parameters:
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    CredentialID:
+      name: credential_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    RuleID:
+      name: rule_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    TraceID:
+      name: X-Trace-ID
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    IfMatchRevision:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive decimal current resource revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]{0,15}"$'}
+    IfMatchPublicationRevision:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted decimal current publication revision; first write uses "0".
+      schema: {type: string, pattern: '^"(?:0|[1-9][0-9]{0,15})"$'}
+    ProviderFilter:
+      name: provider
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/Provider'}
+    CredentialStatusFilter:
+      name: status
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/CredentialStatus'}
+    SiteFilter:
+      name: site_id
+      in: query
+      required: false
+      schema: {type: string, format: uuid}
+    EnabledFilter:
+      name: enabled
+      in: query
+      required: false
+      schema: {type: boolean}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque stable keyset cursor, at most 512 bytes.
+      schema: {type: string, maxLength: 512}
+  requestBodies:
+    EmptyObject:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            maxProperties: 0
+  schemas:
+    Provider:
+      type: string
+      enum: [s3, oss, cos]
+    CredentialStatus:
+      type: string
+      enum: [pending, verified, disabled, deleted]
+    CredentialSecret:
+      type: object
+      additionalProperties: false
+      required: [access_key_id, secret_access_key, not_before, expires_at]
+      properties:
+        access_key_id: {type: string, minLength: 1, maxLength: 256, writeOnly: true}
+        secret_access_key: {type: string, minLength: 1, maxLength: 512, writeOnly: true}
+        session_token: {type: string, minLength: 1, maxLength: 4096, writeOnly: true}
+        not_before: {type: string, format: date-time, writeOnly: true}
+        expires_at: {type: string, format: date-time, writeOnly: true}
+    CreateCredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, name, secret]
+      properties:
+        provider: {$ref: '#/components/schemas/Provider'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        secret: {$ref: '#/components/schemas/CredentialSecret'}
+    ReplaceCredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [secret]
+      properties:
+        secret: {$ref: '#/components/schemas/CredentialSecret'}
+    Credential:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, provider, name, status, revision, revision_ref, not_before, expires_at, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        provider: {$ref: '#/components/schemas/Provider'}
+        name: {type: string}
+        status: {$ref: '#/components/schemas/CredentialStatus'}
+        revision: {type: integer, minimum: 1}
+        revision_ref:
+          type: string
+          format: uuid
+          description: Opaque control revision reference; not an envelope key ID.
+        not_before: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        verified_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CredentialPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Credential'}}
+        next_cursor: {type: string, maxLength: 512}
+    CredentialReference:
+      type: object
+      additionalProperties: false
+      required: [credential_id, revision]
+      properties:
+        credential_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+    RuleConfig:
+      type: object
+      additionalProperties: false
+      required: [provider, algorithm, endpoint, bucket, path_prefix, region, service, signature_ttl_seconds, current_credential]
+      properties:
+        provider: {$ref: '#/components/schemas/Provider'}
+        algorithm:
+          type: string
+          enum: [aws4-hmac-sha256, oss4-hmac-sha256, cos-hmac-sha1]
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 512
+          description: Exact HTTPS port-443 endpoint with no userinfo, path, query, or fragment.
+        bucket: {type: string, maxLength: 63}
+        path_prefix: {type: string, minLength: 1, maxLength: 2048}
+        region: {type: string, minLength: 2, maxLength: 64}
+        service: {type: string, minLength: 2, maxLength: 64}
+        signature_ttl_seconds: {type: integer, minimum: 1, maximum: 3600}
+        egress_policy_reference:
+          type: string
+          maxLength: 128
+          description: >-
+            Required only for an exact S3-compatible custom host and must map
+            to an injected platform host allowlist. It is not proof of DNS or
+            network-layer SSRF containment.
+        current_credential: {$ref: '#/components/schemas/CredentialReference'}
+        previous_credential: {$ref: '#/components/schemas/CredentialReference'}
+        activate_current_at: {type: string, format: date-time}
+    CreateRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [site_id, source_position, config, enabled]
+      properties:
+        site_id: {type: string, format: uuid}
+        source_position: {type: integer, minimum: 1, maximum: 32}
+        config: {$ref: '#/components/schemas/RuleConfig'}
+        enabled: {type: boolean}
+    UpdateRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [config]
+      properties:
+        config: {$ref: '#/components/schemas/RuleConfig'}
+    RotateRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [current_credential, activate_current_at]
+      properties:
+        current_credential: {$ref: '#/components/schemas/CredentialReference'}
+        activate_current_at: {type: string, format: date-time}
+    Rule:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, site_id, source_position, provider, algorithm, endpoint, bucket, path_prefix, region, service, signature_ttl_seconds, current_credential, enabled, deleted, revision, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        source_position: {type: integer, minimum: 1, maximum: 32}
+        provider: {$ref: '#/components/schemas/Provider'}
+        algorithm:
+          type: string
+          enum: [aws4-hmac-sha256, oss4-hmac-sha256, cos-hmac-sha1]
+        endpoint: {type: string, format: uri, maxLength: 512}
+        bucket: {type: string, maxLength: 63}
+        path_prefix: {type: string, minLength: 1, maxLength: 2048}
+        region: {type: string, minLength: 2, maxLength: 64}
+        service: {type: string, minLength: 2, maxLength: 64}
+        signature_ttl_seconds: {type: integer, minimum: 1, maximum: 3600}
+        egress_policy_reference: {type: string, maxLength: 128}
+        current_credential: {$ref: '#/components/schemas/CredentialReference'}
+        previous_credential: {$ref: '#/components/schemas/CredentialReference'}
+        activate_current_at: {type: string, format: date-time}
+        enabled: {type: boolean}
+        deleted: {type: boolean}
+        revision: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RulePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Rule'}}
+        next_cursor: {type: string, maxLength: 512}
+    PublicationRule:
+      type: object
+      additionalProperties: false
+      required: [rule_id, site_id, source_position, provider, algorithm, endpoint, bucket, path_prefix, region, service, signature_ttl_seconds, current_credential_revision_ref, activate_current_at_unix]
+      properties:
+        rule_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        source_position: {type: integer, minimum: 1, maximum: 32}
+        provider: {$ref: '#/components/schemas/Provider'}
+        algorithm:
+          type: string
+          enum: [aws4-hmac-sha256, oss4-hmac-sha256, cos-hmac-sha1]
+        endpoint: {type: string, format: uri, maxLength: 512}
+        bucket: {type: string, maxLength: 63}
+        path_prefix: {type: string, minLength: 1, maxLength: 2048}
+        region: {type: string, minLength: 2, maxLength: 64}
+        service: {type: string, minLength: 2, maxLength: 64}
+        signature_ttl_seconds: {type: integer, minimum: 1, maximum: 3600}
+        current_credential_revision_ref: {type: string, format: uuid}
+        previous_credential_revision_ref: {type: string, format: uuid}
+        activate_current_at_unix: {type: integer, minimum: 0}
+    PublicationSnapshot:
+      type: object
+      additionalProperties: false
+      required: [schema_version, tenant_scope_id, publication_revision, rules]
+      properties:
+        schema_version: {type: string, const: cdnca.control.originauth-publication/v1}
+        tenant_scope_id: {type: string, format: uuid}
+        publication_revision: {type: integer, minimum: 1}
+        rules: {type: array, maxItems: 10000, items: {$ref: '#/components/schemas/PublicationRule'}}
+    Publication:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, revision, snapshot_hash, snapshot, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        snapshot_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        previous_hash: {type: string, pattern: '^[a-f0-9]{64}$'}
+        snapshot: {$ref: '#/components/schemas/PublicationSnapshot'}
+        created_at: {type: string, format: date-time}
+    APIError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id, trace_id]
+          properties:
+            code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+            message: {type: string, maxLength: 256}
+            request_id: {type: string, maxLength: 128}
+            trace_id: {type: string, maxLength: 128}
+  headers:
+    ETag:
+      description: Quoted current resource or publication revision.
+      schema: {type: string}
+    IdempotentReplay:
+      description: Present with value true when a completed write was replayed.
+      schema: {type: string, const: 'true'}
+    RequestID:
+      description: Stable request correlation ID.
+      schema: {type: string, maxLength: 128}
+    TraceID:
+      description: Stable distributed trace correlation ID.
+      schema: {type: string, maxLength: 128}
+  responses:
+    CredentialOK:
+      description: Redacted credential head.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Credential'}}
+    CredentialCreated:
+      description: Pending credential created.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Credential'}}
+    CredentialWriteOK:
+      description: Credential revision appended.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Credential'}}
+    CredentialPageOK:
+      description: Stable credential page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/CredentialPage'}}
+    RuleOK:
+      description: Current rule revision.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Rule'}}
+    RuleCreated:
+      description: Rule created.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Rule'}}
+    RuleWriteOK:
+      description: Rule revision appended.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Rule'}}
+    RulePageOK:
+      description: Stable rule page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/RulePage'}}
+    PublicationOK:
+      description: Latest publication.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Publication'}}
+    PublicationCreated:
+      description: Publication appended.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/Publication'}}
+    BadRequest:
+      description: Unknown field, malformed UUID/body/header/query, invalid cursor, or exceeded bound.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    Forbidden:
+      description: Permission or entitlement denied.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    NotFound:
+      description: Unknown or out-of-tenant resource; both use the same response shape.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    MethodNotAllowed:
+      description: Request method is not allowed for this route.
+      headers:
+        Allow:
+          description: Methods accepted by the matched route.
+          schema: {type: string}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    Conflict:
+      description: State, uniqueness, active-reference, or idempotency conflict.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    PreconditionFailed:
+      description: If-Match does not equal the current revision.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    UnprocessableEntity:
+      description: Provider binding, endpoint, path, credential state, or verification rejected.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}
+    ServiceUnavailable:
+      description: Storage, encryption key, entitlement, verifier, timeout, or cancellation unavailable.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json: {schema: {$ref: '#/components/schemas/APIError'}}

@@ -1,0 +1,523 @@
+{
+ "schema": "cdnca.default-crawlers/v1",
+ "source": "arcjet/well-known-bots（MIT）+ 原前端预设",
+ "crawlers": [
+  {
+   "name": "ahrefs",
+   "members": [
+    "ahrefs-crawler",
+    "ahrefs-site-audit"
+   ],
+   "categories": [
+    "advertising",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "AhrefsBot/",
+    "AhrefsSiteAudit/"
+   ],
+   "sources": [
+    {
+     "url": "https://api.ahrefs.com/v3/public/crawler-ip-ranges",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "algolia-crawler",
+   "members": [
+    "algolia-crawler"
+   ],
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Crawler/"
+   ],
+   "networks": [
+    "34.66.202.43/32"
+   ]
+  },
+  {
+   "name": "anthropic",
+   "members": [
+    "anthropic-crawler-search",
+    "anthropic-crawler-user"
+   ],
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "Claude-SearchBot",
+    "Claude-User"
+   ],
+   "sources": [
+    {
+     "url": "https://claude.com/crawling/bots.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "apple-crawler",
+   "members": [
+    "apple-crawler"
+   ],
+   "categories": [
+    "apple",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Applebot"
+   ],
+   "sources": [
+    {
+     "url": "https://search.developer.apple.com/applebot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "baidu",
+   "members": [
+    "baidu"
+   ],
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Baiduspider"
+   ],
+   "rdns_suffixes": [
+    "baidu.com",
+    "baidu.jp"
+   ]
+  },
+  {
+   "name": "bing",
+   "members": [
+    "bing",
+    "bing-crawler",
+    "bing-preview",
+    "microsoft-preview"
+   ],
+   "categories": [
+    "microsoft",
+    "preview",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "BingPreview/",
+    "MicrosoftPreview/",
+    "bingbot",
+    "bingbot/"
+   ],
+   "rdns_suffixes": [
+    "search.msn.com"
+   ],
+   "sources": [
+    {
+     "url": "https://www.bing.com/toolbox/bingbot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "commoncrawl",
+   "members": [
+    "ccbot-crawler",
+    "commoncrawl-crawler"
+   ],
+   "categories": [
+    "academic",
+    "ai",
+    "archive"
+   ],
+   "user_agent_tokens": [
+    "CCBot",
+    "CCBot/"
+   ],
+   "sources": [
+    {
+     "url": "https://index.commoncrawl.org/ccbot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "duckduckgo",
+   "members": [
+    "duckassist-bot",
+    "duckduckgo-crawler"
+   ],
+   "categories": [
+    "ai",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "DuckAssistBot",
+    "DuckDuckBot"
+   ],
+   "sources": [
+    {
+     "url": "https://duckduckgo.com/duckassistbot.json",
+     "format": "json"
+    },
+    {
+     "url": "https://duckduckgo.com/duckduckbot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "geedo-crawler-products",
+   "members": [
+    "geedo-crawler-products"
+   ],
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "GeedoProductSearch"
+   ],
+   "sources": [
+    {
+     "url": "https://geedo.com/product-search/product-search-ip.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "google",
+   "members": [
+    "google-crawler",
+    "google-crawler-cloudvertex",
+    "google-crawler-image",
+    "google-crawler-mobile",
+    "google-crawler-news",
+    "google-crawler-other",
+    "google-crawler-store",
+    "google-crawler-video",
+    "google-inspection-tool"
+   ],
+   "categories": [
+    "ai",
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Google-CloudVertexBot",
+    "Google-InspectionTool",
+    "GoogleOther",
+    "Googlebot-Image",
+    "Googlebot-Mobile",
+    "Googlebot-News",
+    "Googlebot-Video",
+    "Googlebot/",
+    "Storebot-Google"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "sources": [
+    {
+     "url": "https://developers.google.com/static/crawling/ipranges/common-crawlers.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "google-fetcher",
+   "members": [
+    "google-adsbot-mobile",
+    "google-adsense",
+    "google-agent",
+    "google-feedfetcher",
+    "google-messages",
+    "google-producer"
+   ],
+   "categories": [
+    "advertising",
+    "ai",
+    "feedfetcher",
+    "google",
+    "preview"
+   ],
+   "user_agent_tokens": [
+    "AdsBot-Google-Mobile",
+    "Feedfetcher-Google",
+    "Google-Agent",
+    "GoogleMessages",
+    "GoogleProducer",
+    "Mediapartners-Google"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "sources": [
+    {
+     "url": "https://developers.google.com/static/crawling/ipranges/special-crawlers.json",
+     "format": "json"
+    },
+    {
+     "url": "https://developers.google.com/static/crawling/ipranges/user-triggered-agents.json",
+     "format": "json"
+    },
+    {
+     "url": "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json",
+     "format": "json"
+    },
+    {
+     "url": "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "isonsearch-crawler",
+   "members": [
+    "isonsearch-crawler"
+   ],
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "IsonSearchBot/"
+   ],
+   "sources": [
+    {
+     "url": "https://search.isonai.com/bot/ips.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "kagi-crawler",
+   "members": [
+    "kagi-crawler"
+   ],
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Kagibot"
+   ],
+   "networks": [
+    "104.254.65.50/32",
+    "209.151.156.194/32",
+    "216.18.205.234/32",
+    "35.212.27.76/32"
+   ]
+  },
+  {
+   "name": "kimi",
+   "members": [
+    "kimi-bot",
+    "kimi-searchbot",
+    "kimi-user"
+   ],
+   "categories": [
+    "ai",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Kimi-SearchBot",
+    "Kimi-User",
+    "KimiBot"
+   ],
+   "sources": [
+    {
+     "url": "https://www.kimi.ai/policies/kimi-searchbot.json",
+     "format": "json"
+    },
+    {
+     "url": "https://www.kimi.ai/policies/kimi-user.json",
+     "format": "json"
+    },
+    {
+     "url": "https://www.kimi.ai/policies/kimibot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "meta",
+   "members": [
+    "facebook-catalog",
+    "facebook-share-crawler",
+    "meta-crawler-user",
+    "meta-externalhit",
+    "meta-webindexer"
+   ],
+   "categories": [
+    "ai",
+    "meta",
+    "preview",
+    "search-engine",
+    "social"
+   ],
+   "user_agent_tokens": [
+    "Meta-ExternalHit",
+    "facebookcatalog/",
+    "facebookexternalhit",
+    "meta-externalfetcher",
+    "meta-webindexer"
+   ],
+   "sources": [
+    {
+     "url": "https://www.facebook.com/peering/geofeed",
+     "format": "csv"
+    }
+   ]
+  },
+  {
+   "name": "mojeek-crawler",
+   "members": [
+    "mojeek-crawler"
+   ],
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "MojeekBot/"
+   ],
+   "sources": [
+    {
+     "url": "https://www.mojeek.com/mojeekbot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "openai",
+   "members": [
+    "openai-crawler",
+    "openai-crawler-ads",
+    "openai-crawler-search",
+    "openai-crawler-user"
+   ],
+   "categories": [
+    "advertising",
+    "ai",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "ChatGPT-User",
+    "GPTBot",
+    "OAI-AdsBot/",
+    "OAI-SearchBot"
+   ],
+   "sources": [
+    {
+     "url": "https://openai.com/adsbot.json",
+     "format": "json"
+    },
+    {
+     "url": "https://openai.com/chatgpt-user.json",
+     "format": "json"
+    },
+    {
+     "url": "https://openai.com/gptbot.json",
+     "format": "json"
+    },
+    {
+     "url": "https://openai.com/searchbot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "perplexity-crawler",
+   "members": [
+    "perplexity-crawler"
+   ],
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "PerplexityBot/"
+   ],
+   "sources": [
+    {
+     "url": "https://www.perplexity.ai/perplexitybot.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "quantcast-crawler",
+   "members": [
+    "quantcast-crawler"
+   ],
+   "categories": [
+    "advertising"
+   ],
+   "user_agent_tokens": [
+    "Quantcastbot/"
+   ],
+   "networks": [
+    "103.229.11.253/32",
+    "192.184.74.253/32",
+    "192.184.75.253/32",
+    "192.184.76.253/32",
+    "192.184.77.253/32",
+    "52.34.88.131/32",
+    "54.71.154.151/32"
+   ]
+  },
+  {
+   "name": "reflectionbot",
+   "members": [
+    "reflectionbot"
+   ],
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "Reflectionbot"
+   ],
+   "sources": [
+    {
+     "url": "https://reflection.ai/bot/ips.json",
+     "format": "json"
+    }
+   ]
+  },
+  {
+   "name": "sogou",
+   "members": [
+    "sogou"
+   ],
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Sogou"
+   ],
+   "rdns_suffixes": [
+    "sogou.com"
+   ]
+  },
+  {
+   "name": "telegram-crawler",
+   "members": [
+    "telegram-crawler"
+   ],
+   "categories": [
+    "preview",
+    "social"
+   ],
+   "user_agent_tokens": [
+    "TelegramBot"
+   ],
+   "sources": [
+    {
+     "url": "https://core.telegram.org/resources/cidr.txt",
+     "format": "text"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,59 @@
+From: CDNCA native runtime maintainers
+Subject: [PATCH] NDK/Postgres: finalize complex values after NGINX safety backport
+
+Port the exact ngx_http_rewrite_value end-code construction from NGINX
+a8289aa69c74f7e664ad63b91c17aa2a554f190f to the two bundled copies.
+The 4b90ec769235 compatibility fallback alone can expose an uninitialized
+result tail when a module omits this terminator. Retain original module APIs.
+
+--- a/ngx_devel_kit-0.3.4/src/ndk_rewrite.c
++++ b/ngx_devel_kit-0.3.4/src/ndk_rewrite.c
+@@ -17,6 +17,7 @@
+     ngx_http_script_compile_t              sc;
+     ngx_http_script_value_code_t          *val;
+     ngx_http_script_complex_value_code_t  *complex;
++    ngx_http_script_complex_value_end_code_t  *complex_end;
+ 
+     n = ngx_http_script_variables_count(value);
+ 
+@@ -63,6 +64,15 @@
+         return NGX_CONF_ERROR;
+     }
+ 
++    complex_end = ngx_http_script_add_code(lcf->codes,
++                              sizeof(ngx_http_script_complex_value_end_code_t),
++                              &complex);
++    if (complex_end == NULL) {
++        return NGX_CONF_ERROR;
++    }
++
++    complex_end->code = ngx_http_script_complex_value_end_code;
++
+     return NGX_CONF_OK;
+ }
+ 
+--- a/ngx_postgres-1.0/src/ngx_postgres_util.c
++++ b/ngx_postgres-1.0/src/ngx_postgres_util.c
+@@ -356,6 +356,7 @@
+     ngx_http_script_compile_t              sc;
+     ngx_http_script_value_code_t          *val;
+     ngx_http_script_complex_value_code_t  *complex;
++    ngx_http_script_complex_value_end_code_t  *complex_end;
+ 
+     n = ngx_http_script_variables_count(value);
+ 
+@@ -401,5 +402,14 @@
+         return NGX_CONF_ERROR;
+     }
+ 
++    complex_end = ngx_http_script_add_code(lcf->codes,
++                              sizeof(ngx_http_script_complex_value_end_code_t),
++                              &complex);
++    if (complex_end == NULL) {
++        return NGX_CONF_ERROR;
++    }
++
++    complex_end->code = ngx_http_script_complex_value_end_code;
++
+     return NGX_CONF_OK;
+ }

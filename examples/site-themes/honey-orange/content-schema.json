@@ -1,0 +1,181 @@
+[
+  {
+    "key": "hero_title",
+    "type": "text",
+    "label": {
+      "zh-CN": "首屏标题",
+      "en-US": "Hero title"
+    },
+    "required": true,
+    "max_length": 40
+  },
+  {
+    "key": "hero_subtitle",
+    "type": "textarea",
+    "label": {
+      "zh-CN": "首屏副标题",
+      "en-US": "Hero subtitle"
+    },
+    "max_length": 120
+  },
+  {
+    "key": "hero_cta",
+    "type": "text",
+    "label": {
+      "zh-CN": "首屏按钮文字",
+      "en-US": "Hero button"
+    },
+    "max_length": 12
+  },
+  {
+    "key": "features_title",
+    "type": "text",
+    "label": {
+      "zh-CN": "能力区标题",
+      "en-US": "Features heading"
+    },
+    "max_length": 20
+  },
+  {
+    "key": "features",
+    "type": "list",
+    "label": {
+      "zh-CN": "能力卡片",
+      "en-US": "Feature cards"
+    },
+    "max_items": 6,
+    "fields": [
+      {
+        "key": "icon",
+        "type": "image",
+        "label": {
+          "zh-CN": "图标",
+          "en-US": "Icon"
+        },
+        "help": {
+          "zh-CN": "建议 88×88 的 SVG 或 PNG"
+        }
+      },
+      {
+        "key": "title",
+        "type": "text",
+        "label": {
+          "zh-CN": "标题",
+          "en-US": "Title"
+        },
+        "max_length": 20
+      },
+      {
+        "key": "body",
+        "type": "textarea",
+        "label": {
+          "zh-CN": "说明",
+          "en-US": "Description"
+        },
+        "max_length": 120
+      }
+    ]
+  },
+  {
+    "key": "plans",
+    "type": "list",
+    "label": {
+      "zh-CN": "套餐",
+      "en-US": "Plans"
+    },
+    "max_items": 3,
+    "fields": [
+      {
+        "key": "name",
+        "type": "text",
+        "label": {
+          "zh-CN": "套餐名",
+          "en-US": "Name"
+        },
+        "max_length": 16
+      },
+      {
+        "key": "price",
+        "type": "text",
+        "label": {
+          "zh-CN": "价格",
+          "en-US": "Price"
+        },
+        "max_length": 12
+      },
+      {
+        "key": "unit",
+        "type": "text",
+        "label": {
+          "zh-CN": "单位",
+          "en-US": "Unit"
+        },
+        "max_length": 8
+      },
+      {
+        "key": "points",
+        "type": "textarea",
+        "label": {
+          "zh-CN": "卖点（每行一条）",
+          "en-US": "Points (one per line)"
+        },
+        "max_length": 400
+      },
+      {
+        "key": "featured",
+        "type": "text",
+        "label": {
+          "zh-CN": "推荐（填 yes）",
+          "en-US": "Featured (yes)"
+        },
+        "max_length": 3
+      },
+      {
+        "key": "action",
+        "type": "link",
+        "label": {
+          "zh-CN": "按钮",
+          "en-US": "Button"
+        }
+      }
+    ]
+  },
+  {
+    "key": "faq",
+    "type": "list",
+    "label": {
+      "zh-CN": "常见问题",
+      "en-US": "FAQ"
+    },
+    "max_items": 10,
+    "fields": [
+      {
+        "key": "question",
+        "type": "text",
+        "label": {
+          "zh-CN": "问题",
+          "en-US": "Question"
+        },
+        "max_length": 60
+      },
+      {
+        "key": "answer",
+        "type": "textarea",
+        "label": {
+          "zh-CN": "回答",
+          "en-US": "Answer"
+        },
+        "max_length": 400
+      }
+    ]
+  },
+  {
+    "key": "footer_text",
+    "type": "text",
+    "label": {
+      "zh-CN": "页脚文字",
+      "en-US": "Footer text"
+    },
+    "max_length": 80
+  }
+]

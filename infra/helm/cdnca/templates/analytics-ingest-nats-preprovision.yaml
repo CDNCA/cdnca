@@ -1,0 +1,405 @@
+{{- if .Values.analyticsNATSPreprovision.enabled }}
+{{- $component := "analytics-nats-preprovision" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  activeDeadlineSeconds: {{ .Values.analyticsNATSPreprovision.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.analyticsNATSPreprovision.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.analyticsNATSPreprovision.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        {{- include "cdnca.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      {{- include "cdnca.imagePullSecrets" . | trim | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: preprovision
+          image: {{ include "cdnca.image" .Values.analyticsNATSPreprovision.image | quote }}
+          imagePullPolicy: {{ .Values.analyticsNATSPreprovision.image.pullPolicy }}
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # CDNCA_ANALYTICS_PREPROVISION_SCRIPT_BEGIN
+              #!/bin/sh
+              set -eu
+
+              fail() {
+                printf 'analytics NATS preprovision failed: %s\n' "$1" >&2
+                exit 1
+              }
+
+              command -v nats >/dev/null 2>&1 || fail 'nats CLI is required'
+              command -v jq >/dev/null 2>&1 || fail 'jq is required'
+              command -v sha256sum >/dev/null 2>&1 || fail 'sha256sum is required'
+
+              : "${NATS_URL:?NATS_URL is required}"
+              : "${NATS_PREPROVISION_USERNAME:?NATS_PREPROVISION_USERNAME is required}"
+              : "${NATS_PREPROVISION_PASSWORD:?NATS_PREPROVISION_PASSWORD is required}"
+              case "$NATS_URL" in *://*@*) fail 'NATS_URL must not contain credentials' ;; esac
+
+              ingest_stream=${ANALYTICS_INGEST_STREAM:-ANALYTICS_INGEST_V1}
+              ingest_durable=${ANALYTICS_INGEST_DURABLE:-control_api_analytics_ingest_v1}
+              isolation_stream=${ANALYTICS_ISOLATION_STREAM:-ANALYTICS_ISOLATION_V1}
+              isolation_max_bytes=${ANALYTICS_ISOLATION_MAX_BYTES:-1073741824}
+              cc_coordination_stream=${CC_COORDINATION_STREAM:-SECURITY_CC_COORDINATION_V1}
+              cc_coordination_durable=${CC_COORDINATION_DURABLE:-control_api_cc_coordination_v1}
+              connections_stream=${ANALYTICS_CONNECTIONS_STREAM:-CONNECTIONS_INGEST_V1}
+              connections_durable=${ANALYTICS_CONNECTIONS_DURABLE:-control_api_connections}
+              connections_dead_stream=CONNECTIONS_DEAD_V1
+              l4_stream=L4_SESSIONS_INGEST_V1
+              l4_durable=control_api_l4_sessions_v1
+              replicas=${ANALYTICS_INGEST_REPLICAS:-1}
+              ingest_max_expires=${ANALYTICS_INGEST_MAX_REQUEST_EXPIRES_NANOS:-2000000000}
+              coordination_lease_ttl=${ANALYTICS_INGEST_COORDINATION_LEASE_TTL_NANOS:-40000000000}
+
+              valid_name() {
+                printf '%s' "$1" | grep -Eq '^[A-Za-z0-9_-]+$'
+              }
+              valid_name "$ingest_stream" || fail 'ANALYTICS_INGEST_STREAM is invalid'
+              valid_name "$ingest_durable" || fail 'ANALYTICS_INGEST_DURABLE is invalid'
+              valid_name "$isolation_stream" || fail 'ANALYTICS_ISOLATION_STREAM is invalid'
+              valid_name "$cc_coordination_stream" || fail 'CC_COORDINATION_STREAM is invalid'
+              valid_name "$cc_coordination_durable" || fail 'CC_COORDINATION_DURABLE is invalid'
+              valid_name "$connections_stream" || fail 'ANALYTICS_CONNECTIONS_STREAM is invalid'
+              valid_name "$connections_durable" || fail 'ANALYTICS_CONNECTIONS_DURABLE is invalid'
+              valid_name "$l4_stream" || fail 'L4_INGEST_STREAM is invalid'
+              valid_name "$l4_durable" || fail 'L4_INGEST_DURABLE is invalid'
+              case "$isolation_max_bytes" in ''|*[!0-9]*) fail 'ANALYTICS_ISOLATION_MAX_BYTES is invalid' ;; esac
+              case "$replicas" in 1|2|3|4|5) ;; *) fail 'ANALYTICS_INGEST_REPLICAS is invalid' ;; esac
+              case "$ingest_max_expires" in ''|*[!0-9]*) fail 'ANALYTICS_INGEST_MAX_REQUEST_EXPIRES_NANOS is invalid' ;; esac
+              case "$coordination_lease_ttl" in ''|*[!0-9]*) fail 'ANALYTICS_INGEST_COORDINATION_LEASE_TTL_NANOS is invalid' ;; esac
+              [ "$isolation_max_bytes" -ge 2162688 ] || fail 'ANALYTICS_ISOLATION_MAX_BYTES is invalid'
+
+              bucket_suffix=$(printf '%s\0%s' "$ingest_stream" "$ingest_durable" | sha256sum | cut -c 1-16)
+              state_bucket="AISTATE_$bucket_suffix"
+              lease_bucket="AILEASE_$bucket_suffix"
+              evidence_bucket="AIEVIDENCE_$bucket_suffix"
+
+              api_request() {
+                api_subject=$1
+                api_payload=$2
+                if ! api_response=$(nats --server "$NATS_URL" \
+                  --user "$NATS_PREPROVISION_USERNAME" --password "$NATS_PREPROVISION_PASSWORD" \
+                  request --raw --timeout 5s "$api_subject" "$api_payload" 2>/dev/null); then
+                  fail "request $api_subject"
+                fi
+                printf '%s' "$api_response" | jq -e 'type == "object"' >/dev/null 2>&1 || fail "invalid response from $api_subject"
+              }
+
+              stream_projection='{
+                name, description:(.description // ""), subjects:(.subjects // []), retention,
+                max_consumers, max_msgs, max_bytes, discard,
+                discard_new_per_subject:(.discard_new_per_subject // false), max_age,
+                max_msgs_per_subject, max_msg_size, storage, num_replicas,
+                no_ack:(.no_ack // false), template_owner:(.template_owner // ""), duplicate_window,
+                placement, mirror, sources,
+                sealed:(.sealed // false), deny_delete:(.deny_delete // false),
+                deny_purge:(.deny_purge // false), allow_rollup_hdrs:(.allow_rollup_hdrs // false),
+                compression, first_seq:(.first_seq // 0), subject_transform, republish,
+                allow_direct:(.allow_direct // false), mirror_direct:(.mirror_direct // false),
+                consumer_limits:((.consumer_limits // {}) | {
+                  inactive_threshold:(.inactive_threshold // 0), max_ack_pending:(.max_ack_pending // 0)
+                }),
+                allow_msg_ttl:(.allow_msg_ttl // false),
+                subject_delete_marker_ttl:(.subject_delete_marker_ttl // 0),
+                metadata:((.metadata // {"_nats.req.level":"0"}) | del(."_nats.ver", ."_nats.level"))
+              }'
+
+              stream_matches() {
+                match_resource=$1
+                stream_expected=$2
+                actual_projection=$(printf '%s' "$api_response" | jq -S -c ".config | $stream_projection") || fail "invalid stream response for $match_resource"
+                expected_projection=$(printf '%s' "$stream_expected" | jq -S -c "$stream_projection") || fail "invalid expected stream for $match_resource"
+                [ "$actual_projection" = "$expected_projection" ]
+              }
+
+              verify_stream() {
+                resource=$1
+                expected=$2
+                stream_matches "$resource" "$expected" || fail "stream $resource configuration mismatch"
+              }
+
+              migrate_legacy_lease_stream() {
+                migration_resource=$1
+                migration_expected=$2
+                [ "$migration_resource" = "KV_$lease_bucket" ] || return 1
+                [ "$coordination_lease_ttl" = 40000000000 ] || return 1
+                migration_legacy=$(printf '%s' "$migration_expected" | jq -c \
+                  '.max_age = 12000000000 | .duplicate_window = 12000000000') || fail "invalid legacy stream for $migration_resource"
+                stream_matches "$migration_resource" "$migration_legacy" || return 1
+                printf '%s' "$api_response" | jq -e \
+                  '.state.messages == 0 and (.state.consumer_count // 0) == 0' >/dev/null ||
+                  fail "legacy lease stream $migration_resource is not idle"
+                migration_before_config=$(printf '%s' "$api_response" | jq -S -c \
+                  '.config | del(.max_age, .duplicate_window)') || fail "invalid stream response for $migration_resource"
+                migration_before_state=$(printf '%s' "$api_response" | jq -S -c '.state') || fail "invalid stream state for $migration_resource"
+                migration_before_created=$(printf '%s' "$api_response" | jq -r '.created // empty')
+                [ -n "$migration_before_created" ] || fail "invalid stream creation time for $migration_resource"
+                migration_update=$(printf '%s' "$api_response" | jq -c --argjson ttl "$coordination_lease_ttl" \
+                  '.config | .max_age = $ttl | .duplicate_window = $ttl') || fail "invalid stream response for $migration_resource"
+                api_request "\$JS.API.STREAM.UPDATE.$migration_resource" "$migration_update"
+                migration_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                [ "$migration_error" = 0 ] || fail "migrate legacy stream $migration_resource"
+                api_request "\$JS.API.STREAM.INFO.$migration_resource" '{}'
+                migration_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                [ "$migration_error" = 0 ] || fail "inspect migrated stream $migration_resource"
+                migration_after_config=$(printf '%s' "$api_response" | jq -S -c \
+                  '.config | del(.max_age, .duplicate_window)') || fail "invalid migrated stream response for $migration_resource"
+                migration_after_state=$(printf '%s' "$api_response" | jq -S -c '.state') || fail "invalid migrated stream state for $migration_resource"
+                migration_after_created=$(printf '%s' "$api_response" | jq -r '.created // empty')
+                [ "$migration_before_config" = "$migration_after_config" ] || fail "legacy lease stream $migration_resource changed non-TTL configuration"
+                [ "$migration_before_state" = "$migration_after_state" ] || fail "legacy lease stream $migration_resource changed state"
+                [ "$migration_before_created" = "$migration_after_created" ] || fail "legacy lease stream $migration_resource was recreated"
+                stream_matches "$migration_resource" "$migration_expected" || fail "stream $migration_resource configuration mismatch after migration"
+                printf 'migrated legacy lease stream %s from 12s to 40s\n' "$migration_resource"
+              }
+
+              ensure_stream() {
+                resource=$1
+                expected=$2
+                api_request "\$JS.API.STREAM.INFO.$resource" '{}'
+                error_code=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                if [ "$error_code" = 10059 ]; then
+                  api_request "\$JS.API.STREAM.CREATE.$resource" "$expected"
+                  create_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                  [ "$create_error" = 0 ] || fail "create stream $resource"
+                elif [ "$error_code" != 0 ]; then
+                  fail "inspect stream $resource"
+                elif ! stream_matches "$resource" "$expected"; then
+                  migrate_legacy_lease_stream "$resource" "$expected" || fail "stream $resource configuration mismatch"
+                fi
+                verify_stream "$resource" "$expected"
+              }
+
+              ingest_config=$(jq -cn --arg name "$ingest_stream" --argjson replicas "$replicas" '{
+                name:$name, subjects:["cdnca.analytics.ingest.v1.*"], retention:"workqueue",
+                max_consumers:1, max_msgs:10000000, max_bytes:10737418240, discard:"new",
+                max_age:0, max_msgs_per_subject:-1, max_msg_size:1048576, storage:"file",
+                num_replicas:$replicas, duplicate_window:600000000000, compression:"none",
+                allow_direct:false, mirror_direct:false, allow_msg_ttl:false
+              }')
+              isolation_config=$(jq -cn --arg name "$isolation_stream" --argjson max_bytes "$isolation_max_bytes" --argjson replicas "$replicas" '{
+                name:$name, subjects:["cdnca.analytics.isolation.v1"], retention:"limits",
+                max_consumers:-1, max_msgs:10000000, max_bytes:$max_bytes, discard:"new",
+                max_age:2592000000000000, max_msgs_per_subject:-1, max_msg_size:2097152, storage:"file",
+                num_replicas:$replicas, duplicate_window:600000000000, compression:"none",
+                allow_direct:false, mirror_direct:false, allow_msg_ttl:false
+              }')
+              cc_coordination_config=$(jq -cn --arg name "$cc_coordination_stream" '{
+                name:$name, subjects:["cdnca.security.cccoord.v1.*.*"], retention:"workqueue",
+                max_consumers:1, max_msgs:2000000, max_bytes:2147483648, discard:"new",
+                max_age:86400000000000, max_msgs_per_subject:-1, max_msg_size:1048576, storage:"file",
+                num_replicas:1, duplicate_window:600000000000, compression:"none",
+                allow_direct:false, mirror_direct:false, allow_msg_ttl:false
+              }')
+              connections_config=$(jq -cn --arg name "$connections_stream" '{
+                name:$name, subjects:["cdnca.connections.v1.*.*"], retention:"workqueue",
+                max_consumers:1, max_msgs:1000000, max_bytes:2147483648, discard:"new",
+                discard_new_per_subject:true, max_age:0, max_msgs_per_subject:1, max_msg_size:65536, storage:"file",
+                num_replicas:1, duplicate_window:600000000000, compression:"none",
+                allow_direct:false, mirror_direct:false, allow_msg_ttl:false
+              }')
+              connections_dead_config=$(jq -cn --arg name "$connections_dead_stream" '{
+                name:$name, subjects:["cdnca.connections.dead.v1"], retention:"limits",
+                max_consumers:-1, max_msgs:1000000, max_bytes:1073741824, discard:"new",
+                max_age:2592000000000000, max_msgs_per_subject:-1, max_msg_size:8192, storage:"file",
+                num_replicas:1, duplicate_window:86400000000000, compression:"none",
+                allow_direct:false, mirror_direct:false, allow_msg_ttl:false
+              }')
+              l4_config=$(jq -cn --arg name "$l4_stream" --argjson replicas "$replicas" '{
+                name:$name, subjects:["cdnca.l4.sessions.v1.*.*.*"], retention:"workqueue",
+                max_consumers:1, max_msgs:5000000, max_bytes:5368709120, discard:"new",
+                max_age:2592000000000000, max_msgs_per_subject:-1, max_msg_size:1048576, storage:"file",
+                num_replicas:$replicas, duplicate_window:600000000000, compression:"none",
+                allow_direct:false, mirror_direct:false, allow_msg_ttl:false
+              }')
+              kv_config() {
+                jq -cn --arg bucket "$1" --argjson max_bytes "$2" --argjson max_age "$3" \
+                  --argjson max_msg_size "$4" --argjson duplicate_window "$5" --argjson replicas "$replicas" '{
+                    name:("KV_" + $bucket), subjects:[("$KV." + $bucket + ".>")], retention:"limits",
+                    max_consumers:-1, max_msgs:-1, max_bytes:$max_bytes, discard:"new", max_age:$max_age,
+                    max_msgs_per_subject:1, max_msg_size:$max_msg_size, storage:"file", num_replicas:$replicas,
+                    duplicate_window:$duplicate_window, deny_delete:true, allow_rollup_hdrs:true,
+                    compression:"none", allow_direct:true, mirror_direct:false, allow_msg_ttl:false
+                  }'
+              }
+              state_config=$(kv_config "$state_bucket" 4194304 0 1024 120000000000)
+              lease_config=$(kv_config "$lease_bucket" 4194304 "$coordination_lease_ttl" 1024 "$coordination_lease_ttl")
+              evidence_config=$(kv_config "$evidence_bucket" "$isolation_max_bytes" 0 2162688 120000000000)
+
+              ensure_stream "$ingest_stream" "$ingest_config"
+              ensure_stream "$isolation_stream" "$isolation_config"
+              ensure_stream "$cc_coordination_stream" "$cc_coordination_config"
+              ensure_stream "$connections_stream" "$connections_config"
+              ensure_stream "$connections_dead_stream" "$connections_dead_config"
+              ensure_stream "$l4_stream" "$l4_config"
+              ensure_stream "KV_$state_bucket" "$state_config"
+              ensure_stream "KV_$lease_bucket" "$lease_config"
+              ensure_stream "KV_$evidence_bucket" "$evidence_config"
+
+              consumer_config=$(jq -cn --arg stream "$ingest_stream" --arg durable "$ingest_durable" --argjson max_expires "$ingest_max_expires" '{
+                stream_name:$stream,
+                config:{durable_name:$durable, deliver_policy:"all", ack_policy:"explicit",
+                  ack_wait:120000000000, max_deliver:-1, filter_subject:"cdnca.analytics.ingest.v1.*",
+                  replay_policy:"instant", max_waiting:16, max_ack_pending:256, max_batch:32,
+                  max_expires:$max_expires, max_bytes:33554432, num_replicas:0, mem_storage:false}
+              }')
+              api_request "\$JS.API.CONSUMER.INFO.$ingest_stream.$ingest_durable" '{}'
+              consumer_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+              if [ "$consumer_error" = 10014 ]; then
+                api_request "\$JS.API.CONSUMER.CREATE.$ingest_stream.$ingest_durable" "$consumer_config"
+                create_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                [ "$create_error" = 0 ] || fail "create consumer $ingest_durable"
+              elif [ "$consumer_error" != 0 ]; then
+                fail "inspect consumer $ingest_durable"
+              fi
+              printf '%s' "$api_response" | jq -e --arg durable "$ingest_durable" --argjson max_expires "$ingest_max_expires" '
+                .config.durable_name == $durable and .config.deliver_policy == "all" and
+                .config.ack_policy == "explicit" and .config.ack_wait == 120000000000 and
+                .config.max_deliver == -1 and .config.filter_subject == "cdnca.analytics.ingest.v1.*" and
+                .config.replay_policy == "instant" and .config.max_waiting == 16 and
+                .config.max_ack_pending == 256 and .config.max_batch == 32 and
+                .config.max_expires == $max_expires and .config.max_bytes == 33554432 and
+                (.config.deliver_subject // "") == "" and (.config.deliver_group // "") == "" and
+                (.config.flow_control // false) == false and (.config.headers_only // false) == false and
+                (.config.num_replicas // 0) == 0 and (.config.mem_storage // false) == false
+              ' >/dev/null || fail "consumer $ingest_durable configuration mismatch"
+
+              cc_consumer_config=$(jq -cn --arg stream "$cc_coordination_stream" --arg durable "$cc_coordination_durable" '{
+                stream_name:$stream,
+                config:{durable_name:$durable, deliver_policy:"all", ack_policy:"explicit",
+                  ack_wait:120000000000, max_deliver:-1, filter_subject:"cdnca.security.cccoord.v1.*.*",
+                  replay_policy:"instant", max_waiting:16, max_ack_pending:256, max_batch:1,
+                  max_expires:5000000000, max_bytes:1048576, num_replicas:0, mem_storage:false}
+              }')
+              api_request "\$JS.API.CONSUMER.INFO.$cc_coordination_stream.$cc_coordination_durable" '{}'
+              cc_consumer_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+              if [ "$cc_consumer_error" = 10014 ]; then
+                api_request "\$JS.API.CONSUMER.CREATE.$cc_coordination_stream.$cc_coordination_durable" "$cc_consumer_config"
+                create_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                [ "$create_error" = 0 ] || fail "create consumer $cc_coordination_durable"
+              elif [ "$cc_consumer_error" != 0 ]; then
+                fail "inspect consumer $cc_coordination_durable"
+              fi
+              printf '%s' "$api_response" | jq -e --arg durable "$cc_coordination_durable" '
+                .config.durable_name == $durable and .config.deliver_policy == "all" and
+                .config.ack_policy == "explicit" and .config.ack_wait == 120000000000 and
+                .config.max_deliver == -1 and .config.filter_subject == "cdnca.security.cccoord.v1.*.*" and
+                .config.replay_policy == "instant" and .config.max_waiting == 16 and
+                .config.max_ack_pending == 256 and .config.max_batch == 1 and
+                .config.max_expires == 5000000000 and .config.max_bytes == 1048576 and
+                (.config.deliver_subject // "") == "" and (.config.deliver_group // "") == "" and
+                (.config.flow_control // false) == false and (.config.headers_only // false) == false and
+                (.config.num_replicas // 0) == 0 and (.config.mem_storage // false) == false
+              ' >/dev/null || fail "consumer $cc_coordination_durable configuration mismatch"
+
+              connections_consumer_config=$(jq -cn --arg stream "$connections_stream" --arg durable "$connections_durable" '{
+                stream_name:$stream,
+                config:{durable_name:$durable, deliver_policy:"all", ack_policy:"explicit",
+                  ack_wait:30000000000, max_deliver:8,
+                  backoff:[30000000000,60000000000,120000000000,300000000000,600000000000,900000000000,1800000000000,3600000000000],
+                  filter_subject:"cdnca.connections.v1.*.*", replay_policy:"instant",
+                  max_waiting:16, max_ack_pending:256, max_batch:1,
+                  max_expires:5000000000, max_bytes:65536, num_replicas:0, mem_storage:false}
+              }')
+              api_request "\$JS.API.CONSUMER.INFO.$connections_stream.$connections_durable" '{}'
+              connections_consumer_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+              if [ "$connections_consumer_error" = 10014 ]; then
+                api_request "\$JS.API.CONSUMER.CREATE.$connections_stream.$connections_durable" "$connections_consumer_config"
+                create_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                [ "$create_error" = 0 ] || fail "create consumer $connections_durable"
+              elif [ "$connections_consumer_error" != 0 ]; then
+                fail "inspect consumer $connections_durable"
+              fi
+              printf '%s' "$api_response" | jq -e --arg durable "$connections_durable" '
+                .config.durable_name == $durable and .config.deliver_policy == "all" and
+                .config.ack_policy == "explicit" and .config.ack_wait == 30000000000 and
+                .config.max_deliver == 8 and
+                .config.backoff == [30000000000,60000000000,120000000000,300000000000,600000000000,900000000000,1800000000000,3600000000000] and
+                .config.filter_subject == "cdnca.connections.v1.*.*" and .config.replay_policy == "instant" and
+                .config.max_waiting == 16 and .config.max_ack_pending == 256 and .config.max_batch == 1 and
+                .config.max_expires == 5000000000 and .config.max_bytes == 65536 and
+                (.config.deliver_subject // "") == "" and (.config.deliver_group // "") == "" and
+                (.config.flow_control // false) == false and (.config.headers_only // false) == false and
+                (.config.num_replicas // 0) == 0 and (.config.mem_storage // false) == false
+              ' >/dev/null || fail "consumer $connections_durable configuration mismatch"
+
+              l4_consumer_config=$(jq -cn --arg stream "$l4_stream" --arg durable "$l4_durable" '{
+                stream_name:$stream,
+                config:{durable_name:$durable, deliver_policy:"all", ack_policy:"explicit",
+                  ack_wait:5000000000, max_deliver:-1, filter_subject:"cdnca.l4.sessions.v1.*.*.*",
+                  replay_policy:"instant", max_waiting:16, max_ack_pending:1000, max_batch:32,
+                  max_expires:5000000000, max_bytes:33554432, num_replicas:0, mem_storage:false}
+              }')
+              api_request "\$JS.API.CONSUMER.INFO.$l4_stream.$l4_durable" '{}'
+              l4_consumer_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+              if [ "$l4_consumer_error" = 10014 ]; then
+                api_request "\$JS.API.CONSUMER.CREATE.$l4_stream.$l4_durable" "$l4_consumer_config"
+                create_error=$(printf '%s' "$api_response" | jq -r '.error.err_code // 0')
+                [ "$create_error" = 0 ] || fail "create consumer $l4_durable"
+              elif [ "$l4_consumer_error" != 0 ]; then
+                fail "inspect consumer $l4_durable"
+              fi
+              printf '%s' "$api_response" | jq -e --arg durable "$l4_durable" '
+                .config.durable_name == $durable and .config.deliver_policy == "all" and
+                .config.ack_policy == "explicit" and .config.ack_wait == 5000000000 and
+                .config.max_deliver == -1 and .config.filter_subject == "cdnca.l4.sessions.v1.*.*.*" and
+                .config.replay_policy == "instant" and .config.max_waiting == 16 and
+                .config.max_ack_pending == 1000 and .config.max_batch == 32 and
+                .config.max_expires == 5000000000 and .config.max_bytes == 33554432 and
+                (.config.deliver_subject // "") == "" and (.config.deliver_group // "") == "" and
+                (.config.flow_control // false) == false and (.config.headers_only // false) == false and
+                (.config.num_replicas // 0) == 0 and (.config.mem_storage // false) == false
+              ' >/dev/null || fail "consumer $l4_durable configuration mismatch"
+
+              printf 'analytics NATS resources verified\n'
+              # CDNCA_ANALYTICS_PREPROVISION_SCRIPT_END
+          env:
+            - name: NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.analyticsNATSPreprovision.adminSecret.existingSecret | quote }}
+                  key: {{ .Values.analyticsNATSPreprovision.adminSecret.keys.url | quote }}
+            - name: NATS_PREPROVISION_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.analyticsNATSPreprovision.adminSecret.existingSecret | quote }}
+                  key: {{ .Values.analyticsNATSPreprovision.adminSecret.keys.username | quote }}
+            - name: NATS_PREPROVISION_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.analyticsNATSPreprovision.adminSecret.existingSecret | quote }}
+                  key: {{ .Values.analyticsNATSPreprovision.adminSecret.keys.password | quote }}
+            - name: ANALYTICS_INGEST_STREAM
+              value: {{ .Values.controlApi.analyticsIngest.stream | quote }}
+            - name: ANALYTICS_INGEST_DURABLE
+              value: {{ .Values.controlApi.analyticsIngest.durable | quote }}
+            - name: ANALYTICS_ISOLATION_STREAM
+              value: {{ .Values.controlApi.analyticsIngest.isolationStream | quote }}
+            - name: ANALYTICS_ISOLATION_MAX_BYTES
+              value: {{ printf "%d" (int64 .Values.controlApi.analyticsIngest.isolationMaxBytes) | quote }}
+            - name: CC_COORDINATION_STREAM
+              value: {{ .Values.controlApi.analyticsIngest.ccCoordinationStream | quote }}
+            - name: CC_COORDINATION_DURABLE
+              value: {{ .Values.controlApi.analyticsIngest.ccCoordinationDurable | quote }}
+            - name: ANALYTICS_INGEST_REPLICAS
+              value: {{ printf "%d" (int .Values.controlApi.analyticsIngest.replicas) | quote }}
+          resources:
+            {{- toYaml .Values.analyticsNATSPreprovision.resources | nindent 12 }}
+{{- end }}

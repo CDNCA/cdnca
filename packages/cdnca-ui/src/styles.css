@@ -1,0 +1,1474 @@
+/*
+ * Shared base styles for every cdnca front end. Import once at the root,
+ * before the app's own stylesheet; app styles keep only their own layout.
+ *
+ * Variables: --cdnca-<token> defaults equal libs/themepack/tokens.go
+ * (checked by libs/themepack/shared_ui_test.go). An active theme package
+ * (/v1/theme/theme.<sha>.css, web only) sets the same names on
+ * :root[data-cdnca-theme], which wins over :root.
+ */
+:root {
+  --cdnca-color-primary: #2d8cf0;
+  --cdnca-color-link: #2d8cf0;
+  --cdnca-color-link-hover: #57a3f3;
+  --cdnca-color-text: #515a6e;
+  --cdnca-color-text-secondary: #808695;
+  --cdnca-color-border: #dcdee2;
+  --cdnca-color-bg-layout: #f5f7f9;
+  --cdnca-color-bg-container: #ffffff;
+  --cdnca-border-radius: 4px;
+  --cdnca-control-height: 32px;
+  --cdnca-font-size: 14px;
+  --cdnca-line-height: 1.5;
+  --cdnca-font-family: "Helvetica Neue", Helvetica, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "微软雅黑", Arial, sans-serif;
+  --cdnca-color-border-secondary: #e8eaec;
+  --cdnca-color-bg-page: #eceef2;
+  --cdnca-color-bg-login: #f7f7f7;
+  --cdnca-color-sidebar-dark: #001529;
+  --cdnca-sidebar-width: 256px;
+
+  --cdnca-color-title: #17233d;
+  --cdnca-color-success: #19be6b;
+  --cdnca-color-warning: #ff9900;
+  --cdnca-color-error: #ed4014;
+  --cdnca-color-info-bg: #f0faff;
+  --cdnca-color-success-bg: #edfff3;
+  --cdnca-color-warning-bg: #fff9e6;
+  --cdnca-color-error-bg: #ffefe6;
+  --cdnca-color-table-header: #f8f8f9;
+  --cdnca-color-table-header-text: #515a6e;
+  --cdnca-color-table-row-hover: #ebf7ff;
+  --cdnca-color-focus-ring: #2d8cf0;
+  --cdnca-color-bg-panel: #fbfdff;
+  --cdnca-color-border-panel: #edf1f7;
+  --cdnca-color-border-divider: #f0f1f2;
+  --cdnca-shadow-card: 0 1px 3px rgb(15 23 42 / 4%), 0 12px 28px rgb(15 23 42 / 6%);
+  --cdnca-shadow-popup: 0 1px 6px rgb(0 0 0 / 20%);
+  --cdnca-button-shadow: none;
+  --cdnca-button-font-weight: 400;
+  --cdnca-chart-color1: #2d8cf0;
+  --cdnca-chart-color2: #19be6b;
+  --cdnca-chart-color3: #ff9900;
+  --cdnca-chart-color4: #ed4014;
+  --cdnca-chart-color5: #9a66e4;
+  --cdnca-color-bg-dark: #0f172a;
+  --cdnca-color-chrome-dark: #111827;
+  --cdnca-color-surface-dark: #172033;
+  --cdnca-color-surface-muted-dark: #111c2e;
+  --cdnca-color-border-dark: #273449;
+  --cdnca-color-border-soft-dark: #1f2a3d;
+  --cdnca-color-text-dark: #e5e7eb;
+  --cdnca-color-text-secondary-dark: #98a2b3;
+  --cdnca-color-primary-dark: #60a5fa;
+  --cdnca-chart-color6: #2db7f5;
+  --cdnca-chart-color7: #808695;
+  --cdnca-chart-color8: #e46cbb;
+  --cdnca-chart-color9: #5cadff;
+  --cdnca-chart-color10: #f2c037;
+  --cdnca-chart-traffic-in: #5b8ff9;
+  --cdnca-chart-traffic-out: #61d9a5;
+  --cdnca-chart-bar1: #69cdff;
+  --cdnca-chart-bar2: #3eb3f7;
+  --cdnca-chart-bar3: #1495eb;
+  --cdnca-chart-area: #bbdefb;
+  --cdnca-color-status-pending: #faad14;
+  --cdnca-color-border-light: #f0f0f0;
+  --cdnca-color-bg-subtle: #f8fbff;
+  --cdnca-color-bg-muted: #fafbfc;
+  --cdnca-color-bg-slate: #f8fafc;
+  --cdnca-color-bg-soft: #f5f7fa;
+  --cdnca-color-bg-field: #f7f9fc;
+  --cdnca-color-bg-hover: #f3f3f3;
+  --cdnca-color-primary-bg: #eaf4ff;
+  --cdnca-color-primary-bg-soft: #f0f7ff;
+  --cdnca-color-border-muted: #dfe4ec;
+  --cdnca-color-border-input: #d9dfe8;
+  --cdnca-color-border-card: #e5eaf3;
+  --cdnca-color-text-emphasis: #27364e;
+  --cdnca-color-text-subtle: #596273;
+  --cdnca-color-text-hint: #667085;
+  --cdnca-color-text-tertiary: #a2a8b3;
+  --cdnca-color-text-faint: #98a2b3;
+  --cdnca-color-text-disabled: #999999;
+  --cdnca-color-text-inverse: #ffffff;
+  --cdnca-color-blue1: #fcfdff;
+  --cdnca-color-blue2: #fbfcfe;
+  --cdnca-color-blue3: #f8faff;
+  --cdnca-color-blue4: #f7fbff;
+  --cdnca-color-blue5: #f7faff;
+  --cdnca-color-blue6: #f8fafd;
+  --cdnca-color-blue7: #f5faff;
+  --cdnca-color-blue8: #f4f9ff;
+  --cdnca-color-blue9: #f3f7ff;
+  --cdnca-color-blue10: #f1f8ff;
+  --cdnca-color-blue11: #eef6ff;
+  --cdnca-color-blue12: #eef7ff;
+  --cdnca-color-blue13: #edf5ff;
+  --cdnca-color-blue14: #eaf3ff;
+  --cdnca-color-blue15: #eef3fa;
+  --cdnca-color-blue16: #eaf3fe;
+  --cdnca-color-blue17: #eaf1fb;
+  --cdnca-color-blue18: #e6f2ff;
+  --cdnca-color-blue19: #e1f0fe;
+  --cdnca-color-blue20: #dbeafe;
+  --cdnca-color-blue21: #d9eaff;
+  --cdnca-color-blue22: #d8eaff;
+  --cdnca-color-blue23: #dfe8f6;
+  --cdnca-color-blue24: #d5eaff;
+  --cdnca-color-blue25: #d9e2ef;
+  --cdnca-color-blue26: #d9e0eb;
+  --cdnca-color-blue27: #d8dee9;
+  --cdnca-color-blue28: #badcff;
+  --cdnca-color-blue29: #b8d7ff;
+  --cdnca-color-blue30: #b8cff2;
+  --cdnca-color-blue31: #c7d1df;
+  --cdnca-color-blue32: #c3cfdf;
+  --cdnca-color-blue33: #91caff;
+  --cdnca-color-blue34: #8fc3ff;
+  --cdnca-color-blue35: #69a8ff;
+  --cdnca-color-blue36: #6cadde;
+  --cdnca-color-blue37: #4f8ee8;
+  --cdnca-color-blue38: #4e8de7;
+  --cdnca-color-blue39: #4b8ce8;
+  --cdnca-color-blue40: #2f7df6;
+  --cdnca-color-blue41: #2f8cf4;
+  --cdnca-color-blue42: #1677ff;
+  --cdnca-color-blue43: #667fa8;
+  --cdnca-color-blue44: #176dd1;
+  --cdnca-color-blue45: #1f3858;
+  --cdnca-color-blue46: #23304a;
+  --cdnca-color-blue47: #1f2d3d;
+  --cdnca-color-blue48: #0f234b;
+  --cdnca-color-blue49: #17233c;
+  --cdnca-color-blue50: #0f172a;
+  --cdnca-color-blue51: #101828;
+  --cdnca-color-neutral1: #f8f9fc;
+  --cdnca-color-neutral2: #fafafa;
+  --cdnca-color-neutral3: #f6f8fb;
+  --cdnca-color-neutral4: #f7f8fa;
+  --cdnca-color-neutral5: #f6f8fa;
+  --cdnca-color-neutral6: #f6f7f9;
+  --cdnca-color-neutral7: #f3f4f6;
+  --cdnca-color-neutral8: #f2f4f7;
+  --cdnca-color-neutral9: #f4f4f4;
+  --cdnca-color-neutral10: #f1f3f6;
+  --cdnca-color-neutral11: #f2f3f5;
+  --cdnca-color-neutral12: #f1f3f5;
+  --cdnca-color-neutral13: #edf2f8;
+  --cdnca-color-neutral14: #eef2f7;
+  --cdnca-color-neutral15: #f0f2f5;
+  --cdnca-color-neutral16: #eef1f5;
+  --cdnca-color-neutral17: #edf1f6;
+  --cdnca-color-neutral18: #eef0f5;
+  --cdnca-color-neutral19: #eef0f4;
+  --cdnca-color-neutral20: #e8eef7;
+  --cdnca-color-neutral21: #e9edf5;
+  --cdnca-color-neutral22: #e8eef6;
+  --cdnca-color-neutral23: #e8edf5;
+  --cdnca-color-neutral24: #e6edf6;
+  --cdnca-color-neutral25: #eeeeee;
+  --cdnca-color-neutral26: #e5ebf3;
+  --cdnca-color-neutral27: #e8ebf0;
+  --cdnca-color-neutral28: #e4e9f2;
+  --cdnca-color-neutral29: #e3e8f0;
+  --cdnca-color-neutral30: #e1e6ef;
+  --cdnca-color-neutral31: #dce7f3;
+  --cdnca-color-neutral32: #e2e5ed;
+  --cdnca-color-neutral33: #dfe5ee;
+  --cdnca-color-neutral34: #dfe3ea;
+  --cdnca-color-neutral35: #dcdfe6;
+  --cdnca-color-neutral36: #d9dee7;
+  --cdnca-color-neutral37: #d9dde5;
+  --cdnca-color-neutral38: #d7dce5;
+  --cdnca-color-neutral39: #d9d9d9;
+  --cdnca-color-neutral40: #d0d5dd;
+  --cdnca-color-neutral41: #cccccc;
+  --cdnca-color-neutral42: #c5c8ce;
+  --cdnca-color-neutral43: #bfc4ce;
+  --cdnca-color-neutral44: #b9c0cc;
+  --cdnca-color-neutral45: #b8bfca;
+  --cdnca-color-neutral46: #b8bec8;
+  --cdnca-color-neutral47: #b9bdc4;
+  --cdnca-color-neutral48: #aab3c2;
+  --cdnca-color-neutral49: #a8b2c2;
+  --cdnca-color-neutral50: #a7adb8;
+  --cdnca-color-neutral51: #a0a8b6;
+  --cdnca-color-neutral52: #a0a5b1;
+  --cdnca-color-neutral53: #9aa4b5;
+  --cdnca-color-neutral54: #9aa3b2;
+  --cdnca-color-neutral55: #9aa1ad;
+  --cdnca-color-neutral56: #9b9ea8;
+  --cdnca-color-neutral57: #9399a5;
+  --cdnca-color-neutral58: #8c96a8;
+  --cdnca-color-neutral59: #8c93a3;
+  --cdnca-color-neutral60: #8b93a1;
+  --cdnca-color-neutral61: #909399;
+  --cdnca-color-neutral62: #8c8c8c;
+  --cdnca-color-neutral63: #7c8799;
+  --cdnca-color-neutral64: #6e7685;
+  --cdnca-color-neutral65: #6b7280;
+  --cdnca-color-neutral66: #657180;
+  --cdnca-color-neutral67: #5c667a;
+  --cdnca-color-neutral68: #5b667a;
+  --cdnca-color-neutral69: #5c6577;
+  --cdnca-color-neutral70: #536178;
+  --cdnca-color-neutral71: #526077;
+  --cdnca-color-neutral72: #606266;
+  --cdnca-color-neutral73: #475467;
+  --cdnca-color-neutral74: #3b4352;
+  --cdnca-color-neutral75: #344054;
+  --cdnca-color-neutral76: #373737;
+  --cdnca-color-neutral77: #333333;
+  --cdnca-color-neutral78: #303133;
+  --cdnca-color-neutral79: #1d2329;
+  --cdnca-color-neutral80: #000000;
+  --cdnca-color-green1: #f0fff6;
+  --cdnca-color-green2: #edfff7;
+  --cdnca-color-green3: #edfff5;
+  --cdnca-color-green4: #effbf5;
+  --cdnca-color-green5: #effaf5;
+  --cdnca-color-green6: #edfbf3;
+  --cdnca-color-green7: #fffbe6;
+  --cdnca-color-green8: #e8f9f0;
+  --cdnca-color-green9: #cdeed8;
+  --cdnca-color-green10: #c8f0dc;
+  --cdnca-color-green11: #c8efd9;
+  --cdnca-color-green12: #b8efda;
+  --cdnca-color-green13: #b9ebd2;
+  --cdnca-color-green14: #27b676;
+  --cdnca-color-green15: #389e0d;
+  --cdnca-color-green16: #00a870;
+  --cdnca-color-green17: #0f8f4d;
+  --cdnca-color-green18: #237804;
+  --cdnca-color-orange1: #fff7e6;
+  --cdnca-color-orange2: #fff8e6;
+  --cdnca-color-orange3: #ffe0a8;
+  --cdnca-color-orange4: #ffd591;
+  --cdnca-color-orange5: #ffad33;
+  --cdnca-color-orange6: #f3a337;
+  --cdnca-color-orange7: #fa541c;
+  --cdnca-color-orange8: #c98b2e;
+  --cdnca-color-orange9: #d46b08;
+  --cdnca-color-orange10: #ad6800;
+  --cdnca-color-orange11: #7a4d05;
+  --cdnca-color-red1: #fff5f2;
+  --cdnca-color-red2: #fff3f0;
+  --cdnca-color-red3: #fff1f0;
+  --cdnca-color-red4: #ffccc7;
+  --cdnca-color-red5: #ffc7bb;
+  --cdnca-color-red6: #ff654f;
+  --cdnca-color-red7: #df4b2e;
+  --cdnca-color-red8: #ee461c;
+  --cdnca-color-purple1: #c7254e;
+  --cdnca-color-scale1-dark: #d8dee9;
+  --cdnca-color-scale2-dark: #d1d5db;
+  --cdnca-color-scale3-dark: #374151;
+  --cdnca-color-scale4-dark: #353b4a;
+  --cdnca-color-scale5-dark: #22324c;
+  --cdnca-color-scale6-dark: #1c2940;
+  --cdnca-color-scale7-dark: #242834;
+  --cdnca-color-scale8-dark: #202731;
+  --cdnca-color-scale9-dark: #000000;
+
+  /* Fixed colors (not theme tokens). */
+  --cdnca-color-placeholder: #c5c8ce;
+  --cdnca-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-layout);
+  font-family: var(--cdnca-font-family);
+  font-size: var(--cdnca-font-size);
+  line-height: var(--cdnca-line-height);
+  font-synthesis: none;
+  text-rendering: auto;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--cdnca-color-bg-layout);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  letter-spacing: 0;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--cdnca-font-family-mono);
+}
+
+:focus-visible {
+  outline-color: var(--cdnca-color-primary);
+}
+
+/* Buttons: flat (shadows off in the theme), lucide icons centred. */
+.ant-btn > svg {
+  flex: none;
+}
+
+/* Form items: label color and spacing match across ends. */
+.ant-form-item .ant-form-item-label > label {
+  color: var(--cdnca-color-text);
+}
+
+.ant-form-item .ant-form-item-extra,
+.ant-form-item .ant-form-item-explain:not(.ant-form-item-explain-error) {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+/* Inputs, selects, pickers: same placeholder and disabled look. */
+.ant-input::placeholder,
+.ant-input-number-input::placeholder,
+.ant-picker-input > input::placeholder {
+  color: var(--cdnca-color-placeholder);
+}
+
+.ant-select-selection-placeholder {
+  color: var(--cdnca-color-placeholder);
+}
+
+.ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+}
+
+/* Tables: bold header, aligned cells. */
+.ant-table-wrapper .ant-table-thead > tr > th {
+  font-weight: 600;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th::before {
+  display: none;
+}
+
+/* Feedback: message / notification / modal / empty read the same. */
+.ant-message .ant-message-notice-content {
+  max-width: min(560px, calc(100vw - 32px));
+  color: var(--cdnca-color-text);
+  text-align: start;
+}
+
+.ant-notification .ant-notification-notice .ant-notification-notice-message {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+.ant-notification .ant-notification-notice .ant-notification-notice-description {
+  color: var(--cdnca-color-text);
+}
+
+.ant-modal .ant-modal-title {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+/* Error / warning dialogs (feedback.tsx, useFeedback), laid out like the
+   management console's iView Modal.confirm: 28px icon on the
+   title line, 16px / 500 title, 14px body indented 40px under the title, one
+   right-aligned button row 20px below. */
+.cdnca-feedback .cdnca-feedback-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.cdnca-feedback .cdnca-feedback-icon { flex: none; width: 28px; height: 28px; }
+.cdnca-feedback .cdnca-feedback-icon-error { color: var(--cdnca-color-error); }
+.cdnca-feedback .cdnca-feedback-icon-warning { color: var(--cdnca-color-warning); }
+
+.cdnca-feedback .cdnca-feedback-detail,
+.cdnca-feedback .cdnca-feedback-hint,
+.cdnca-feedback .cdnca-feedback-request-id {
+  padding-inline-start: 40px;
+  overflow-wrap: anywhere;
+}
+
+.cdnca-feedback .cdnca-feedback-detail {
+  color: var(--cdnca-color-text);
+  font-size: var(--cdnca-font-size);
+  line-height: var(--cdnca-line-height);
+  white-space: pre-line;
+}
+
+.cdnca-feedback .cdnca-feedback-hint { margin-top: 8px; color: var(--cdnca-color-text-secondary); font-size: 12px; }
+.cdnca-feedback .cdnca-feedback-request-id { margin-top: 8px; font-size: 12px; line-height: 18px; }
+.cdnca-feedback .cdnca-feedback-request-id .ant-typography { color: var(--cdnca-color-text-secondary); font-size: 12px; }
+
+.cdnca-feedback .ant-modal-footer { margin-top: 20px; }
+.cdnca-feedback .cdnca-feedback-footer,
+.cdnca-feedback .cdnca-feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.cdnca-feedback .cdnca-feedback-footer .ant-btn { margin-inline-start: 0; }
+/* Page buttons passed as `action` are often size="small" (they used to sit in
+   the body); in the button row they match 「知道了」. */
+.cdnca-feedback .cdnca-feedback-actions .ant-btn-sm {
+  height: var(--ant-control-height, 32px);
+  padding: 4px 15px;
+  font-size: var(--cdnca-font-size);
+  border-radius: var(--ant-border-radius, 6px);
+}
+.cdnca-feedback .cdnca-feedback-actions .ant-space { gap: 8px !important; }
+
+/* Pages' own confirmations (modal.confirm and the rest of antd's static
+   dialogs) use the same sizes, so every dialog in the five ends reads alike. */
+.ant-modal-confirm .ant-modal-confirm-body > .anticon { font-size: 28px; margin-inline-end: 12px; margin-top: 0; }
+.ant-modal-confirm .ant-modal-confirm-body { align-items: flex-start; }
+.ant-modal-confirm .ant-modal-confirm-title {
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 28px;
+}
+.ant-modal-confirm .ant-modal-confirm-content {
+  color: var(--cdnca-color-text);
+  font-size: var(--cdnca-font-size);
+  line-height: var(--cdnca-line-height);
+}
+.ant-modal-confirm .ant-modal-confirm-btns { margin-top: 20px; }
+.ant-modal-confirm-error .ant-modal-confirm-body > .anticon { color: var(--cdnca-color-error); }
+.ant-modal-confirm-warning .ant-modal-confirm-body > .anticon,
+.ant-modal-confirm-confirm .ant-modal-confirm-body > .anticon { color: var(--cdnca-color-warning); }
+
+/* Result-unknown recovery bar (OutcomeUnknown): one compact line beside the locked block. */
+.ant-alert.cdnca-outcome-bar { padding: 4px 8px 4px 12px; align-items: center; margin-block: 8px; flex-wrap: wrap; row-gap: 4px; }
+.ant-alert.cdnca-outcome-bar .ant-alert-message { font-size: 13px; }
+/* 窄屏（390 宽）下按钮组放不下时整行换到文字下方，文字保有一行宽度，不逐字竖排（p0c 遗留）。 */
+.ant-alert.cdnca-outcome-bar .ant-alert-content { flex: 1 1 12em; min-width: 12em; }
+.ant-alert.cdnca-outcome-bar .ant-alert-action { margin-inline-start: auto; max-width: 100%; }
+
+/* 弹窗/表单里的说明型提示框：与表单说明文字同字号（12px / 18px）。antd 带 description 时
+   标题 16px、图标 24px、内边距 20px 24px，放在小弹窗里比字段本身还显眼。 */
+.ant-alert.cdnca-alert-compact { padding: 8px 12px; align-items: flex-start; }
+.ant-alert.cdnca-alert-compact .ant-alert-icon { margin-inline-end: 8px; font-size: 14px; line-height: 18px; }
+.ant-alert.cdnca-alert-compact .ant-alert-message { font-size: 12px; font-weight: 400; line-height: 18px; margin-bottom: 0; }
+.ant-alert.cdnca-alert-compact .ant-alert-description { font-size: 12px; line-height: 18px; margin-top: 2px; }
+
+.ant-empty .ant-empty-description {
+  color: var(--cdnca-color-text-secondary);
+}
+
+/*
+ * Page building blocks (components.tsx, usage in ../COMPONENTS.md). Only
+ * .cdnca-* classes, so no existing screen changes until a page adopts them.
+ * PageSection is the .identity-page card of apps/web.
+ */
+.cdnca-page-header {
+  margin-bottom: 16px;
+}
+
+.cdnca-page-header-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.cdnca-page-title {
+  min-width: 0;
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.cdnca-page-header-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.cdnca-page-description {
+  margin: 4px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.cdnca-page-section {
+  min-width: 0;
+  padding: 16px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--cdnca-border-radius);
+  box-shadow: 0 1px 6px color-mix(in srgb, var(--cdnca-color-neutral80) 14%, transparent);
+}
+
+.cdnca-page-section + .cdnca-page-section {
+  margin-top: 16px;
+}
+
+.cdnca-page-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cdnca-page-section-title {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.cdnca-page-section-extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cdnca-table-toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.cdnca-table-toolbar-actions,
+.cdnca-table-toolbar-filters {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cdnca-table-toolbar-filters {
+  margin-left: auto;
+}
+
+.cdnca-table-toolbar-filters > .ant-input-affix-wrapper,
+.cdnca-table-toolbar-filters > .ant-input-search,
+.cdnca-table-toolbar-filters > .ant-input {
+  width: 240px;
+}
+
+.cdnca-table-toolbar-filters > .ant-select {
+  width: 150px;
+}
+
+.cdnca-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cdnca-cursor-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cdnca-cursor-pager-total {
+  margin-right: 4px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.cdnca-form-grid {
+  display: grid;
+  gap: 0 16px;
+  align-items: start;
+}
+
+.cdnca-form-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cdnca-form-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cdnca-form-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cdnca-form-grid-full { grid-column: 1 / -1; }
+
+@media (max-width: 767px) {
+  .cdnca-page-section {
+    padding: 12px;
+  }
+
+  .cdnca-table-toolbar-filters {
+    margin-left: 0;
+  }
+
+  .cdnca-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * The same blocks under the tech look (apps/web official.tech theme sets
+ * html[data-cdnca-look="tech"]; --tech-radius-lg comes from its tech-look.css).
+ */
+html[data-cdnca-look="tech"] .cdnca-page-title {
+  letter-spacing: -0.01em;
+}
+
+html[data-cdnca-look="tech"] .cdnca-page-section {
+  border-radius: var(--tech-radius-lg, 10px);
+  box-shadow: var(--cdnca-shadow-card);
+}
+
+html[data-cdnca-look="tech"] .cdnca-page-section-head {
+  margin: -16px -16px 16px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+html[data-cdnca-look="tech"] .cdnca-table-toolbar {
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--cdnca-color-border-secondary) 70%, transparent);
+}
+
+html[data-cdnca-look="tech"] .cdnca-cursor-pager-total {
+  font-size: 13px;
+}
+
+html[data-cdnca-look="tech"] .cdnca-status-tag {
+  font-weight: 500;
+}
+
+html[data-cdnca-look="tech"] .cdnca-modal-footer .ant-btn {
+  min-width: 72px;
+}
+
+@media (max-width: 767px) {
+  html[data-cdnca-look="tech"] .cdnca-page-section-head {
+    margin: -12px -12px 12px;
+    padding: 10px 12px;
+  }
+}
+
+/*
+ * Dialog scroll areas (Modal / Drawer bodies and .cdnca-dialog-scroll boxes
+ * inside them): no visible scrollbar, still scrolls by wheel, touchpad, touch
+ * and keyboard. Page scroll and table scrollers keep their bars.
+ * Hint: while there is more below, the bottom 24px fades out (alpha mask, so it
+ * works on any theme colour); scroll-padding keeps a Tab-focused control clear
+ * of the fade. The timeline is inactive when the box does not scroll, so boxes
+ * that fit get no mask. Guard: dialog-scroll.guard.test.ts.
+ */
+.ant-modal-body,
+.ant-drawer-body,
+.cdnca-dialog-scroll {
+  scrollbar-width: none;
+  scroll-padding-block-end: 24px;
+}
+
+.ant-modal-body::-webkit-scrollbar,
+.ant-drawer-body::-webkit-scrollbar,
+.cdnca-dialog-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@property --cdnca-scroll-fade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* The mask is set only by the keyframes: a box that does not scroll has an
+   inactive timeline, so it gets no mask and nothing it paints outside its box
+   (popups mounted inside the body) is clipped. Only the gradient's alpha
+   matters; neutral80 is opaque. */
+@keyframes cdnca-scroll-fade {
+  from {
+    --cdnca-scroll-fade: 24px;
+    mask-image: linear-gradient(to bottom, var(--cdnca-color-neutral80) calc(100% - var(--cdnca-scroll-fade)), transparent);
+  }
+  to {
+    --cdnca-scroll-fade: 0px;
+    mask-image: linear-gradient(to bottom, var(--cdnca-color-neutral80) calc(100% - var(--cdnca-scroll-fade)), transparent);
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  .ant-modal-body,
+  .ant-drawer-body,
+  .cdnca-dialog-scroll {
+    animation: cdnca-scroll-fade linear both;
+    animation-timeline: scroll(self block);
+    animation-range: calc(100% - 48px) 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* In-place notice next to its trigger (formErrors.tsx InlineNotice): one
+   compact line in the field-error colours, icon + text, optional ×. It appears
+   with a short fade (no movement), so the layout does not jump twice. */
+.cdnca-inline-notice {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 6px;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--cdnca-color-error);
+  border-color: color-mix(in srgb, var(--cdnca-color-error) 35%, transparent);
+  border-radius: 4px;
+  background: var(--cdnca-color-error-bg);
+  color: var(--cdnca-color-title);
+  font-size: var(--cdnca-font-size);
+  line-height: 22px;
+  overflow-wrap: anywhere;
+  animation: cdnca-inline-notice-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.cdnca-inline-notice-warning {
+  border-color: var(--cdnca-color-warning);
+  border-color: color-mix(in srgb, var(--cdnca-color-warning) 40%, transparent);
+  background: var(--cdnca-color-warning-bg);
+}
+.cdnca-inline-notice-icon { flex: none; margin-top: 4px; color: var(--cdnca-color-error); }
+.cdnca-inline-notice-warning .cdnca-inline-notice-icon { color: var(--cdnca-color-warning); }
+.cdnca-inline-notice-text { flex: 1 1 auto; min-width: 0; padding-inline-end: 4px; }
+.cdnca-inline-notice-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--cdnca-color-text-secondary);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.cdnca-inline-notice-close:hover { color: var(--cdnca-color-title); background: rgb(0 0 0 / 6%); }
+.cdnca-inline-notice-close:focus-visible { outline: 2px solid var(--cdnca-color-focus-ring); outline-offset: 1px; }
+@keyframes cdnca-inline-notice-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* New-password strength popover (PasswordStrength.tsx). Colours are the shared
+   status variables; the level is also written out (弱/中/强), not colour only. */
+.cdnca-password-strength-popover .ant-popover-inner {
+  padding: 10px 12px;
+}
+
+.cdnca-password-strength {
+  width: 280px;
+  max-width: calc(100vw - 32px);
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cdnca-password-strength-head strong {
+  margin-left: 2px;
+}
+
+.cdnca-password-strength.is-weak .cdnca-password-strength-head strong {
+  color: var(--cdnca-color-error);
+}
+
+.cdnca-password-strength.is-medium .cdnca-password-strength-head strong {
+  color: var(--cdnca-color-warning);
+}
+
+.cdnca-password-strength.is-strong .cdnca-password-strength-head strong {
+  color: var(--cdnca-color-success);
+}
+
+.cdnca-password-strength-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin: 6px 0 8px;
+}
+
+.cdnca-password-strength-bar span {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--cdnca-color-border-light);
+}
+
+.cdnca-password-strength.is-weak .cdnca-password-strength-bar .is-on {
+  background: var(--cdnca-color-error);
+}
+
+.cdnca-password-strength.is-medium .cdnca-password-strength-bar .is-on {
+  background: var(--cdnca-color-warning);
+}
+
+.cdnca-password-strength.is-strong .cdnca-password-strength-bar .is-on {
+  background: var(--cdnca-color-success);
+}
+
+.cdnca-password-strength-rules {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cdnca-password-strength-mark {
+  display: inline-block;
+  width: 14px;
+}
+
+.cdnca-password-strength-rules .is-met .cdnca-password-strength-mark {
+  color: var(--cdnca-color-success);
+}
+
+.cdnca-password-strength-rules .is-unmet .cdnca-password-strength-mark {
+  color: var(--cdnca-color-error);
+}
+
+/*
+ * TimeRangeFilter (TimeRangeFilter.tsx): quick ranges as a solid button group,
+ * "custom" opens a two-month popup with a time switch and clear / OK.
+ */
+/* One row on desktop: the quick ranges never wrap and the custom box
+   sits to their right; only phones (<768px) let the whole control wrap. */
+.cdnca-time-range {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cdnca-time-range-presets {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.cdnca-time-range-input {
+  flex: none;
+  width: 300px;
+  max-width: 100%;
+  cursor: pointer;
+}
+
+.cdnca-time-range-input input {
+  cursor: pointer;
+}
+
+/* The custom box is as high as the quick buttons (32px) on every toolbar. Many page toolbars set
+   `.ant-input { height: 32px }`, which also hits the box's inner input and grows the wrapper to 43px. */
+.cdnca-time-range .cdnca-time-range-input {
+  height: 32px;
+}
+
+.cdnca-time-range .cdnca-time-range-input input.ant-input {
+  height: auto !important;
+}
+
+/* compact：「自定义」按钮本身打开弹层，弹层顶部显示正在编辑的时间范围 */
+.cdnca-time-range-custom-trigger {
+  display: inline-block;
+}
+
+.cdnca-time-range-summary {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cdnca-time-range-popover {
+  max-width: calc(100vw - 24px);
+}
+
+.cdnca-time-range-popover .ant-popover-inner {
+  padding: 0;
+  border-radius: 4px;
+}
+
+.cdnca-time-range-panel {
+  width: 520px;
+  max-width: calc(100vw - 24px);
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+}
+
+.cdnca-time-range-calendars,
+.cdnca-time-range-times {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.cdnca-time-range-month + .cdnca-time-range-month,
+.cdnca-time-range-time + .cdnca-time-range-time {
+  border-left: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.cdnca-time-range-month-header {
+  display: flex;
+  height: 40px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+  font-weight: 500;
+}
+
+.cdnca-time-range-month-header > span:first-child,
+.cdnca-time-range-month-header > span:last-child {
+  display: inline-flex;
+  width: 48px;
+  flex: 0 0 48px;
+}
+
+.cdnca-time-range-month-header > span:last-child {
+  justify-content: flex-end;
+}
+
+.cdnca-time-range-month-header > span:nth-child(2) {
+  flex: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.cdnca-time-range-panel button {
+  cursor: pointer;
+}
+
+.cdnca-time-range-month-header button {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--cdnca-color-text-secondary);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  transition: color 150ms ease;
+}
+
+.cdnca-time-range-month-header button:hover {
+  color: var(--cdnca-color-primary);
+}
+
+.cdnca-time-range-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  padding: 8px 10px 10px;
+}
+
+.cdnca-time-range-days > * {
+  display: flex;
+  height: 30px;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.cdnca-time-range-weekday,
+.cdnca-time-range-days .is-outside {
+  color: var(--cdnca-color-placeholder);
+}
+
+.cdnca-time-range-days button {
+  position: relative;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: 3px;
+}
+
+.cdnca-time-range-days button:hover:not(:disabled),
+.cdnca-time-range-days .is-between {
+  background: var(--cdnca-color-primary-bg);
+}
+
+/* Must outrank the hover rule above: a just-clicked day stays under the pointer. */
+.cdnca-time-range-days button.is-selected,
+.cdnca-time-range-days button.is-selected:hover:not(:disabled) {
+  color: var(--cdnca-color-text-inverse);
+  background: var(--cdnca-color-primary);
+}
+
+/* Today is marked with a dot under the number, as on the competitor's calendar. */
+.cdnca-time-range-days .is-today::after {
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  content: '';
+  background: var(--cdnca-color-primary);
+  border-radius: 50%;
+}
+
+.cdnca-time-range-days .is-today.is-selected::after {
+  background: var(--cdnca-color-text-inverse);
+}
+
+.cdnca-time-range-days button:disabled {
+  color: var(--cdnca-color-placeholder);
+  cursor: not-allowed;
+  background: var(--cdnca-color-bg-muted);
+}
+
+.cdnca-time-range-time-heading {
+  display: flex;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+  font-weight: 500;
+}
+
+.cdnca-time-range-time-columns {
+  display: grid;
+  height: 240px;
+}
+
+.cdnca-time-range-time-columns > div {
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.cdnca-time-range-time-columns > div + div {
+  border-left: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.cdnca-time-range-time-columns button {
+  display: block;
+  width: 100%;
+  height: 28px;
+  color: inherit;
+  font: inherit;
+  background: none;
+  border: 0;
+}
+
+.cdnca-time-range-time-columns button:hover,
+.cdnca-time-range-time-columns button[aria-pressed='true'] {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-primary-bg);
+}
+
+.cdnca-time-range-footer {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.cdnca-time-range-footer > span {
+  display: flex;
+  gap: 8px;
+}
+
+.cdnca-time-range-footer .ant-btn-text:not(:disabled) {
+  color: var(--cdnca-color-primary);
+}
+
+.cdnca-time-range-panel button:focus-visible {
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: -2px;
+}
+
+@media (max-width: 767px) {
+  .cdnca-time-range,
+  .cdnca-time-range-input {
+    width: 100%;
+  }
+
+  .cdnca-time-range {
+    flex-wrap: wrap;
+  }
+
+  /* The popup is wider than the box on phones; pin it inside the viewport
+     (antd's overflow shift measures the desktop width and pushes it off-screen). */
+  .cdnca-time-range-popover.ant-popover {
+    left: 12px !important;
+    right: auto;
+    width: calc(100vw - 24px);
+  }
+
+  .cdnca-time-range-popover .cdnca-time-range-panel {
+    width: 100%;
+    max-width: none;
+  }
+
+  .cdnca-time-range-calendars {
+    grid-template-columns: 1fr;
+  }
+
+  .cdnca-time-range-month + .cdnca-time-range-month {
+    border-top: 1px solid var(--cdnca-color-border-secondary);
+    border-left: 0;
+  }
+
+  /* Footer buttons are antd small (24px) on desktop, as on the competitor; on phones they are 32px high with a
+     wider hit area so 清空 / 确定 / 选择时间 are easy to tap. */
+  .cdnca-time-range-footer {
+    padding: 8px 12px;
+  }
+
+  .cdnca-time-range-footer > span {
+    gap: 12px;
+  }
+
+  .cdnca-time-range-footer .ant-btn.ant-btn-sm {
+    height: 32px;
+    min-width: 64px;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+}
+
+/*
+ * Advanced filters (AdvancedFilters.tsx): one toolbar row of
+ * common fields + query / reset + the "高级筛选" toggle; the panel opens under
+ * the row; applied advanced conditions show as removable tags. Only shared
+ * variables; the row wraps below 768px only.
+ */
+.cdnca-adv-filters {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.cdnca-adv-filters-bar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* The common fields sit directly in the bar's row next to the buttons; the row wraps instead of overflowing sideways. */
+.cdnca-adv-filters-primary {
+  display: contents;
+}
+
+.cdnca-adv-filters-primary > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/*
+ * Fields with a label above sit at the bar's bottom (flex-end),
+ * so query / reset / toggle line up with the controls, not the label. Stretch
+ * makes the toggle as tall as the antd buttons beside it (32px here, 34px in
+ * the operator console).
+ */
+.cdnca-adv-filters-actions,
+.cdnca-adv-filters-extra {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.cdnca-adv-filters-extra {
+  margin-left: auto;
+}
+
+.cdnca-adv-filters-toggle {
+  display: inline-flex;
+  min-height: var(--cdnca-control-height);
+  align-items: center;
+  gap: 4px;
+  padding: 0 12px;
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: var(--cdnca-border-radius);
+  background: var(--cdnca-color-bg-container);
+  color: var(--cdnca-color-text);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.cdnca-adv-filters-toggle:hover,
+.cdnca-adv-filters-toggle.has-active,
+.cdnca-adv-filters.is-open .cdnca-adv-filters-toggle {
+  border-color: var(--cdnca-color-primary);
+  color: var(--cdnca-color-primary);
+}
+
+.cdnca-adv-filters-toggle:focus-visible,
+.cdnca-adv-filters-tag-remove:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.cdnca-adv-filters-chevron {
+  transition: transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.cdnca-adv-filters.is-open .cdnca-adv-filters-chevron {
+  transform: rotate(180deg);
+}
+
+.cdnca-adv-filters-panel {
+  padding: 12px 16px;
+  border: 1px solid var(--cdnca-color-border-panel);
+  border-radius: var(--cdnca-border-radius);
+  background: var(--cdnca-color-bg-panel);
+}
+
+.cdnca-adv-filters-panel[hidden] {
+  display: none;
+}
+
+.cdnca-adv-filters-grid {
+  display: grid;
+  gap: 12px 16px;
+  align-items: end;
+}
+
+.cdnca-adv-filters-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cdnca-adv-filters-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.cdnca-adv-filters-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+.cdnca-adv-filters-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cdnca-adv-filters-field.is-wide {
+  grid-column: span 2;
+}
+
+.cdnca-adv-filters-field > .ant-select,
+.cdnca-adv-filters-field > .ant-input,
+.cdnca-adv-filters-field > .ant-input-affix-wrapper,
+.cdnca-adv-filters-field > .ant-input-number,
+.cdnca-adv-filters-field > .ant-picker,
+.cdnca-adv-filters-field > .ant-space-compact {
+  width: 100%;
+}
+
+.cdnca-adv-filters-label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cdnca-adv-filters-panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cdnca-adv-filters-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cdnca-adv-filters-tag {
+  display: inline-flex;
+  max-width: 100%;
+  height: 24px;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 8px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: var(--cdnca-border-radius);
+  background: var(--cdnca-color-info-bg);
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+}
+
+.cdnca-adv-filters-tag-text {
+  overflow: hidden;
+  max-width: 320px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cdnca-adv-filters-tag-remove {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--cdnca-border-radius);
+  background: transparent;
+  color: var(--cdnca-color-text-secondary);
+  cursor: pointer;
+}
+
+.cdnca-adv-filters-tag-remove:hover {
+  color: var(--cdnca-color-primary);
+}
+
+@media (max-width: 767px) {
+
+  .cdnca-adv-filters-extra {
+    margin-left: 0;
+  }
+
+  .cdnca-adv-filters-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cdnca-adv-filters-field.is-wide {
+    grid-column: auto;
+  }
+
+  .cdnca-adv-filters-tag-text {
+    max-width: 240px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cdnca-adv-filters-chevron,
+  .cdnca-adv-filters-toggle {
+    transition: none;
+  }
+}
+
+/* Price badges (PriceBadge.tsx): free = gift, 限免 = clock + time left.
+   Static (no motion): shown many times per page, so reduced-motion needs nothing extra. */
+.cdnca-price-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 22px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.cdnca-price-badge svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cdnca-price-badge.is-free {
+  color: var(--cdnca-color-green17);
+  background: var(--cdnca-color-green8);
+  box-shadow: inset 0 0 0 1px var(--cdnca-color-green13);
+}
+.cdnca-price-badge.is-promo {
+  color: var(--cdnca-color-orange9);
+  background: var(--cdnca-color-orange1);
+  box-shadow: inset 0 0 0 1px var(--cdnca-color-orange4);
+}
+.cdnca-price-badge.is-free:is(.i-theme-dark *) {
+  color: var(--cdnca-color-green12);
+  background: color-mix(in srgb, var(--cdnca-color-green16) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cdnca-color-green16) 45%, transparent);
+}
+.cdnca-price-badge.is-promo:is(.i-theme-dark *) {
+  color: var(--cdnca-color-orange4);
+  background: color-mix(in srgb, var(--cdnca-color-orange9) 22%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cdnca-color-orange9) 50%, transparent);
+}
+.cdnca-price-badge-price {
+  color: var(--cdnca-color-text-emphasis);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cdnca-price-badge-price:is(.i-theme-dark *) { color: var(--cdnca-color-text-dark); }
+.cdnca-promo-preview {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--cdnca-border-radius);
+  background: var(--cdnca-color-orange1);
+  box-shadow: inset 0 0 0 1px var(--cdnca-color-orange3);
+  color: var(--cdnca-color-text-emphasis);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.cdnca-promo-preview strong { color: var(--cdnca-color-orange10); font-weight: 600; }
+.cdnca-promo-preview:is(.i-theme-dark *) {
+  background: color-mix(in srgb, var(--cdnca-color-orange9) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cdnca-color-orange9) 40%, transparent);
+  color: var(--cdnca-color-text-dark);
+}
+.cdnca-promo-preview:is(.i-theme-dark *) strong { color: var(--cdnca-color-orange4); }
+
+/* 「ID 或名称」联想，下拉每项 名称（ID），次行灰字（节点 IP、证书域名等）。 */
+.cdnca-id-or-name {
+  min-width: 0;
+}
+
+.cdnca-id-or-name-option {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.cdnca-id-or-name-option > small {
+  color: var(--cdnca-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,335 @@
+{
+ "id": "recharges",
+ "prefix": "/v1/recharges",
+ "operations": [
+  {
+   "operation_id": "listOwnRechargeOrders",
+   "method": "GET",
+   "path": "/v1/recharges/orders",
+   "summary": "List recharge orders owned by the authenticated tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "channel",
+     "in": "query",
+     "type": "string: alipay / wechat / transfer"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "snapshot_at",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Reuse snapshot_at returned by the first page to keep later pages and CSV on the same fact boundary."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable database snapshot",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<RechargeOrder>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "401",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "403",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    }
+   ]
+  },
+  {
+   "operation_id": "createRechargeOrder",
+   "method": "POST",
+   "path": "/v1/recharges/orders",
+   "summary": "Create an authenticated tenant recharge order",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.account.read",
+    "billing.recharges.create"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "channel",
+      "type": "string: alipay / wechat / transfer",
+      "required": true
+     },
+     {
+      "name": "amount_minor",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created or exact replay",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "channel",
+       "type": "string: alipay / wechat / transfer",
+       "required": true
+      },
+      {
+       "name": "provider",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "captured_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "refunded_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "net_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "401",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "403",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "409",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    }
+   ]
+  },
+  {
+   "operation_id": "getRechargePolicy",
+   "method": "GET",
+   "path": "/v1/recharges/policy",
+   "summary": "Read the effective platform recharge policy for an authenticated tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.recharges.create on the caller's current active tenant session. The response contains only non-sensitive payment availability, default selection and verification restriction fields. Order creation and provider checkout re-read and lock the same policy, so this projection cannot bypass a concurrent administrator change.",
+   "permissions": [
+    "billing.account.read",
+    "billing.recharges.create"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current platform recharge policy",
+     "fields": [
+      {
+       "name": "wechat_payment_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "alipay_payment_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bank_transfer_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "default_recharge_method",
+       "type": "string: none / wechat / alipay / bank_transfer",
+       "required": true
+      },
+      {
+       "name": "recharge_restriction",
+       "type": "string: none / individual_verified / enterprise_verified",
+       "required": true
+      },
+      {
+       "name": "available_methods",
+       "type": "array<string: wechat / alipay / bank_transfer>",
+       "required": true,
+       "description": "Methods the customer can use now: the switch is on and, for wechat/alipay, an enabled payment channel is configured. Empty means recharge is not offered and the balance page shows no recharge block."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "401",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "403",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "503",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    }
+   ]
+  }
+ ]
+}

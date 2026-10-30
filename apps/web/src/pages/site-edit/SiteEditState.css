@@ -1,0 +1,20 @@
+.site-edit-state-loading {
+  display: flex;
+  min-height: 100px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.site-edit-state-detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.site-edit-state-message {
+  display: grid;
+  text-align: center;
+}

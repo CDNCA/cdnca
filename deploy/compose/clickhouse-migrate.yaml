@@ -1,0 +1,30 @@
+# Ledgered ClickHouse migration job (docs/runbooks/clickhouse-migrate-deploy.md),
+# the only ClickHouse migrator of the compose stacks: compose.full.yaml's
+# control-api waits for it, so stack it with compose.full.yaml (or on top of
+# compose.yaml alone):
+#   docker compose -f compose.yaml [-f compose.full.yaml] -f deploy/compose/clickhouse-migrate.yaml \
+#     up --exit-code-from clickhouse-migrate clickhouse-migrate
+services:
+  clickhouse-migrate:
+    build:
+      context: .  # compose resolves paths from the first -f file (repository root)
+      dockerfile: deploy/clickhouse-migrate/Dockerfile
+    image: cdnca/clickhouse-migrate:local
+    restart: "no"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    entrypoint: ["python3", "-I", "-B", "/opt/cdnca/clickhouse/cdnca-clickhouse-migrate.py"]
+    command: ["${CLICKHOUSE_MIGRATE_ACTION:-migrate}"]
+    # The image carries the SQL (infra/clickhouse/migrations).
+    environment:
+      CLICKHOUSE_MIGRATE_URL: ${CLICKHOUSE_MIGRATE_URL:-http://clickhouse:8123}
+      CLICKHOUSE_MIGRATE_DATABASE: ${CLICKHOUSE_DB:?set CLICKHOUSE_DB}
+      CLICKHOUSE_MIGRATE_USER: ${CLICKHOUSE_MIGRATE_USER:-${CLICKHOUSE_USER:?set CLICKHOUSE_USER}}
+      CLICKHOUSE_MIGRATE_PASSWORD: ${CLICKHOUSE_MIGRATE_PASSWORD:-${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}}
+      CLICKHOUSE_MIGRATE_CLUSTER: ${CLICKHOUSE_MIGRATE_CLUSTER:-}
+      CLICKHOUSE_MIGRATE_GRANT_QUERY_USER: ${CLICKHOUSE_MIGRATE_GRANT_QUERY_USER:-}
+      CLICKHOUSE_MIGRATE_GRANT_INGEST_USER: ${CLICKHOUSE_MIGRATE_GRANT_INGEST_USER:-}
+      CLICKHOUSE_MIGRATE_GRANT_ROLLUP_USER: ${CLICKHOUSE_MIGRATE_GRANT_ROLLUP_USER:-}
+    networks:
+      - control

@@ -1,0 +1,70 @@
+{
+ "id": "admin-recharge-identity-policy",
+ "prefix": "/v1/admin/recharge-identity-policy",
+ "operations": [
+  {
+   "operation_id": "getPlatformRechargeIdentityPolicy",
+   "method": "GET",
+   "path": "/v1/admin/recharge-identity-policy/{tenant_scope_id}",
+   "summary": "Read a tenant recharge identity policy as a platform administrator",
+   "auth": [
+    "bearer"
+   ],
+   "any_permissions": [
+    "billing.recharges.manage",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ]
+  },
+  {
+   "operation_id": "updatePlatformRechargeIdentityPolicy",
+   "method": "PUT",
+   "path": "/v1/admin/recharge-identity-policy/{tenant_scope_id}",
+   "summary": "CAS update a tenant recharge identity policy as a platform administrator",
+   "auth": [
+    "bearer"
+   ],
+   "any_permissions": [
+    "billing.recharges.manage",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Strong quoted current revision; use \"0\" while no explicit policy exists."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": []
+   }
+  }
+ ]
+}

@@ -1,0 +1,2885 @@
+{
+ "id": "dns",
+ "prefix": "/v1/dns",
+ "operations": [
+  {
+   "operation_id": "listTenantDNSHubDomains",
+   "method": "GET",
+   "path": "/v1/dns/hub/domains",
+   "summary": "Own DNS accounts and one page of their cached hosted domains",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.read"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "provider_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "q",
+     "in": "query",
+     "type": "string",
+     "description": "domain substring"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Accounts and domains",
+     "fields": [
+      {
+       "name": "accounts",
+       "type": "array<Account>",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<Domain>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "refreshTenantDNSHubDomains",
+   "method": "POST",
+   "path": "/v1/dns/hub/domains/refresh",
+   "summary": "Re-list hosted domains (each account at most once a minute)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "fields": [
+     {
+      "name": "provider_id",
+      "type": "string(uuid)",
+      "description": "omitted = every own account"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Per-account outcome",
+     "fields": [
+      {
+       "name": "results",
+       "type": "array<RefreshResult>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantDNSHubRecords",
+   "method": "GET",
+   "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
+   "summary": "Live A/AAAA/CNAME/TXT records of a hosted domain",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.read"
+   ],
+   "params": [
+    {
+     "name": "provider_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "apex",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string: A / AAAA / CNAME / TXT"
+    },
+    {
+     "name": "q",
+     "in": "query",
+     "type": "string",
+     "description": "host or value substring"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Records",
+     "fields": [
+      {
+       "name": "provider_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "apex",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<Record>",
+       "required": true
+      },
+      {
+       "name": "skipped",
+       "type": "integer",
+       "required": true,
+       "description": "listed records the page cannot show (wildcard owners)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "createTenantDNSHubRecord",
+   "method": "POST",
+   "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
+   "summary": "Create a record and read it back",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "provider_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "apex",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "relative host, @ or empty = the domain itself"
+     },
+     {
+      "name": "type",
+      "type": "string: A / AAAA / CNAME / TXT",
+      "required": true
+     },
+     {
+      "name": "value",
+      "type": "string",
+      "required": true,
+      "description": "TXT: 1-255 bytes, no control characters, quote or backslash"
+     },
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "line",
+      "type": "string"
+     },
+     {
+      "name": "weight",
+      "type": "integer"
+     },
+     {
+      "name": "expected",
+      "type": "RecordValue"
+     },
+     {
+      "name": "confirm_managed",
+      "type": "boolean"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "200/201 applied (read back); 202 uncertain (sent, not confirmed by read-back; reload the records)",
+     "fields": [
+      {
+       "name": "op_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: applied / uncertain",
+       "required": true
+      },
+      {
+       "name": "record",
+       "type": "null | Record",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "202",
+     "description": "200/201 applied (read back); 202 uncertain (sent, not confirmed by read-back; reload the records)",
+     "fields": [
+      {
+       "name": "op_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: applied / uncertain",
+       "required": true
+      },
+      {
+       "name": "record",
+       "type": "null | Record",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateTenantDNSHubRecord",
+   "method": "PATCH",
+   "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
+   "summary": "Change a record if it still holds expected",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "provider_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "apex",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "record_ref",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "opaque, from a listed record"
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true,
+      "description": "relative host, @ or empty = the domain itself"
+     },
+     {
+      "name": "type",
+      "type": "string: A / AAAA / CNAME / TXT",
+      "required": true
+     },
+     {
+      "name": "value",
+      "type": "string",
+      "required": true,
+      "description": "TXT: 1-255 bytes, no control characters, quote or backslash"
+     },
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "line",
+      "type": "string"
+     },
+     {
+      "name": "weight",
+      "type": "integer"
+     },
+     {
+      "name": "expected",
+      "type": "RecordValue"
+     },
+     {
+      "name": "confirm_managed",
+      "type": "boolean"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "200/201 applied (read back); 202 uncertain (sent, not confirmed by read-back; reload the records)",
+     "fields": [
+      {
+       "name": "op_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: applied / uncertain",
+       "required": true
+      },
+      {
+       "name": "record",
+       "type": "null | Record",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "202",
+     "description": "200/201 applied (read back); 202 uncertain (sent, not confirmed by read-back; reload the records)",
+     "fields": [
+      {
+       "name": "op_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: applied / uncertain",
+       "required": true
+      },
+      {
+       "name": "record",
+       "type": "null | Record",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteTenantDNSHubRecord",
+   "method": "DELETE",
+   "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
+   "summary": "Delete a record if it still holds expected",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "provider_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "apex",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "record_ref",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "opaque, from a listed record"
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected",
+      "type": "RecordValue",
+      "required": true
+     },
+     {
+      "name": "confirm_managed",
+      "type": "boolean"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "200/201 applied (read back); 202 uncertain (sent, not confirmed by read-back; reload the records)",
+     "fields": [
+      {
+       "name": "op_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: applied / uncertain",
+       "required": true
+      },
+      {
+       "name": "record",
+       "type": "null | Record",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "202",
+     "description": "200/201 applied (read back); 202 uncertain (sent, not confirmed by read-back; reload the records)",
+     "fields": [
+      {
+       "name": "op_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: applied / uncertain",
+       "required": true
+      },
+      {
+       "name": "record",
+       "type": "null | Record",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    },
+    {
+     "status": "404",
+     "description": "Error envelope"
+    },
+    {
+     "status": "409",
+     "description": "Error envelope"
+    },
+    {
+     "status": "422",
+     "description": "Error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "batchTenantDNSHubRecords",
+   "method": "POST",
+   "path": "/v1/dns/hub/records/batch",
+   "summary": "Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "items",
+      "type": "array<object>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Per-item results",
+     "fields": [
+      {
+       "name": "results",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error envelope"
+    },
+    {
+     "status": "401",
+     "description": "Error envelope"
+    },
+    {
+     "status": "403",
+     "description": "Error envelope"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformDNSConfig",
+   "method": "GET",
+   "path": "/v1/dns/platform-config",
+   "summary": "Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Provider, non-secret identifiers, TTL, IP weight, tenant sync summary and the last DNS write failure.",
+     "fields": [
+      {
+       "name": "provider_type",
+       "type": "string"
+      },
+      {
+       "name": "identifiers",
+       "type": "object",
+       "required": true,
+       "description": "Non-secret credential fields (ID"
+      },
+      {
+       "name": "secret_saved",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "ttl",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "ip_weight",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "weight_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "The provider writes record weights (DNSPod)."
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "sync",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "last_error",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "savePlatformDNSConfig",
+   "method": "PUT",
+   "path": "/v1/dns/platform-config",
+   "summary": "Save the installation-wide DNS configuration and synchronise every tenant copy",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "provider_type",
+      "type": "string: aliyun / huawei / dns_la / dnspod_cn / dns_com / cloudflare / namecom / custom_http",
+      "required": true
+     },
+     {
+      "name": "credentials",
+      "type": "object",
+      "description": "Every credential field of the provider; omitted keeps the stored credentials of the same provider."
+     },
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true,
+      "description": "Cloudflare requires at least 60; name.com at least 300."
+     },
+     {
+      "name": "ip_weight",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved configuration.",
+     "fields": [
+      {
+       "name": "provider_type",
+       "type": "string"
+      },
+      {
+       "name": "identifiers",
+       "type": "object",
+       "required": true,
+       "description": "Non-secret credential fields (ID"
+      },
+      {
+       "name": "secret_saved",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "ttl",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "ip_weight",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "weight_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "The provider writes record weights (DNSPod)."
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "sync",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "last_error",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "testPlatformDNSConnection",
+   "method": "POST",
+   "path": "/v1/dns/platform-config/connection-test",
+   "summary": "连接测试 - verify DNS credentials and the CNAME domains they host (read-only)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Verifies the entered credentials (or, without credentials, the saved ones of provider_type) with the same provider check as a save, then lists the account's domains once per CNAME domain. Nothing is saved and no DNS record is written. Custom HTTP and plugin providers have no domain list (status unchecked).",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "provider_type",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "credentials",
+      "type": "object"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The provider accepted the credentials.",
+     "fields": [
+      {
+       "name": "provider_type",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "zones",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "dns_not_configured (no saved credentials to test)."
+    },
+    {
+     "status": "422",
+     "description": "provider_credentials_rejected or provider_credentials_invalid."
+    },
+    {
+     "status": "429",
+     "description": "provider_verification_rate_limited."
+    },
+    {
+     "status": "503",
+     "description": "provider_verification_unavailable or credential_encryption_unavailable."
+    },
+    {
+     "status": "504",
+     "description": "provider_verification_timeout."
+    }
+   ]
+  },
+  {
+   "operation_id": "startPlatformDNSOperation",
+   "method": "POST",
+   "path": "/v1/dns/platform-config/{kind}",
+   "summary": "Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs",
+   "auth": [
+    "bearer"
+   ],
+   "description": "repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner); cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the result lines shown under 系统管理 > 后台任务.",
+   "params": [
+    {
+     "name": "kind",
+     "in": "path",
+     "type": "string: repair / cleanup",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Background jobs accepted (or replayed).",
+     "fields": [
+      {
+       "name": "operations",
+       "type": "array<DNSOperation>",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "dns_not_configured, dns_no_tenant or an idempotency conflict."
+    },
+    {
+     "status": "502",
+     "description": "dns_provider_unavailable (the provider records could not be listed)."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformDNSZones",
+   "method": "GET",
+   "path": "/v1/dns/platform-zones",
+   "summary": "List the CNAME domains (CNAME域名)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of CNAME domains.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PlatformDNSZone>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createPlatformDNSZone",
+   "method": "POST",
+   "path": "/v1/dns/platform-zones",
+   "summary": "Add a CNAME domain (copied into every tenant; the first is the default allocation zone)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "random_allocation",
+      "type": "boolean",
+      "description": "参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created CNAME domain.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "in_use",
+       "type": "boolean",
+       "required": true,
+       "description": "Some tenant still has CNAME hostnames allocated under this domain."
+      },
+      {
+       "name": "random_allocation",
+       "type": "boolean",
+       "required": true,
+       "description": "参与随机分配 (see PlatformDNSZoneInput)."
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updatePlatformDNSZone",
+   "method": "PATCH",
+   "path": "/v1/dns/platform-zones/{id}",
+   "summary": "Edit a CNAME domain; renaming one with allocated CNAMEs is refused (dns_zone_in_use)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "random_allocation",
+      "type": "boolean",
+      "description": "参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated CNAME domain.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "in_use",
+       "type": "boolean",
+       "required": true,
+       "description": "Some tenant still has CNAME hostnames allocated under this domain."
+      },
+      {
+       "name": "random_allocation",
+       "type": "boolean",
+       "required": true,
+       "description": "参与随机分配 (see PlatformDNSZoneInput)."
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deletePlatformDNSZone",
+   "method": "DELETE",
+   "path": "/v1/dns/platform-zones/{id}",
+   "summary": "Delete a CNAME domain and its tenant copies; refused while sites use it (dns_zone_in_use)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listDNSProviders",
+   "method": "GET",
+   "path": "/v1/dns/providers",
+   "summary": "List DNS provider configurations",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque cursor bound to the authenticated scope and page limit."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Provider metadata without credentials or credential-derived fingerprints.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Provider>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    }
+   ]
+  },
+  {
+   "operation_id": "createDNSProvider",
+   "method": "POST",
+   "path": "/v1/dns/providers",
+   "summary": "Store an encrypted DNS provider configuration",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "备注; trimmed"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Stored as unverified; no provider request has been made.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "备注 (DNS API list and form); empty when none"
+      },
+      {
+       "name": "provider_type",
+       "type": "string: aliyun / cloudflare / huawei / dnspod_cn / dns_com / dns_la / namecom / custom_http / dnsdun",
+       "required": true,
+       "description": "Persisted provider type. dnsdun is retained only so disabled legacy records can be listed; new configurations must use a creatable type."
+      },
+      {
+       "name": "credentials_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: unverified / verified / disabled",
+       "required": true
+      },
+      {
+       "name": "managed_by",
+       "type": "string: tenant / platform",
+       "description": "tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    },
+    {
+     "status": "503",
+     "description": "Deployment credential encryption is not configured."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateDNSProvider",
+   "method": "PATCH",
+   "path": "/v1/dns/providers/{id}",
+   "summary": "Update provider metadata or replace encrypted credentials",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "备注; omitted keeps the stored remark"
+     },
+     {
+      "name": "status",
+      "type": "string: unverified / disabled",
+      "required": true,
+      "description": "unverified means enabled: without new credentials a verified provider stays verified (renaming or a remark change keeps the verification); with new credentials it becomes unverified; disabled disables it."
+     },
+     {
+      "name": "credentials",
+      "type": "object",
+      "description": "To pass verification, replacement credentials must match the existing provider type. Cloudflare requires only api_token; Aliyun requires only access_key_id and access_key_secret; Huawei Cloud requires only access_key, secret_key, region, and project_id; DNSPod CN requires only dp_id and dp_key; DNS.COM requires only api_key and api_secret; DNS.LA requires only api_id and api_secret; Name.com requires only username and api_token; custom_http requires only endpoint and secret."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated provider metadata.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "备注 (DNS API list and form); empty when none"
+      },
+      {
+       "name": "provider_type",
+       "type": "string: aliyun / cloudflare / huawei / dnspod_cn / dns_com / dns_la / namecom / custom_http / dnsdun",
+       "required": true,
+       "description": "Persisted provider type. dnsdun is retained only so disabled legacy records can be listed; new configurations must use a creatable type."
+      },
+      {
+       "name": "credentials_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: unverified / verified / disabled",
+       "required": true
+      },
+      {
+       "name": "managed_by",
+       "type": "string: tenant / platform",
+       "description": "tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    },
+    {
+     "status": "503",
+     "description": "Deployment credential encryption is not configured."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteDNSProvider",
+   "method": "DELETE",
+   "path": "/v1/dns/providers/{id}",
+   "summary": "Delete an unreferenced DNS provider configuration",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive resource version."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Provider deleted."
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    }
+   ]
+  },
+  {
+   "operation_id": "verifyDNSProvider",
+   "method": "POST",
+   "path": "/v1/dns/providers/{id}/verify",
+   "summary": "Verify a DNS provider credential against its upstream API",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires dns.manage in the active scope, an empty request body, a quoted If-Match revision, and an Idempotency-Key. The first implemented adapter verifies a Cloudflare API Token with GET /user/tokens/verify. A verified result proves token activity only; it does not prove zone-specific permissions, mutate DNS records, or start ACME issuance. Deterministic denials are audited and idempotently replayed. Rate limits, timeouts, upstream failures, and invalid upstream responses leave the provider unchanged and the key retryable.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Tenant-scoped DNS provider UUID."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The token is active and the provider is now verified, or an identical completed request was replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "provider_type",
+       "type": "string: aliyun / cloudflare / huawei / dnspod_cn / dns_com / dns_la / namecom / custom_http / dnsdun",
+       "required": true,
+       "description": "dnsdun is a disabled legacy read-only value; new configurations use dns_la."
+      },
+      {
+       "name": "credentials_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: unverified / verified / disabled",
+       "required": true
+      },
+      {
+       "name": "managed_by",
+       "type": "string: tenant / platform",
+       "description": "tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "Stable deterministic denial: provider_verification_unsupported, provider_credentials_invalid, provider_token_inactive, or provider_credentials_rejected."
+    },
+    {
+     "status": "429",
+     "description": "The provider rate limited verification. Retry-After is returned only when the upstream value was valid."
+    },
+    {
+     "status": "502",
+     "description": "The provider returned an oversized, malformed, or otherwise unexpected response."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Provider verification exceeded the bounded request timeout."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listDNSRecords",
+   "method": "GET",
+   "path": "/v1/dns/records",
+   "summary": "List structured records in a zone",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "zone_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Draft records visible in the authenticated scope.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Record>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    }
+   ]
+  },
+  {
+   "operation_id": "createDNSRecord",
+   "method": "POST",
+   "path": "/v1/dns/records",
+   "summary": "Create a validated draft DNS record",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "zone_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "type",
+      "type": "string: A / AAAA / CNAME / TXT",
+      "required": true
+     },
+     {
+      "name": "content",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Draft created; the provider has not been called.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "zone_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string: A / AAAA / CNAME / TXT",
+       "required": true
+      },
+      {
+       "name": "content",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ttl",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / failed",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateDNSRecord",
+   "method": "PATCH",
+   "path": "/v1/dns/records/{id}",
+   "summary": "Update a validated draft DNS record",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "type",
+      "type": "string: A / AAAA / CNAME / TXT",
+      "required": true
+     },
+     {
+      "name": "content",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated draft record.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "zone_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string: A / AAAA / CNAME / TXT",
+       "required": true
+      },
+      {
+       "name": "content",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ttl",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / failed",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteDNSRecord",
+   "method": "DELETE",
+   "path": "/v1/dns/records/{id}",
+   "summary": "Delete a draft DNS record",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive resource version."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Record deleted."
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    }
+   ]
+  },
+  {
+   "operation_id": "getDNSSettings",
+   "method": "GET",
+   "path": "/v1/dns/settings",
+   "summary": "Read the DNS settings for the active tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Scope-level DNS TTL. Provider secrets are never returned.",
+     "fields": [
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "ttl",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateDNSSettings",
+   "method": "PATCH",
+   "path": "/v1/dns/settings",
+   "summary": "Update the compatibility DNS TTL with compare-and-swap semantics",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated scope-level DNS TTL.",
+     "fields": [
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "ttl",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getDNSOperation",
+   "method": "GET",
+   "path": "/v1/dns/settings/operations/{operation_id}",
+   "summary": "Read a DNS DNS operation status",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.read"
+   ],
+   "params": [
+    {
+     "name": "operation_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current durable operation state.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: dns.repair.v1 / dns.cleanup.v1",
+       "required": true
+      },
+      {
+       "name": "subject",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "last_error_code",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "completed_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "enqueueDNSOperation",
+   "method": "POST",
+   "path": "/v1/dns/settings/{kind}",
+   "summary": "Enqueue record repair or CDN-unrelated record cleanup",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "kind",
+     "in": "path",
+     "type": "string: repair / cleanup",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Durable background job accepted; no provider mutation is reported until a worker completes it.",
+     "fields": [
+      {
+       "name": "operation",
+       "type": "DNSOperation",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listDNSZones",
+   "method": "GET",
+   "path": "/v1/dns/zones",
+   "summary": "List DNS zones",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Zones visible in the authenticated scope.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Zone>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    }
+   ]
+  },
+  {
+   "operation_id": "createDNSZone",
+   "method": "POST",
+   "path": "/v1/dns/zones",
+   "summary": "Create a draft DNS zone",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "provider_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Draft created; the provider has not been called.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "provider_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / failed",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteDNSZone",
+   "method": "DELETE",
+   "path": "/v1/dns/zones/{id}",
+   "summary": "Delete an unreferenced draft DNS zone",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive resource version."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Zone deleted."
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    }
+   ]
+  }
+ ]
+}

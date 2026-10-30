@@ -1,0 +1,39 @@
+{
+ "id": "tenant",
+ "prefix": "/v1/tenant",
+ "operations": [
+  {
+   "operation_id": "listTenantMembers",
+   "method": "GET",
+   "path": "/v1/tenant/members",
+   "summary": "List the members of the caller's tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant session with identity.users.manage or identity.roles.manage (the tenant owner). The owner is the scope's earliest member.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Members.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<TenantMember>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  }
+ ]
+}

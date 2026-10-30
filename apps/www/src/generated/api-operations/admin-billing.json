@@ -1,0 +1,1048 @@
+{
+ "id": "admin-billing",
+ "prefix": "/v1/admin/billing",
+ "operations": [
+  {
+   "operation_id": "listBillingAccounts",
+   "method": "GET",
+   "path": "/v1/admin/billing/accounts",
+   "summary": "List tenant balances for manual administration",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.adjustments.manage in a platform scope. Accounts without entries are returned with a zero balance and revision one.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "scope_ids",
+     "in": "query",
+     "type": "array<string(uuid)>",
+     "description": "Optional comma-separated set of 1–100 distinct canonical, nonzero tenant scope UUIDs. Intersects the existing search and active-tenant filters before pagination. Unknown, platform and inactive scopes produce no rows; omission preserves the unfiltered behavior. Requires the same billing.adjustments.manage permission as the account list. Reading never creates accounts or postings."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Tenant balance page ordered by tenant name.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingAccount>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listBillingAccountLedger",
+   "method": "GET",
+   "path": "/v1/admin/billing/accounts/{id}/ledger",
+   "summary": "List immutable entries for a selected tenant balance",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.adjustments.manage in a platform scope. The identifier must resolve to a tenant billing account; a valid tenant account with no postings returns an empty page.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Newest-first ledger page for the selected tenant account.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingLedgerEntry>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listBillingAdjustments",
+   "method": "GET",
+   "path": "/v1/admin/billing/adjustments",
+   "summary": "List manual billing adjustment approval requests",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.adjustments.propose or billing.adjustments.approve in a platform scope. Pending and expired are derived from the immutable proposal expiry when no terminal decision exists.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: pending / approved / rejected / cancelled / expired"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Newest-first immutable adjustment request page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingAdjustment>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "proposeBillingAdjustment",
+   "method": "POST",
+   "path": "/v1/admin/billing/adjustments",
+   "summary": "Propose an MFA-bound manual tenant balance adjustment",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.adjustments.propose in a platform scope and a max_uses=1 MFA proof bound to the proposal. This operation never changes a balance; a different operator must approve it.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "account_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "direction",
+      "type": "string: credit / debit",
+      "required": true
+     },
+     {
+      "name": "amount_minor",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "expected_account_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Immutable pending proposal created, or the exact stored response replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_account_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "direction",
+       "type": "string: credit / debit",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expected_account_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / approved / rejected / cancelled / expired",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "decision",
+       "type": "BillingAdjustmentDecision"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getBillingAdjustment",
+   "method": "GET",
+   "path": "/v1/admin/billing/adjustments/{id}",
+   "summary": "Read one billing adjustment approval request",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current immutable proposal and optional terminal decision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_account_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "direction",
+       "type": "string: credit / debit",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expected_account_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / approved / rejected / cancelled / expired",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "decision",
+       "type": "BillingAdjustmentDecision"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "approveBillingAdjustment",
+   "method": "POST",
+   "path": "/v1/admin/billing/adjustments/{id}/approve",
+   "summary": "Approve and atomically post another operator's adjustment",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.adjustments.approve, If-Match revision one, and a separate max_uses=1 MFA proof. Proposal, decision, double-entry postings, balance, audit, and replay receipt commit atomically.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Approved terminal request or exact stored replay.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_account_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "direction",
+       "type": "string: credit / debit",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expected_account_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / approved / rejected / cancelled / expired",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "decision",
+       "type": "BillingAdjustmentDecision"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelBillingAdjustment",
+   "method": "POST",
+   "path": "/v1/admin/billing/adjustments/{id}/cancel",
+   "summary": "Cancel a pending adjustment from the original proposal session",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Cancelled terminal request or exact stored replay.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_account_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "direction",
+       "type": "string: credit / debit",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expected_account_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / approved / rejected / cancelled / expired",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "decision",
+       "type": "BillingAdjustmentDecision"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "rejectBillingAdjustment",
+   "method": "POST",
+   "path": "/v1/admin/billing/adjustments/{id}/reject",
+   "summary": "Reject another operator's adjustment",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Rejected terminal request or exact stored replay.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_account_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "direction",
+       "type": "string: credit / debit",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expected_account_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / approved / rejected / cancelled / expired",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "proposed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "decision",
+       "type": "BillingAdjustmentDecision"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

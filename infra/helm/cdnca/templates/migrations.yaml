@@ -1,0 +1,51 @@
+{{- if and .Values.controlApi.enabled .Values.controlApi.migrations.enabled }}
+{{- $component := "control-api-migrate" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-20"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  activeDeadlineSeconds: {{ .Values.controlApi.migrations.activeDeadlineSeconds }}
+  backoffLimit: 0
+  ttlSecondsAfterFinished: {{ .Values.controlApi.migrations.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        {{- include "cdnca.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      {{- include "cdnca.imagePullSecrets" . | trim | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "cdnca.image" .Values.controlApi.image | quote }}
+          imagePullPolicy: {{ .Values.controlApi.image.pullPolicy }}
+          args: ["migrate", "up"]
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.databaseURL }}
+          resources:
+            {{- toYaml .Values.controlApi.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+{{- end }}

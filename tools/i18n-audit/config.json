@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "maxFileBytes": 1048576,
+  "typescriptCompiler": "apps/web/node_modules/typescript/lib/typescript.js",
+  "apps": [
+    {
+      "name": "web",
+      "sourceRoots": ["apps/web/src"],
+      "resourceFile": "apps/web/src/i18n/resources.ts",
+      "defaultVariable": "zhCN",
+      "secondaryVariable": "enUS",
+      "defaultNamespace": "common",
+      "namespaceFromTopLevel": true,
+      "pseudo": {
+        "sourceVariable": "zhCN",
+        "transformFunction": "pseudoTree",
+        "textTransformFunction": "pseudoText",
+        "transformKind": "placeholder-safe-character-expansion",
+        "outputVariable": "pseudoCN",
+        "minimumExpansionRatio": 1.2
+      },
+      "formatterEntrypoints": ["apps/web/src/i18n/formatters.ts"]
+    },
+    {
+      "name": "operator-console",
+      "sourceRoots": ["apps/operator-console/src"],
+      "resourceFile": "apps/operator-console/src/i18n.ts",
+      "defaultVariable": "zhCN",
+      "secondaryVariable": "enUS",
+      "defaultNamespace": null,
+      "namespaceFromTopLevel": false,
+      "pseudo": {
+        "sourceVariable": "zhCN",
+        "transformFunction": "inflate",
+        "transformKind": "suffix-repeat-expansion",
+        "resourceLocale": "qps-ploc",
+        "resourceNamespace": "translation",
+        "initReceiver": "i18n",
+        "initImportSource": "i18next",
+        "minimumExpansionRatio": 1.2
+      },
+      "formatterEntrypoints": ["apps/operator-console/src/utils/date.ts"]
+    }
+  ],
+  "dynamicKeys": [],
+  "allowlist": []
+}

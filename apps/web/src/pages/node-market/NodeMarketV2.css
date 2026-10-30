@@ -1,0 +1,202 @@
+/* fix-mktui: 市场 → 节点市场 / 插件商店 重设计.
+   Every rule sits under .node-market-v2 or .market-store-v2, so the base look of
+   other pages stays (DefaultLookLock). Colors come from the shared --cdnca-*
+   variables only. The membership strip reuses .site-tab-summary (SiteEditV4.css). */
+
+.node-market-v2,
+.market-store-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.node-market-v2 .node-market-v2-head .ant-typography,
+.market-store-v2 .market-store-v2-head .ant-typography {
+  margin-bottom: 0;
+}
+
+.node-market-v2 .node-market-v2-head .ant-typography-secondary,
+.market-store-v2 .market-store-v2-head .ant-typography-secondary {
+  display: block;
+  max-width: 880px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.node-market-v2 .node-market-v2-summary {
+  margin: 0;
+}
+
+.node-market-v2 .node-market-v2-id {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- grouped section nav on the left, one white panel on the right ---- */
+.node-market-v2 .node-market-v2-body {
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.node-market-v2 .node-market-v2-nav {
+  position: sticky;
+  top: 16px;
+  display: grid;
+  gap: 16px;
+  padding: 12px 8px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.node-market-v2 .node-market-v2-group > div {
+  display: grid;
+  gap: 2px;
+}
+
+.node-market-v2 .node-market-v2-group-title {
+  display: block;
+  padding: 0 12px 6px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.node-market-v2 .node-market-v2-tab {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 12px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.node-market-v2 .node-market-v2-tab:hover {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-primary-bg-soft);
+}
+
+.node-market-v2 .node-market-v2-tab:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: -2px;
+}
+
+.node-market-v2 .node-market-v2-tab.is-active {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+  background: var(--cdnca-color-primary-bg);
+  box-shadow: inset 3px 0 0 var(--cdnca-color-primary);
+}
+
+.node-market-v2 .node-market-v2-panel,
+.market-store-v2 .market-store-v2-panel {
+  min-width: 0;
+  padding: 16px 20px 20px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.node-market-v2 .node-market-v2-panel-title.ant-typography {
+  margin: 0 0 12px;
+}
+
+/* nested tabs (供货管理) read as a second level under the panel title */
+.node-market-v2 .node-market-v2-panel .ant-tabs-small > .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+/* ---- browse: filters in one toolbar, compact offer cells ---- */
+.node-market-v2 .node-market-v2-advfilters {
+  margin-bottom: 0;
+}
+
+.node-market-v2 .node-market-v2-help {
+  font-size: 13px;
+}
+
+.node-market-v2 .node-market-v2-offer,
+.node-market-v2 .node-market-v2-price {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.node-market-v2 .node-market-v2-offer-name {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+.node-market-v2 .node-market-v2-offer-seller,
+.node-market-v2 .node-market-v2-price .ant-typography-secondary {
+  font-size: 12px;
+}
+
+.node-market-v2 .node-market-v2-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- not included in the licence: a calm in-page notice ---- */
+.node-market-v2 .market-not-open,
+.market-store-v2 .market-not-open {
+  max-width: 720px;
+}
+
+/* ---- plugin store: tabs in one white card, cards with a quiet hover ---- */
+.market-store-v2 .market-store-v2-panel > .ant-tabs > .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+.market-store-v2 .market-store-card {
+  border-color: var(--cdnca-color-border-card);
+  transition: border-color 150ms ease;
+}
+
+.market-store-v2 .market-store-card:hover {
+  border-color: var(--cdnca-color-primary);
+}
+
+.market-store-v2 .plugin-market-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.market-store-v2 .plugin-market-toolbar > .ant-input {
+  max-width: 320px;
+}
+
+@media (max-width: 960px) {
+  .node-market-v2 .node-market-v2-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .node-market-v2 .node-market-v2-nav {
+    position: static;
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .node-market-v2 .node-market-v2-panel,
+  .market-store-v2 .market-store-v2-panel {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-market-v2 .node-market-v2-tab,
+  .market-store-v2 .market-store-card {
+    transition: none;
+  }
+}

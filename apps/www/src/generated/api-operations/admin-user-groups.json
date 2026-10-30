@@ -1,0 +1,400 @@
+{
+ "id": "admin-user-groups",
+ "prefix": "/v1/admin/user-groups",
+ "operations": [
+  {
+   "operation_id": "listUserGroups",
+   "method": "GET",
+   "path": "/v1/admin/user-groups",
+   "summary": "List platform-scoped tenant-user groups",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable user-group page ordered newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<UserGroup>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createUserGroup",
+   "method": "POST",
+   "path": "/v1/admin/user-groups",
+   "summary": "Create a platform-scoped tenant-user group",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "User group created, or an identical request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "member_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateUserGroup",
+   "method": "PATCH",
+   "path": "/v1/admin/user-groups/{id}",
+   "summary": "Rename a tenant-user group with CAS",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "User group updated, or an identical request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "member_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteUserGroup",
+   "method": "DELETE",
+   "path": "/v1/admin/user-groups/{id}",
+   "summary": "Delete an empty tenant-user group with CAS",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "204",
+     "description": "User group deleted"
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,7 @@
+/* 蜜橙：平台登录 / 注册页样式。只写样式，表单与字段由平台提供。 */
+.cdnca-auth { background: radial-gradient(640px 280px at 50% 0%, #ffedd5, transparent), #fffdfa; }
+.cdnca-auth-card { border: 2px solid #f1e4d6; border-radius: 16px; box-shadow: 0 10px 30px rgb(194 65 12 / 10%); }
+.cdnca-auth-title { color: #1c1917; font-weight: 800; }
+.cdnca-auth-submit { border-radius: 999px; background: #f97316; font-weight: 700; }
+.cdnca-auth-submit:hover { background: #c2410c; }
+.cdnca-auth-brand { background-image: var(--cdnca-auth-image-logo); background-repeat: no-repeat; background-position: center; background-size: contain; }

@@ -1,0 +1,143 @@
+/* B6：账户中心日志查询：胶囊标签、筛选行、表格、"共 N 条 + 页码 + 每页条数"靠右。 */
+.account-log-page {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.account-log-tabs > .ant-tabs-nav {
+  min-height: 33px;
+  margin: 0 0 14px;
+}
+
+.account-log-tabs > .ant-tabs-nav::before,
+.account-log-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+.account-log-tabs .ant-tabs-tab {
+  height: 33px;
+  margin: 0 6px 0 0 !important;
+  padding: 6px 16px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+  border-radius: 8px;
+}
+
+.account-log-tabs .ant-tabs-tab:hover,
+.account-log-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--cdnca-color-primary);
+}
+
+.account-log-tabs .ant-tabs-tab-active {
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 12%, transparent);
+}
+
+.account-log-panel {
+  min-width: 0;
+}
+
+.account-log-filters {
+  margin-bottom: 12px;
+}
+
+/* fix-advfilter: the row is the shared AdvancedFilters bar; keep this page's 8px × 10px spacing (bottom alignment comes from the bar, fix-advfilter3). */
+.account-log-filters .cdnca-adv-filters-bar {
+  gap: 8px 10px;
+}
+
+.account-log-filters-boxed {
+  padding: 12px;
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 8px;
+}
+
+.account-log-table {
+  width: 100%;
+  min-width: 0;
+}
+
+.account-log-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 18px;
+}
+
+.account-log-stack > strong {
+  color: var(--cdnca-color-text);
+  font-weight: 600;
+}
+
+.account-log-muted {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.account-log-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.account-log-status {
+  margin-inline-end: 0;
+  border-radius: 999px;
+}
+
+.account-log-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.account-log-page-number {
+  display: inline-flex;
+  min-width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  color: var(--cdnca-color-primary);
+  border: 1px solid var(--cdnca-color-primary);
+  border-radius: 4px;
+}
+
+@media (max-width: 767px) {
+  .account-log-filters .cdnca-adv-filters-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-log-filters .cdnca-adv-filters-primary > *,
+  .account-log-filters .ant-picker {
+    width: 100% !important;
+  }
+
+  .account-log-pager {
+    justify-content: flex-start;
+  }
+}
+
+/* A3：筛选项就地报错，提示放在控件下方，不挤动同行其他控件。 */
+.account-log-field {
+  position: relative;
+}
+
+.account-log-field-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  color: var(--cdnca-color-error, #ed4014);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.account-log-filters:has(.account-log-field-error) {
+  margin-bottom: 24px;
+}
+
+.account-log-error {
+  margin-bottom: 12px;
+}

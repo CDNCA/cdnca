@@ -1,0 +1,234 @@
+{
+ "id": "admin-control-backup",
+ "prefix": "/v1/admin/control-backup",
+ "operations": [
+  {
+   "operation_id": "getControlBackupStatus",
+   "method": "GET",
+   "path": "/v1/admin/control-backup",
+   "summary": "Signer fingerprint, freeze state, bundles, recent runs and redacted settings",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Status"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "requestControlBackup",
+   "method": "POST",
+   "path": "/v1/admin/control-backup/backups",
+   "summary": "Queue an immediate backup",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "Queued run"
+    },
+    {
+     "status": "409",
+     "description": "Another backup or migration is queued or running"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteControlBackup",
+   "method": "DELETE",
+   "path": "/v1/admin/control-backup/backups/{backup_id}",
+   "summary": "Queue deletion of a bundle and its remote copies; body confirm must equal backup_id",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "backup_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "Queued"
+    },
+    {
+     "status": "400",
+     "description": "Confirmation mismatch"
+    }
+   ]
+  },
+  {
+   "operation_id": "getControlBackupRestoreCommands",
+   "method": "GET",
+   "path": "/v1/admin/control-backup/backups/{backup_id}/restore-commands",
+   "summary": "Text commands to restore a bundle onto an empty host (nothing is executed)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "backup_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Commands"
+    }
+   ]
+  },
+  {
+   "operation_id": "fetchControlBackupHostKey",
+   "method": "POST",
+   "path": "/v1/admin/control-backup/host-key",
+   "summary": "Read an SSH host key fingerprint to pin before a migration",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Fingerprint"
+    },
+    {
+     "status": "502",
+     "description": "Host unreachable"
+    }
+   ]
+  },
+  {
+   "operation_id": "requestControlMigration",
+   "method": "POST",
+   "path": "/v1/admin/control-backup/migrations",
+   "summary": "Queue a migration to an empty new host; confirm must equal host. This control plane stays frozen after success.",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "Queued run"
+    },
+    {
+     "status": "400",
+     "description": "Invalid target or confirmation mismatch"
+    },
+    {
+     "status": "409",
+     "description": "Busy"
+    }
+   ]
+  },
+  {
+   "operation_id": "exportControlBackupRecoveryKit",
+   "method": "POST",
+   "path": "/v1/admin/control-backup/recovery-kit",
+   "summary": "Download the backup identity sealed with a passphrase (scrypt) for off-host disaster recovery",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Recovery kit JSON"
+    },
+    {
+     "status": "400",
+     "description": "Passphrase shorter than 12 characters"
+    }
+   ]
+  },
+  {
+   "operation_id": "getControlBackupRun",
+   "method": "GET",
+   "path": "/v1/admin/control-backup/runs/{run_id}",
+   "summary": "One agent run with its redacted log",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "run_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Run"
+    },
+    {
+     "status": "404",
+     "description": "Unknown run"
+    }
+   ]
+  },
+  {
+   "operation_id": "putControlBackupSettings",
+   "method": "PUT",
+   "path": "/v1/admin/control-backup/settings",
+   "summary": "Replace schedule, retention and off-host targets",
+   "auth": [
+    "bearer"
+   ],
+   "description": "expected_revision must equal settings.revision of the status read (409 control_backup_revision_conflict otherwise). Each target names the saved target it edits in stored_name (absent for a new target, which never inherits stored secrets). Empty secret fields keep the stored value of stored_name; for SFTP only while auth stays the same: a changed auth without a matching new credential is 400 control_backup_auth_changed, and a credential that does not fit auth is 400 control_backup_invalid_private_key / control_backup_invalid_password, with error.details {target, field}.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated status"
+    },
+    {
+     "status": "400",
+     "description": "Invalid settings or a refused target credential"
+    },
+    {
+     "status": "409",
+     "description": "The settings changed since expected_revision"
+    }
+   ]
+  },
+  {
+   "operation_id": "probeControlBackupTarget",
+   "method": "POST",
+   "path": "/v1/admin/control-backup/targets/probe",
+   "summary": "Write, read back and delete a probe object on the target as on screen (nothing is saved)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Body {expected_revision, target}. target is merged over the stored settings exactly as a save would (same stored_name and credential rules), then probed.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Probe result (ok and a redacted message)"
+    },
+    {
+     "status": "400",
+     "description": "Invalid target or a refused credential"
+    },
+    {
+     "status": "409",
+     "description": "The settings changed since expected_revision"
+    }
+   ]
+  }
+ ]
+}

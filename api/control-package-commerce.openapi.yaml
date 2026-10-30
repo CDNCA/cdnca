@@ -1,0 +1,2196 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Package Commerce API
+  version: 0.1.3
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Production-mounted BILL-02/03/11/12 HTTP contract over migration 051,
+    migration 059, and packagecommerce.Service. Tenant commands and reads always derive tenant
+    and owner scope from the current authenticated principal. Platform reads,
+    refunds, and voids require an explicit target tenant and existing
+    billing.adjustments.manage permission. Provider callbacks are accepted only
+    when the default-off callback runtime is enabled with a valid versioned
+    provider keyring. The production authenticator verifies the bounded raw
+    request before returning a normalized callback; signature_verified is not a
+    client field. The fragment is aggregated by the unified control API and
+    mounted by control-api main behind a default-off runtime gate.
+
+    This slice does not expose order retry/cancel, approval creation or approval,
+    hold capture/release/expire, provider configuration, outbox delivery, or any
+    raw provider payload endpoint. Those actions remain unsupported rather than
+    being represented by placeholder operations.
+servers:
+  - url: /
+tags:
+  - name: Tenant package commerce
+    description: Tenant-user package purchases, subscriptions, orders, and traffic results.
+  - name: Platform package commerce
+    description: Explicit-tenant operational reads and approved billing adjustments.
+  - name: Payment provider callbacks
+    description: Strict JSON callbacks authenticated with a configured provider HMAC key.
+paths:
+  /v1/package-commerce/catalog:
+    get:
+      tags: [Tenant package commerce]
+      operationId: listPurchasablePackageCatalog
+      summary: List package products purchasable by the authenticated tenant user
+      description: >-
+        Requires package_subscriptions.read. Only enabled products linked to a
+        currently visible package group are returned. The first page freezes the
+        authenticated tenant/user scope, business-time snapshot, catalog publish
+        watermark, and package-group visibility watermark; later pages reuse the
+        endpoint- and principal-bound signed cursor so catalog changes cannot
+        produce mixed pages. The response contains display and purchase input
+        fields only, including the immutable CC and DDoS protection description.
+        ADR 0018 RS-03 (Q3): a reseller's customer sees only its reseller's
+        packages, a direct customer only the platform's; traffic packages are
+        always the platform's.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.read]
+      parameters:
+        - $ref: '#/components/parameters/CatalogKind'
+        - $ref: '#/components/parameters/CatalogGroupID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/CatalogPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/package-commerce/purchases:
+    post:
+      tags: [Tenant package commerce]
+      operationId: purchasePackageSubscription
+      summary: Purchase a package subscription for the authenticated tenant user
+      description: >-
+        Requires a tenant principal with package_subscriptions.manage. Tenant and
+        buyer IDs are derived from the live principal and cannot be supplied in
+        the request body. Unknown results may be retried only with the original
+        Idempotency-Key, If-Match value where applicable, and identical payload.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PurchaseRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/orders:
+    get:
+      tags: [Tenant package commerce]
+      operationId: listMyPackageOrders
+      summary: List the authenticated tenant user's package orders
+      description: >-
+        Requires package_subscriptions.read. Results are constrained by both
+        principal scope and principal user ID. tenant_id is rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/OrderProductKind'
+        - $ref: '#/components/parameters/OrderState'
+        - $ref: '#/components/parameters/OrderRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/OrderPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/package-commerce/orders/{order_id}:
+    get:
+      tags: [Tenant package commerce]
+      operationId: getMyPackageOrder
+      summary: Get one visible package order
+      description: >-
+        A foreign-tenant or different-owner order returns the same 404 as an
+        unknown order and does not disclose existence.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.read]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+      responses:
+        '200': {$ref: '#/components/responses/OrderOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/package-commerce/orders/{order_id}/events:
+    get:
+      tags: [Tenant package commerce]
+      operationId: listMyPackageOrderEvents
+      summary: List sanitized order state events in revision order
+      description: >-
+        Event payload, actor, request/trace IDs, approval IDs, ledger IDs, holds,
+        provider data, and digests are deliberately omitted.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.read]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/EventPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/package-commerce/subscriptions:
+    get:
+      tags: [Tenant package commerce]
+      operationId: listMySoldPackageSubscriptions
+      summary: List effective sold-subscription projections owned by the current user
+      description: >-
+        Uses a fixed-time effective entitlement projection. Future scheduled
+        entitlements do not hide the currently effective revision. The first page
+        freezes an exact UTC microsecond business-time snapshot, migration 059's
+        entitlement committed-fact high-water mark, and migration 062's immutable
+        subscription-state high-water mark. Each subsequent page reuses all three
+        values from the endpoint-, tenant-, and owner-bound signed cursor, so later
+        entitlement backfills, renewals, or cancellations cannot create mixed facts.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/SubscriptionStatus'
+        - $ref: '#/components/parameters/SubscriptionEndAtFrom'
+        - $ref: '#/components/parameters/SubscriptionEndAtTo'
+        - $ref: '#/components/parameters/IncludeSubscriptionProductName'
+        - name: page
+          in: query
+          description: Page-jump mode (1-based, max 10000, mutually exclusive with cursor). Uses OFFSET within the same frozen snapshot and returns total.
+          schema: {type: integer, minimum: 1, maximum: 10000}
+      responses:
+        '200': {$ref: '#/components/responses/SubscriptionPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/package-commerce/subscriptions/{subscription_id}/renew:
+    post:
+      tags: [Tenant package commerce]
+      operationId: renewPackageSubscription
+      summary: Renew an active package subscription
+      description: >-
+        If-Match is the quoted current package_subscriptions revision and is
+        passed to the core transaction as expected_revision.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RenewRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/orders:
+    get:
+      tags: [Tenant package commerce]
+      operationId: resellerListCustomerOrders
+      summary: A reseller lists one of its customers' package orders
+      description: >-
+        ADR 0018 RS-05. Reseller tenant session with reseller.customers.read or reseller.customers.manage; the customer
+        must be under the caller's active reseller scope (otherwise 403). Lists the whole customer scope (every owner);
+        wholesale_minor is the reseller's own cost and is returned. tenant_id and operation are rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.read]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/OrderProductKind'
+        - $ref: '#/components/parameters/OrderState'
+        - $ref: '#/components/parameters/OrderRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/OrderPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions:
+    get:
+      tags: [Tenant package commerce]
+      operationId: resellerListCustomerSubscriptions
+      summary: A reseller lists one of its customers' package subscriptions
+      description: >-
+        ADR 0018 RS-05. Same snapshot and paging rules as /v1/package-commerce/subscriptions, over the whole customer
+        scope; reseller.customers.read or reseller.customers.manage, customer under the caller (otherwise 403).
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.read]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/SubscriptionStatus'
+        - $ref: '#/components/parameters/SubscriptionEndAtFrom'
+        - $ref: '#/components/parameters/SubscriptionEndAtTo'
+        - $ref: '#/components/parameters/IncludeSubscriptionProductName'
+        - name: page
+          in: query
+          description: Page-jump mode (1-based, max 10000, mutually exclusive with cursor).
+          schema: {type: integer, minimum: 1, maximum: 10000}
+      responses:
+        '200': {$ref: '#/components/responses/SubscriptionPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/purchases:
+    post:
+      tags: [Tenant package commerce]
+      operationId: resellerPurchaseForCustomer
+      summary: A reseller buys one of its packages for its own customer
+      description: >-
+        ADR 0018 RS-03. The caller is a reseller tenant session with reseller.customers.manage; the customer must be
+        under it and the package must be the reseller's. Only the reseller's prepaid wholesale cost (W, from its price
+        list) is charged; the customer's balance is untouched (funding_source reseller). The subscription belongs to
+        owner_user_id in the customer scope. 422 reseller_prepaid_insufficient when the prepaid balance is short of W
+        (nothing is written); 422 reseller_wholesale_unpriced when the main line group has no wholesale price for the period.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.manage]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [owner_user_id, product_id, product_revision, period]
+              properties:
+                owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+                product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+                product_revision: {type: integer, format: int64, minimum: 1}
+                period: {$ref: '#/components/schemas/PackagePeriod'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/renew:
+    post:
+      tags: [Tenant package commerce]
+      operationId: resellerRenewForCustomer
+      summary: A reseller renews its customer's subscription to one of its packages
+      description: >-
+        ADR 0018 RS-03. Same rules as the reseller purchase: only W is charged. If-Match is the quoted current
+        subscription revision. A renewal carrying a platform add-on cannot be reseller-placed (409).
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.manage]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [period]
+              properties:
+                period: {$ref: '#/components/schemas/PackagePeriod'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/upgrade:
+    post:
+      tags: [Tenant package commerce]
+      operationId: resellerUpgradeForCustomer
+      summary: A reseller upgrades its customer's subscription to another of its packages
+      description: >-
+        ADR 0019 §5 / Q2 a (bb03). Only between the reseller's own packages, immediately. The customer pays
+        nothing; the reseller's prepaid balance moves by the wholesale difference prorated over the remaining
+        part of the current cycle (old price rounded down, new price rounded up, as proration-utc-v1). An
+        upgrade charges it (422 reseller_prepaid_insufficient when short: nothing is written); a downgrade
+        returns it. The order's seller is the reseller and wholesale_minor is the difference. If-Match is the
+        quoted current subscription revision.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.manage]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [product_id, product_revision, period]
+              properties:
+                product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+                product_revision: {type: integer, minimum: 1}
+                period: {$ref: '#/components/schemas/PackagePeriod'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/downgrade:
+    post:
+      tags: [Tenant package commerce]
+      operationId: resellerDowngradeForCustomer
+      summary: A reseller downgrades its customer's subscription to another of its packages
+      description: >-
+        ADR 0019 §5 / Q2 a (bb03). Only between the reseller's own packages, immediately. The customer pays
+        nothing; the reseller's prepaid balance moves by the wholesale difference prorated over the remaining
+        part of the current cycle (old price rounded down, new price rounded up, as proration-utc-v1). An
+        upgrade charges it (422 reseller_prepaid_insufficient when short: nothing is written); a downgrade
+        returns it. The order's seller is the reseller and wholesale_minor is the difference. If-Match is the
+        quoted current subscription revision.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.manage]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [product_id, product_revision, period]
+              properties:
+                product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+                product_revision: {type: integer, minimum: 1}
+                period: {$ref: '#/components/schemas/PackagePeriod'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/cancel:
+    post:
+      tags: [Tenant package commerce]
+      operationId: resellerCancelCustomerSubscription
+      summary: A reseller cancels its customer's subscription
+      description: >-
+        ADR 0019 §5 (bb03). Same behavior as the platform's cancel (the sites stop, no refund or ledger entry).
+        The customer must be under the caller's active reseller scope.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.manage]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false}
+      responses:
+        '201': {$ref: '#/components/responses/AdminCancelCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/suspend:
+    post:
+      operationId: resellerSuspendCustomerSubscription
+      summary: Suspend one package subscription as the customer's reseller
+      description: >-
+        ADR 0019 §5 (bb03, migration 551). Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.manage]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ResellerSuspendSubscriptionRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/SubscriptionSuspensionOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/unsuspend:
+    post:
+      operationId: resellerUnsuspendCustomerSubscription
+      summary: Unsuspend one package subscription as the customer's reseller
+      description: >-
+        ADR 0019 §5 (bb03, migration 551). Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [reseller.customers.manage]
+      parameters:
+        - {name: customer_scope_id, in: path, required: true, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ResellerUnsuspendSubscriptionRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/SubscriptionSuspensionOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/package-commerce/subscriptions/{subscription_id}/upgrade:
+    post:
+      tags: [Tenant package commerce]
+      operationId: upgradePackageSubscription
+      summary: Upgrade a package immediately or at the next cycle
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChangeRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/subscriptions/{subscription_id}/downgrade:
+    post:
+      tags: [Tenant package commerce]
+      operationId: downgradePackageSubscription
+      summary: Downgrade a package immediately or at the next cycle
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChangeRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/traffic-purchases:
+    post:
+      tags: [Tenant package commerce]
+      operationId: purchaseTrafficPackage
+      summary: Purchase a versioned traffic package snapshot
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TrafficPurchaseRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/traffic-purchases/{order_id}:
+    get:
+      tags: [Tenant package commerce]
+      operationId: getMyTrafficPackagePurchase
+      summary: Get a sanitized traffic-purchase order and grant result
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.read]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+      responses:
+        '200': {$ref: '#/components/responses/TrafficPurchaseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/package-commerce/orders:
+    get:
+      tags: [Platform package commerce]
+      operationId: listTenantPackageOrdersAsPlatform
+      summary: List all package orders for one explicit tenant
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequiredTenantID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/OrderOperation'
+        - $ref: '#/components/parameters/OrderProductKind'
+        - $ref: '#/components/parameters/OrderState'
+        - $ref: '#/components/parameters/OrderRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/OrderPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/package-commerce/orders/{order_id}:
+    get:
+      tags: [Platform package commerce]
+      operationId: getTenantPackageOrderAsPlatform
+      summary: Get one order in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+        - $ref: '#/components/parameters/RequiredTenantID'
+      responses:
+        '200': {$ref: '#/components/responses/OrderOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/package-commerce/orders/{order_id}/events:
+    get:
+      tags: [Platform package commerce]
+      operationId: listTenantPackageOrderEventsAsPlatform
+      summary: List sanitized events for one tenant order
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+        - $ref: '#/components/parameters/RequiredTenantID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/EventPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/package-commerce/subscriptions:
+    get:
+      tags: [Platform package commerce]
+      operationId: listSoldPackageSubscriptionsAsPlatform
+      summary: List effective sold subscriptions for one explicit tenant
+      description: >-
+        Uses the fixed-time effective entitlement projection. The first page
+        freezes an exact UTC microsecond business-time snapshot, migration 059's
+        entitlement committed-fact high-water mark, and migration 062's immutable
+        subscription-state high-water mark. Each subsequent page reuses all three
+        values from the endpoint- and tenant-bound signed cursor, so later
+        entitlement backfills, renewals, or cancellations cannot create mixed facts.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequiredTenantID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/SubscriptionStatus'
+        - $ref: '#/components/parameters/SubscriptionEndAtFrom'
+        - $ref: '#/components/parameters/SubscriptionEndAtTo'
+        - $ref: '#/components/parameters/IncludeSubscriptionProductName'
+      responses:
+        '200': {$ref: '#/components/responses/SubscriptionPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+    post:
+      tags: [Platform package commerce]
+      operationId: openPackageSubscriptionAsPlatform
+      summary: Open a package subscription for an active tenant member without an order
+      description: >-
+        Creates the subscription, immutable revision-one state, and active
+        manual_open entitlement atomically. It never fabricates an order,
+        payment, or fulfillment. Unknown outcomes may be retried only with the
+        exact original body and Idempotency-Key.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminOpenSubscriptionRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/AdminOpenCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/admin/package-commerce/subscriptions/{subscription_id}/upgrade:
+    post:
+      tags: [Platform package commerce]
+      operationId: upgradePackageSubscriptionAsPlatform
+      summary: Upgrade one tenant package subscription as platform administrator
+      description: >-
+        The platform principal must name the target tenant in the body. The
+        subscription row and stored owner are locked and verified before the
+        existing proration, price-direction, revision CAS, idempotency, audit,
+        and fulfillment transaction is reused. The response order remains
+        owned by the stored tenant user, not the platform operator.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminChangeRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/admin/package-commerce/subscriptions/{subscription_id}/downgrade:
+    post:
+      tags: [Platform package commerce]
+      operationId: downgradePackageSubscriptionAsPlatform
+      summary: Downgrade one tenant package subscription as platform administrator
+      description: >-
+        The platform principal must name the target tenant in the body. The
+        subscription row and stored owner are locked and verified before the
+        existing next-cycle or immediate downgrade transaction is reused.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminChangeRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CommandCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/UnknownResult'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/admin/package-commerce/traffic-purchases/{order_id}:
+    get:
+      tags: [Platform package commerce]
+      operationId: getTenantTrafficPackagePurchaseAsPlatform
+      summary: Get one sanitized traffic-purchase result for an explicit tenant
+      description: >-
+        The platform principal must name the target tenant. A purchase outside
+        that tenant scope is indistinguishable from an unknown order.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+        - $ref: '#/components/parameters/RequiredTenantID'
+      responses:
+        '200': {$ref: '#/components/responses/TrafficPurchaseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/package-commerce/orders/{order_id}/refund:
+    post:
+      tags: [Platform package commerce]
+      operationId: refundPackageOrder
+      summary: Apply an approved partial or cumulative refund
+      description: >-
+        Requires a platform principal with billing.adjustments.manage and an
+        explicit tenant_id. The core requires a matching unexpired, unused
+        two-person approval fact; this endpoint neither creates nor weakens that
+        approval. gross_amount_minor is the gross amount for this refund action.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RefundRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/CommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/admin/package-commerce/orders/{order_id}/void:
+    post:
+      tags: [Platform package commerce]
+      operationId: voidPackageOrder
+      summary: Void an eligible order using a one-time approval fact
+      description: >-
+        Requires billing.adjustments.manage and an explicit tenant_id. The
+        approval must match the order, tenant, operation, executor, and validity
+        window. Existing refunds or a consumed approval remain hard failures.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - $ref: '#/components/parameters/OrderID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VoidRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/CommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/UnknownResult'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/package-commerce/provider-callbacks/{provider}:
+    post:
+      tags: [Payment provider callbacks]
+      operationId: applyVerifiedPaymentProviderCallback
+      summary: Authenticate and apply one raw payment-provider callback
+      description: >-
+        No bearer identity is accepted as proof. All four callback headers must
+        each have exactly one non-empty value without surrounding whitespace.
+        The timestamp is canonical Unix seconds within the configured freshness
+        window. The HMAC-SHA256 input is eleven newline-separated values in this
+        order: cdnca.package-commerce.provider-callback.v1, the provider path
+        value, provider_account_id, key ID, timestamp, external_event_id,
+        external_payment_id, event_kind, canonical decimal amount_minor,
+        currency, and the lowercase hexadecimal SHA-256 of the exact raw body.
+        X-CDNCA-Callback-Signature is v1= followed by the canonical
+        base64url-no-padding encoding of the 32-byte HMAC. Verification binds the
+        provider, account, and key before the normalized callback reaches the
+        commerce core. Exact and concurrent signed retries pass authentication;
+        durable external_event_id plus raw payload SHA-256 idempotency returns the
+        committed replay, while a changed payload returns provider_event_conflict.
+        Raw payloads, credentials, keyring contents, and secrets are never
+        returned by this endpoint.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - name: X-CDNCA-Callback-Version
+          in: header
+          required: true
+          x-cdnca-single-value: true
+          description: Exactly one value selecting callback signature version 1.
+          schema: {type: string, const: '1'}
+        - name: X-CDNCA-Callback-Key-ID
+          in: header
+          required: true
+          x-cdnca-single-value: true
+          description: Exactly one configured key identifier bound to the provider and provider account.
+          schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+        - name: X-CDNCA-Callback-Timestamp
+          in: header
+          required: true
+          x-cdnca-single-value: true
+          description: Exactly one canonical base-10 Unix-seconds value that fits signed int64.
+          schema: {type: string, maxLength: 19, pattern: '^(0|[1-9][0-9]{0,18})$'}
+        - name: X-CDNCA-Callback-Signature
+          in: header
+          required: true
+          x-cdnca-single-value: true
+          description: Exactly one v1= prefixed canonical base64url-no-padding encoding of the 32-byte HMAC-SHA256.
+          schema: {type: string, pattern: '^v1=[A-Za-z0-9_-]{43}$'}
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceparent'
+      requestBody:
+        required: true
+        x-maxBodyBytes: 262144
+        description: >-
+          One non-empty UTF-8 JSON object, at most 256 KiB. Content-Type must be
+          application/json with no parameter or only charset=utf-8. Duplicate
+          fields, unknown fields, invalid UTF-8, and trailing JSON are rejected.
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - version
+                - provider_account_id
+                - external_event_id
+                - external_payment_id
+                - event_kind
+                - amount_minor
+                - currency
+                - occurred_at
+              properties:
+                version: {type: integer, const: 1}
+                provider_account_id: {$ref: '#/components/schemas/ProviderIdentifier'}
+                external_event_id: {$ref: '#/components/schemas/ProviderIdentifier'}
+                external_payment_id: {$ref: '#/components/schemas/ProviderIdentifier'}
+                event_kind:
+                  type: string
+                  enum: [payment_succeeded, payment_failed, refund_succeeded, void_succeeded]
+                amount_minor: {type: integer, format: int64, minimum: 0, maximum: 1000000000000000}
+                currency: {type: string, const: CNY}
+                occurred_at: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Normalized provider event processed or replayed.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CallbackResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/CallbackUnauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/CallbackUnavailable'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/admin/package-commerce/subscriptions/{subscription_id}/cancel:
+    post:
+      operationId: cancelPackageSubscriptionAsPlatform
+      summary: Cancel a tenant subscription as administrator
+      description: Physical deletion is not supported by cancellation. Use sold package commands for independent enable/disable and audited deletion.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - {name: subscription_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: If-Match, in: header, required: true, schema: {type: string}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+        - {name: X-Request-ID, in: header, required: true, schema: {type: string}}
+        - {name: traceparent, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminCancelSubscriptionRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/AdminCancelCreated'}
+        '400': {description: Invalid request.}
+        '403': {description: Permission denied.}
+        '404': {description: Subscription not found.}
+        '409': {description: Invalid subscription state or idempotency conflict.}
+        '412': {description: Revision conflict.}
+  /v1/admin/package-commerce/subscriptions/{subscription_id}/suspend:
+    post:
+      operationId: suspendPackageSubscriptionAsPlatform
+      summary: Suspend one package subscription as an administrator
+      description: >-
+        ADR 0019 §5 (bb03, migration 551). Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminSuspendSubscriptionRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/SubscriptionSuspensionOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/admin/package-commerce/subscriptions/{subscription_id}/unsuspend:
+    post:
+      operationId: unsuspendPackageSubscriptionAsPlatform
+      summary: Unsuspend one package subscription as an administrator
+      description: >-
+        ADR 0019 §5 (bb03, migration 551). Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminUnsuspendSubscriptionRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/SubscriptionSuspensionOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/package-commerce/subscriptions/{subscription_id}/auto-renew:
+    post:
+      operationId: setPackageSubscriptionAutoRenew
+      summary: Turn auto-renew on or off for an owned subscription
+      description: Auto-renew charges the account balance at the renewal price (bound same-price promotion snapshot and frozen add-ons included) at ends_at-lead_hours, ends_at-24h and ends_at; each term gets at most three tries.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - {name: subscription_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+        - {name: X-Request-ID, in: header, required: true, schema: {type: string}}
+        - {name: traceparent, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AutoRenewSettingRequest'}
+      responses:
+        '200': {description: Current setting., content: {application/json: {schema: {$ref: '#/components/schemas/AutoRenewSetting'}}}}
+        '400': {description: Invalid request.}
+        '403': {description: Permission denied.}
+        '404': {description: Subscription not found or not owned.}
+        '409': {description: 'Subscription is not active, or error.code package_auto_renew_disabled: PACKAGE_AUTO_RENEW_ENABLED is off on this control plane and no setting is written (GET /v1/runtime-features package_auto_renew is false).'}
+  /v1/admin/package-commerce/subscriptions/{subscription_id}/auto-renew:
+    post:
+      operationId: disablePackageSubscriptionAutoRenewAsPlatform
+      summary: Turn a tenant subscription's auto-renew off as administrator
+      description: Operators may only switch auto-renew off (enabled must be false).
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - {name: subscription_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string}}
+        - {name: X-Request-ID, in: header, required: true, schema: {type: string}}
+        - {name: traceparent, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/AutoRenewSettingRequest'}
+                - type: object
+                  required: [tenant_id]
+                  properties:
+                    tenant_id: {type: string, format: uuid}
+                    enabled: {type: boolean, enum: [false]}
+      responses:
+        '200': {description: Current setting., content: {application/json: {schema: {$ref: '#/components/schemas/AutoRenewSetting'}}}}
+        '400': {description: Invalid request or enabled=true.}
+        '403': {description: Permission denied.}
+        '404': {description: Subscription not found.}
+        '409': {description: 'error.code package_auto_renew_disabled: PACKAGE_AUTO_RENEW_ENABLED is off on this control plane and no setting is written.'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Live control-api session authentication and current RBAC grants.
+  parameters:
+    CatalogKind:
+      name: kind
+      in: query
+      required: true
+      x-cdnca-single-value: true
+      description: Public catalog projection kind. This endpoint currently exposes package products only.
+      schema: {type: string, const: package}
+    CatalogGroupID:
+      name: group_id
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: >-
+        BILL-13: only products in this visible package group (an ID from the
+        first page's groups). Bound to the signed cursor; a cursor minted for
+        another group, or for no group, is refused with 400.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    OrderID:
+      name: order_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    SubscriptionID:
+      name: subscription_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+    RequiredTenantID:
+      name: tenant_id
+      in: query
+      required: true
+      description: Target tenant access-scope UUID; platform routes never infer it.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        Versioned base64url HMAC-SHA256 envelope bound to endpoint, target
+        tenant, and owner user where applicable. Tampering or cross-scope reuse
+        returns package_commerce_validation_error.
+      schema: {type: string, minLength: 1, maxLength: 4096, pattern: '^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'}
+    OrderOperation:
+      name: operation
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: Optional platform-only filter for package upgrade or downgrade orders.
+      schema: {type: string, enum: [upgrade, downgrade]}
+    OrderProductKind:
+      name: product_kind
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: Optional order product filter shared by tenant and platform order reads.
+      schema: {type: string, enum: [package_subscription, traffic_package]}
+    OrderState:
+      name: state
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: Optional latest order state filter shared by tenant and platform order reads.
+      schema: {type: string, enum: [created, paid, fulfilled, cancelled, refund_applied, void_applied, failed]}
+    OrderRequestID:
+      name: request_id
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: Optional X-Request-ID the order was created with, so a buyer can confirm the outcome of the original command.
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    SubscriptionStatus:
+      name: status
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: >-
+        Effective status at the frozen snapshot. active ends after snapshot_at;
+        expired ends at or before snapshot_at; cancelled always follows the
+        immutable cancelled lifecycle fact regardless of end_at.
+      schema: {type: string, enum: [active, expired, cancelled]}
+    IncludeSubscriptionProductName:
+      name: include_product_name
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: >-
+        Accepts exactly one lowercase true or false. Empty, repeated, or other
+        values return 400. Omitted or false preserves the legacy response shape.
+        true includes product_name only when the selected effective entitlement's
+        immutable product_snapshot.name is a JSON string, preserved without
+        normalization. Missing, null, or non-string names are omitted. The current
+        product catalog is never used. This projection does not change subscription
+        membership, ordering, or the cursor's tenant, owner, time, and high-water bounds.
+      schema: {type: string, enum: ['true', 'false'], default: 'false'}
+    SubscriptionEndAtFrom:
+      name: end_at_from
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: Inclusive canonical UTC microsecond lower bound for end_at.
+      schema: {type: string, format: date-time}
+    SubscriptionEndAtTo:
+      name: end_at_to
+      in: query
+      required: false
+      x-cdnca-single-value: true
+      description: Exclusive canonical UTC microsecond upper bound for end_at.
+      schema: {type: string, format: date-time}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        One bounded business-action key. Exact retries preserve the original
+        payload, target, principal, and If-Match precondition. Reuse with changed
+        input returns idempotency_conflict.
+      schema: {$ref: '#/components/schemas/MetadataToken'}
+    WriteRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/MetadataToken'}
+    OptionalRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/MetadataToken'}
+    Traceparent:
+      name: traceparent
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/Traceparent'}
+    OptionalTraceparent:
+      name: traceparent
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/Traceparent'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive decimal package subscription revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  headers:
+    RequestID:
+      description: Validated or server-generated bounded request identifier.
+      schema: {$ref: '#/components/schemas/MetadataToken'}
+    IdempotencyReplayed:
+      description: Present and true only for an identical committed replay.
+      schema: {type: string, const: 'true'}
+  schemas:
+    AutoRenewSettingRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, period, lead_hours]
+      properties:
+        enabled: {type: boolean}
+        period: {type: string, enum: [month, quarter, year]}
+        lead_hours: {type: integer, minimum: 1, maximum: 720, description: First try at ends_at minus this many hours.}
+    AutoRenewSetting:
+      type: object
+      required: [subscription_id, enabled, period, lead_hours, revision]
+      properties:
+        subscription_id: {type: string, format: uuid}
+        enabled: {type: boolean}
+        period: {type: string, enum: [month, quarter, year]}
+        lead_hours: {type: integer}
+        revision: {type: integer, minimum: 1}
+        updated_at: {type: string, format: date-time}
+    AdminCancelSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_id]
+      properties:
+        tenant_id: {type: string, format: uuid}
+    AdminSuspendSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, reason]
+      properties:
+        tenant_id: {type: string, format: uuid}
+        reason: {type: string, minLength: 1, maxLength: 256}
+    AdminUnsuspendSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_id]
+      properties:
+        tenant_id: {type: string, format: uuid}
+    ResellerSuspendSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1, maxLength: 256}
+    ResellerUnsuspendSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      properties: {}
+    SubscriptionSuspensionResult:
+      type: object
+      required: [subscription]
+      properties:
+        subscription:
+          type: object
+          required: [id, tenant_scope_id, lifecycle_status, revision]
+          properties:
+            id: {type: string, format: uuid}
+            tenant_scope_id: {type: string, format: uuid}
+            lifecycle_status: {type: string, const: active}
+            suspended_at: {type: string, format: date-time, description: Present while suspended.}
+            suspend_reason: {type: string, maxLength: 256}
+            revision: {type: integer, minimum: 1}
+    AdminCancelSubscriptionResult:
+      type: object
+      required: [subscription]
+      properties:
+        subscription:
+          type: object
+          required: [id, tenant_scope_id, lifecycle_status, cancelled_at, revision]
+          properties:
+            id: {type: string, format: uuid}
+            tenant_scope_id: {type: string, format: uuid}
+            lifecycle_status: {type: string, const: cancelled}
+            cancelled_at: {type: string, format: date-time}
+            revision: {type: integer, minimum: 2}
+        intent:
+          type: object
+          properties:
+            action: {type: string, const: suspend}
+            reason: {type: string, const: cancelled}
+            desired_enabled: {type: boolean, const: false}
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    MetadataToken:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    Traceparent:
+      type: string
+      pattern: '^00-(?!0{32}-)[0-9a-f]{32}-(?!0{16}-)[0-9a-f]{16}-[0-9a-f]{2}$'
+    PromotionReference:
+      type: object
+      additionalProperties: false
+      required: [quote_id, reservation_id]
+      properties:
+        quote_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        reservation_id: {$ref: '#/components/schemas/CanonicalUUID'}
+    BalancePayment:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: {type: string, const: balance}
+    ProviderPayment:
+      type: object
+      additionalProperties: false
+      required: [kind, provider, provider_account_id, external_payment_id]
+      properties:
+        kind: {type: string, const: provider}
+        provider: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        provider_account_id: {$ref: '#/components/schemas/ProviderIdentifier'}
+        external_payment_id: {$ref: '#/components/schemas/ProviderIdentifier'}
+    PaymentSource:
+      oneOf:
+        - $ref: '#/components/schemas/BalancePayment'
+        - $ref: '#/components/schemas/ProviderPayment'
+      discriminator:
+        propertyName: kind
+        mapping:
+          balance: '#/components/schemas/BalancePayment'
+          provider: '#/components/schemas/ProviderPayment'
+    ProviderIdentifier:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    CyclePolicy:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, custom_days]
+          properties:
+            kind: {type: string, enum: [daily, monthly]}
+            custom_days: {type: integer, const: 0}
+        - type: object
+          additionalProperties: false
+          required: [kind, custom_days]
+          properties:
+            kind: {type: string, const: custom_days}
+            custom_days: {type: integer, minimum: 1, maximum: 366}
+    TrafficFactor:
+      type: object
+      additionalProperties: false
+      required: [numerator, denominator]
+      properties:
+        numerator: {type: integer, format: int64, minimum: 1, maximum: 1000000}
+        denominator: {type: integer, format: int64, minimum: 1, maximum: 1000000}
+    PurchaseRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - product_id
+        - product_revision
+        - period
+        - site_limit
+        - node_limit
+        - timezone
+        - cycle_policy
+        - traffic_factor
+        - payment
+      properties:
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        period: {$ref: '#/components/schemas/PackagePeriod'}
+        site_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        node_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        timezone: {type: string, minLength: 3, maxLength: 128, examples: [UTC, Asia/Shanghai]}
+        cycle_policy: {$ref: '#/components/schemas/CyclePolicy'}
+        traffic_factor: {$ref: '#/components/schemas/TrafficFactor'}
+        promotion: {$ref: '#/components/schemas/PromotionReference'}
+        payment: {$ref: '#/components/schemas/PaymentSource'}
+    AdminOpenSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - tenant_id
+        - owner_user_id
+        - product_id
+        - product_revision
+        - site_limit
+        - node_limit
+        - timezone
+        - cycle_policy
+        - traffic_factor
+      properties:
+        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        site_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        node_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        duration: {$ref: '#/components/schemas/PackagePeriod'}
+        end_at: {type: string, format: date-time}
+        timezone: {type: string, minLength: 3, maxLength: 128, examples: [UTC, Asia/Shanghai]}
+        cycle_policy: {$ref: '#/components/schemas/CyclePolicy'}
+        traffic_factor: {$ref: '#/components/schemas/TrafficFactor'}
+      oneOf:
+        - required: [duration]
+          not: {required: [end_at]}
+        - required: [end_at]
+          not: {required: [duration]}
+    AdminOpenSubscriptionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - subscription_id
+        - tenant_scope_id
+        - owner_user_id
+        - product_id
+        - product_revision
+        - starts_at
+        - ends_at
+        - lifecycle_status
+        - revision
+        - replayed
+      properties:
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        lifecycle_status: {type: string, const: active}
+        revision: {type: integer, format: int64, const: 1}
+        replayed: {type: boolean}
+    RenewRequest:
+      type: object
+      additionalProperties: false
+      required: [period, payment]
+      properties:
+        period: {$ref: '#/components/schemas/PackagePeriod'}
+        promotion: {$ref: '#/components/schemas/PromotionReference'}
+        payment: {$ref: '#/components/schemas/PaymentSource'}
+    ChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [product_id, product_revision, period, effective_mode, site_limit, node_limit]
+      properties:
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        period: {$ref: '#/components/schemas/PackagePeriod'}
+        effective_mode: {type: string, enum: [immediate, next_cycle]}
+        site_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        node_limit: {$ref: '#/components/schemas/ResourceLimit'}
+    AdminChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, product_id, product_revision, period, effective_mode, site_limit, node_limit]
+      properties:
+        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        period: {$ref: '#/components/schemas/PackagePeriod'}
+        effective_mode: {type: string, enum: [immediate, next_cycle]}
+        site_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        node_limit: {$ref: '#/components/schemas/ResourceLimit'}
+    TrafficPurchaseRequest:
+      type: object
+      additionalProperties: false
+      required: [product_snapshot_id, payment]
+      properties:
+        product_snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        promotion: {$ref: '#/components/schemas/PromotionReference'}
+        payment: {$ref: '#/components/schemas/PaymentSource'}
+    RefundRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, gross_amount_minor, revoke_entitlement]
+      properties:
+        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        gross_amount_minor: {type: integer, format: int64, minimum: 1, maximum: 1000000000000000}
+        revoke_entitlement: {type: boolean}
+        approval_id:
+          description: >-
+            Optional. Refunds no longer require a second administrator's approval. When supplied it
+            must be a canonical UUID of an unexpired, unused manual approval for this order and
+            operation; it is then validated and consumed as before. An empty string is treated as absent.
+          type: string
+          anyOf:
+            - {$ref: '#/components/schemas/CanonicalUUID'}
+            - {type: string, maxLength: 0}
+    VoidRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_id]
+      properties:
+        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        approval_id:
+          description: >-
+            Optional. Voids no longer require a second administrator's approval. When supplied it is
+            validated and consumed as before; an empty string is treated as absent.
+          type: string
+          anyOf:
+            - {$ref: '#/components/schemas/CanonicalUUID'}
+            - {type: string, maxLength: 0}
+    PackagePeriod:
+      type: string
+      enum: [month, quarter, year]
+    ResourceLimit:
+      type: integer
+      format: int64
+      minimum: -1
+      maximum: 1000000000
+      description: -1 means unlimited; otherwise 0 through 1,000,000,000.
+    PackageProtection:
+      type: object
+      additionalProperties: false
+      required: [cc, ddos]
+      properties:
+        cc:
+          type: string
+          maxLength: 256
+          description: Frozen human-readable CC protection included in the purchased product snapshot.
+        ddos:
+          type: string
+          maxLength: 256
+          description: Frozen human-readable DDoS protection included in the purchased product snapshot.
+    PackageCatalogLimits:
+      type: object
+      additionalProperties: false
+      required:
+        - monthly_traffic_bytes
+        - bandwidth_bps
+        - connections
+        - stream_ports
+        - domains
+        - root_domains
+        - http_ports
+        - custom_cc
+        - websocket
+        - http3
+        - l2_origin
+      properties:
+        monthly_traffic_bytes: {type: integer, format: int64, minimum: -1, maximum: 1152921504606846976}
+        bandwidth_bps: {type: integer, format: int64, minimum: -1, maximum: 1000000000000000}
+        connections: {$ref: '#/components/schemas/ResourceLimit'}
+        stream_ports: {$ref: '#/components/schemas/ResourceLimit'}
+        domains: {$ref: '#/components/schemas/ResourceLimit'}
+        root_domains: {$ref: '#/components/schemas/ResourceLimit'}
+        http_ports: {$ref: '#/components/schemas/ResourceLimit'}
+        custom_cc: {type: boolean}
+        websocket: {type: boolean}
+        http3: {type: boolean}
+        l2_origin: {type: boolean}
+    PackageCatalogPrices:
+      type: object
+      additionalProperties: false
+      required: [currency, monthly_minor, quarterly_minor, yearly_minor]
+      properties:
+        currency: {type: string, const: CNY}
+        monthly_minor: {type: integer, format: int64, minimum: 0, maximum: 1000000000000000}
+        quarterly_minor: {type: integer, format: int64, minimum: 0, maximum: 1000000000000000}
+        yearly_minor: {type: integer, format: int64, minimum: 0, maximum: 1000000000000000}
+    PackageCatalogPurchasePolicy:
+      type: object
+      additionalProperties: false
+      required: [per_user_limit, sale_expires_at, require_real_name, renew_before_days, restrict_source_ips]
+      properties:
+        per_user_limit: {type: integer, format: int64, minimum: -1, maximum: 1000000000}
+        sale_expires_at:
+          type: [string, 'null']
+          format: date-time
+        require_real_name: {type: boolean}
+        renew_before_days: {type: integer, format: int64, minimum: -1, maximum: 36500}
+        restrict_source_ips: {type: boolean}
+    PackageCatalogCommercialTerms:
+      type: object
+      additionalProperties: false
+      required: [site_limit, node_limit, timezone, cycle_kind, custom_cycle_days, tcp_factor_numerator, tcp_factor_denominator]
+      properties:
+        site_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        node_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        cycle_kind: {type: string, enum: [daily, monthly, custom_days]}
+        custom_cycle_days: {type: integer, minimum: 0, maximum: 366}
+        tcp_factor_numerator: {type: integer, format: int64, minimum: 1, maximum: 1000000}
+        tcp_factor_denominator: {type: integer, format: int64, minimum: 1, maximum: 1000000}
+    PackageCatalogItem:
+      type: object
+      additionalProperties: false
+      required:
+        - product_id
+        - product_revision
+        - name
+        - description
+        - limits
+        - protection
+        - prices
+        - purchase_policy
+        - commercial_terms
+      properties:
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        description: {type: string, maxLength: 1000}
+        limits: {$ref: '#/components/schemas/PackageCatalogLimits'}
+        protection: {$ref: '#/components/schemas/PackageProtection'}
+        prices: {$ref: '#/components/schemas/PackageCatalogPrices'}
+        purchase_policy: {$ref: '#/components/schemas/PackageCatalogPurchasePolicy'}
+        commercial_terms: {$ref: '#/components/schemas/PackageCatalogCommercialTerms'}
+    CatalogEligibility:
+      type: object
+      additionalProperties: false
+      required: [purchasable, code]
+      properties:
+        purchasable: {type: boolean}
+        code: {type: string, maxLength: 128}
+    PackageCatalogPage:
+      type: object
+      additionalProperties: false
+      required: [items, eligibility]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/PackageCatalogItem'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+        eligibility: {$ref: '#/components/schemas/CatalogEligibility'}
+        groups:
+          description: >-
+            BILL-13: first page only. Visible package groups holding at least
+            one product purchasable at the same catalog snapshot, in the admin
+            group order; independent of the group_id filter.
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/PackageCatalogGroup'}
+    PackageCatalogGroup:
+      type: object
+      additionalProperties: false
+      required: [group_id, name]
+      properties:
+        group_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        name: {type: string, minLength: 1, maxLength: 128}
+    Order:
+      type: object
+      additionalProperties: false
+      allOf:
+        - if:
+            properties:
+              product_kind: {const: package_subscription}
+            required: [product_kind]
+          then:
+            required: [protection]
+      required:
+        - id
+        - display_id
+        - tenant_scope_id
+        - user_id
+        - user_display_id
+        - operation
+        - product_kind
+        - product_id
+        - product_revision
+        - currency
+        - original_amount_minor
+        - discount_amount_minor
+        - payable_amount_minor
+        - settlement_direction
+        - funding_source
+        - effective_mode
+        - effective_at
+        - state
+        - revision
+        - created_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        display_id:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Positive tenant-scope package-order identifier. The UUID remains canonical for links and commands.
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        user_display_id:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Stable user-facing identifier. The user UUID remains canonical for ownership and commands.
+        operation: {type: string, enum: [purchase, renew, upgrade, downgrade, traffic_package_purchase]}
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_kind: {type: string, enum: [package_subscription, traffic_package]}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        protection:
+          allOf: [{$ref: '#/components/schemas/PackageProtection'}]
+          description: >-
+            Required for package-subscription orders and frozen from the exact
+            purchased product revision. Traffic-package orders may omit it.
+        traffic_product_snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        package_period: {$ref: '#/components/schemas/PackagePeriod'}
+        currency: {type: string, const: CNY}
+        original_amount_minor: {type: integer, format: int64, minimum: 0}
+        discount_amount_minor: {type: integer, format: int64, minimum: 0}
+        payable_amount_minor: {type: integer, format: int64, minimum: 0}
+        settlement_direction: {type: string, enum: [debit, credit, hold]}
+        funding_source:
+          type: string
+          enum: [balance, provider, reseller]
+          description: reseller = a reseller placed the order for its customer; only the reseller's wholesale cost was charged (ADR 0018 RS-03).
+        effective_mode: {type: string, enum: [immediate, next_cycle]}
+        effective_at: {type: string, format: date-time}
+        state: {type: string, enum: [created, paid, fulfilled, cancelled, refund_applied, void_applied, failed]}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        seller_scope_id:
+          allOf: [{$ref: '#/components/schemas/CanonicalUUID'}]
+          description: Package owner that sold the order (the platform scope, or the customer's reseller). Traffic packages are always the platform's.
+        wholesale_minor:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Reseller's prepaid wholesale cost W of the order. Platform responses only; tenant responses always carry 0.
+        product_name:
+          type: string
+          description: Package name from the order's product snapshot. Only the reseller customer orders route (ADR 0018 RS-05) returns it.
+    Fulfillment:
+      type: object
+      additionalProperties: false
+      required: [fulfilled_at]
+      description: >-
+        Sanitized fulfillment reference. Billing transaction and balance-hold IDs
+        are intentionally not exposed. Package fulfillment has a non-zero
+        subscription_id plus both positive revisions and no traffic_grant_id;
+        traffic fulfillment has a non-zero traffic_grant_id and no subscription
+        fields. Before returning a command response, the implementation verifies
+        the exact fulfillment, order, tenant, owner, subscription/grant IDs, and
+        revisions against committed commerce facts. A mismatch is rejected.
+      properties:
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        subscription_revision: {type: integer, format: int64, minimum: 1}
+        entitlement_revision: {type: integer, format: int64, minimum: 1}
+        traffic_grant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        fulfilled_at: {type: string, format: date-time}
+    CommandResult:
+      type: object
+      additionalProperties: false
+      required: [order, replayed]
+      properties:
+        order: {$ref: '#/components/schemas/Order'}
+        fulfillment: {$ref: '#/components/schemas/Fulfillment'}
+        replayed: {type: boolean}
+    OrderEvent:
+      type: object
+      additionalProperties: false
+      required: [id, revision, event_type, occurred_at]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        event_type: {type: string, enum: [created, paid, fulfilled, cancelled, refund_applied, void_applied, failed]}
+        occurred_at: {type: string, format: date-time}
+    Subscription:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - tenant_scope_id
+        - owner_user_id
+        - revision
+        - lifecycle_status
+        - starts_at
+        - ends_at
+        - created_at
+        - updated_at
+        - entitlement_revision
+        - entitlement_status
+        - entitlement_effective_at
+        - product_id
+        - product_revision
+        - protection
+        - site_limit
+        - domain_limit
+        - node_limit
+        - traffic_limit_bytes
+        - timezone
+        - cycle_kind
+        - custom_cycle_days
+        - tcp_factor_numerator
+        - tcp_factor_denominator
+        - package_period
+        - period_price_minor
+        - currency
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        lifecycle_status: {type: string, enum: [active, cancelled]}
+        starts_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        entitlement_revision: {type: integer, format: int64, minimum: 1}
+        entitlement_status: {type: string, enum: [active, revoked]}
+        entitlement_effective_at: {type: string, format: date-time}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        product_name:
+          type: string
+          description: >-
+            Optional immutable product_snapshot.name from the selected entitlement.
+            Present only for include_product_name=true when the snapshot name is a
+            JSON string; empty strings and historical whitespace are preserved.
+        protection: {$ref: '#/components/schemas/PackageProtection'}
+        site_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        domain_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        node_limit: {$ref: '#/components/schemas/ResourceLimit'}
+        traffic_limit_bytes: {type: integer, format: int64, minimum: -1}
+        timezone: {type: string, minLength: 3, maxLength: 128}
+        cycle_kind: {type: string, enum: [daily, monthly, custom_days]}
+        custom_cycle_days: {type: integer, minimum: 0, maximum: 366}
+        tcp_factor_numerator: {type: integer, format: int64, minimum: 1, maximum: 1000000}
+        tcp_factor_denominator: {type: integer, format: int64, minimum: 1, maximum: 1000000}
+        package_period: {type: string, enum: ['', month, quarter, year]}
+        period_price_minor: {type: integer, format: int64, minimum: -1}
+        currency: {type: string, const: CNY}
+    TrafficGrant:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - product_snapshot_id
+        - granted_bytes
+        - remaining_bytes
+        - starts_at
+        - expires_at
+        - expiry_timezone
+        - priority
+        - currency
+        - metering_scope
+        - metering_version
+        - status
+        - revision
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        granted_bytes: {type: integer, format: int64, minimum: 1}
+        remaining_bytes: {type: integer, format: int64, minimum: 0}
+        starts_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        expiry_timezone: {type: string, minLength: 3, maxLength: 128}
+        priority: {type: integer, minimum: 0, maximum: 10000}
+        currency: {type: string, const: CNY}
+        metering_scope: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        metering_version: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'}
+        status: {type: string, enum: [active, exhausted, expired, reversed]}
+        revision: {type: integer, format: int64, minimum: 1}
+    TrafficPurchaseResult:
+      type: object
+      additionalProperties: false
+      required: [order]
+      properties:
+        order: {$ref: '#/components/schemas/Order'}
+        grant: {$ref: '#/components/schemas/TrafficGrant'}
+    CallbackResult:
+      type: object
+      additionalProperties: false
+      required: [processing_result, replayed]
+      properties:
+        processing_result:
+          type: string
+          enum: [applied, rejected_signature, rejected_mismatch, ignored_terminal, ignored_out_of_order, failed_fulfillment]
+        replayed: {type: boolean}
+    OrderPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Order'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    EventPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/OrderEvent'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    SubscriptionPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Subscription'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+        total: {type: integer, format: int64, minimum: 0, description: Present only in page-jump mode (tenant list).}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - payment_callback_authentication_failed
+                - permission_denied
+                - package_commerce_validation_error
+                - package_commerce_not_found
+                - revision_conflict
+                - idempotency_conflict
+                - provider_event_conflict
+                - package_commerce_state_conflict
+                - refund_amount_exceeded
+                - reseller_change_irreversible
+                - traffic_package_in_use
+                - commerce_approval_required
+                - insufficient_funds
+                - reseller_prepaid_insufficient
+                - reseller_wholesale_unpriced
+                - traffic_package_product_disabled
+                - promotion_unavailable
+                - commerce_amount_out_of_range
+                - commerce_fulfillment_unavailable
+                - package_commerce_result_unknown
+                - package_commerce_request_cancelled
+                - package_commerce_query_timeout
+                - payment_callback_provider_unavailable
+                - package_commerce_response_too_large
+                - package_commerce_invalid_response
+                - package_commerce_store_unavailable
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {$ref: '#/components/schemas/MetadataToken'}
+  responses:
+    SubscriptionSuspensionOK:
+      description: The subscription after the change (or unchanged when already in that state), or an exact idempotent replay.
+      headers:
+        Idempotency-Replayed: {schema: {type: string, enum: ['true']}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SubscriptionSuspensionResult'}
+    AdminCancelCreated:
+      description: Cancelled subscription or exact idempotent replay.
+      headers:
+        Idempotency-Replayed: {schema: {type: string, enum: ['true']}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminCancelSubscriptionResult'}
+    CatalogPageOK:
+      description: Stable public package catalog page and current caller eligibility.
+      content: {application/json: {schema: {$ref: '#/components/schemas/PackageCatalogPage'}}}
+    CommandCreated:
+      description: Created command result or identical committed replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CommandResult'}
+    CommandOK:
+      description: Applied command result or identical committed replay.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CommandResult'}
+    OrderPageOK:
+      description: Stable keyset page ordered by created_at and order UUID descending.
+      content: {application/json: {schema: {$ref: '#/components/schemas/OrderPage'}}}
+    OrderOK:
+      description: Sanitized visible order.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Order'}}}
+    EventPageOK:
+      description: Stable event page ordered by revision ascending.
+      content: {application/json: {schema: {$ref: '#/components/schemas/EventPage'}}}
+    SubscriptionPageOK:
+      description: Stable effective-subscription projection page.
+      content: {application/json: {schema: {$ref: '#/components/schemas/SubscriptionPage'}}}
+    AdminOpenCreated:
+      description: Subscription and entitlement created, or an identical committed replay returned.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminOpenSubscriptionResult'}
+    TrafficPurchaseOK:
+      description: Sanitized traffic order and an optional grant while provider payment is pending.
+      content: {application/json: {schema: {$ref: '#/components/schemas/TrafficPurchaseResult'}}}
+    BadRequest: {$ref: '#/components/responses/Error400'}
+    Unauthorized: {$ref: '#/components/responses/Error401'}
+    CallbackUnauthorized:
+      description: >-
+        Authentication failed because a required single-value callback header,
+        provider/account/key binding, freshness check, canonical HMAC signature,
+        application/json content type, strict UTF-8 JSON body, or 256 KiB body
+        bound was invalid. The commerce core was not invoked, and the response
+        does not reveal whether a provider, account, or key exists.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    CallbackUnavailable:
+      description: >-
+        Callback verification is unavailable before the commerce core is invoked
+        (payment_callback_provider_unavailable), or the write outcome is unknown
+        after a verified callback reaches the core
+        (package_commerce_result_unknown). The stable error code distinguishes
+        whether an unchanged signed request may be retried.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Forbidden: {$ref: '#/components/responses/Error403'}
+    NotFound: {$ref: '#/components/responses/Error404'}
+    Conflict: {$ref: '#/components/responses/Error409'}
+    PreconditionFailed: {$ref: '#/components/responses/Error412'}
+    Unprocessable: {$ref: '#/components/responses/Error422'}
+    QueryCancelled: {$ref: '#/components/responses/Error408'}
+    QueryTimeout: {$ref: '#/components/responses/Error504'}
+    UnknownResult:
+      description: >-
+        The write outcome is unknown. Retry only the exact original request with
+        the same Idempotency-Key and If-Match value where present.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    BadGateway: {$ref: '#/components/responses/Error502'}
+    ServiceUnavailable: {$ref: '#/components/responses/Error503'}
+    Error400:
+      description: Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error401:
+      description: Authentication is absent or invalid.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error403:
+      description: Current scope or live permission does not authorize the operation.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error404:
+      description: Resource is absent or outside the caller's visible tenant/owner scope.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error408:
+      description: Caller cancelled the query.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error409:
+      description: Idempotency, provider event, state, approval, refund, or traffic-use conflict.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error412:
+      description: If-Match does not equal the current subscription revision.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error422:
+      description: Funding, promotion, arithmetic, or fulfillment policy rejected the command.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error502:
+      description: Stored facts or encoded response violate the public response contract.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error503:
+      description: Query storage or required callback verification is unavailable.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error504:
+      description: Query deadline elapsed.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}

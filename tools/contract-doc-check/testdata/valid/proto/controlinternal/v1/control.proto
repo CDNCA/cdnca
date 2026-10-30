@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package controlinternal.v1;
+
+message GetWidgetRequest {}
+message GetWidgetResponse {}
+
+service ControlInternalService {
+  rpc GetWidget(GetWidgetRequest) returns (GetWidgetResponse);
+}

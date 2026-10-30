@@ -1,0 +1,464 @@
+CDNCA proxy_download_rate_shared.  Original CDNCA change, not upstream.
+proxy_download_rate limits each session on its own, evaluated once when
+the upstream connects; a market subscription's bandwidth (ADR 0012 ML-07)
+is one budget for all of its sessions on the node, so a per-session share
+fixed at entry let two sessions take 1.5 times the budget (L4F-E02).
+proxy_download_rate_shared zone=name:size key: sessions with the same
+non-empty key draw upstream bytes from one token bucket in shared memory,
+refilled at proxy_download_rate bytes per second, at most one second's
+worth stored (the burst); a reader waits on the event timer until a tenth
+of a second's worth is available.  Without the directive, with an empty
+key or no memory for the key, proxy_download_rate keeps its stock
+per-session semantics.
+
+--- a/src/stream/ngx_stream_upstream.h
++++ b/src/stream/ngx_stream_upstream.h
+@@ -140,6 +140,7 @@
+ 
+     size_t                             upload_rate;
+     size_t                             download_rate;
++    ngx_str_t                          download_rate_key;
+ 
+     ngx_str_t                          ssl_name;
+ 
+--- a/src/stream/ngx_stream_proxy_module.c
++++ b/src/stream/ngx_stream_proxy_module.c
+@@ -26,6 +26,8 @@
+     size_t                           buffer_size;
+     ngx_stream_complex_value_t      *upload_rate;
+     ngx_stream_complex_value_t      *download_rate;
++    ngx_shm_zone_t                  *download_rate_zone;
++    ngx_stream_complex_value_t      *download_rate_key;
+     ngx_uint_t                       requests;
+     ngx_uint_t                       responses;
+     ngx_uint_t                       next_upstream_tries;
+@@ -63,6 +65,34 @@
+ } ngx_stream_proxy_srv_conf_t;
+ 
+ 
++/*
++ * proxy_download_rate_shared: one token bucket per key in a shared memory
++ * zone, refilled at the session's proxy_download_rate (bytes per second,
++ * kept in thousandths of a byte), at most one second's worth (the burst).
++ */
++
++typedef struct {
++    ngx_rbtree_t                     rbtree;
++    ngx_rbtree_node_t                sentinel;
++    ngx_queue_t                      queue;
++} ngx_stream_proxy_rate_shctx_t;
++
++
++typedef struct {
++    ngx_stream_proxy_rate_shctx_t   *sh;
++    ngx_slab_pool_t                 *shpool;
++} ngx_stream_proxy_rate_zone_t;
++
++
++typedef struct {
++    ngx_str_node_t                   sn;
++    ngx_queue_t                      queue;
++    ngx_msec_t                       last;
++    int64_t                          tokens;
++    u_char                           data[1];
++} ngx_stream_proxy_rate_node_t;
++
++
+ static void ngx_stream_proxy_handler(ngx_stream_session_t *s);
+ static ngx_int_t ngx_stream_proxy_eval(ngx_stream_session_t *s,
+     ngx_stream_proxy_srv_conf_t *pscf);
+@@ -93,6 +123,13 @@
+     void *conf);
+ static char *ngx_stream_proxy_bind(ngx_conf_t *cf, ngx_command_t *cmd,
+     void *conf);
++static char *ngx_stream_proxy_download_rate_shared(ngx_conf_t *cf,
++    ngx_command_t *cmd, void *conf);
++static ngx_int_t ngx_stream_proxy_rate_init_zone(ngx_shm_zone_t *shm_zone,
++    void *data);
++static ngx_int_t ngx_stream_proxy_rate_bucket(ngx_stream_session_t *s,
++    ngx_stream_proxy_srv_conf_t *pscf, size_t rate, off_t consume,
++    off_t *tokens);
+ 
+ #if (NGX_STREAM_SSL)
+ 
+@@ -229,6 +266,13 @@
+       ngx_stream_set_complex_value_size_slot,
+       NGX_STREAM_SRV_CONF_OFFSET,
+       offsetof(ngx_stream_proxy_srv_conf_t, download_rate),
++      NULL },
++
++    { ngx_string("proxy_download_rate_shared"),
++      NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE2,
++      ngx_stream_proxy_download_rate_shared,
++      NGX_STREAM_SRV_CONF_OFFSET,
++      0,
+       NULL },
+ 
+     { ngx_string("proxy_requests"),
+@@ -1009,6 +1053,18 @@
+ 
+     u->upload_rate = ngx_stream_complex_value_size(s, pscf->upload_rate, 0);
+     u->download_rate = ngx_stream_complex_value_size(s, pscf->download_rate, 0);
++
++    ngx_str_null(&u->download_rate_key);
++
++    if (pscf->download_rate_key && u->download_rate) {
++        if (ngx_stream_complex_value(s, pscf->download_rate_key,
++                                     &u->download_rate_key)
++            != NGX_OK)
++        {
++            ngx_stream_proxy_finalize(s, NGX_STREAM_INTERNAL_SERVER_ERROR);
++            return;
++        }
++    }
+ 
+     u->connected = 1;
+ 
+@@ -1923,12 +1979,12 @@
+     ngx_uint_t do_write)
+ {
+     char                         *recv_action, *send_action;
+-    off_t                        *received, limit;
++    off_t                        *received, limit, chunk;
+     size_t                        size, limit_rate;
+     ssize_t                       n;
+     ngx_buf_t                    *b;
+     ngx_int_t                     rc;
+-    ngx_uint_t                    flags, *packets;
++    ngx_uint_t                    flags, *packets, shared;
+     ngx_msec_t                    delay;
+     ngx_chain_t                  *cl, **ll, **out, **busy;
+     ngx_connection_t             *c, *pc, *src, *dst;
+@@ -2014,7 +2070,37 @@
+ 
+         if (size && src->read->ready && !src->read->delayed) {
+ 
+-            if (limit_rate) {
++            shared = 0;
++
++            if (limit_rate && from_upstream && u->download_rate_key.len
++                && ngx_stream_proxy_rate_bucket(s, pscf, limit_rate, 0, &limit)
++                   == NGX_OK)
++            {
++                /*
++                 * the key's bucket: wait for a tenth of a second's worth
++                 * (or the free buffer) rather than waking up for a few bytes
++                 */
++
++                shared = 1;
++                chunk = ngx_max((off_t) limit_rate / 10, 1);
++
++                if ((off_t) size < chunk) {
++                    chunk = size;
++                }
++
++                if (limit < chunk) {
++                    src->read->delayed = 1;
++                    delay = (ngx_msec_t) ((chunk - limit) * 1000 / limit_rate
++                                          + 1);
++                    ngx_add_timer(src->read, delay);
++                    break;
++                }
++
++                if (c->type == SOCK_STREAM && (off_t) size > limit) {
++                    size = (size_t) limit;
++                }
++
++            } else if (limit_rate) {
+                 limit = (off_t) limit_rate * (ngx_time() - u->start_sec + 1)
+                         - *received;
+ 
+@@ -2044,7 +2130,13 @@
+             }
+ 
+             if (n >= 0) {
+-                if (limit_rate) {
++                if (shared) {
++                    if (n) {
++                        (void) ngx_stream_proxy_rate_bucket(s, pscf, limit_rate,
++                                                            n, &limit);
++                    }
++
++                } else if (limit_rate) {
+                     delay = (ngx_msec_t) (n * 1000 / limit_rate);
+ 
+                     if (delay > 0) {
+@@ -2425,6 +2517,8 @@
+     conf->buffer_size = NGX_CONF_UNSET_SIZE;
+     conf->upload_rate = NGX_CONF_UNSET_PTR;
+     conf->download_rate = NGX_CONF_UNSET_PTR;
++    conf->download_rate_zone = NGX_CONF_UNSET_PTR;
++    conf->download_rate_key = NGX_CONF_UNSET_PTR;
+     conf->requests = NGX_CONF_UNSET_UINT;
+     conf->responses = NGX_CONF_UNSET_UINT;
+     conf->next_upstream_tries = NGX_CONF_UNSET_UINT;
+@@ -2475,6 +2569,12 @@
+     ngx_conf_merge_ptr_value(conf->upload_rate, prev->upload_rate, NULL);
+ 
+     ngx_conf_merge_ptr_value(conf->download_rate, prev->download_rate, NULL);
++
++    ngx_conf_merge_ptr_value(conf->download_rate_zone,
++                             prev->download_rate_zone, NULL);
++
++    ngx_conf_merge_ptr_value(conf->download_rate_key,
++                             prev->download_rate_key, NULL);
+ 
+     ngx_conf_merge_uint_value(conf->requests,
+                               prev->requests, 0);
+@@ -2897,12 +2997,256 @@
+                                "invalid parameter \"%V\"", &value[2]);
+             return NGX_CONF_ERROR;
+         }
++    }
++
++    return NGX_CONF_OK;
++}
++
++
++static char *
++ngx_stream_proxy_download_rate_shared(ngx_conf_t *cf, ngx_command_t *cmd,
++    void *conf)
++{
++    ngx_stream_proxy_srv_conf_t *pscf = conf;
++
++    u_char                              *p;
++    ssize_t                              size;
++    ngx_str_t                           *value, name, s;
++    ngx_stream_proxy_rate_zone_t        *zone;
++    ngx_stream_compile_complex_value_t   ccv;
++
++    if (pscf->download_rate_zone != NGX_CONF_UNSET_PTR) {
++        return "is duplicate";
++    }
++
++    value = cf->args->elts;
++
++    p = (u_char *) ngx_strlchr(value[1].data, value[1].data + value[1].len,
++                               ':');
++    if (p == NULL || p == value[1].data) {
++        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                           "invalid zone \"%V\"", &value[1]);
++        return NGX_CONF_ERROR;
++    }
++
++    name.data = value[1].data;
++    name.len = p - value[1].data;
++
++    s.data = p + 1;
++    s.len = value[1].data + value[1].len - s.data;
++
++    size = ngx_parse_size(&s);
++
++    if (size == NGX_ERROR || size < (ssize_t) (8 * ngx_pagesize)) {
++        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                           "invalid zone size \"%V\"", &value[1]);
++        return NGX_CONF_ERROR;
++    }
++
++    pscf->download_rate_zone = ngx_shared_memory_add(cf, &name, size,
++                                                     &ngx_stream_proxy_module);
++    if (pscf->download_rate_zone == NULL) {
++        return NGX_CONF_ERROR;
++    }
++
++    if (pscf->download_rate_zone->data == NULL) {
++        zone = ngx_pcalloc(cf->pool, sizeof(ngx_stream_proxy_rate_zone_t));
++        if (zone == NULL) {
++            return NGX_CONF_ERROR;
++        }
++
++        pscf->download_rate_zone->init = ngx_stream_proxy_rate_init_zone;
++        pscf->download_rate_zone->data = zone;
++    }
++
++    pscf->download_rate_key = ngx_palloc(cf->pool,
++                                         sizeof(ngx_stream_complex_value_t));
++    if (pscf->download_rate_key == NULL) {
++        return NGX_CONF_ERROR;
++    }
++
++    ngx_memzero(&ccv, sizeof(ngx_stream_compile_complex_value_t));
++
++    ccv.cf = cf;
++    ccv.value = &value[2];
++    ccv.complex_value = pscf->download_rate_key;
++
++    if (ngx_stream_compile_complex_value(&ccv) != NGX_OK) {
++        return NGX_CONF_ERROR;
+     }
+ 
+     return NGX_CONF_OK;
+ }
+ 
+ 
++static ngx_int_t
++ngx_stream_proxy_rate_init_zone(ngx_shm_zone_t *shm_zone, void *data)
++{
++    ngx_stream_proxy_rate_zone_t  *ozone = data;
++
++    size_t                         len;
++    ngx_stream_proxy_rate_zone_t  *zone;
++
++    zone = shm_zone->data;
++
++    if (ozone) {
++        zone->sh = ozone->sh;
++        zone->shpool = ozone->shpool;
++        return NGX_OK;
++    }
++
++    zone->shpool = (ngx_slab_pool_t *) shm_zone->shm.addr;
++
++    if (shm_zone->shm.exists) {
++        zone->sh = zone->shpool->data;
++        return NGX_OK;
++    }
++
++    zone->sh = ngx_slab_alloc(zone->shpool,
++                              sizeof(ngx_stream_proxy_rate_shctx_t));
++    if (zone->sh == NULL) {
++        return NGX_ERROR;
++    }
++
++    zone->shpool->data = zone->sh;
++
++    ngx_rbtree_init(&zone->sh->rbtree, &zone->sh->sentinel,
++                    ngx_str_rbtree_insert_value);
++
++    ngx_queue_init(&zone->sh->queue);
++
++    len = sizeof(" in proxy_download_rate_shared zone \"\"")
++          + shm_zone->shm.name.len;
++
++    zone->shpool->log_ctx = ngx_slab_alloc(zone->shpool, len);
++    if (zone->shpool->log_ctx == NULL) {
++        return NGX_ERROR;
++    }
++
++    ngx_sprintf(zone->shpool->log_ctx,
++                " in proxy_download_rate_shared zone \"%V\"%Z",
++                &shm_zone->shm.name);
++
++    zone->shpool->log_nomem = 0;
++
++    return NGX_OK;
++}
++
++
++/*
++ * Refills the bucket of the session's key at rate bytes per second (a new
++ * key starts full), takes consume bytes and returns the bytes left (negative
++ * when sessions of other workers took the same tokens).  Keys idle for a
++ * minute are dropped; with the zone full the least recently used keys go.
++ * NGX_DECLINED: no memory for the key, the session keeps its own rate.
++ */
++
++static ngx_int_t
++ngx_stream_proxy_rate_bucket(ngx_stream_session_t *s,
++    ngx_stream_proxy_srv_conf_t *pscf, size_t rate, off_t consume,
++    off_t *tokens)
++{
++    size_t                          n;
++    uint32_t                        hash;
++    ngx_str_t                      *key;
++    ngx_uint_t                      i;
++    ngx_msec_t                      now;
++    ngx_queue_t                    *q;
++    ngx_msec_int_t                  elapsed;
++    ngx_str_node_t                 *sn;
++    ngx_stream_proxy_rate_node_t   *node, *old;
++    ngx_stream_proxy_rate_zone_t   *zone;
++
++    zone = pscf->download_rate_zone->data;
++    key = &s->upstream->download_rate_key;
++    hash = ngx_crc32_short(key->data, key->len);
++    now = ngx_current_msec;
++
++    ngx_shmtx_lock(&zone->shpool->mutex);
++
++    sn = ngx_str_rbtree_lookup(&zone->sh->rbtree, key, hash);
++
++    if (sn == NULL) {
++
++        for (i = 0; i < 2 && !ngx_queue_empty(&zone->sh->queue); i++) {
++            q = ngx_queue_last(&zone->sh->queue);
++            old = ngx_queue_data(q, ngx_stream_proxy_rate_node_t, queue);
++
++            if ((ngx_msec_int_t) (now - old->last) < 60000) {
++                break;
++            }
++
++            ngx_queue_remove(q);
++            ngx_rbtree_delete(&zone->sh->rbtree, &old->sn.node);
++            ngx_slab_free_locked(zone->shpool, old);
++        }
++
++        n = offsetof(ngx_stream_proxy_rate_node_t, data) + key->len;
++
++        node = ngx_slab_alloc_locked(zone->shpool, n);
++
++        while (node == NULL && !ngx_queue_empty(&zone->sh->queue)) {
++            q = ngx_queue_last(&zone->sh->queue);
++            old = ngx_queue_data(q, ngx_stream_proxy_rate_node_t, queue);
++
++            ngx_queue_remove(q);
++            ngx_rbtree_delete(&zone->sh->rbtree, &old->sn.node);
++            ngx_slab_free_locked(zone->shpool, old);
++
++            node = ngx_slab_alloc_locked(zone->shpool, n);
++        }
++
++        if (node == NULL) {
++            ngx_shmtx_unlock(&zone->shpool->mutex);
++            return NGX_DECLINED;
++        }
++
++        ngx_memcpy(node->data, key->data, key->len);
++
++        node->sn.node.key = hash;
++        node->sn.str.len = key->len;
++        node->sn.str.data = node->data;
++        node->last = now;
++        node->tokens = (int64_t) rate * 1000;
++
++        ngx_rbtree_insert(&zone->sh->rbtree, &node->sn.node);
++
++    } else {
++        node = (ngx_stream_proxy_rate_node_t *) sn;
++
++        /* worker clocks differ slightly: never refill backwards */
++
++        elapsed = (ngx_msec_int_t) (now - node->last);
++
++        if (elapsed > 0) {
++            if (elapsed > 1000) {
++                elapsed = 1000;
++            }
++
++            node->tokens += (int64_t) rate * elapsed;
++
++            if (node->tokens > (int64_t) rate * 1000) {
++                node->tokens = (int64_t) rate * 1000;
++            }
++
++            node->last = now;
++        }
++
++        ngx_queue_remove(&node->queue);
++    }
++
++    ngx_queue_insert_head(&zone->sh->queue, &node->queue);
++
++    node->tokens -= (int64_t) consume * 1000;
++
++    *tokens = (off_t) (node->tokens / 1000);
++
++    ngx_shmtx_unlock(&zone->shpool->mutex);
++
++    return NGX_OK;
++}
++
++
+ ngx_uint_t
+ ngx_stream_proxy_get_next_upstream_tries(ngx_stream_session_t *s)
+ {

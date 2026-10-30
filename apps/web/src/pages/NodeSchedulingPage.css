@@ -1,0 +1,318 @@
+.node-scheduling-page {
+  min-width: 0;
+  color: var(--cdnca-color-text);
+}
+
+.node-scheduling-page > h1 {
+  margin: 0 0 14px;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.node-scheduling-toolbar {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.node-scheduling-toolbar .ant-input,
+.node-scheduling-toolbar .ant-select,
+.node-scheduling-toolbar .ant-select-selector,
+.node-scheduling-toolbar .ant-btn {
+  height: 32px !important;
+}
+
+.node-scheduling-search {
+  width: 300px;
+  max-width: 100%;
+}
+
+.node-scheduling-scope-input {
+  width: 370px;
+  max-width: 100%;
+}
+
+.node-scheduling-alert {
+  margin-bottom: 14px;
+}
+
+.node-scheduling-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.node-scheduling-table-scroll .ant-table-thead > tr > th {
+  height: 41px;
+  padding: 8px 12px;
+  color: var(--cdnca-color-text);
+  font-weight: 600;
+  background: var(--cdnca-color-table-header);
+}
+
+.node-scheduling-table-scroll .ant-table-tbody > tr > td {
+  height: 46px;
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+
+.node-scheduling-addresses {
+  display: grid;
+  gap: 3px;
+}
+
+.node-scheduling-addresses code,
+.node-scheduling-node-id {
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+}
+
+.node-scheduling-pagination {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.node-scheduling-pagination .ant-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.node-scheduling-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+.node-scheduling-policy-grid .ant-input-number,
+.node-scheduling-endpoint-row .ant-input-number {
+  width: 100%;
+}
+
+.node-scheduling-endpoints {
+  min-width: 0;
+}
+
+.node-scheduling-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.node-scheduling-section-heading h2,
+.node-scheduling-detail-section h2 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.node-scheduling-endpoint-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(210px, 1.4fr) minmax(210px, 1.4fr) minmax(140px, 1fr) 90px minmax(110px, 0.8fr) minmax(110px, 0.8fr) 100px 90px 66px max-content;
+  align-items: start;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+}
+
+.node-scheduling-endpoint-row .ant-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.node-scheduling-endpoint-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  padding-top: 30px;
+}
+
+.node-scheduling-endpoint-actions .ant-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.node-scheduling-detail-header {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.node-scheduling-detail-header h1 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.node-scheduling-detail-section {
+  min-width: 0;
+  margin-top: 20px;
+}
+
+.node-scheduling-topology {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1.4fr);
+  align-items: stretch;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.node-scheduling-topology-column {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 8px;
+}
+
+.node-scheduling-topology-node {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 4px;
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.node-scheduling-topology-node code,
+.node-scheduling-topology-node small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.node-scheduling-topology-arrow {
+  display: grid;
+  align-items: center;
+  justify-content: center;
+  color: var(--cdnca-color-primary);
+}
+
+.node-scheduling-decision-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.node-scheduling-decision-fact {
+  min-width: 0;
+  padding: 9px 10px;
+  background: var(--cdnca-color-table-header);
+  border: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.node-scheduling-decision-fact strong,
+.node-scheduling-decision-fact span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .node-scheduling-endpoint-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .node-scheduling-endpoint-actions {
+    align-items: center;
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 767px) {
+  .node-scheduling-alert {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .node-scheduling-alert .ant-alert-content {
+    min-width: 0;
+  }
+
+  .node-scheduling-alert .ant-alert-action {
+    flex: 0 0 100%;
+    margin-inline-start: 0;
+    padding-inline-start: 30px;
+  }
+
+  .node-scheduling-alert .ant-alert-action .node-scheduling-toolbar {
+    margin: 8px 0 0;
+  }
+
+  .node-scheduling-table-scroll .ant-table {
+    min-width: 0;
+  }
+
+  .node-line-groups-table-scroll {
+    overflow-x: clip;
+  }
+
+  .node-line-groups-table-scroll > .ant-table-wrapper,
+  .node-line-groups-table-scroll .ant-table {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .node-scheduling-toolbar {
+    align-items: stretch;
+  }
+
+  .node-scheduling-toolbar > .ant-input-affix-wrapper,
+  .node-scheduling-toolbar > .ant-input,
+  .node-scheduling-toolbar > .ant-select,
+  .node-scheduling-toolbar > .node-scheduling-search,
+  .node-scheduling-toolbar > .node-scheduling-scope-input {
+    width: 100% !important;
+  }
+
+  .node-scheduling-toolbar > .ant-btn {
+    width: max-content;
+  }
+
+  .node-scheduling-table-scroll .ant-table-cell-fix-right {
+    position: static !important;
+  }
+
+  .node-scheduling-table-scroll .ant-table-cell-fix-right-first::after,
+  .node-scheduling-table-scroll .ant-table-cell-fix-right-last::after {
+    box-shadow: none !important;
+  }
+
+  .node-scheduling-policy-grid,
+  .node-scheduling-endpoint-row,
+  .node-scheduling-decision-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .node-scheduling-topology {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .node-scheduling-topology-arrow {
+    min-height: 32px;
+    transform: rotate(90deg);
+  }
+
+  .node-scheduling-modal {
+    max-width: calc(100vw - 16px);
+  }
+}

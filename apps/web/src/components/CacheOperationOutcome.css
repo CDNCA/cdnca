@@ -1,0 +1,64 @@
+/* CACHE-ADD-06: one bar and one color rule for a cache task's outcome. */
+.cache-operation-outcome {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.cache-operation-outcome-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.cache-operation-outcome-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.cache-operation-outcome-facts .is-failed {
+  color: var(--cdnca-color-error);
+}
+
+.cache-operation-outcome-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--cdnca-color-bg-muted);
+}
+
+.cache-operation-outcome-bar > .is-succeeded {
+  background: var(--cdnca-color-success);
+}
+
+.cache-operation-outcome-bar > .is-failed {
+  background: var(--cdnca-color-error);
+}
+
+.cache-operation-outcome-bar > .is-cancelled {
+  background: var(--cdnca-color-text-disabled);
+}
+
+.cache-operation-outcome h3 {
+  margin: 4px 0 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cache-operation-outcome-empty {
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.cache-operation-outcome .ant-table-tbody > tr > td code {
+  /* The whole URL stays readable (same path, other query is another item). */
+  display: block;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

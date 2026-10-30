@@ -1,0 +1,149 @@
+{
+ "id": "admin-admin-access-policy",
+ "prefix": "/v1/admin/admin-access-policy",
+ "operations": [
+  {
+   "operation_id": "getAdminAccessPolicy",
+   "method": "GET",
+   "path": "/v1/admin/admin-access-policy",
+   "summary": "Read the platform administration access allowlist",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires system_configuration.read on the platform scope. current_ip is the client address the control plane resolved for this request.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current policy (revision 0 and disabled when never saved).",
+     "fields": [
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "allowlist",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "current_ip",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateAdminAccessPolicy",
+   "method": "PUT",
+   "path": "/v1/admin/admin-access-policy",
+   "summary": "Save the platform administration access allowlist",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires system_configuration.manage on the platform scope. When enabled, platform-scope sign-in, refresh and every platform-scope session request must come from an allowed address or CIDR prefix; loopback is always allowed; tenant sessions and API keys are not affected. A policy that would not allow the saving request's own address is refused (422 admin_access_self_lockout). Recovery when locked out: run `control-api admin-access-allowlist disable` as root on the control host. Requests refused by the policy get 403 admin_access_denied.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "allowlist",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved.",
+     "fields": [
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "allowlist",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "current_ip",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "admin_access_self_lockout."
+    }
+   ]
+  }
+ ]
+}

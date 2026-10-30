@@ -1,0 +1,28 @@
+{
+ "id": "-health-live",
+ "prefix": "/health/live",
+ "operations": [
+  {
+   "operation_id": "getLiveness",
+   "method": "GET",
+   "path": "/health/live",
+   "summary": "Process liveness",
+   "auth": [
+    "none"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The process is alive.",
+     "fields": [
+      {
+       "name": "status",
+       "type": "string: live / ready",
+       "required": true
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

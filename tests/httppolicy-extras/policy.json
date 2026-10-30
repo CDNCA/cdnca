@@ -1,0 +1,27 @@
+{"site_id":"site-a","max_upload_bytes":1048576,
+ "request_headers":[
+  {"kind":"set","name":"x-client","values":["$remote_addr"]},
+  {"kind":"set","name":"x-fp","values":["$tls_fp"]},
+  {"kind":"set","name":"x-geo","values":["c=$country;p=$province;a=$areacode;i=$isp"]},
+  {"kind":"set","name":"x-lit","values":["cost $$5 $host-x"]},
+  {"kind":"add","name":"x-multi","values":["edge"],"allow_duplicate":true},
+  {"kind":"add","name":"x-once","values":["edge"]},
+  {"kind":"set","name":"x-ua","values":["$http_user_agent"]}
+ ],
+ "response_headers":[
+  {"kind":"add","name":"x-resp-multi","values":["edge-$request_method"],"allow_duplicate":true},
+  {"kind":"add","name":"x-resp-new","values":["$scheme://$host$uri"]},
+  {"kind":"add","name":"x-resp-once","values":["edge"]}
+ ],
+ "rewrites":[
+  {"rule_id":"rw-mobile","priority":1,"match_kind":"prefix","match_path":"/app/","target_path":"/m/","preserve_query":true,"preserve_cookie":true,
+   "conditions":[{"source":"user_agent","pattern":"iPhone|Android"}]},
+  {"rule_id":"rw-header","priority":1,"match_kind":"exact","match_path":"/beta","target_path":"/beta-on","preserve_query":true,"preserve_cookie":true,
+   "conditions":[{"source":"header","name":"x-beta","pattern":"^1$"},{"source":"host","pattern":"^hp\\.test(:[0-9]+)?$"}]}
+ ],
+ "redirect_allowed_hosts":["www.example.test"],
+ "redirects":[
+  {"rule_id":"rd-ref","priority":2,"match_kind":"prefix","match_path":"/","status":302,"target_url":"https://www.example.test/blocked","preserve_query":false,"preserve_path":false,
+   "conditions":[{"source":"referer","pattern":"spam\\.test"}]}
+ ],
+ "cors":null,"referer_check":null}

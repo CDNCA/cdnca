@@ -1,0 +1,1911 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "nameOverride",
+    "fullnameOverride",
+    "imagePullSecrets",
+    "production",
+    "topologySpreadConstraints",
+    "networkPolicy",
+    "analyticsNATSPreprovision",
+    "clickhouseMigrations",
+    "pluginWebhook",
+    "controlBackupTool",
+    "controlBackup",
+    "controlRestore",
+    "controlBackupNetworkPolicy",
+    "customerIngress",
+    "controlUpgradeRunner",
+    "controlApi",
+    "agentGateway",
+    "web"
+  ],
+  "properties": {
+    "nameOverride": {"type": "string", "maxLength": 63},
+    "fullnameOverride": {"type": "string", "maxLength": 63},
+    "imagePullSecrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 253}}
+      }
+    },
+    "production": {"$ref": "#/definitions/production"},
+    "topologySpreadConstraints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["maxSkew", "topologyKey", "whenUnsatisfiable"],
+        "properties": {
+          "maxSkew": {"type": "integer", "minimum": 1},
+          "topologyKey": {"type": "string", "minLength": 1, "maxLength": 253},
+          "whenUnsatisfiable": {"type": "string", "enum": ["DoNotSchedule", "ScheduleAnyway"]}
+        }
+      }
+    },
+    "networkPolicy": {"$ref": "#/definitions/networkPolicy"},
+    "analyticsNATSPreprovision": {"$ref": "#/definitions/analyticsNATSPreprovision"},
+    "clickhouseMigrations": {"$ref": "#/definitions/clickhouseMigrations"},
+    "pluginWebhook": {"$ref": "#/definitions/pluginWebhook"},
+    "controlBackupTool": {"$ref": "#/definitions/controlBackupTool"},
+    "controlBackup": {"$ref": "#/definitions/controlBackup"},
+    "controlRestore": {"$ref": "#/definitions/controlRestore"},
+    "controlBackupNetworkPolicy": {"$ref": "#/definitions/controlBackupNetworkPolicy"},
+    "customerIngress": {"$ref": "#/definitions/ingress"},
+    "controlUpgradeRunner": {"$ref": "#/definitions/controlUpgradeRunner"},
+    "controlApi": {"$ref": "#/definitions/controlApi"},
+    "agentGateway": {"$ref": "#/definitions/agentGateway"},
+    "web": {"$ref": "#/definitions/frontend"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "production": {
+            "properties": {"enabled": {"const": true}},
+            "required": ["enabled"]
+          }
+        },
+        "required": ["production"]
+      },
+      "then": {
+        "properties": {
+          "production": {
+            "properties": {"metricsServerAvailable": {"const": true}},
+            "required": ["metricsServerAvailable"]
+          },
+          "topologySpreadConstraints": {
+            "allOf": [
+              {
+                "contains": {
+                  "properties": {
+                    "maxSkew": {"const": 1},
+                    "topologyKey": {"const": "topology.kubernetes.io/zone"},
+                    "whenUnsatisfiable": {"const": "DoNotSchedule"}
+                  },
+                  "required": ["maxSkew", "topologyKey", "whenUnsatisfiable"]
+                }
+              },
+              {
+                "contains": {
+                  "properties": {
+                    "maxSkew": {"const": 1},
+                    "topologyKey": {"const": "kubernetes.io/hostname"},
+                    "whenUnsatisfiable": {"const": "DoNotSchedule"}
+                  },
+                  "required": ["maxSkew", "topologyKey", "whenUnsatisfiable"]
+                }
+              }
+            ]
+          },
+          "networkPolicy": {
+            "properties": {
+              "enabled": {"const": true},
+              "dataStores": {
+                "properties": {
+                  "postgresql": {"properties": {"cidrs": {"minItems": 1}, "port": {"const": 5432}}},
+                  "redis": {"properties": {"cidrs": {"minItems": 1}, "port": {"const": 6379}}},
+                  "nats": {"properties": {"cidrs": {"minItems": 1}, "port": {"const": 4222}}},
+                  "clickhouse": {"properties": {"cidrs": {"minItems": 1}, "port": {"const": 8123}}}
+                },
+                "required": ["postgresql", "redis", "nats", "clickhouse"]
+              }
+            },
+            "required": ["enabled", "dataStores"]
+          },
+          "controlApi": {
+            "properties": {
+              "enabled": {"const": true},
+              "image": {"properties": {"digest": {"pattern": "^sha256:[0-9a-f]{64}$"}}, "required": ["digest"]},
+              "pdb": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]},
+              "autoscaling": {"properties": {"enabled": {"const": true}, "minReplicas": {"minimum": 2}}, "required": ["enabled", "minReplicas"]},
+              "migrations": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}
+            },
+            "required": ["enabled", "image", "pdb", "autoscaling", "migrations"]
+          },
+          "agentGateway": {
+            "properties": {
+              "enabled": {"const": true},
+              "image": {"properties": {"digest": {"pattern": "^sha256:[0-9a-f]{64}$"}}, "required": ["digest"]},
+              "pdb": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]},
+              "autoscaling": {"properties": {"enabled": {"const": true}, "minReplicas": {"minimum": 2}}, "required": ["enabled", "minReplicas"]}
+            },
+            "required": ["enabled", "image", "pdb", "autoscaling"]
+          },
+          "web": {
+            "properties": {
+              "enabled": {"const": true},
+              "image": {"properties": {"digest": {"pattern": "^sha256:[0-9a-f]{64}$"}}, "required": ["digest"]},
+              "pdb": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]},
+              "autoscaling": {"properties": {"enabled": {"const": true}, "minReplicas": {"minimum": 2}}, "required": ["enabled", "minReplicas"]}
+            },
+            "required": ["enabled", "image", "pdb", "autoscaling"]
+          }
+        },
+        "required": ["production", "topologySpreadConstraints", "networkPolicy", "controlApi", "agentGateway", "web"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "production": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]},
+          "clickhouseMigrations": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}
+        },
+        "required": ["production", "clickhouseMigrations"]
+      },
+      "then": {
+        "properties": {
+          "clickhouseMigrations": {
+            "properties": {"image": {"properties": {"digest": {"pattern": "^sha256:[0-9a-f]{64}$"}}, "required": ["digest"]}}
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "controlApi": {
+            "properties": {
+              "analyticsIngest": {
+                "properties": {"enabled": {"const": true}},
+                "required": ["enabled"]
+              }
+            },
+            "required": ["analyticsIngest"]
+          }
+        },
+        "required": ["controlApi"]
+      },
+      "then": {
+        "properties": {
+          "analyticsNATSPreprovision": {
+            "properties": {"enabled": {"const": true}},
+            "required": ["enabled"]
+          }
+        },
+        "required": ["analyticsNATSPreprovision"]
+      }
+    },
+    {
+      "if": {
+        "anyOf": [
+          {"properties": {"controlBackup": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}}, "required": ["controlBackup"]},
+          {"properties": {"controlRestore": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}}, "required": ["controlRestore"]}
+        ]
+      },
+      "then": {
+        "properties": {
+          "controlBackupTool": {
+            "properties": {
+              "image": {"properties": {"digest": {"pattern": "^sha256:[0-9a-f]{64}$"}}, "required": ["digest"]},
+              "recovery": {"properties": {"schemaVersion": {"minimum": 1}, "coreManifestSHA256": {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}, "envelopeKey": {"properties": {"version": {"not": {"const": "unconfigured-1"}}}}}, "required": ["schemaVersion", "coreManifestSHA256", "envelopeKey"]}
+            },
+            "required": ["image", "recovery"]
+          },
+          "controlBackupNetworkPolicy": {
+            "properties": {
+              "enabled": {"const": true}
+            },
+            "required": ["enabled"]
+          }
+        },
+        "required": ["controlBackupTool", "controlBackupNetworkPolicy"]
+      }
+    },
+    {
+      "if": {"properties": {"controlBackup": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}}, "required": ["controlBackup"]},
+      "then": {"properties": {"controlBackupTool": {"properties": {"installationId": {"minLength": 36, "not": {"const": "00000000-0000-0000-0000-000000000000"}}}, "required": ["installationId"]}, "controlBackupNetworkPolicy": {"properties": {"kubernetesAPI": {"properties": {"cidrs": {"minItems": 1}}, "required": ["cidrs"]}}, "required": ["kubernetesAPI"]}}}
+    },
+    {
+      "if": {"properties": {"controlRestore": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}}, "required": ["controlRestore"]},
+      "then": {"properties": {"controlBackupNetworkPolicy": {"properties": {"agentProbe": {"properties": {"cidrs": {"minItems": 1}}, "required": ["cidrs"]}}, "required": ["agentProbe"]}}}
+    },
+    {
+      "if": {
+        "properties": {"controlUpgradeRunner": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}},
+        "required": ["controlUpgradeRunner"]
+      },
+      "then": {
+        "properties": {
+          "controlApi": {
+            "properties": {
+              "enabled": {"const": true},
+              "replicaCount": {"minimum": 2},
+              "image": {"properties": {"digest": {"pattern": "^sha256:[0-9a-f]{64}$"}}, "required": ["digest"]},
+              "migrations": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}
+            },
+            "required": ["enabled", "replicaCount", "image", "migrations"]
+          }
+        },
+        "required": ["controlApi"]
+      }
+    }
+  ],
+  "definitions": {
+    "production": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "metricsServerAvailable"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "metricsServerAvailable": {"type": "boolean"}
+      }
+    },
+    "stringMap": {
+      "type": "object",
+      "additionalProperties": {"type": "string"}
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "tag", "digest", "pullPolicy"],
+      "properties": {
+        "repository": {"type": "string", "minLength": 1},
+        "tag": {
+          "type": "string",
+          "minLength": 1,
+          "not": {"pattern": "^[Ll][Aa][Tt][Ee][Ss][Tt]$"}
+        },
+        "digest": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+          ]
+        },
+        "pullPolicy": {"type": "string", "enum": ["Always", "IfNotPresent", "Never"]}
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["requests", "limits"],
+      "properties": {
+        "requests": {"$ref": "#/definitions/resourcePair"},
+        "limits": {"$ref": "#/definitions/resourcePair"}
+      }
+    },
+    "resourcePair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu", "memory"],
+      "properties": {
+        "cpu": {"type": "string", "minLength": 1},
+        "memory": {"type": "string", "minLength": 1}
+      }
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minAvailable"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minAvailable": {"type": "integer", "minimum": 1}
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "minReplicas", "maxReplicas", "targetCPUUtilizationPercentage", "targetMemoryUtilizationPercentage"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "minReplicas": {"type": "integer", "minimum": 1},
+        "maxReplicas": {"type": "integer", "minimum": 1},
+        "targetCPUUtilizationPercentage": {"type": "integer", "minimum": 1, "maximum": 100},
+        "targetMemoryUtilizationPercentage": {"type": "integer", "minimum": 1, "maximum": 100}
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "httpPort"],
+      "properties": {
+        "type": {"type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"]},
+        "httpPort": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "secretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "key"],
+      "properties": {
+        "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+        "key": {"type": "string", "minLength": 1, "maxLength": 253}
+      }
+    },
+    "optionalSecretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "key"],
+      "properties": {
+        "existingSecret": {"type": "string", "maxLength": 253},
+        "key": {"type": "string", "maxLength": 253}
+      }
+    },
+    "optionalNamedSecretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "key"],
+      "properties": {
+        "name": {
+          "anyOf": [
+            {"const": ""},
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"
+            }
+          ]
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      }
+    },
+    "clickhouseMigrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "image", "action", "database", "cluster", "grantUsers", "secret", "caSecret", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "image": {"$ref": "#/definitions/image"},
+        "action": {"type": "string", "enum": ["migrate", "check", "dry-run"]},
+        "database": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$"},
+        "cluster": {"type": "string", "pattern": "^([A-Za-z_][A-Za-z0-9_]{0,62})?$"},
+        "grantUsers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["query", "ingest", "rollup"],
+          "properties": {"query": {"type": "string", "pattern": "^([A-Za-z_][A-Za-z0-9_]{0,62})?$"}, "ingest": {"type": "string", "pattern": "^([A-Za-z_][A-Za-z0-9_]{0,62})?$"}, "rollup": {"type": "string", "pattern": "^([A-Za-z_][A-Za-z0-9_]{0,62})?$"}}
+        },
+        "secret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+            "keys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "username", "password"],
+              "properties": {"url": {"type": "string", "minLength": 1, "maxLength": 253}, "username": {"type": "string", "minLength": 1, "maxLength": 253}, "password": {"type": "string", "minLength": 1, "maxLength": 253}}
+            }
+          }
+        },
+        "caSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "key"],
+          "properties": {"existingSecret": {"type": "string", "maxLength": 253}, "key": {"type": "string", "minLength": 1, "maxLength": 253}}
+        },
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 60, "maximum": 86400},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 60, "maximum": 604800},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "analyticsNATSPreprovision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "image", "adminSecret", "activeDeadlineSeconds", "backoffLimit", "ttlSecondsAfterFinished", "resources"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "image": {"$ref": "#/definitions/image"},
+        "adminSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+            "keys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "username", "password"],
+              "properties": {
+                "url": {"type": "string", "minLength": 1, "maxLength": 253},
+                "username": {"type": "string", "minLength": 1, "maxLength": 253},
+                "password": {"type": "string", "minLength": 1, "maxLength": 253}
+              }
+            }
+          }
+        },
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+        "backoffLimit": {"type": "integer", "minimum": 0, "maximum": 10},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 60, "maximum": 604800},
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "backupSecretKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["postgresHost", "postgresPort", "postgresUser", "postgresDatabase", "postgresPassword", "clickhouseHost", "clickhousePort", "clickhouseUser", "clickhouseDatabase", "clickhousePassword", "manifestSigningPrivateKey"],
+      "properties": {
+        "postgresHost": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresPort": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresUser": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresDatabase": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresPassword": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhouseHost": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhousePort": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhouseUser": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhouseDatabase": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhousePassword": {"type": "string", "minLength": 1, "maxLength": 253},
+        "manifestSigningPrivateKey": {"type": "string", "minLength": 1, "maxLength": 253}
+      }
+    },
+    "restoreSecretKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["postgresHost", "postgresPort", "postgresUser", "postgresDatabase", "postgresPassword", "clickhouseHost", "clickhousePort", "clickhouseUser", "clickhouseDatabase", "clickhousePassword", "manifestSigningPublicKey"],
+      "properties": {
+        "postgresHost": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresPort": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresUser": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresDatabase": {"type": "string", "minLength": 1, "maxLength": 253},
+        "postgresPassword": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhouseHost": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhousePort": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhouseUser": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhouseDatabase": {"type": "string", "minLength": 1, "maxLength": 253},
+        "clickhousePassword": {"type": "string", "minLength": 1, "maxLength": 253},
+        "manifestSigningPublicKey": {"type": "string", "minLength": 1, "maxLength": 253}
+      }
+    },
+    "recoveryCommand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "preflightArguments", "captureArguments", "restoreArguments", "compensateArguments", "environment"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+        "preflightArguments": {"$ref": "#/definitions/recoveryArguments"},
+        "captureArguments": {"$ref": "#/definitions/recoveryArguments"},
+        "restoreArguments": {"$ref": "#/definitions/recoveryArguments"},
+        "compensateArguments": {"$ref": "#/definitions/recoveryArguments"},
+        "environment": {
+          "type": "object",
+          "maxProperties": 32,
+          "propertyNames": {"pattern": "^[A-Z][A-Z0-9_]{0,63}$"},
+          "additionalProperties": {"type": "string", "maxLength": 1024, "pattern": "^[^\\r\\n\\t]*$"}
+        }
+      }
+    },
+    "recoveryArguments": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {"type": "string", "maxLength": 1024, "pattern": "^[^\\r\\n\\t]*$"}
+    },
+    "controlBackupTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "appVersion", "installationId", "sourceClusterId", "signingKeyId", "storage", "recovery", "scratchSizeLimit", "resources", "initResources"],
+      "properties": {
+        "image": {"$ref": "#/definitions/image"},
+        "appVersion": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$"},
+        "installationId": {"type": "string", "pattern": "^$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"},
+        "sourceClusterId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "signingKeyId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+        "storage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingClaim", "mountPath"],
+          "properties": {
+            "existingClaim": {"type": "string", "minLength": 1, "maxLength": 253},
+            "mountPath": {"type": "string", "pattern": "^/[^:\\r\\n\\t]+$", "maxLength": 1024}
+          }
+        },
+        "recovery": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schemaVersion", "coreManifestSHA256", "envelopeKey", "targetRPOSeconds", "targetRTOSeconds", "driver", "components", "jetStream", "dnsProbe", "agentProbe"],
+          "properties": {
+            "schemaVersion": {"type": "integer", "minimum": 0},
+            "coreManifestSHA256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+            "envelopeKey": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["provider", "name", "version"],
+              "properties": {
+                "provider": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+                "name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$"},
+                "version": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"}
+              }
+            },
+            "targetRPOSeconds": {"type": "integer", "minimum": 1, "maximum": 31536000},
+            "targetRTOSeconds": {"type": "integer", "minimum": 1, "maximum": 31536000},
+            "driver": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["backupPath", "restorePath", "path", "operationTimeoutSeconds", "kubernetesSettleTimeoutSeconds", "stateDirectory", "artifactDirectory", "manifestDirectory", "receiptDirectory"],
+              "properties": {
+                "backupPath": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+                "restorePath": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+                "path": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+                "operationTimeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 86400},
+                "kubernetesSettleTimeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 3600},
+                "stateDirectory": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+                "artifactDirectory": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+                "manifestDirectory": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+                "receiptDirectory": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024}
+              }
+            },
+            "components": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["postgresql", "clickhouse"],
+              "properties": {
+                "postgresql": {"$ref": "#/definitions/recoveryCommand"},
+                "clickhouse": {"$ref": "#/definitions/recoveryCommand"}
+              }
+            },
+            "jetStream": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "topologyFile", "nodeId", "nodeIdUnderscore", "requestTimeoutSeconds", "secret"],
+              "properties": {
+                "url": {"type": "string", "pattern": "^tls://[^/?#@\\s]+:[0-9]{1,5}$", "maxLength": 1024},
+                "topologyFile": {"type": "string", "pattern": "^/[^\\r\\n\\t]+$", "maxLength": 1024},
+                "nodeId": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+                "nodeIdUnderscore": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+                "requestTimeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 300},
+                "secret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["existingSecret", "keys"],
+                  "properties": {
+                    "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+                    "keys": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["credentials", "ca", "clientCertificate", "clientPrivateKey"],
+                      "properties": {
+                        "credentials": {"type": "string", "minLength": 1, "maxLength": 253},
+                        "ca": {"type": "string", "minLength": 1, "maxLength": 253},
+                        "clientCertificate": {"type": "string", "minLength": 1, "maxLength": 253},
+                        "clientPrivateKey": {"type": "string", "minLength": 1, "maxLength": 253}
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "dnsProbe": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["hostname", "expectedAddresses", "timeoutSeconds", "intervalSeconds"],
+              "properties": {
+                "hostname": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9.-]+$"},
+                "expectedAddresses": {"type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 2, "maxLength": 45, "pattern": "^[0-9A-Fa-f:.]+$"}},
+                "timeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 1800},
+                "intervalSeconds": {"type": "integer", "minimum": 1, "maximum": 1800}
+              }
+            },
+            "agentProbe": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "expectedNodes", "timeoutSeconds", "intervalSeconds", "secret"],
+              "properties": {
+                "url": {"type": "string", "pattern": "^https://[^?#@\\s]+$", "maxLength": 1024},
+                "expectedNodes": {"type": "integer", "minimum": 1, "maximum": 100000},
+                "timeoutSeconds": {"type": "integer", "minimum": 1, "maximum": 1800},
+                "intervalSeconds": {"type": "integer", "minimum": 1, "maximum": 1800},
+                "secret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["existingSecret", "keys"],
+                  "properties": {
+                    "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+                    "keys": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["ca", "clientCertificate", "clientPrivateKey", "bearerToken"],
+                      "properties": {
+                        "ca": {"type": "string", "minLength": 1, "maxLength": 253},
+                        "clientCertificate": {"type": "string", "minLength": 1, "maxLength": 253},
+                        "clientPrivateKey": {"type": "string", "minLength": 1, "maxLength": 253},
+                        "bearerToken": {"type": "string", "minLength": 1, "maxLength": 253}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "scratchSizeLimit": {"type": "string", "minLength": 1, "maxLength": 32},
+        "resources": {"$ref": "#/definitions/resources"},
+        "initResources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "controlBackup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "schedule", "startingDeadlineSeconds", "activeDeadlineSeconds", "backoffLimit", "successfulJobsHistoryLimit", "failedJobsHistoryLimit", "ttlSecondsAfterFinished", "secret", "clickhouse"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "schedule": {"type": "string", "minLength": 9, "maxLength": 128},
+        "startingDeadlineSeconds": {"type": "integer", "minimum": 60, "maximum": 86400},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 60, "maximum": 86400},
+        "backoffLimit": {"type": "integer", "minimum": 0, "maximum": 3},
+        "successfulJobsHistoryLimit": {"type": "integer", "minimum": 1, "maximum": 20},
+        "failedJobsHistoryLimit": {"type": "integer", "minimum": 1, "maximum": 20},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 300, "maximum": 2592000},
+        "secret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+            "keys": {"$ref": "#/definitions/backupSecretKeys"}
+          }
+        },
+        "clickhouse": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {"enabled": {"type": "boolean"}}
+        }
+      }
+    },
+    "controlRestore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "backupId", "manifestSHA256", "operationId", "targetId", "maxSchemaVersion", "activeDeadlineSeconds", "backoffLimit", "ttlSecondsAfterFinished", "secret", "clickhouse"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "backupId": {"type": "string", "maxLength": 36},
+        "manifestSHA256": {"type": "string", "maxLength": 64},
+        "operationId": {"type": "string", "maxLength": 128},
+        "targetId": {"type": "string", "maxLength": 128},
+        "maxSchemaVersion": {"type": "integer", "minimum": 1},
+        "activeDeadlineSeconds": {"type": "integer", "minimum": 60, "maximum": 86400},
+        "backoffLimit": {"type": "integer", "minimum": 0, "maximum": 1},
+        "ttlSecondsAfterFinished": {"type": "integer", "minimum": 300, "maximum": 2592000},
+        "secret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+            "keys": {"$ref": "#/definitions/restoreSecretKeys"}
+          }
+        },
+        "clickhouse": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {"enabled": {"type": "boolean"}}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"enabled": {"const": true}}},
+          "then": {
+            "properties": {
+              "backupId": {"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+              "manifestSHA256": {"pattern": "^[0-9a-f]{64}$"},
+              "operationId": {"minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+              "targetId": {"minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+              "clickhouse": {"properties": {"enabled": {"const": true}}}
+            }
+          }
+        }
+      ]
+    },
+    "networkPeer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespaceSelector", "podSelector", "cidrs", "port"],
+      "properties": {
+        "namespaceSelector": {"$ref": "#/definitions/stringMap"},
+        "podSelector": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}},
+        "cidrs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 3, "maxLength": 49, "not": {"pattern": "/0$"}}
+        },
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "externalNetworkPeer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cidrs", "port"],
+      "properties": {
+        "cidrs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 49,
+            "not": {"pattern": "/0$"},
+            "anyOf": [
+              {"pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})\\.){3}(?:25[0-5]|2[0-4][0-9]|1?[0-9]{1,2})/(?:[0-9]|[12][0-9]|3[0-2])$"},
+              {"pattern": "^[0-9A-Fa-f:]+/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$"}
+            ]
+          }
+        },
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "controlBackupNetworkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "dns", "postgresql", "clickhouse", "nats", "kubernetesAPI", "agentProbe"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "dns": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceSelector", "podSelector"],
+          "properties": {
+            "namespaceSelector": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}},
+            "podSelector": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string"}}
+          }
+        },
+        "postgresql": {"$ref": "#/definitions/networkPeer"},
+        "clickhouse": {"$ref": "#/definitions/networkPeer"},
+        "nats": {"$ref": "#/definitions/networkPeer"},
+        "kubernetesAPI": {"$ref": "#/definitions/externalNetworkPeer"},
+        "agentProbe": {"$ref": "#/definitions/externalNetworkPeer"}
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "className", "annotations", "host", "tls"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "className": {"type": "string", "minLength": 1},
+        "annotations": {"$ref": "#/definitions/stringMap"},
+        "host": {"type": "string", "minLength": 1, "maxLength": 253},
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "existingSecret"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "existingSecret": {"type": "string", "maxLength": 253}
+          },
+          "allOf": [
+            {
+              "if": {"properties": {"enabled": {"const": true}}},
+              "then": {"properties": {"existingSecret": {"minLength": 1}}}
+            }
+          ]
+        }
+      }
+    },
+    "egress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cidrs", "ports"],
+      "properties": {
+        "cidrs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 49,
+            "not": {"enum": ["0.0.0.0/0", "::/0"]}
+          }
+        },
+        "ports": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "integer", "minimum": 1, "maximum": 65535}
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "ingressController", "dns", "gatewaySourceCIDRs", "controlExternalEgress", "gatewayExternalEgress", "dataStores"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "ingressController": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceSelector", "podSelector"],
+          "properties": {
+            "namespaceSelector": {"$ref": "#/definitions/stringMap"},
+            "podSelector": {"$ref": "#/definitions/stringMap"}
+          }
+        },
+        "dns": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["namespaceSelector"],
+          "properties": {"namespaceSelector": {"$ref": "#/definitions/stringMap"}}
+        },
+        "gatewaySourceCIDRs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 49,
+            "not": {"enum": ["0.0.0.0/0", "::/0"]}
+          }
+        },
+        "controlExternalEgress": {"$ref": "#/definitions/egress"},
+        "gatewayExternalEgress": {"$ref": "#/definitions/egress"},
+        "dataStores": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["postgresql", "redis", "nats", "clickhouse"],
+          "properties": {
+            "postgresql": {"$ref": "#/definitions/dataStoreEgress"},
+            "redis": {"$ref": "#/definitions/dataStoreEgress"},
+            "nats": {"$ref": "#/definitions/dataStoreEgress"},
+            "clickhouse": {"$ref": "#/definitions/dataStoreEgress"}
+          }
+        }
+      }
+    },
+    "dataStoreEgress": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cidrs", "port"],
+      "properties": {
+        "cidrs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 49,
+            "not": {"enum": ["0.0.0.0/0", "::/0"]}
+          }
+        },
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535}
+      }
+    },
+    "pluginWebhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "wrappingKey", "attestationKey", "nats"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "wrappingKey": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "secret"],
+          "properties": {
+            "id": {
+              "anyOf": [
+                {"const": ""},
+                {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$"}
+              ]
+            },
+            "secret": {"$ref": "#/definitions/optionalNamedSecretReference"}
+          }
+        },
+        "attestationKey": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "secret"],
+          "properties": {
+            "id": {
+              "anyOf": [
+                {"const": ""},
+                {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
+              ]
+            },
+            "secret": {"$ref": "#/definitions/optionalNamedSecretReference"},
+            "next": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "secret"],
+              "properties": {
+                "id": {
+                  "anyOf": [
+                    {"const": ""},
+                    {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"}
+                  ]
+                },
+                "secret": {"$ref": "#/definitions/optionalNamedSecretReference"}
+              }
+            }
+          }
+        },
+        "nats": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "credentialsSecret", "caSecret", "jetStreamReplicas", "reconnect", "egressCIDRs"],
+          "properties": {
+            "url": {
+              "anyOf": [
+                {"const": ""},
+                {
+                  "type": "string",
+                  "maxLength": 264,
+                  "pattern": "^tls://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\\.[a-z]([a-z0-9-]{0,61}[a-z0-9])?:4222$"
+                }
+              ]
+            },
+            "credentialsSecret": {"$ref": "#/definitions/optionalNamedSecretReference"},
+            "caSecret": {"$ref": "#/definitions/optionalNamedSecretReference"},
+            "jetStreamReplicas": {"type": "integer", "minimum": 1},
+            "reconnect": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["min", "max"],
+              "properties": {
+                "min": {"type": "string", "pattern": "^(([1-9][0-9]{0,4}|[12][0-9]{5}|300000)ms|([1-9][0-9]?|[12][0-9]{2}|300)s|[1-5]m)$"},
+                "max": {"type": "string", "pattern": "^(([1-9][0-9]{0,4}|[12][0-9]{5}|300000)ms|([1-9][0-9]?|[12][0-9]{2}|300)s|[1-5]m)$"}
+              }
+            },
+            "egressCIDRs": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 49,
+                "pattern": "^((0|[1-9][0-9]{0,2})([.](0|[1-9][0-9]{0,2})){3}/(0|[1-9]|[12][0-9]|3[0-2])|[0-9a-f:]+/(0|[1-9][0-9]?|1[01][0-9]|12[0-8]))$",
+                "not": {"enum": ["0.0.0.0/0", "::/0"]}
+              }
+            }
+          }
+        }
+      }
+    },
+    "controlRuntimeKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accessTokenSecret", "apiKeyPepper", "dnsCredentialKeyID", "dnsCredentialKey", "entitlementTrustedKeys", "installationID", "installationPrivateKey", "activationCredential", "controlServerCertificate", "controlServerPrivateKey", "gatewayClientCA", "nodeCACertificateChain", "nodeCAPrivateKey", "cacheControlCursorKey", "packageCommerceCursorKey", "edgePublishCursorKeys", "edgePublishSigningPrivateKey", "analyticsIngestNATSUser", "analyticsIngestNATSPassword", "analyticsIngestClickHouseUser", "analyticsIngestClickHousePassword", "analyticsIngestIsolationWrappingKeyID", "analyticsIngestIsolationWrappingKey"],
+      "properties": {
+        "accessTokenSecret": {"type": "string", "minLength": 1},
+        "apiKeyPepper": {"type": "string", "minLength": 1},
+        "dnsCredentialKeyID": {"type": "string", "minLength": 1},
+        "dnsCredentialKey": {"type": "string", "minLength": 1},
+        "entitlementTrustedKeys": {"type": "string", "minLength": 1},
+        "installationID": {"type": "string", "minLength": 1},
+        "installationPrivateKey": {"type": "string", "minLength": 1},
+        "activationCredential": {"type": "string", "minLength": 1},
+        "controlServerCertificate": {"type": "string", "minLength": 1},
+        "controlServerPrivateKey": {"type": "string", "minLength": 1},
+        "gatewayClientCA": {"type": "string", "minLength": 1},
+        "nodeCACertificateChain": {"type": "string", "minLength": 1},
+        "nodeCAPrivateKey": {"type": "string", "minLength": 1},
+        "cacheControlCursorKey": {"type": "string", "minLength": 1},
+        "packageCommerceCursorKey": {"type": "string", "minLength": 1},
+        "edgePublishCursorKeys": {"type": "string", "minLength": 1},
+        "edgePublishSigningPrivateKey": {"type": "string", "minLength": 1},
+        "analyticsIngestNATSUser": {"type": "string", "minLength": 1},
+        "analyticsIngestNATSPassword": {"type": "string", "minLength": 1},
+        "analyticsIngestClickHouseUser": {"type": "string", "minLength": 1},
+        "analyticsIngestClickHousePassword": {"type": "string", "minLength": 1},
+        "analyticsIngestIsolationWrappingKeyID": {"type": "string", "minLength": 1},
+        "analyticsIngestIsolationWrappingKey": {"type": "string", "minLength": 1}
+      }
+    },
+    "analyticsIngest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "clickhouseDatabase", "stream", "durable", "isolationStream", "isolationMaxBytes", "ccCoordinationStream", "ccCoordinationDurable", "replicas"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "clickhouseDatabase": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$"},
+        "stream": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9_-]{0,127}$"},
+        "durable": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 128},
+        "isolationStream": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9_-]{0,127}$"},
+        "isolationMaxBytes": {"type": "integer", "minimum": 2162688},
+        "ccCoordinationStream": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9_-]{0,127}$"},
+        "ccCoordinationDurable": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 128},
+        "replicas": {"type": "integer", "minimum": 1, "maximum": 5}
+      }
+    },
+    "controlDataStoreKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["databaseURL", "redisURL", "natsURL", "clickhouseURL"],
+      "properties": {
+        "databaseURL": {"type": "string", "minLength": 1},
+        "redisURL": {"type": "string", "minLength": 1},
+        "natsURL": {"type": "string", "minLength": 1},
+        "clickhouseURL": {"type": "string", "minLength": 1}
+      }
+    },
+    "cacheControlDuration": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*(?:ms|s|m|h)$"
+    },
+    "trafficPackageSecretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "key"],
+      "properties": {
+        "existingSecret": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"}
+          ]
+        },
+        "key": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+      }
+    },
+    "trafficPackage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "cursorKeySecret", "workload"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "cursorKeySecret": {"$ref": "#/definitions/trafficPackageSecretReference"},
+        "workload": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "port", "mtlsSecret"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "mtlsSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["existingSecret", "keys"],
+              "properties": {
+                "existingSecret": {
+                  "anyOf": [
+                    {"const": ""},
+                    {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"}
+                  ]
+                },
+                "keys": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["serverCertificate", "serverPrivateKey", "clientCA"],
+                  "properties": {
+                    "serverCertificate": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                    "serverPrivateKey": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                    "clientCA": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {"properties": {"enabled": {"const": true}}},
+              {"properties": {"workload": {"properties": {"enabled": {"const": true}}}}}
+            ]
+          },
+          "then": {"properties": {"cursorKeySecret": {"properties": {"existingSecret": {"minLength": 1}}}}}
+        },
+        {
+          "if": {"properties": {"workload": {"properties": {"enabled": {"const": true}}}}},
+          "then": {"properties": {"workload": {"properties": {"mtlsSecret": {"properties": {"existingSecret": {"minLength": 1}}}}}}}
+        }
+      ]
+    },
+    "cacheControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "natsName", "natsConnectTimeout", "natsReconnectWait", "natsDrainTimeout", "commandStream", "statusStream", "commandSubjectPrefix", "statusSubjectPrefix", "dlqSubjectPrefix", "durable", "workerID", "pollInterval", "fetchTimeout", "operationTimeout", "leaseDuration", "ackWait", "nakBaseDelay", "nakMaximumDelay", "claimBatch", "maxDeliver", "maxAckPending", "maxWaiting", "maxPayloadBytes", "streamReplicas"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "natsName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "natsConnectTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+        "natsReconnectWait": {"$ref": "#/definitions/cacheControlDuration"},
+        "natsDrainTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+        "commandStream": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 128},
+        "statusStream": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 128},
+        "commandSubjectPrefix": {"type": "string", "pattern": "^[A-Za-z0-9_-]+(?:[.][A-Za-z0-9_-]+)*$", "maxLength": 256},
+        "statusSubjectPrefix": {"type": "string", "pattern": "^[A-Za-z0-9_-]+(?:[.][A-Za-z0-9_-]+)*$", "maxLength": 256},
+        "dlqSubjectPrefix": {"type": "string", "pattern": "^[A-Za-z0-9_-]+(?:[.][A-Za-z0-9_-]+)*$", "maxLength": 256},
+        "durable": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 128},
+        "workerID": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 128},
+        "pollInterval": {"$ref": "#/definitions/cacheControlDuration"},
+        "fetchTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+        "operationTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+        "leaseDuration": {"$ref": "#/definitions/cacheControlDuration"},
+        "ackWait": {"$ref": "#/definitions/cacheControlDuration"},
+        "nakBaseDelay": {"$ref": "#/definitions/cacheControlDuration"},
+        "nakMaximumDelay": {"$ref": "#/definitions/cacheControlDuration"},
+        "claimBatch": {"type": "integer", "minimum": 1, "maximum": 16},
+        "maxDeliver": {"type": "integer", "minimum": 2, "maximum": 100},
+        "maxAckPending": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "maxWaiting": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "maxPayloadBytes": {"type": "integer", "minimum": 1, "maximum": 1048576},
+        "streamReplicas": {"type": "integer", "minimum": 1, "maximum": 5}
+      }
+    },
+    "packageCommerceSecretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "key"],
+      "properties": {
+        "existingSecret": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"}
+          ]
+        },
+        "key": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+      }
+    },
+    "packageMonitorSecretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "key"],
+      "properties": {
+        "existingSecret": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"}
+          ]
+        },
+        "key": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+      }
+    },
+    "packageMonitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "cursorKeySecret"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "cursorKeySecret": {"$ref": "#/definitions/packageMonitorSecretReference"}
+      },
+      "allOf": [{
+        "if": {"properties": {"enabled": {"const": true}}},
+        "then": {"properties": {"cursorKeySecret": {"properties": {"existingSecret": {"minLength": 1}}}}}
+      }]
+    },
+    "identityVerificationDuration": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 32,
+      "pattern": "^([1-9][0-9]*(ns|us|ms|s|m|h))+$"
+    },
+    "identityVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "resolverName", "reviewTTL", "retentionPeriod", "cursorKeySecret", "settlement", "provider", "issuer"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "resolverName": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,63}$"}
+          ]
+        },
+        "reviewTTL": {"$ref": "#/definitions/identityVerificationDuration"},
+        "retentionPeriod": {"$ref": "#/definitions/identityVerificationDuration"},
+        "cursorKeySecret": {"$ref": "#/definitions/packageMonitorSecretReference"},
+        "settlement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["workerEnabled", "leaseDuration", "retryDelay", "maxAttempts", "idlePoll", "errorBackoff"],
+          "properties": {
+            "workerEnabled": {"type": "boolean"},
+            "leaseDuration": {"$ref": "#/definitions/identityVerificationDuration"},
+            "retryDelay": {"$ref": "#/definitions/identityVerificationDuration"},
+            "maxAttempts": {"type": "integer", "minimum": 1, "maximum": 1000},
+            "idlePoll": {"$ref": "#/definitions/identityVerificationDuration"},
+            "errorBackoff": {"$ref": "#/definitions/identityVerificationDuration"}
+          }
+        },
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "name", "endpoint", "apiKeySecret", "callbackKeyId", "callbackHMACSecret", "objectStore"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "name": {"type": "string", "maxLength": 64, "pattern": "^$|^[a-z][a-z0-9._-]{0,63}$"},
+            "endpoint": {"type": "string", "maxLength": 2048, "pattern": "^$|^https://[^/?#]+$"},
+            "apiKeySecret": {"$ref": "#/definitions/packageMonitorSecretReference"},
+            "callbackKeyId": {"type": "string", "maxLength": 128, "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+            "callbackHMACSecret": {"$ref": "#/definitions/packageMonitorSecretReference"},
+            "objectStore": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["endpoint", "region", "bucket", "prefix", "kmsKeyId", "credentialsSecret"],
+              "properties": {
+                "endpoint": {"type": "string", "maxLength": 2048, "pattern": "^$|^https://[^/?#]+$"},
+                "region": {"type": "string", "maxLength": 64, "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+                "bucket": {"type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$"},
+                "prefix": {"type": "string", "maxLength": 128, "pattern": "^$|^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$"},
+                "kmsKeyId": {"type": "string", "maxLength": 256},
+                "credentialsSecret": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["existingSecret", "keys"],
+                  "properties": {
+                    "existingSecret": {"type": "string", "maxLength": 253, "pattern": "^$|^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"},
+                    "keys": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["accessKeyId", "secretAccessKey", "sessionToken"],
+                      "properties": {
+                        "accessKeyId": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                        "secretAccessKey": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                        "sessionToken": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "issuer": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "listenAddress", "servicePort", "workloadIdentities", "kmsEndpoint", "mtlsSecret"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "listenAddress": {"type": "string", "minLength": 3, "maxLength": 261, "pattern": "^[^\\s]+:[1-9][0-9]{0,4}$"},
+            "servicePort": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "workloadIdentities": {"type": "string", "maxLength": 131072, "pattern": "^$|^spiffe://[^|,\\s]+\\|[A-Za-z0-9][A-Za-z0-9._:-]{0,127}(,spiffe://[^|,\\s]+\\|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})*$"},
+            "kmsEndpoint": {"type": "string", "maxLength": 2048, "pattern": "^$|^https://[^/?#]+$"},
+            "mtlsSecret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["existingSecret", "keys"],
+              "properties": {
+                "existingSecret": {"type": "string", "maxLength": 253, "pattern": "^$|^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"},
+                "keys": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["serverCertificate", "serverPrivateKey", "clientCA"],
+                  "properties": {
+                    "serverCertificate": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                    "serverPrivateKey": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                    "clientCA": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"enabled": {"const": true}}},
+          "then": {"properties": {
+            "resolverName": {"minLength": 1},
+            "cursorKeySecret": {"properties": {"existingSecret": {"minLength": 1}}},
+            "settlement": {"properties": {"workerEnabled": {"const": true}}}
+          }}
+        },
+        {
+          "if": {"properties": {"provider": {"properties": {"enabled": {"const": true}}}}},
+          "then": {"properties": {
+            "enabled": {"const": true},
+            "provider": {"properties": {
+              "name": {"minLength": 1},
+              "endpoint": {"minLength": 1},
+              "callbackKeyId": {"minLength": 1},
+              "apiKeySecret": {"properties": {"existingSecret": {"minLength": 1}}},
+              "callbackHMACSecret": {"properties": {"existingSecret": {"minLength": 1}}},
+              "objectStore": {"properties": {
+                "endpoint": {"minLength": 1}, "region": {"minLength": 1}, "bucket": {"minLength": 1},
+                "kmsKeyId": {"minLength": 1},
+                "credentialsSecret": {"properties": {"existingSecret": {"minLength": 1}}}
+              }}
+            }},
+            "issuer": {"properties": {"enabled": {"const": true}}}
+          }}
+        },
+        {
+          "if": {"properties": {"issuer": {"properties": {"enabled": {"const": true}}}}},
+          "then": {"properties": {
+            "enabled": {"const": true},
+            "provider": {"properties": {"enabled": {"const": true}}},
+            "issuer": {"properties": {
+              "workloadIdentities": {"minLength": 1},
+              "mtlsSecret": {"properties": {"existingSecret": {"minLength": 1}}}
+            }}
+          }}
+        }
+      ]
+    },
+    "packageCommerce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "providerCallbacks", "worker"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "providerCallbacks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "keyringSecret"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "keyringSecret": {"$ref": "#/definitions/packageCommerceSecretReference"}
+          },
+          "allOf": [
+            {
+              "if": {"properties": {"enabled": {"const": true}}},
+              "then": {"properties": {"keyringSecret": {"properties": {"existingSecret": {"minLength": 1}}}}}
+            }
+          ]
+        },
+        "worker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "nats", "batchSize", "leaseDuration", "publishTimeout", "settleTimeout", "retryMaxAttempts", "retryBaseDelay", "retryMaxDelay", "idlePoll", "errorBackoff", "shutdownTimeout"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "nats": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url", "stream", "credentialsSecret", "caSecret", "connectTimeout", "operationTimeout", "reconnectWait", "drainTimeout"],
+              "properties": {
+                "url": {
+                  "anyOf": [
+                    {"const": ""},
+                    {"type": "string", "maxLength": 264, "pattern": "^tls://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\\.[a-z]([a-z0-9-]{0,61}[a-z0-9])?:4222$"}
+                  ]
+                },
+                "stream": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Z0-9][A-Z0-9_-]{0,127}$"},
+                "credentialsSecret": {"$ref": "#/definitions/packageCommerceSecretReference"},
+                "caSecret": {"$ref": "#/definitions/packageCommerceSecretReference"},
+                "connectTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+                "operationTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+                "reconnectWait": {"$ref": "#/definitions/cacheControlDuration"},
+                "drainTimeout": {"$ref": "#/definitions/cacheControlDuration"}
+              }
+            },
+            "batchSize": {"type": "integer", "minimum": 1, "maximum": 256},
+            "leaseDuration": {"$ref": "#/definitions/cacheControlDuration"},
+            "publishTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+            "settleTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+            "retryMaxAttempts": {"type": "integer", "minimum": 1, "maximum": 20},
+            "retryBaseDelay": {"$ref": "#/definitions/cacheControlDuration"},
+            "retryMaxDelay": {"$ref": "#/definitions/cacheControlDuration"},
+            "idlePoll": {"$ref": "#/definitions/cacheControlDuration"},
+            "errorBackoff": {"$ref": "#/definitions/cacheControlDuration"},
+            "shutdownTimeout": {"$ref": "#/definitions/cacheControlDuration"}
+          },
+          "allOf": [
+            {
+              "if": {"properties": {"enabled": {"const": true}}},
+              "then": {
+                "properties": {
+                  "nats": {
+                    "properties": {
+                      "url": {"minLength": 1},
+                      "credentialsSecret": {"properties": {"existingSecret": {"minLength": 1}}},
+                      "caSecret": {"properties": {"existingSecret": {"minLength": 1}}}
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"enabled": {"const": true}}},
+          "then": {"properties": {"worker": {"properties": {"enabled": {"const": true}}}}}
+        },
+        {
+          "if": {"properties": {"providerCallbacks": {"properties": {"enabled": {"const": true}}}}},
+          "then": {"properties": {"enabled": {"const": true}}}
+        }
+      ]
+    },
+    "nodeScheduling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled"],
+      "properties": {
+        "enabled": {"type": "boolean"}
+      }
+    },
+    "edgePublishSignerSecretReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["existingSecret", "key"],
+      "properties": {
+        "existingSecret": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"}
+          ]
+        },
+        "key": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+      }
+    },
+    "edgePublishRemoteSigner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "caSecret", "bearerTokenSecret", "timeout"],
+      "properties": {
+        "endpoint": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "maxLength": 2048, "pattern": "^https://[^/?#@\\s]+/[^?#\\s]*$"}
+          ]
+        },
+        "caSecret": {"$ref": "#/definitions/edgePublishSignerSecretReference"},
+        "bearerTokenSecret": {"$ref": "#/definitions/edgePublishSignerSecretReference"},
+        "timeout": {"type": "string", "pattern": "^(100ms|[1-9][0-9]{2}ms|[1-9]s|10s)$"}
+      }
+    },
+    "edgePublishSigner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "publicKeySecret", "remote"],
+      "properties": {
+        "provider": {"type": "string", "enum": ["file", "remote"]},
+        "publicKeySecret": {"$ref": "#/definitions/edgePublishSignerSecretReference"},
+        "remote": {"$ref": "#/definitions/edgePublishRemoteSigner"}
+      },
+      "allOf": [{
+        "if": {"properties": {"provider": {"const": "remote"}}, "required": ["provider"]},
+        "then": {
+          "properties": {
+            "publicKeySecret": {"properties": {"existingSecret": {"minLength": 1}}, "required": ["existingSecret"]},
+            "remote": {
+              "properties": {
+                "endpoint": {"minLength": 1},
+                "caSecret": {"properties": {"existingSecret": {"minLength": 1}}, "required": ["existingSecret"]},
+                "bearerTokenSecret": {"properties": {"existingSecret": {"minLength": 1}}, "required": ["existingSecret"]}
+              }
+            }
+          }
+        }
+      }]
+    },
+    "securityActivation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "reconcileInterval", "candidateTTL", "requiredWAFAPIVersion", "requiredCCAPIVersion", "edgePublishCursorActiveKeyID", "edgePublishSigningKeyID", "signer"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "reconcileInterval": {"type": "string", "pattern": "^([1-9][0-9]{2}ms|[1-9][0-9]{3}ms|[1-5][0-9]{4}ms|60000ms|[1-9]s|[1-5][0-9]s|60s|1m)$"},
+        "candidateTTL": {"type": "string", "pattern": "^([1-9]m|[1-9][0-9]m|[1-9][0-9]{2}m|1[0-3][0-9]{2}m|14[0-3][0-9]m|1440m|[1-9]h|1[0-9]h|2[0-4]h)$"},
+        "requiredWAFAPIVersion": {"const": 1},
+        "requiredCCAPIVersion": {"const": 2},
+        "edgePublishCursorActiveKeyID": {"type": "string", "maxLength": 128},
+        "edgePublishSigningKeyID": {"type": "string", "maxLength": 128},
+        "signer": {"$ref": "#/definitions/edgePublishSigner"}
+      },
+      "allOf": [{
+        "if": {"properties": {"enabled": {"const": true}}},
+        "then": {"properties": {
+          "edgePublishCursorActiveKeyID": {"minLength": 1},
+          "edgePublishSigningKeyID": {"minLength": 1}
+        }}
+      }]
+    },
+    "automaticPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "pollInterval", "errorBackoff", "operationTimeout", "leaseDuration", "retryDelay"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "pollInterval": {"$ref": "#/definitions/cacheControlDuration"},
+        "errorBackoff": {"$ref": "#/definitions/cacheControlDuration"},
+        "operationTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+        "leaseDuration": {"$ref": "#/definitions/cacheControlDuration"},
+        "retryDelay": {"$ref": "#/definitions/cacheControlDuration"}
+      }
+    },
+    "acmeRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "publicationCursorActiveKeyID", "directoryURL", "contacts", "pollInterval", "leaseDuration", "settleTimeout", "retryBase", "retryMaximum", "maxAttempts", "errorBackoffMin", "errorBackoffMax", "runtimeSecret"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "publicationCursorActiveKeyID": {"type": "string", "maxLength": 64, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$|^$"},
+        "directoryURL": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "maxLength": 2048, "pattern": "^https://[^/?#@\\s]+(?:/[^?#\\s]*)?$"}
+          ]
+        },
+        "contacts": {
+          "type": "array",
+          "maxItems": 10,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 8, "maxLength": 320, "pattern": "^mailto:[^,\\r\\n\\t ]+$"}
+        },
+        "pollInterval": {"$ref": "#/definitions/cacheControlDuration"},
+        "leaseDuration": {"$ref": "#/definitions/cacheControlDuration"},
+        "settleTimeout": {"$ref": "#/definitions/cacheControlDuration"},
+        "retryBase": {"$ref": "#/definitions/cacheControlDuration"},
+        "retryMaximum": {"$ref": "#/definitions/cacheControlDuration"},
+        "maxAttempts": {"type": "integer", "minimum": 1, "maximum": 100},
+        "errorBackoffMin": {"$ref": "#/definitions/cacheControlDuration"},
+        "errorBackoffMax": {"$ref": "#/definitions/cacheControlDuration"},
+        "runtimeSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"},
+            "keys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["wrappingKeyID", "wrappingKey", "dnsHandleActiveKeyID", "dnsHandleActiveKey", "dnsHandleVerifyOnlyKeys", "publicationCursorKeys"],
+              "properties": {
+                "wrappingKeyID": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "wrappingKey": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "dnsHandleActiveKeyID": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "dnsHandleActiveKey": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "dnsHandleVerifyOnlyKeys": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "publicationCursorKeys": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"enabled": {"const": true}}},
+          "then": {
+            "properties": {
+              "publicationCursorActiveKeyID": {"minLength": 1},
+              "directoryURL": {"minLength": 1},
+              "contacts": {"minItems": 1}
+            }
+          }
+        }
+      ]
+    },
+    "dnsReconcile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "workloadPort", "resolverEndpoints", "authoritativeResolvers", "publicResolvers", "workloadIdentities", "workloadMTLSSecret"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "workloadPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "resolverEndpoints": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 128}
+        },
+        "authoritativeResolvers": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 3, "maxLength": 256, "pattern": "^[^=,\\r\\n\\t ]+=[^=,\\r\\n\\t ]+$"}
+        },
+        "publicResolvers": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 3, "maxLength": 256, "pattern": "^[^=,\\r\\n\\t ]+=[^=,\\r\\n\\t ]+$"}
+        },
+        "workloadIdentities": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 768, "pattern": "^spiffe://[^|,?#]+\\|[^|,\\r\\n\\t ]+\\|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}
+        },
+        "workloadMTLSSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253},
+            "keys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["serverCertificate", "serverPrivateKey", "clientCA"],
+              "properties": {
+                "serverCertificate": {"type": "string", "minLength": 1, "maxLength": 253},
+                "serverPrivateKey": {"type": "string", "minLength": 1, "maxLength": 253},
+                "clientCA": {"type": "string", "minLength": 1, "maxLength": 253}
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"enabled": {"const": true}}},
+          "then": {
+            "properties": {
+              "resolverEndpoints": {"minItems": 1},
+              "authoritativeResolvers": {"minItems": 1},
+              "publicResolvers": {"minItems": 1},
+              "workloadIdentities": {"minItems": 1}
+            }
+          }
+        }
+      ]
+    },
+    "controlUpgradeRunner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "protocolVersion", "pollInterval", "stepTimeout", "healthTimeout", "expectedReplicas", "quorum", "stateKey", "internalTokenKey", "installationSecret", "trustSecret", "planSecret", "planSource", "state", "resources"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "protocolVersion": {"type": "string", "pattern": "^[1-9][0-9]{0,9}$"},
+        "pollInterval": {"type": "string", "pattern": "^[1-9][0-9]*(?:ms|s|m)$"},
+        "stepTimeout": {"type": "string", "pattern": "^[1-9][0-9]*(?:s|m)$"},
+        "healthTimeout": {"type": "string", "pattern": "^[1-9][0-9]*(?:s|m)$"},
+        "expectedReplicas": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "quorum": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "stateKey": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$"},
+        "internalTokenKey": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,252}$"},
+        "installationSecret": {"$ref": "#/definitions/secretReference"},
+        "trustSecret": {"$ref": "#/definitions/secretReference"},
+        "planSecret": {"$ref": "#/definitions/secretReference"},
+        "planSource": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "timeout", "maxBytes", "existingSecret", "keys"],
+          "properties": {
+            "url": {"type": "string", "pattern": "^https://[^/?#]+/v1/internal/control-upgrade/plan$"},
+            "timeout": {"type": "string", "pattern": "^[1-9][0-9]*(?:ms|s|m)$"},
+            "maxBytes": {"type": "integer", "minimum": 1024, "maximum": 2097152},
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"},
+            "keys": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["ca", "clientCertificate", "clientPrivateKey", "internalToken"],
+              "properties": {
+                "ca": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "clientCertificate": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "clientPrivateKey": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"},
+                "internalToken": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$"}
+              }
+            }
+          }
+        },
+        "state": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingClaim", "storageClass", "size"],
+          "properties": {
+            "existingClaim": {"type": "string", "maxLength": 253},
+            "storageClass": {"type": "string", "maxLength": 253},
+            "size": {"type": "string", "pattern": "^[1-9][0-9]*(?:Mi|Gi|Ti)$"}
+          }
+        },
+        "resources": {"$ref": "#/definitions/resources"}
+      }
+    },
+    "controlApi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "replicaCount", "image", "rolloutNonce", "installationName", "controlVersion", "licenseServiceURL", "service", "trafficPackage", "dnsReconcile", "nodeScheduling", "nodePortTransition", "systemConfiguration", "securityActivation", "automaticPublication", "analyticsIngest", "acme", "runtimeSecret", "dataStoresSecret", "resources", "pdb", "autoscaling", "terminationGracePeriodSeconds", "migrations", "packageCommerce", "packageMonitor", "identityVerification", "cacheControl"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "replicaCount": {"type": "integer", "minimum": 1},
+        "image": {"$ref": "#/definitions/image"},
+        "rolloutNonce": {"type": "string", "maxLength": 128},
+        "installationName": {"type": "string", "minLength": 1, "maxLength": 128},
+        "controlVersion": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+        "licenseServiceURL": {
+          "anyOf": [
+            {"const": ""},
+            {"type": "string", "pattern": "^https://[^/?#]+$"}
+          ]
+        },
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "httpPort", "internalGRPCPort"],
+          "properties": {
+            "type": {"type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"]},
+            "httpPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "internalGRPCPort": {"type": "integer", "minimum": 1, "maximum": 65535}
+          }
+        },
+        "trafficPackage": {"$ref": "#/definitions/trafficPackage"},
+        "dnsReconcile": {"$ref": "#/definitions/dnsReconcile"},
+        "nodeScheduling": {"$ref": "#/definitions/nodeScheduling"},
+        "nodePortTransition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {"enabled": {"type": "boolean"}}
+        },
+        "systemConfiguration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled"],
+          "properties": {"enabled": {"type": "boolean"}}
+        },
+        "securityActivation": {"$ref": "#/definitions/securityActivation"},
+        "automaticPublication": {"$ref": "#/definitions/automaticPublication"},
+        "analyticsIngest": {"$ref": "#/definitions/analyticsIngest"},
+        "acme": {"$ref": "#/definitions/acmeRuntime"},
+        "runtimeSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1},
+            "keys": {"$ref": "#/definitions/controlRuntimeKeys"}
+          }
+        },
+        "dataStoresSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1},
+            "keys": {"$ref": "#/definitions/controlDataStoreKeys"}
+          }
+        },
+        "resources": {"$ref": "#/definitions/resources"},
+        "pdb": {"$ref": "#/definitions/pdb"},
+        "autoscaling": {"$ref": "#/definitions/autoscaling"},
+        "terminationGracePeriodSeconds": {"type": "integer", "minimum": 15, "maximum": 300},
+        "packageCommerce": {"$ref": "#/definitions/packageCommerce"},
+        "packageMonitor": {"$ref": "#/definitions/packageMonitor"},
+        "identityVerification": {"$ref": "#/definitions/identityVerification"},
+        "cacheControl": {"$ref": "#/definitions/cacheControl"},
+        "migrations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "activeDeadlineSeconds", "ttlSecondsAfterFinished"],
+          "properties": {
+            "enabled": {"type": "boolean"},
+            "activeDeadlineSeconds": {"type": "integer", "minimum": 30, "maximum": 3600},
+            "ttlSecondsAfterFinished": {"type": "integer", "minimum": 60, "maximum": 604800}
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"packageCommerce": {"properties": {"worker": {"properties": {"enabled": {"const": true}}}}}}},
+          "then": {"properties": {"enabled": {"const": true}}}
+        },
+        {
+          "if": {"properties": {"automaticPublication": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}}, "required": ["automaticPublication"]},
+          "then": {"properties": {"securityActivation": {"properties": {"enabled": {"const": true}}, "required": ["enabled"]}}, "required": ["securityActivation"]}
+        }
+      ]
+    },
+    "gatewayRuntimeKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["serverCertificate", "serverPrivateKey", "agentClientCA", "controlClientCertificate", "controlClientPrivateKey", "controlServerCA"],
+      "properties": {
+        "serverCertificate": {"type": "string", "minLength": 1},
+        "serverPrivateKey": {"type": "string", "minLength": 1},
+        "agentClientCA": {"type": "string", "minLength": 1},
+        "controlClientCertificate": {"type": "string", "minLength": 1},
+        "controlClientPrivateKey": {"type": "string", "minLength": 1},
+        "controlServerCA": {"type": "string", "minLength": 1}
+      }
+    },
+    "gatewayDataStoreKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["redisURL", "natsURL"],
+      "properties": {
+        "redisURL": {"type": "string", "minLength": 1},
+        "natsURL": {"type": "string", "minLength": 1}
+      }
+    },
+    "gatewayTelemetryNATSKeys": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "username", "password"],
+      "properties": {
+        "url": {"type": "string", "minLength": 1},
+        "username": {"type": "string", "minLength": 1},
+        "password": {"type": "string", "minLength": 1}
+      }
+    },
+    "agentGateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "replicaCount", "image", "rolloutNonce", "gatewayVersion", "workloadURISAN", "controlServerName", "agentPublicEndpoint", "service", "runtimeSecret", "dataStoresSecret", "telemetryNATSSecret", "resources", "pdb", "autoscaling", "terminationGracePeriodSeconds"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "replicaCount": {"type": "integer", "minimum": 1},
+        "image": {"$ref": "#/definitions/image"},
+        "rolloutNonce": {"type": "string", "maxLength": 128},
+        "gatewayVersion": {"type": "string", "minLength": 1, "maxLength": 128},
+        "workloadURISAN": {"type": "string", "pattern": "^[a-z][a-z0-9+.-]*://[^?#]+$", "maxLength": 256},
+        "controlServerName": {"type": "string", "maxLength": 253},
+        "agentPublicEndpoint": {"type": "string", "minLength": 3, "maxLength": 320, "pattern": "^(?:\\[[0-9A-Fa-f:.]+\\]|[A-Za-z0-9.-]+):[0-9]{1,5}$"},
+        "service": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "enrollmentPort", "agentPort", "healthPort", "annotations", "externalTrafficPolicy", "loadBalancerSourceRanges"],
+          "properties": {
+            "type": {"type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"]},
+            "enrollmentPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "agentPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "healthPort": {"type": "integer", "minimum": 1, "maximum": 65535},
+            "annotations": {"$ref": "#/definitions/stringMap"},
+            "externalTrafficPolicy": {"type": "string", "enum": ["Cluster", "Local"]},
+            "loadBalancerSourceRanges": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 3,
+                "maxLength": 49,
+                "not": {"enum": ["0.0.0.0/0", "::/0"]}
+              }
+            }
+          }
+        },
+        "runtimeSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1},
+            "keys": {"$ref": "#/definitions/gatewayRuntimeKeys"}
+          }
+        },
+        "dataStoresSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1},
+            "keys": {"$ref": "#/definitions/gatewayDataStoreKeys"}
+          }
+        },
+        "telemetryNATSSecret": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["existingSecret", "keys"],
+          "properties": {
+            "existingSecret": {"type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$"},
+            "keys": {"$ref": "#/definitions/gatewayTelemetryNATSKeys"}
+          }
+        },
+        "resources": {"$ref": "#/definitions/resources"},
+        "pdb": {"$ref": "#/definitions/pdb"},
+        "autoscaling": {"$ref": "#/definitions/autoscaling"},
+        "terminationGracePeriodSeconds": {"type": "integer", "minimum": 15, "maximum": 300}
+      }
+    },
+    "frontend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "replicaCount", "image", "rolloutNonce", "service", "resources", "pdb", "autoscaling", "terminationGracePeriodSeconds"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "replicaCount": {"type": "integer", "minimum": 1},
+        "image": {"$ref": "#/definitions/image"},
+        "rolloutNonce": {"type": "string", "maxLength": 128},
+        "service": {"$ref": "#/definitions/service"},
+        "resources": {"$ref": "#/definitions/resources"},
+        "pdb": {"$ref": "#/definitions/pdb"},
+        "autoscaling": {"$ref": "#/definitions/autoscaling"},
+        "terminationGracePeriodSeconds": {"type": "integer", "minimum": 15, "maximum": 300}
+      }
+    }
+  }
+}

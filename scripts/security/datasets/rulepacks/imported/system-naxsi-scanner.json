@@ -1,0 +1,243 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/naxsi-scanner",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "扫描器特征（naxsi）",
+ "description": "UA、Accept、Content-Length 等含已知扫描器/攻击工具特征即记录，可改为拦截或挑战。含 curl、wget、python、Go-http 等通用客户端标识，API 调用方会命中。",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "nx-scan-args-00",
+  "nx-scan-body-00",
+  "nx-scan-cookie-00",
+  "nx-scan-header-accept-00",
+  "nx-scan-header-content-length-00",
+  "nx-scan-path-00",
+  "nx-scan-referer-00",
+  "nx-scan-request-uri-00",
+  "nx-scan-user-agent-00"
+ ],
+ "rules": [
+  {
+   "id": "nx-scan-args-00",
+   "name": "参数含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "contains",
+       "values": [
+        "alieltop"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-body-00",
+   "name": "请求体含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "body",
+       "operator": "contains",
+       "values": [
+        "acunetix"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-cookie-00",
+   "name": "Cookie含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "contains",
+       "values": [
+        "alieltop"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-header-accept-00",
+   "name": "请求头[accept]含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "header",
+       "operator": "contains",
+       "values": [
+        "acunetix",
+        "acunetix/wvs"
+       ],
+       "key": "accept"
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-header-content-length-00",
+   "name": "请求头[content-length]含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "header",
+       "operator": "contains",
+       "values": [
+        "99999999999999999999999"
+       ],
+       "key": "content-length"
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-path-00",
+   "name": "路径含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "contains",
+       "values": [
+        "/netsparker",
+        "acunetix"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-referer-00",
+   "name": "Referer含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "referer",
+       "operator": "contains",
+       "values": [
+        "alieltop"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-request-uri-00",
+   "name": "URL含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "request_uri",
+       "operator": "contains",
+       "values": [
+        "alieltop"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-scan-user-agent-00",
+   "name": "UA含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "${",
+        "alieltop",
+        "asynchttpclient",
+        "brutus/",
+        "cloudmapping",
+        "curl",
+        "dav.pm",
+        "expense",
+        "go-http",
+        "guzzlehttp",
+        "http_get_vars",
+        "l9explore",
+        "l9tcpid",
+        "libwww-perl",
+        "meterpreter",
+        "mysqloit",
+        "netsystemsresearch",
+        "network-services-auditor",
+        "nlpproject.info",
+        "palo alto network",
+        "paloaltonetworks.com",
+        "python",
+        "w3af",
+        "webmole",
+        "wget",
+        "whisker",
+        "winhttpreq",
+        "wordpress/",
+        "zerodium"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

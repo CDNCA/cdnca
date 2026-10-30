@@ -1,0 +1,1135 @@
+{
+ "id": "node-line-groups",
+ "prefix": "/v1/node-line-groups",
+ "operations": [
+  {
+   "operation_id": "listNodeLineGroups",
+   "method": "GET",
+   "path": "/v1/node-line-groups",
+   "summary": "查询线路组当前修订列表",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current immutable revision of every visible line group.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<LineGroupRevision>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "createNodeLineGroup",
+   "method": "POST",
+   "path": "/v1/node-line-groups",
+   "summary": "创建线路组首个不可变修订",
+   "auth": [
+    "bearer"
+   ],
+   "description": "租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。",
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Must be the single exact quoted value \"0\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "region",
+      "type": "string"
+     },
+     {
+      "name": "resolved_value",
+      "type": "string",
+      "description": "留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。"
+     },
+     {
+      "name": "ipv4_resolved_value",
+      "type": "string",
+      "description": "IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。"
+     },
+     {
+      "name": "l2_config_id",
+      "type": "string(uuid) | null(uuid)",
+      "description": "同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。"
+     },
+     {
+      "name": "failover_mode",
+      "type": "string: primary_offline / online_less_than_backup_count",
+      "description": "有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。"
+     },
+     {
+      "name": "note",
+      "type": "string"
+     },
+     {
+      "name": "sort_order",
+      "type": "integer(int32)"
+     },
+     {
+      "name": "health_policy",
+      "type": "HealthPolicy",
+      "required": true
+     },
+     {
+      "name": "endpoints",
+      "type": "array<EndpointWrite>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Revision 1 created. ETag is a quoted decimal revision.",
+     "fields": [
+      {
+       "name": "group",
+       "type": "LineGroupRevision",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeLineGroup",
+   "method": "GET",
+   "path": "/v1/node-line-groups/{id}",
+   "summary": "查询线路组当前修订",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current immutable revision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "region",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "resolved_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ipv4_resolved_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "l2_config_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "failover_mode",
+       "type": "string: primary_offline / online_less_than_backup_count",
+       "required": true
+      },
+      {
+       "name": "note",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "sort_order",
+       "type": "integer(int32)",
+       "required": true
+      },
+      {
+       "name": "health_policy",
+       "type": "HealthPolicy",
+       "required": true
+      },
+      {
+       "name": "endpoints",
+       "type": "array<Endpoint>",
+       "required": true
+      },
+      {
+       "name": "statistics",
+       "type": "LineGroupStatistics",
+       "description": "仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。"
+      },
+      {
+       "name": "configuration_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "sealed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "is_platform_default",
+       "type": "boolean",
+       "description": "平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。"
+      },
+      {
+       "name": "backup_states",
+       "type": "array<LineBackupState>",
+       "description": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateNodeLineGroup",
+   "method": "PUT",
+   "path": "/v1/node-line-groups/{id}",
+   "summary": "创建线路组下一不可变修订",
+   "auth": [
+    "bearer"
+   ],
+   "description": "租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single quoted positive decimal current revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "region",
+      "type": "string"
+     },
+     {
+      "name": "resolved_value",
+      "type": "string",
+      "description": "留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。"
+     },
+     {
+      "name": "ipv4_resolved_value",
+      "type": "string",
+      "description": "IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。"
+     },
+     {
+      "name": "l2_config_id",
+      "type": "string(uuid) | null(uuid)",
+      "description": "同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。"
+     },
+     {
+      "name": "failover_mode",
+      "type": "string: primary_offline / online_less_than_backup_count",
+      "description": "有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。"
+     },
+     {
+      "name": "note",
+      "type": "string"
+     },
+     {
+      "name": "sort_order",
+      "type": "integer(int32)"
+     },
+     {
+      "name": "health_policy",
+      "type": "HealthPolicy",
+      "required": true
+     },
+     {
+      "name": "endpoints",
+      "type": "array<EndpointWrite>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "New immutable current revision.",
+     "fields": [
+      {
+       "name": "group",
+       "type": "LineGroupRevision",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteNodeLineGroup",
+   "method": "DELETE",
+   "path": "/v1/node-line-groups/{id}",
+   "summary": "软删除线路组并保留不可变修订历史",
+   "auth": [
+    "bearer"
+   ],
+   "description": "租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single quoted positive decimal current revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Soft deletion completed or the stored result was replayed."
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "decideNodeLineGroupEndpoint",
+   "method": "POST",
+   "path": "/v1/node-line-groups/{id}/decisions",
+   "summary": "计算可审计的区域健康调度决策",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "selector",
+      "type": "Selector",
+      "required": true
+     },
+     {
+      "name": "requested_mode",
+      "type": "string: weighted_baseline / weighted_rendezvous / p2c_least_loaded",
+      "required": true
+     },
+     {
+      "name": "stable_key",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Deterministic selection with auditable reason and fallback state.",
+     "fields": [
+      {
+       "name": "endpoint",
+       "type": "Endpoint",
+       "required": true
+      },
+      {
+       "name": "requested_mode",
+       "type": "string: weighted_baseline / weighted_rendezvous / p2c_least_loaded",
+       "required": true
+      },
+      {
+       "name": "effective_mode",
+       "type": "string: weighted_baseline / weighted_rendezvous / p2c_least_loaded",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string: baseline_weighted_selected / weighted_rendezvous_selected / p2c_least_loaded_selected / telemetry_insufficient / telemetry_stale_fallback / telemetry_unavailable_fallback / single_candidate_fallback / no_healthy_endpoint",
+       "required": true
+      },
+      {
+       "name": "fallback",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "priority",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "candidates",
+       "type": "array<Endpoint>",
+       "required": true
+      },
+      {
+       "name": "standby",
+       "type": "array<Endpoint>",
+       "required": true
+      },
+      {
+       "name": "snapshot",
+       "type": "DecisionSnapshot",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "setNodeLineGroupPlatformDefault",
+   "method": "POST",
+   "path": "/v1/node-line-groups/{id}/platform-default",
+   "summary": "设为或取消平台默认线路组",
+   "auth": [
+    "bearer"
+   ],
+   "description": "只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "is_platform_default",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current line group with the new platform default flag.",
+     "fields": [
+      {
+       "name": "group",
+       "type": "LineGroupRevision",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeLineGroupRevision",
+   "method": "GET",
+   "path": "/v1/node-line-groups/{id}/revisions/{revision}",
+   "summary": "查询线路组历史修订",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "revision",
+     "in": "path",
+     "type": "integer(int64)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Historical immutable revision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "region",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "resolved_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ipv4_resolved_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "l2_config_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "failover_mode",
+       "type": "string: primary_offline / online_less_than_backup_count",
+       "required": true
+      },
+      {
+       "name": "note",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "sort_order",
+       "type": "integer(int32)",
+       "required": true
+      },
+      {
+       "name": "health_policy",
+       "type": "HealthPolicy",
+       "required": true
+      },
+      {
+       "name": "endpoints",
+       "type": "array<Endpoint>",
+       "required": true
+      },
+      {
+       "name": "statistics",
+       "type": "LineGroupStatistics",
+       "description": "仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。"
+      },
+      {
+       "name": "configuration_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_by_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "sealed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "is_platform_default",
+       "type": "boolean",
+       "description": "平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。"
+      },
+      {
+       "name": "backup_states",
+       "type": "array<LineBackupState>",
+       "description": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "rollbackNodeLineGroup",
+   "method": "POST",
+   "path": "/v1/node-line-groups/{id}/rollback",
+   "summary": "将历史配置复制为新的当前修订",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single quoted positive decimal current revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "source_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Historical configuration copied into current revision plus one.",
+     "fields": [
+      {
+       "name": "group",
+       "type": "LineGroupRevision",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeLineGroupTargetSnapshot",
+   "method": "GET",
+   "path": "/v1/node-line-groups/{id}/target-snapshots",
+   "summary": "按来源修订查询 L1/L2 拓扑快照",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "source_revision",
+     "in": "query",
+     "type": "integer(int64)",
+     "required": true,
+     "description": "Single positive decimal source line-group revision."
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable L1 target set bound to the requested L2 source revision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_line_group_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "source_configuration_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "node_set_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "node_ids",
+       "type": "array<string(uuid)>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "createNodeLineGroupTargetSnapshot",
+   "method": "POST",
+   "path": "/v1/node-line-groups/{id}/target-snapshots",
+   "summary": "创建 L1 目标与 L2 候选拓扑快照",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "source_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "node_ids",
+      "type": "array<string(uuid)>",
+      "required": true,
+      "description": "L1 target nodes. Every target has an edge to every L2 endpoint node in the source revision."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Immutable L1 target set bound to an immutable L2 source revision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_line_group_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "source_configuration_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "node_set_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "node_ids",
+       "type": "array<string(uuid)>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "default",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  }
+ ]
+}

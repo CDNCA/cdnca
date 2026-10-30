@@ -1,0 +1,1686 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild DNS and Certificate Foundation API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant-isolated persistence for encrypted DNS provider credentials, zones,
+    structured DNS records, and pending certificate orders. Cloudflare API
+    Token, Aliyun access-key, Huawei Cloud AK/SK, DNSPod CN token, and DNS.COM
+    API key/secret and DNS.LA API ID/secret verification are implemented;
+    api/openapi/v1/control.yaml is authoritative for that endpoint. DNS
+    DNS zone/record mutation is not yet implemented. ACME CA execution is available when the production runtime is enabled;
+    when disabled, pending states must not be interpreted as externally applied or issued.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/dns/providers:
+    get:
+      operationId: listDNSProviders
+      summary: List DNS provider configurations
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: cursor
+          in: query
+          schema: {type: string, minLength: 1, maxLength: 4096}
+          description: Opaque cursor bound to the authenticated scope and page limit.
+      responses:
+        '200':
+          description: Provider metadata without credentials or credential-derived fingerprints.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ProviderList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createDNSProvider
+      summary: Store an encrypted DNS provider configuration
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateProvider'}
+            examples:
+              cloudflare:
+                summary: Cloudflare API Token
+                value:
+                  name: Cloudflare production
+                  provider_type: cloudflare
+                  credentials: {api_token: cf-api-token}
+              aliyun:
+                summary: Aliyun access key
+                value:
+                  name: Aliyun production
+                  provider_type: aliyun
+                  credentials:
+                    access_key_id: aliyun-access-key-id
+                    access_key_secret: aliyun-access-key-secret
+              huawei:
+                summary: Huawei Cloud AK/SK
+                value:
+                  name: Huawei Cloud production
+                  provider_type: huawei
+                  credentials:
+                    access_key: huawei-access-key
+                    secret_key: huawei-secret-key
+                    region: cn-north-4
+                    project_id: 0123456789abcdef0123456789abcdef
+              dnspod_cn:
+                summary: DNSPod CN API 2.0 token
+                value:
+                  name: DNSPod CN production
+                  provider_type: dnspod_cn
+                  credentials:
+                    dp_id: '12345'
+                    dp_key: dnspod-token
+              dns_com:
+                summary: DNS.COM API credential
+                value:
+                  name: DNS.COM production
+                  provider_type: dns_com
+                  credentials:
+                    api_key: dns-com-api-key
+                    api_secret: dns-com-api-secret
+              dns_la:
+                summary: DNS.LA API credential
+                value:
+                  name: DNS.LA production
+                  provider_type: dns_la
+                  credentials:
+                    api_id: dns-la-api-id
+                    api_secret: dns-la-api-secret
+      responses:
+        '201':
+          description: Stored as unverified; no provider request has been made.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Provider'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/dns/providers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    patch:
+      operationId: updateDNSProvider
+      summary: Update provider metadata or replace encrypted credentials
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateProvider'}
+      responses:
+        '200':
+          description: Updated provider metadata.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Provider'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    delete:
+      operationId: deleteDNSProvider
+      summary: Delete an unreferenced DNS provider configuration
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': {description: Provider deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/dns/providers/{id}/verify:
+    post:
+      operationId: verifyDNSProvider
+      summary: Verify a DNS provider credential against its upstream API
+      description: >-
+        The Cloudflare adapter calls GET /user/tokens/verify. The Aliyun adapter
+        signs a read-only DescribeDomains request against API version 2015-01-09
+        at https://alidns.aliyuncs.com. The Huawei Cloud adapter signs a
+        read-only GET /v2/zones?limit=1&type=public request with
+        SDK-HMAC-SHA256. Its endpoint is derived only from the cn-north-4 or
+        ap-southeast-3 region allowlist; clients cannot provide a URL. The
+        DNSPod CN compatibility adapter sends a token-authenticated, read-only
+        POST to https://dnsapi.cn/User.Detail using the traditional API 2.0
+        contract. The DNS.COM adapter signs a read-only GET request to the fixed
+        https://openapi.dns.com/api/domain/lists/ endpoint. All adapters use
+        bounded, non-redirecting clients.
+        Cloudflare verification requires exactly api_token; Aliyun verification
+        requires exactly access_key_id and access_key_secret. Huawei Cloud
+        verification requires exactly access_key, secret_key, region, and
+        project_id. DNSPod CN requires exactly dp_id and dp_key, corresponding
+        to the legacy DP_Id and DP_Key fields. DNS.COM requires exactly api_key
+        and api_secret; clients cannot provide an endpoint. A verified result
+        proves the credential can complete that
+        provider check; it does not mutate DNS records or start ACME. DNS.LA
+        verification uses Basic authentication for a bounded read-only request
+        to the fixed https://api.dns.la endpoint. Legacy dnsdun configurations
+        are never sent to DNS.LA and fail before any provider network request.
+        api/openapi/v1/control.yaml is the authoritative contract for this
+        endpoint, including stable error codes and replay semantics.
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: The upstream credential check succeeded and the provider is verified, or the completed request was replayed.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Provider'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422':
+          description: Stable deterministic credential denial; see the authoritative control contract for codes.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429':
+          description: The provider rate limited verification.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '502':
+          description: The provider returned an oversized, malformed, or unexpected response.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504':
+          description: Provider verification exceeded the bounded request timeout.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /v1/dns/settings:
+    get:
+      operationId: getDNSSettings
+      summary: Read the DNS settings for the active tenant scope
+      responses:
+        '200':
+          description: Scope-level DNS TTL without provider secrets.
+          content: {application/json: {schema: {$ref: '#/components/schemas/DNSSettings'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      operationId: updateDNSSettings
+      summary: Update compatibility DNS TTL with compare-and-swap and idempotency
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/UpdateDNSSettings'}}}
+      responses:
+        '200':
+          description: Updated scope-level DNS TTL.
+          content: {application/json: {schema: {$ref: '#/components/schemas/DNSSettings'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/dns/settings/{kind}:
+    post:
+      operationId: enqueueDNSOperation
+      summary: Enqueue DNS record repair or CDN-unrelated cleanup
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema: {type: string, enum: [repair, cleanup]}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false}}}
+      responses:
+        '202':
+          description: Durable background task accepted.
+          content: {application/json: {schema: {$ref: '#/components/schemas/DNSOperationResponse'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/dns/settings/operations/{operation_id}:
+    get:
+      operationId: getDNSOperation
+      summary: Read a DNS operation state
+      parameters:
+        - name: operation_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Durable task state.
+          content: {application/json: {schema: {$ref: '#/components/schemas/DNSOperation'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/dns/platform-config:
+    get:
+      operationId: getPlatformDNSConfig
+      summary: Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)
+      responses:
+        '200':
+          description: Provider, non-secret identifiers, TTL, IP weight, tenant sync summary and the last DNS write failure.
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSConfig'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    put:
+      operationId: savePlatformDNSConfig
+      summary: Save the installation-wide DNS configuration and synchronise every tenant copy
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provider_type, ttl, ip_weight]
+              properties:
+                provider_type: {type: string, enum: [aliyun, huawei, dns_la, dnspod_cn, dns_com, cloudflare, namecom, custom_http]}
+                credentials:
+                  description: Every credential field of the provider; omitted keeps the stored credentials of the same provider.
+                  type: object
+                  additionalProperties: {type: string}
+                ttl: {type: integer, minimum: 1, maximum: 86400, description: 'Cloudflare requires at least 60; name.com at least 300.'}
+                ip_weight: {type: boolean}
+      responses:
+        '200':
+          description: Saved configuration.
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSConfig'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/dns/platform-config/connection-test:
+    post:
+      operationId: testPlatformDNSConnection
+      summary: 连接测试 - verify DNS credentials and the CNAME domains they host (read-only)
+      description: >-
+        Verifies the entered credentials (or, without credentials, the saved ones of provider_type) with the
+        same provider check as a save, then lists the account's domains once per CNAME domain. Nothing is saved
+        and no DNS record is written. Custom HTTP and plugin providers have no domain list (status unchecked).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [provider_type]
+              properties:
+                provider_type: {type: string}
+                credentials: {type: object, additionalProperties: {type: string}}
+      responses:
+        '200':
+          description: The provider accepted the credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [provider_type, zones]
+                properties:
+                  provider_type: {type: string}
+                  zones:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, status]
+                      properties:
+                        name: {type: string}
+                        status: {type: string, enum: [hosted, not_hosted, unchecked]}
+                        apex: {type: string}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: dns_not_configured (no saved credentials to test).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '422':
+          description: provider_credentials_rejected or provider_credentials_invalid.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '429':
+          description: provider_verification_rate_limited.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '503':
+          description: provider_verification_unavailable or credential_encryption_unavailable.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '504':
+          description: provider_verification_timeout.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /v1/dns/platform-config/{kind}:
+    post:
+      operationId: startPlatformDNSOperation
+      summary: Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs
+      description: >-
+        repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner);
+        cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per
+        A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the
+        result lines shown under 系统管理 > 后台任务.
+      parameters:
+        - name: kind
+          in: path
+          required: true
+          schema: {type: string, enum: [repair, cleanup]}
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false}}}
+      responses:
+        '202':
+          description: Background jobs accepted (or replayed).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [operations, replayed]
+                properties:
+                  operations: {type: array, items: {$ref: '#/components/schemas/DNSOperation'}}
+                  replayed: {type: boolean}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: dns_not_configured, dns_no_tenant or an idempotency conflict.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+        '502':
+          description: dns_provider_unavailable (the provider records could not be listed).
+          content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  /v1/dns/platform-zones:
+    get:
+      operationId: listPlatformDNSZones
+      summary: List the CNAME domains (CNAME域名)
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+        - {name: search, in: query, schema: {type: string, maxLength: 253}}
+      responses:
+        '200':
+          description: One page of CNAME domains.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/PlatformDNSZone'}}
+                  total: {type: integer, minimum: 0}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createPlatformDNSZone
+      summary: Add a CNAME domain (copied into every tenant; the first is the default allocation zone)
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSZoneInput'}}}
+      responses:
+        '201':
+          description: Created CNAME domain.
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSZone'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/dns/platform-zones/{id}:
+    patch:
+      operationId: updatePlatformDNSZone
+      summary: Edit a CNAME domain; renaming one with allocated CNAMEs is refused (dns_zone_in_use)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSZoneInput'}}}
+      responses:
+        '200':
+          description: Updated CNAME domain.
+          content: {application/json: {schema: {$ref: '#/components/schemas/PlatformDNSZone'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deletePlatformDNSZone
+      summary: Delete a CNAME domain and its tenant copies; refused while sites use it (dns_zone_in_use)
+      parameters:
+        - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': {description: Deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/dns/zones:
+    get:
+      operationId: listDNSZones
+      summary: List DNS zones
+      responses:
+        '200':
+          description: Zones visible in the authenticated scope.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ZoneList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createDNSZone
+      summary: Create a draft DNS zone
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateZone'}
+      responses:
+        '201':
+          description: Draft created; the provider has not been called.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Zone'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/dns/zones/{id}:
+    delete:
+      operationId: deleteDNSZone
+      summary: Delete an unreferenced draft DNS zone
+      parameters:
+        - $ref: '#/components/parameters/ResourceID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': {description: Zone deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/dns/records:
+    get:
+      operationId: listDNSRecords
+      summary: List structured records in a zone
+      parameters:
+        - name: zone_id
+          in: query
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Draft records visible in the authenticated scope.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecordList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createDNSRecord
+      summary: Create a validated draft DNS record
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateRecord'}
+      responses:
+        '201':
+          description: Draft created; the provider has not been called.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Record'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/dns/records/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    patch:
+      operationId: updateDNSRecord
+      summary: Update a validated draft DNS record
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateRecord'}
+      responses:
+        '200':
+          description: Updated draft record.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Record'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+    delete:
+      operationId: deleteDNSRecord
+      summary: Delete a draft DNS record
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': {description: Record deleted.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/certificate-assets:
+    parameters:
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    get:
+      operationId: listCertificateAssets
+      summary: List immutable tenant certificate assets
+      x-required-permissions: [certificates.read]
+      responses:
+        '200':
+          description: Certificate assets visible in the explicitly targeted tenant scope.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: uploadCertificateAsset
+      summary: Import an encrypted certificate asset version
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ImportCertificateAsset'}}}
+      responses:
+        '201':
+          description: The certificate and encrypted private-key envelope were committed atomically.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetDetail'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/certificate-assets/{asset_id}:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    get:
+      operationId: getCertificateAsset
+      summary: Get an asset and its immutable versions
+      x-required-permissions: [certificates.read]
+      responses:
+        '200':
+          description: Asset detail with private-key material redacted.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetDetail'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      operationId: deleteCertificateAsset
+      summary: Tombstone an unbound certificate asset
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetRevisionRequest'}}}
+      responses:
+        '200': {description: Asset tombstoned., content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAsset'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/auto-renew:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    patch:
+      operationId: setCertificateAssetAutoRenew
+      summary: Turn automatic renewal of an ACME certificate on or off (uploaded certificates are rejected with 409)
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SetCertificateAssetAutoRenew'}}}
+      responses:
+        '200': {description: Auto-renew updated., content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAsset'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/disabled:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    patch:
+      operationId: setCertificateAssetDisabled
+      summary: Disable or re-enable a certificate (a bound certificate cannot be disabled; a disabled one cannot be bound or auto-renewed)
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SetCertificateAssetDisabled'}}}
+      responses:
+        '200': {description: Disabled state updated., content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAsset'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/download:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    get:
+      operationId: downloadCertificateAsset
+      summary: Download a zip of fullchain.pem and privkey.pem of the current version (audited as certificate.asset.download)
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+      responses:
+        '200': {description: Certificate zip., content: {application/zip: {schema: {type: string, format: binary}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {description: Private key envelope unavailable (certificate_asset_envelope_unavailable).}
+  /v1/certificate-assets/{asset_id}/versions/{version_id}/activate:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/CertificateVersionID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    post:
+      operationId: activateCertificateAssetVersion
+      summary: Atomically activate an immutable certificate version
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetRevisionRequest'}}}
+      responses:
+        '200': {description: Version activated., content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetVersion'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/bindings:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    get:
+      operationId: listCertificateAssetBindings
+      summary: List current site bindings for a certificate asset
+      x-required-permissions: [certificates.read]
+      responses:
+        '200':
+          description: Current bindings.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetBindingList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      operationId: bindCertificateAsset
+      summary: Bind an active certificate version to a tenant site
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/BindCertificateAsset'}}}
+      responses:
+        '200': {description: Binding fact appended., content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetBinding'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/bindings/{site_id}:
+    parameters:
+      - $ref: '#/components/parameters/CertificateAssetID'
+      - $ref: '#/components/parameters/SiteID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    delete:
+      operationId: unbindCertificateAsset
+      summary: Append an immutable certificate unbind fact
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/CertificateRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetRevisionRequest'}}}
+      responses:
+        '200': {description: Unbind fact appended., content: {application/json: {schema: {$ref: '#/components/schemas/CertificateAssetBinding'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{site_id}/certificate-binding:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+      - $ref: '#/components/parameters/CertificateTargetScopeID'
+    get:
+      operationId: getCertificateSiteBinding
+      summary: Get the active certificate binding for one site
+      x-required-permissions: [certificates.read]
+      responses:
+        '200':
+          description: Current bound fact and its active immutable version.
+          content: {application/json: {schema: {$ref: '#/components/schemas/CertificateSiteBindingDetail'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-defaults:
+    get:
+      operationId: getCertificateDefaults
+      summary: Read a user's certificate request defaults
+      description: >-
+        The default certificate type, DNS provider and CA prefilled into a new
+        request. A user without saved defaults reads acme with revision 0.
+        Tenant actors read their own scope; platform actors name the target
+        tenant scope and user.
+      x-required-permissions: [certificates.read]
+      parameters:
+        - $ref: '#/components/parameters/CertificateTargetScopeID'
+        - name: target_user_id
+          in: query
+          required: false
+          description: Defaults to the authenticated user.
+          schema: {type: string, format: uuid}
+      responses:
+        '200':
+          description: The user's defaults; ETag carries the revision.
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CertificateDefaults'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    patch:
+      operationId: updateCertificateDefaults
+      summary: Save a user's certificate request defaults
+      description: >-
+        Compare-and-set on expected_revision (version_conflict when stale).
+        dns_provider_id must be an enabled provider in the target scope
+        (dns_resource_conflict otherwise). issuer is a known CA that is
+        available now: a CA without platform EAB credentials is refused with
+        certificate_issuer_unavailable (409) when saved, the same check an
+        order create applies; uploaded defaults drop dns_provider_id and
+        issuer. An order that falls back to a default CA whose credentials
+        were removed later is still refused with
+        certificate_issuer_unavailable when it is created.
+      x-required-permissions: [certificates.manage]
+      x-audit-action: certificate.defaults.update
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateCertificateDefaults'}
+      responses:
+        '200':
+          description: Saved defaults; ETag carries the new revision.
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CertificateDefaults'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-issuers:
+    get:
+      operationId: listCertificateIssuers
+      summary: List the CAs a new certificate request may name
+      description: >-
+        lets_encrypt and each EAB CA (zerossl, google_trust) whose platform
+        credentials are configured, with the platform default issuer. A request
+        form offers only these; an unconfigured CA is not shown.
+      x-required-permissions: [certificates.read]
+      responses:
+        '200':
+          description: Available issuers.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, default]
+                properties:
+                  items: {type: array, items: {type: string, enum: [lets_encrypt, zerossl, google_trust]}}
+                  default: {type: string, enum: [lets_encrypt, zerossl, google_trust]}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/certificate-orders:
+    get:
+      operationId: listCertificateOrders
+      summary: List certificate orders
+      x-required-permissions: [certificates.read]
+      responses:
+        '200':
+          description: Orders visible in the authenticated scope.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CertificateOrderList'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+    post:
+      operationId: createCertificateOrder
+      summary: Queue a pending certificate order
+      x-required-permissions: [certificates.manage]
+      x-audit-action: certificate.order.create
+      description: >-
+        Wildcards require dns-01 and a provider in the same tenant scope. A 202
+        response only persists a tenant-scoped pending intent and its audit
+        event; it does not claim CA acceptance. Reusing an Idempotency-Key with
+        a different scope, domain set, challenge, provider, or auto-renew value
+        returns a conflict. HTTP-01 forbids dns_provider_id; DNS-01 requires a
+        verified same-tenant provider. Entitlement authorization is a separate
+        fail-closed server composition requirement and is not implied by RBAC.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateCertificateOrder'}
+      responses:
+        '202':
+          description: Pending intent stored without external side effects.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CertificateOrder'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    ResourceID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    CertificateRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    CertificateTargetScopeID:
+      name: target_scope_id
+      in: query
+      required: false
+      description: Required for platform actors; tenant actors may only target their own scope.
+      schema: {type: string, format: uuid}
+    CertificateAssetID:
+      name: asset_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    CertificateVersionID:
+      name: version_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive resource version.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  schemas:
+    ScopeTarget:
+      type: object
+      properties:
+        target_scope_id: {type: string, format: uuid}
+    Provider:
+      type: object
+      required: [id, scope_id, name, provider_type, credentials_configured, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        scope_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128, x-maxUtf8Bytes: 128}
+        remark: {type: string, maxLength: 256, description: 备注 (DNS API list and form); empty when none}
+        provider_type: {$ref: '#/components/schemas/ProviderType'}
+        credentials_configured: {type: boolean, const: true}
+        status: {type: string, enum: [unverified, verified, disabled]}
+        managed_by:
+          type: string
+          enum: [tenant, platform]
+          description: 'tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)'
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DNSSettings:
+      type: object
+      required: [scope_id, ttl, version]
+      properties:
+        scope_id: {type: string, format: uuid}
+        ttl: {type: integer, minimum: 1, maximum: 604800}
+        version: {type: integer, format: int64, minimum: 1}
+        updated_at: {type: string, format: date-time}
+    UpdateDNSSettings:
+      type: object
+      additionalProperties: false
+      required: [ttl]
+      properties:
+        ttl: {type: integer, minimum: 1, maximum: 604800}
+    PlatformDNSConfig:
+      type: object
+      required: [identifiers, secret_saved, ttl, ip_weight, weight_supported, version, sync, last_error]
+      properties:
+        provider_type: {type: string}
+        identifiers: {type: object, additionalProperties: {type: string}, description: Non-secret credential fields (ID, Huawei region and project).}
+        secret_saved: {type: boolean}
+        ttl: {type: integer}
+        ip_weight: {type: boolean}
+        weight_supported: {type: boolean, description: The provider writes record weights (DNSPod).}
+        version: {type: integer, minimum: 1}
+        updated_at: {type: string, format: date-time}
+        sync:
+          type: object
+          required: [tenants]
+          properties:
+            tenants: {type: integer, minimum: 0}
+            error: {type: string}
+            at: {type: string, format: date-time}
+        last_error:
+          nullable: true
+          type: object
+          required: [source, code, at]
+          properties:
+            source: {type: string, enum: [platform_sync, cname_allocation, cname_retarget, dns_repair, dns_cleanup]}
+            code: {type: string}
+            message: {type: string}
+            at: {type: string, format: date-time}
+    PlatformDNSZoneInput:
+      type: object
+      additionalProperties: false
+      required: [name, remark]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 253}
+        remark: {type: string, maxLength: 255}
+        random_allocation: {type: boolean, description: '参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.'}
+    PlatformDNSZone:
+      type: object
+      required: [id, display_id, name, remark, in_use, random_allocation, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: integer, minimum: 1}
+        name: {type: string}
+        remark: {type: string}
+        in_use: {type: boolean, description: Some tenant still has CNAME hostnames allocated under this domain.}
+        random_allocation: {type: boolean, description: 参与随机分配 (see PlatformDNSZoneInput).}
+        version: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    DNSOperation:
+      type: object
+      required: [id, kind, subject, state, attempt, max_attempts, progress, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [dns.repair.v1, dns.cleanup.v1]}
+        subject: {type: string}
+        state: {type: string, enum: [queued, running, succeeded, partial_failed, failed, cancelled]}
+        attempt: {type: integer, minimum: 0}
+        max_attempts: {type: integer, minimum: 1}
+        progress:
+          type: object
+          required: [total, completed, succeeded, failed, cancelled, pending]
+          properties:
+            total: {type: integer, minimum: 0}
+            completed: {type: integer, minimum: 0}
+            succeeded: {type: integer, minimum: 0}
+            failed: {type: integer, minimum: 0}
+            cancelled: {type: integer, minimum: 0}
+            pending: {type: integer, minimum: 0}
+        last_error_code: {type: string}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    DNSOperationResponse:
+      type: object
+      required: [operation, replayed]
+      properties:
+        operation: {$ref: '#/components/schemas/DNSOperation'}
+        replayed: {type: boolean}
+    ProviderType:
+      type: string
+      description: >-
+        Persisted provider type. dnsdun is retained only so disabled legacy
+        records can be listed; new configurations must use a creatable type.
+      enum: [aliyun, cloudflare, huawei, dnspod_cn, dns_com, dns_la, namecom, custom_http, dnsdun]
+    ProviderList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Provider'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    CreateProvider:
+      allOf:
+        - $ref: '#/components/schemas/ScopeTarget'
+        - type: object
+          required: [name, provider_type, credentials]
+          properties:
+            name: {type: string, minLength: 1, maxLength: 128}
+            remark: {type: string, maxLength: 256, description: 备注; trimmed, no control characters}
+          oneOf:
+            - title: Cloudflare provider
+              properties:
+                provider_type: {type: string, const: cloudflare}
+                credentials: {$ref: '#/components/schemas/CloudflareCredentials'}
+            - title: Aliyun provider
+              properties:
+                provider_type: {type: string, const: aliyun}
+                credentials: {$ref: '#/components/schemas/AliyunCredentials'}
+            - title: Huawei Cloud provider
+              properties:
+                provider_type: {type: string, const: huawei}
+                credentials: {$ref: '#/components/schemas/HuaweiCredentials'}
+            - title: DNSPod CN provider
+              properties:
+                provider_type: {type: string, const: dnspod_cn}
+                credentials: {$ref: '#/components/schemas/DNSPodCNCredentials'}
+            - title: DNS.COM provider
+              properties:
+                provider_type: {type: string, const: dns_com}
+                credentials: {$ref: '#/components/schemas/DNSComCredentials'}
+            - title: DNS.LA provider
+              properties:
+                provider_type: {type: string, const: dns_la}
+                credentials: {$ref: '#/components/schemas/DNSLACredentials'}
+            - title: Name.com provider
+              properties:
+                provider_type: {type: string, const: namecom}
+                credentials: {$ref: '#/components/schemas/NameComCredentials'}
+            - title: Custom HTTP API provider
+              properties:
+                provider_type: {type: string, const: custom_http}
+                credentials: {$ref: '#/components/schemas/CustomHTTPCredentials'}
+    UpdateProvider:
+      type: object
+      additionalProperties: false
+      required: [expected_version, name, status]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 256, description: 备注; omitted keeps the stored remark}
+        status:
+          type: string
+          enum: [unverified, disabled]
+          description: >-
+            unverified means enabled: without new credentials a verified
+            provider stays verified (renaming or a remark change keeps the
+            verification); with new credentials it becomes unverified;
+            disabled disables it.
+        credentials:
+          allOf:
+            - $ref: '#/components/schemas/ProviderCredentials'
+          description: >-
+            To pass verification, replacement credentials must match the
+            existing provider type. Cloudflare requires only api_token; Aliyun
+            requires only access_key_id and access_key_secret; Huawei Cloud
+            requires only access_key, secret_key, region, and project_id;
+            DNSPod CN requires only dp_id and dp_key; DNS.COM requires only
+            api_key and api_secret; DNS.LA requires only api_id and api_secret;
+            Name.com requires only username and api_token; custom_http requires only endpoint and secret.
+    ProviderCredentials:
+      anyOf:
+        - $ref: '#/components/schemas/CloudflareCredentials'
+        - $ref: '#/components/schemas/AliyunCredentials'
+        - $ref: '#/components/schemas/HuaweiCredentials'
+        - $ref: '#/components/schemas/DNSPodCNCredentials'
+        - $ref: '#/components/schemas/DNSComCredentials'
+        - $ref: '#/components/schemas/DNSLACredentials'
+        - $ref: '#/components/schemas/NameComCredentials'
+        - $ref: '#/components/schemas/CustomHTTPCredentials'
+    CloudflareCredentials:
+      type: object
+      additionalProperties: false
+      required: [api_token]
+      properties:
+        api_token: {type: string, minLength: 1, maxLength: 4096}
+    AliyunCredentials:
+      type: object
+      additionalProperties: false
+      required: [access_key_id, access_key_secret]
+      properties:
+        access_key_id: {type: string, minLength: 1, maxLength: 4096}
+        access_key_secret: {type: string, minLength: 1, maxLength: 4096}
+    HuaweiCredentials:
+      type: object
+      additionalProperties: false
+      required: [access_key, secret_key, region, project_id]
+      properties:
+        access_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[A-Za-z0-9_-]+$'
+        secret_key:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[!-~]+$'
+        region:
+          type: string
+          enum: [cn-north-4, ap-southeast-3]
+        project_id:
+          type: string
+          pattern: '^[a-f0-9]{32}$'
+    DNSPodCNCredentials:
+      type: object
+      additionalProperties: false
+      required: [dp_id, dp_key]
+      description: >-
+        Traditional DNSPod API 2.0 main-account token fields. dp_id and dp_key
+        correspond to the legacy DP_Id and DP_Key labels. No endpoint override
+        is accepted.
+      properties:
+        dp_id:
+          type: string
+          minLength: 1
+          maxLength: 20
+          pattern: '^[1-9][0-9]{0,19}$'
+        dp_key:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[!-\x2B\x2D-\x7E]+$'
+          description: Printable ASCII excluding whitespace, controls, and comma.
+    DNSComCredentials:
+      type: object
+      additionalProperties: false
+      required: [api_key, api_secret]
+      description: >-
+        DNS.COM API key and signing secret. No endpoint override is accepted.
+      properties:
+        api_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[!-%''-<>-~]+$'
+          description: Printable ASCII excluding ampersand and equals delimiters.
+        api_secret:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[!-~]+$'
+    NameComCredentials:
+      type: object
+      additionalProperties: false
+      required: [username, api_token]
+      description: >-
+        name.com Core API HTTP Basic credentials (account username and API
+        token). No endpoint override is accepted. Printable ASCII; username
+        cannot contain the colon delimiter. name.com records have no DNS line
+        (default line only) and a minimum TTL of 300.
+      properties:
+        username: {type: string, minLength: 1, maxLength: 128, pattern: '^[!-9;-~]+$'}
+        api_token: {type: string, minLength: 1, maxLength: 256, pattern: '^[!-~]+$'}
+    DNSLACredentials:
+      type: object
+      additionalProperties: false
+      required: [api_id, api_secret]
+      description: >-
+        DNS.LA HTTP Basic credentials. No endpoint override is accepted.
+        Each value must contain 1 to 4096 valid UTF-8 bytes without control
+        characters. api_id cannot contain the colon delimiter.
+      properties:
+        api_id:
+          type: string
+          minLength: 1
+          pattern: '^[^:\x00-\x1F\x7F]+$'
+        api_secret:
+          type: string
+          minLength: 1
+          pattern: '^[^\x00-\x1F\x7F]+$'
+    CustomHTTPCredentials:
+      type: object
+      additionalProperties: false
+      required: [endpoint, secret]
+      description: >-
+        自定义 HTTP 接口 (docs/dns/custom-http-provider.md). The controller POSTs
+        signed JSON to endpoint over verified TLS, follows no redirect and
+        refuses loopback, private, link-local and reserved addresses (also
+        after DNS resolution).
+      properties:
+        endpoint: {type: string, format: uri, maxLength: 2048, pattern: '^https://[^?#@\s]+$'}
+        secret: {type: string, minLength: 16, maxLength: 512, pattern: '^[\x21-\x7E]+$'}
+    Zone:
+      type: object
+      required: [id, scope_id, provider_id, name, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        scope_id: {type: string, format: uuid}
+        provider_id: {type: string, format: uuid}
+        name: {type: string, maxLength: 253}
+        status: {type: string, enum: [draft, failed]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    ZoneList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Zone'}}
+    CreateZone:
+      allOf:
+        - $ref: '#/components/schemas/ScopeTarget'
+        - type: object
+          required: [provider_id, name]
+          properties:
+            provider_id: {type: string, format: uuid}
+            name: {type: string, maxLength: 253}
+    Record:
+      type: object
+      required: [id, scope_id, zone_id, name, type, content, ttl, status, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        scope_id: {type: string, format: uuid}
+        zone_id: {type: string, format: uuid}
+        name: {type: string, maxLength: 253}
+        type: {type: string, enum: [A, AAAA, CNAME, TXT]}
+        content: {type: string, minLength: 1, maxLength: 1024}
+        ttl: {type: integer, minimum: 60, maximum: 86400}
+        status: {type: string, enum: [draft, failed]}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RecordList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Record'}}
+    CreateRecord:
+      allOf:
+        - $ref: '#/components/schemas/ScopeTarget'
+        - type: object
+          required: [zone_id, name, type, content, ttl]
+          properties:
+            zone_id: {type: string, format: uuid}
+            name: {type: string, maxLength: 253}
+            type: {type: string, enum: [A, AAAA, CNAME, TXT]}
+            content: {type: string, minLength: 1, maxLength: 1024}
+            ttl: {type: integer, minimum: 60, maximum: 86400}
+    UpdateRecord:
+      type: object
+      additionalProperties: false
+      required: [expected_version, name, type, content, ttl]
+      properties:
+        expected_version: {type: integer, format: int64, minimum: 1}
+        name: {type: string, maxLength: 253}
+        type: {type: string, enum: [A, AAAA, CNAME, TXT]}
+        content: {type: string, minLength: 1, maxLength: 1024}
+        ttl: {type: integer, minimum: 60, maximum: 86400}
+    CertificateAsset:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, name, source, revision, created_by, created_by_display_id, updated_by, updated_by_display_id, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        tenant_scope_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        source: {type: string, enum: [uploaded, acme]}
+        auto_renew: {type: boolean}
+        disabled: {type: boolean}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_by: {type: string, format: uuid}
+        created_by_display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        updated_by: {type: string, format: uuid}
+        updated_by_display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time}
+    CertificateAssetVersion:
+      type: object
+      additionalProperties: false
+      required: [id, asset_id, tenant_scope_id, version, status, fingerprint_sha256, certificate_pem, sans, subject, serial_number, public_key_algorithm, public_key_bits, signature_algorithm, not_before, not_after, renewal_due, imported_by, imported_at]
+      properties:
+        id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        version: {type: integer, format: int64, minimum: 1}
+        status: {type: string, enum: [default, pending_activation, active, superseded, revoked, expired]}
+        fingerprint_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        certificate_pem: {type: string, format: byte, maxLength: 262144}
+        sans: {type: array, minItems: 1, maxItems: 100, items: {type: string}}
+        subject: {type: string}
+        serial_number: {type: string}
+        public_key_algorithm: {type: string, enum: [rsa, ecdsa, ed25519]}
+        public_key_bits: {type: integer, minimum: 256}
+        signature_algorithm: {type: string}
+        not_before: {type: string, format: date-time}
+        not_after: {type: string, format: date-time}
+        acme_order_id: {type: string, format: uuid}
+        renewal_due_at: {type: string, format: date-time}
+        renewal_due: {type: boolean}
+        imported_by: {type: string, format: uuid}
+        imported_at: {type: string, format: date-time}
+    CertificateAssetBinding:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, site_id, asset_id, version_id, revision, default, bound, changed_by, changed_at]
+      properties:
+        tenant_scope_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        asset_id: {type: string, format: uuid}
+        version_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        default: {type: boolean}
+        bound: {type: boolean}
+        changed_by: {type: string, format: uuid}
+        changed_at: {type: string, format: date-time}
+    CertificateAssetBindingList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/CertificateAssetBinding'}}
+    CertificateSiteBindingDetail:
+      type: object
+      additionalProperties: false
+      required: [binding, version]
+      properties:
+        binding: {$ref: '#/components/schemas/CertificateAssetBinding'}
+        version: {$ref: '#/components/schemas/CertificateAssetVersion'}
+    CertificateAssetList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/CertificateAsset'}}
+    CertificateAssetDetail:
+      type: object
+      additionalProperties: false
+      required: [asset, versions]
+      properties:
+        asset: {$ref: '#/components/schemas/CertificateAsset'}
+        versions: {type: array, items: {$ref: '#/components/schemas/CertificateAssetVersion'}}
+    ImportCertificateAsset:
+      type: object
+      additionalProperties: false
+      required: [name, certificate_pem, private_key_pem]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128, x-maxUtf8Bytes: 128}
+        certificate_pem: {type: string, minLength: 1, maxLength: 262144}
+        private_key_pem: {type: string, minLength: 1, maxLength: 65536, writeOnly: true}
+    SetCertificateAssetAutoRenew:
+      type: object
+      additionalProperties: false
+      required: [enabled, expected_revision]
+      properties:
+        enabled: {type: boolean}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    SetCertificateAssetDisabled:
+      type: object
+      additionalProperties: false
+      required: [disabled, expected_revision]
+      properties:
+        disabled: {type: boolean}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    CertificateAssetRevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    BindCertificateAsset:
+      type: object
+      additionalProperties: false
+      required: [site_id, version_id, expected_revision, default]
+      properties:
+        site_id: {type: string, format: uuid}
+        version_id: {type: string, format: uuid}
+        expected_revision: {type: integer, format: int64, minimum: 0}
+        default: {type: boolean}
+    CertificateAssetErrorCode:
+      type: string
+      enum:
+        - certificate_asset_permission_denied
+        - certificate_asset_revision_conflict
+        - certificate_asset_idempotency_conflict
+        - certificate_asset_not_found
+        - certificate_asset_invalid_transition
+        - certificate_asset_domain_not_covered
+        - certificate_asset_referenced
+        - certificate_asset_auto_renew_unsupported
+        - certificate_asset_envelope_unavailable
+    CertificateOrder:
+      type: object
+      required: [id, scope_id, domains, challenge_type, status, auto_renew, version, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        scope_id: {type: string, format: uuid}
+        dns_provider_id: {type: string, format: uuid}
+        domains: {type: array, minItems: 1, maxItems: 100, items: {type: string, maxLength: 253}}
+        challenge_type: {type: string, enum: [http-01, dns-01]}
+        status:
+          type: string
+          enum: [pending, validating, issuing, issued, deploying, active, renewal_due, failed, revoked]
+        auto_renew: {type: boolean}
+        issuer: {type: string, enum: [lets_encrypt, zerossl, google_trust], description: Frozen CA; omitted for orders that use the platform default issuer.}
+        name: {type: string, maxLength: 128}
+        remark: {type: string, maxLength: 256}
+        renewal_of_order_id: {type: string, format: uuid}
+        not_after: {type: string, format: date-time}
+        failure_code: {type: string, maxLength: 128}
+        issued_asset_id: {type: string, format: uuid}
+        issued_version_id: {type: string, format: uuid}
+        issued_at: {type: string, format: date-time}
+        version: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CertificateOrderList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/CertificateOrder'}}
+    CertificateDefaults:
+      type: object
+      additionalProperties: false
+      required: [scope_id, user_id, certificate_type, revision]
+      properties:
+        scope_id: {type: string, format: uuid}
+        user_id: {type: string, format: uuid}
+        certificate_type: {type: string, enum: [acme, uploaded]}
+        dns_provider_id: {type: string, format: uuid}
+        issuer: {type: string, enum: [lets_encrypt, zerossl, google_trust], description: Omitted when unset (the platform default applies).}
+        revision: {type: integer, format: int64, minimum: 0}
+        updated_at: {type: string, format: date-time}
+    UpdateCertificateDefaults:
+      type: object
+      additionalProperties: false
+      required: [certificate_type, expected_revision]
+      properties:
+        target_scope_id: {type: string, format: uuid}
+        target_user_id: {type: string, format: uuid}
+        certificate_type: {type: string, enum: [acme, uploaded]}
+        dns_provider_id: {type: [string, 'null'], format: uuid, description: Empty or null clears the default provider.}
+        issuer: {type: [string, 'null'], enum: [lets_encrypt, zerossl, google_trust, '', null], description: Empty or null uses the platform default.}
+        expected_revision: {type: integer, format: int64, minimum: 0}
+    CreateCertificateOrder:
+      allOf:
+        - $ref: '#/components/schemas/ScopeTarget'
+        - type: object
+          required: [domains, challenge_type, auto_renew]
+          properties:
+            dns_provider_id: {type: string, format: uuid}
+            domains: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: string, maxLength: 253}}
+            challenge_type: {type: string, enum: [http-01, dns-01]}
+            auto_renew: {type: boolean}
+            issuer:
+              type: string
+              enum: [lets_encrypt, zerossl, google_trust]
+              description: >-
+                The CA. Omitted uses the requesting user's default issuer, then the
+                platform default. The resolved CA is frozen on the order and its
+                renewals; a CA without platform EAB credentials is refused with 409
+                certificate_issuer_unavailable. An order for the same domain set
+                that is still pending, validating or issuing refuses the new
+                order with 409 certificate_order_in_flight.
+            name: {type: string, maxLength: 128, description: Names the order and the certificate it issues; trimmed.}
+            remark: {type: string, maxLength: 256, description: Copied to the issued certificate; trimmed, no control characters.}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: On a validation_error that names the refused request field (JSON path as sent, domains[n] in request order) and a machine reason.
+              x-description-zh: 能定位字段的 validation_error 附带 field（请求 JSON 路径，domains[n] 按请求顺序）与 reason 机器码。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$'}
+                reason: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+              example: {field: 'domains[1]', reason: invalid_format}
+  responses:
+    BadRequest:
+      description: Invalid request or structurally invalid DNS/certificate data.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Unauthorized:
+      description: Authentication is required.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Forbidden:
+      description: The active role lacks the required permission.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    NotFound:
+      description: Resource absent or hidden by tenant isolation.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Conflict:
+      description: Duplicate, referenced, stale, or conflicting idempotent request.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    MethodNotAllowed:
+      description: Method not allowed.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    RequestTooLarge:
+      description: Request body exceeds 384 KiB.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    UnsupportedMediaType:
+      description: Content-Type is not application/json with optional UTF-8 charset.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    InternalError:
+      description: Sanitized internal failure.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    ServiceUnavailable:
+      description: Deployment credential encryption is not configured.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

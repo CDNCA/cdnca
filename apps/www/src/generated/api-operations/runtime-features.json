@@ -1,0 +1,39 @@
+{
+ "id": "runtime-features",
+ "prefix": "/v1/runtime-features",
+ "operations": [
+  {
+   "operation_id": "listRuntimeFeatures",
+   "method": "GET",
+   "path": "/v1/runtime-features",
+   "summary": "List which optional control-plane runtimes are mounted",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Any authenticated session. Each flag is true exactly when the corresponding route set is mounted on this control plane (cache_control /v1/cache-*, custom_rbac /v1/custom-rbac/*, plugin_webhooks /v1/tenant-scopes/{id}/plugin-webhook-*); front-end menus for a runtime that is off are hidden instead of answering 404.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Mounted optional runtimes.",
+     "fields": [
+      {
+       "name": "features",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

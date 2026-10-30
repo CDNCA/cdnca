@@ -1,0 +1,3851 @@
+{
+ "id": "admin-announcements",
+ "prefix": "/v1/admin/announcements",
+ "operations": [
+  {
+   "operation_id": "listAnnouncements",
+   "method": "GET",
+   "path": "/v1/admin/announcements",
+   "summary": "List tenant announcements",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: draft / scheduled / published / withdrawn / archived"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement page",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Announcement>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "createAnnouncementDraft",
+   "method": "POST",
+   "path": "/v1/admin/announcements",
+   "summary": "Create an announcement draft",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "title",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "body",
+      "type": "string",
+      "required": true,
+      "description": "Required for format=content; empty for format=link. UTF-8 encoded body must not exceed 65536 bytes; only the documented safe Markdown subset is accepted."
+     },
+     {
+      "name": "format",
+      "type": "string: content / link"
+     },
+     {
+      "name": "link_url",
+      "type": "string(uri)",
+      "description": "Required for format=link and limited to http(s)."
+     },
+     {
+      "name": "sort_order",
+      "type": "integer"
+     },
+     {
+      "name": "visible",
+      "type": "boolean"
+     },
+     {
+      "name": "popup",
+      "type": "boolean"
+     },
+     {
+      "name": "red",
+      "type": "boolean"
+     },
+     {
+      "name": "bold",
+      "type": "boolean"
+     },
+     {
+      "name": "all",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "user_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "group_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "withdrawal_visibility",
+      "type": "string: retain / hide",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "422",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "searchAnnouncementAudience",
+   "method": "GET",
+   "path": "/v1/admin/announcements/audience-directory",
+   "summary": "Search the current tenant's users or roles by name for an announcement audience",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Read-only; authorized by announcements.manage in the current tenant. ids resolves stored targets back to names and returns only those that still exist.",
+   "params": [
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string: user / role",
+     "required": true
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive name substring; mutually exclusive with ids."
+    },
+    {
+     "name": "ids",
+     "in": "query",
+     "type": "string",
+     "description": "Comma-separated IDs to resolve to names (at most 100)."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Audience directory entries",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AudienceDirectoryEntry>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "listGlobalAnnouncements",
+   "method": "GET",
+   "path": "/v1/admin/announcements/global",
+   "summary": "List platform global announcements",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: draft / published / withdrawn / archived"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform global announcement page",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<GlobalAnnouncement>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "createGlobalAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/global",
+   "summary": "Create a platform global announcement draft",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "all_tenants",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "tenant_scope_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "role_targets",
+      "type": "array<GlobalRoleTarget>",
+      "required": true
+     },
+     {
+      "name": "user_targets",
+      "type": "array<GlobalUserTarget>",
+      "required": true
+     },
+     {
+      "name": "title",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "body",
+      "type": "string",
+      "required": true,
+      "description": "Required for format=content; empty for format=link. HTML content is rendered in a script-disabled sandbox with remote resource loading blocked."
+     },
+     {
+      "name": "format",
+      "type": "string: content / link"
+     },
+     {
+      "name": "link_url",
+      "type": "string(uri)",
+      "description": "Required for format=link and limited to http(s)."
+     },
+     {
+      "name": "sort_order",
+      "type": "integer"
+     },
+     {
+      "name": "visible",
+      "type": "boolean"
+     },
+     {
+      "name": "popup",
+      "type": "boolean"
+     },
+     {
+      "name": "red",
+      "type": "boolean"
+     },
+     {
+      "name": "bold",
+      "type": "boolean"
+     },
+     {
+      "name": "withdrawal_visibility",
+      "type": "string: retain / hide",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Platform global announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "platform_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "GlobalAudience",
+       "required": true,
+       "description": "all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "422",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "searchGlobalAnnouncementAudience",
+   "method": "GET",
+   "path": "/v1/admin/announcements/global/audience-directory",
+   "summary": "Search tenants, or one tenant's roles and users, by name for a platform global announcement audience",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Read-only; authorized by announcements.manage (or platform.admin) in the platform scope. Role and user searches require scope_id. ids resolves stored targets back to names and returns only those that still exist.",
+   "params": [
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string: tenant / role / user",
+     "required": true
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive name substring; mutually exclusive with ids."
+    },
+    {
+     "name": "ids",
+     "in": "query",
+     "type": "string",
+     "description": "Comma-separated IDs to resolve to names (at most 100)."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant scope for role and user searches."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Audience directory entries",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AudienceDirectoryEntry>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "getGlobalAnnouncement",
+   "method": "GET",
+   "path": "/v1/admin/announcements/global/{id}",
+   "summary": "Get a platform global announcement",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform global announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "platform_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "GlobalAudience",
+       "required": true,
+       "description": "all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateGlobalAnnouncement",
+   "method": "PATCH",
+   "path": "/v1/admin/announcements/global/{id}",
+   "summary": "Update a platform global announcement draft",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "all_tenants",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "tenant_scope_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "role_targets",
+      "type": "array<GlobalRoleTarget>",
+      "required": true
+     },
+     {
+      "name": "user_targets",
+      "type": "array<GlobalUserTarget>",
+      "required": true
+     },
+     {
+      "name": "title",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "body",
+      "type": "string",
+      "required": true,
+      "description": "Required for format=content; empty for format=link. HTML content is rendered in a script-disabled sandbox with remote resource loading blocked."
+     },
+     {
+      "name": "format",
+      "type": "string: content / link"
+     },
+     {
+      "name": "link_url",
+      "type": "string(uri)",
+      "description": "Required for format=link and limited to http(s)."
+     },
+     {
+      "name": "sort_order",
+      "type": "integer"
+     },
+     {
+      "name": "visible",
+      "type": "boolean"
+     },
+     {
+      "name": "popup",
+      "type": "boolean"
+     },
+     {
+      "name": "red",
+      "type": "boolean"
+     },
+     {
+      "name": "bold",
+      "type": "boolean"
+     },
+     {
+      "name": "withdrawal_visibility",
+      "type": "string: retain / hide",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform global announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "platform_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "GlobalAudience",
+       "required": true,
+       "description": "all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "422",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "archiveGlobalAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/global/{id}/archive",
+   "summary": "Archive a global announcement in management; published messages remain available",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_lifecycle_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform global announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "platform_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "GlobalAudience",
+       "required": true,
+       "description": "all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "countGlobalAnnouncementAudience",
+   "method": "GET",
+   "path": "/v1/admin/announcements/global/{id}/audience/count",
+   "summary": "Count the recipients a platform global announcement would be delivered to now",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Read-only; resolves recipients with the same query publication uses and writes nothing.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Audience recipient count",
+     "fields": [
+      {
+       "name": "announcement_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "description": "Tenant announcement version counted; omitted for global announcements."
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "publishGlobalAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/global/{id}/publish",
+   "summary": "Publish a platform global announcement and freeze recipients",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform global announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "platform_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "GlobalAudience",
+       "required": true,
+       "description": "all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "422",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "restoreGlobalAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/global/{id}/restore",
+   "summary": "Restore a global announcement to management",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_lifecycle_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform global announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "platform_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "GlobalAudience",
+       "required": true,
+       "description": "all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "withdrawGlobalAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/global/{id}/withdraw",
+   "summary": "Withdraw a platform global announcement",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform global announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "platform_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "GlobalAudience",
+       "required": true,
+       "description": "all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "getAnnouncement",
+   "method": "GET",
+   "path": "/v1/admin/announcements/{id}",
+   "summary": "Get the current announcement version",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateAnnouncementDraft",
+   "method": "PATCH",
+   "path": "/v1/admin/announcements/{id}",
+   "summary": "Update an announcement draft",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "title",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "body",
+      "type": "string",
+      "required": true,
+      "description": "Required for format=content; empty for format=link. UTF-8 encoded body must not exceed 65536 bytes; only the documented safe Markdown subset is accepted."
+     },
+     {
+      "name": "format",
+      "type": "string: content / link"
+     },
+     {
+      "name": "link_url",
+      "type": "string(uri)",
+      "description": "Required for format=link and limited to http(s)."
+     },
+     {
+      "name": "sort_order",
+      "type": "integer"
+     },
+     {
+      "name": "visible",
+      "type": "boolean"
+     },
+     {
+      "name": "popup",
+      "type": "boolean"
+     },
+     {
+      "name": "red",
+      "type": "boolean"
+     },
+     {
+      "name": "bold",
+      "type": "boolean"
+     },
+     {
+      "name": "all",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "user_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "group_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "withdrawal_visibility",
+      "type": "string: retain / hide",
+      "required": true
+     },
+     {
+      "name": "version",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "422",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "archiveAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/{id}/archive",
+   "summary": "Archive a tenant announcement for reversible deletion",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_lifecycle_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "countAnnouncementAudience",
+   "method": "GET",
+   "path": "/v1/admin/announcements/{id}/audience/count",
+   "summary": "Count the recipients the head version of an announcement would be delivered to now",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Read-only; resolves recipients with the same query publication uses and writes nothing.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Audience recipient count",
+     "fields": [
+      {
+       "name": "announcement_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "description": "Tenant announcement version counted; omitted for global announcements."
+      },
+      {
+       "name": "recipient_count",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "publishAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/{id}/publish",
+   "summary": "Publish an announcement",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "version",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "restoreAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/{id}/restore",
+   "summary": "Restore an archived tenant announcement",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_lifecycle_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "reviseAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/{id}/revise",
+   "summary": "Create a revised announcement draft",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "title",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "body",
+      "type": "string",
+      "required": true,
+      "description": "Required for format=content; empty for format=link. UTF-8 encoded body must not exceed 65536 bytes; only the documented safe Markdown subset is accepted."
+     },
+     {
+      "name": "format",
+      "type": "string: content / link"
+     },
+     {
+      "name": "link_url",
+      "type": "string(uri)",
+      "description": "Required for format=link and limited to http(s)."
+     },
+     {
+      "name": "sort_order",
+      "type": "integer"
+     },
+     {
+      "name": "visible",
+      "type": "boolean"
+     },
+     {
+      "name": "popup",
+      "type": "boolean"
+     },
+     {
+      "name": "red",
+      "type": "boolean"
+     },
+     {
+      "name": "bold",
+      "type": "boolean"
+     },
+     {
+      "name": "all",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "user_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "group_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "withdrawal_visibility",
+      "type": "string: retain / hide",
+      "required": true
+     },
+     {
+      "name": "expected_head_version",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "422",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "scheduleAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/{id}/schedule",
+   "summary": "Schedule an announcement",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "version",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "publish_at",
+      "type": "string(date-time)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "withdrawAnnouncement",
+   "method": "POST",
+   "path": "/v1/admin/announcements/{id}/withdraw",
+   "summary": "Withdraw an announcement",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "version",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Announcement",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "head_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / scheduled / published / withdrawn / archived",
+       "required": true
+      },
+      {
+       "name": "title",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "format",
+       "type": "string: content / link",
+       "required": true
+      },
+      {
+       "name": "link_url",
+       "type": "string(uri)"
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "popup",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "red",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bold",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "Audience",
+       "required": true,
+       "description": "user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty."
+      },
+      {
+       "name": "withdrawal_visibility",
+       "type": "string: retain / hide",
+       "required": true
+      },
+      {
+       "name": "scheduled_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "archived",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "archived_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  }
+ ]
+}

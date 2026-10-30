@@ -1,0 +1,41 @@
+--- a/agents/edge-agent/cmd/edge-agent/dynroute_e2e_test.go
++++ b/agents/edge-agent/cmd/edge-agent/dynroute_e2e_test.go
+@@ -29,7 +29,6 @@
+ 	"github.com/cdnca/cdnca/agents/edge-agent/internal/certstore"
+ 	"github.com/cdnca/cdnca/agents/edge-agent/internal/dynroute"
+ 	"github.com/cdnca/cdnca/agents/edge-agent/internal/gatewayclient"
+-	"github.com/cdnca/cdnca/agents/edge-agent/internal/objectstore"
+ 	"github.com/cdnca/cdnca/agents/edge-agent/internal/rulepackprecheck"
+ 	"github.com/cdnca/cdnca/libs/edgeconfig"
+ 	"github.com/cdnca/cdnca/libs/edgeconfig/artifactset"
+@@ -108,10 +107,6 @@
+ 	if err := os.MkdirAll(deploymentRoot, 0o700); err != nil {
+ 		t.Fatal(err)
+ 	}
+-	objects, err := objectstore.Open(filepath.Join(deploymentRoot, objectStoreDir))
+-	if err != nil {
+-		t.Fatal(err)
+-	}
+ 	// The image's worker group: nobody, or nogroup on Debian bases (dynamic_routing.worker_group).
+ 	workerGroup := "nobody"
+ 	if group := os.Getenv("DYNROUTE_E2E_WORKER_GROUP"); group != "" {
+@@ -128,6 +123,10 @@
+ 	if root := os.Getenv("DYNROUTE_E2E_RULEPACK_RUNTIME"); root != "" {
+ 		packRuntime = root
+ 	}
++	objects, err := openObjectStore(fileConfig{DeploymentRoot: deploymentRoot, DynamicRouting: dynamicRoutingSettings{Enabled: true, WorkerGroup: workerGroup}})
++	if err != nil {
++		t.Fatal(err)
++	}
+ 	vault, err := openRulePackVault(deploymentRoot, artifactKey, objects, packRuntime, gid)
+ 	if err != nil || vault == nil {
+ 		t.Fatalf("rule pack vault: %v", err)
+@@ -137,7 +136,7 @@
+ 	if err != nil {
+ 		t.Fatal(err)
+ 	}
+-	config := fileConfig{DeploymentRoot: deploymentRoot, OpenResty: openRestySettings{Binary: binary},
++	config := fileConfig{DeploymentRoot: deploymentRoot, OpenResty: openRestySettings{Binary: binary, HealthURL: "http://127.0.0.1:18080/healthz"},
+ 		DynamicRouting: dynamicRoutingSettings{Enabled: true, WorkerGroup: workerGroup}}
+ 	runtime, err := assembleDynamicRouting(config, gateway.NodeID, certificates, nil, 20*time.Second, nil, rulepackprecheck.Plans{Vault: vault}, nil)
+ 	if err != nil {

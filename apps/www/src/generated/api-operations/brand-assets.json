@@ -1,0 +1,44 @@
+{
+ "id": "brand-assets",
+ "prefix": "/v1/brand-assets",
+ "operations": [
+  {
+   "operation_id": "readPublicBrandAsset",
+   "method": "GET",
+   "path": "/v1/brand-assets/{slot}",
+   "summary": "",
+   "auth": [
+    "none"
+   ],
+   "description": "Pages request only the slots listed in GET /v1/theme/current brand_assets, with v set to that slot's revision.",
+   "params": [
+    {
+     "name": "slot",
+     "in": "path",
+     "type": "string: favicon / logo / login_ad / logo_dark / login_background / app_icon",
+     "required": true
+    },
+    {
+     "name": "v",
+     "in": "query",
+     "type": "string",
+     "description": "Cache-busting revision from /v1/theme/current brand_assets"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable image bytes"
+    },
+    {
+     "status": "304",
+     "description": "Not modified"
+    },
+    {
+     "status": "404",
+     "description": "Asset not found"
+    }
+   ]
+  }
+ ]
+}

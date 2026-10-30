@@ -1,0 +1,178 @@
+{
+ "id": "certificate-publications",
+ "prefix": "/v1/certificate-publications",
+ "operations": [
+  {
+   "operation_id": "listCertificatePublicationStatuses",
+   "method": "GET",
+   "path": "/v1/certificate-publications",
+   "summary": "List current certificate publication statuses",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.read"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform actors; tenant actors may target only their own scope."
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: pending / leased / retry_wait / succeeded / permanent_failed"
+    },
+    {
+     "name": "operation",
+     "in": "query",
+     "type": "string: publish / unpublish"
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque signed snapshot cursor bound to actor, tenant and filters."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current publication state page from one stable snapshot.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PublicationStatus>",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid query, scope target, body or cursor."
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing, malformed or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Scope or certificates.read permission denied."
+    },
+    {
+     "status": "405",
+     "description": "Only GET is supported."
+    },
+    {
+     "status": "500",
+     "description": "Sanitized publication status storage or cursor encoding failure."
+    }
+   ]
+  },
+  {
+   "operation_id": "getCertificatePublicationStatus",
+   "method": "GET",
+   "path": "/v1/certificate-publications/{site_id}/revisions/{revision}",
+   "summary": "Get one binding revision and its complete state history",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "revision",
+     "in": "path",
+     "type": "integer(int64)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform actors; tenant actors may target only their own scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current state and complete ordered history for one binding revision.",
+     "fields": [
+      {
+       "name": "current",
+       "type": "PublicationStatus",
+       "required": true
+      },
+      {
+       "name": "history",
+       "type": "array<PublicationStatusEvent>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid query, scope target, body or cursor."
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing, malformed or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Scope or certificates.read permission denied."
+    },
+    {
+     "status": "404",
+     "description": "Route or exact site binding revision is absent."
+    },
+    {
+     "status": "405",
+     "description": "Only GET is supported."
+    },
+    {
+     "status": "500",
+     "description": "Sanitized publication status storage or cursor encoding failure."
+    }
+   ]
+  }
+ ]
+}

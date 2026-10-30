@@ -1,0 +1,758 @@
+openapi: 3.1.0
+info:
+  title: CDNCA announcements and inbox API
+  version: 1.0.0
+  description: Tenant-scoped announcement lifecycle and in-app message state.
+servers:
+  - url: /
+paths:
+  /v1/admin/announcements/global:
+    get:
+      summary: List platform global announcements
+      operationId: listGlobalAnnouncements
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, published, withdrawn, archived] }
+      responses:
+        '200': { $ref: '#/components/responses/GlobalAnnouncementPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+    post:
+      summary: Create a platform global announcement draft
+      operationId: createGlobalAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalAnnouncementInput' } } } }
+      responses:
+        '201': { $ref: '#/components/responses/GlobalAnnouncement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/global/audience-directory:
+    get:
+      summary: Search tenants, or one tenant's roles and users, by name for a platform global announcement audience
+      description: Read-only; authorized by announcements.manage (or platform.admin) in the platform scope. Role and user searches require scope_id. ids resolves stored targets back to names and returns only those that still exist.
+      operationId: searchGlobalAnnouncementAudience
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AudienceKindGlobal'
+        - $ref: '#/components/parameters/AudienceSearch'
+        - $ref: '#/components/parameters/AudienceIDs'
+        - $ref: '#/components/parameters/AudienceLimit'
+        - { name: scope_id, in: query, description: Tenant scope for role and user searches., schema: { type: string, format: uuid } }
+      responses:
+        '200': { $ref: '#/components/responses/AudienceDirectory' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/global/{id}/audience/count:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    get:
+      summary: Count the recipients a platform global announcement would be delivered to now
+      description: Read-only; resolves recipients with the same query publication uses and writes nothing.
+      operationId: countGlobalAnnouncementAudience
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AudienceCount' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/global/{id}:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    get:
+      summary: Get a platform global announcement
+      operationId: getGlobalAnnouncement
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/GlobalAnnouncement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Update a platform global announcement draft
+      operationId: updateGlobalAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalAnnouncementUpdate' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/GlobalAnnouncement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/global/{id}/publish:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Publish a platform global announcement and freeze recipients
+      operationId: publishGlobalAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalTransitionInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/GlobalAnnouncement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/global/{id}/withdraw:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Withdraw a platform global announcement
+      operationId: withdrawGlobalAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalTransitionInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/GlobalAnnouncement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/global/{id}/archive:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Archive a global announcement in management; published messages remain available
+      operationId: archiveGlobalAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/GlobalAnnouncement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/global/{id}/restore:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Restore a global announcement to management
+      operationId: restoreGlobalAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/GlobalAnnouncement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements:
+    get:
+      summary: List tenant announcements
+      operationId: listAnnouncements
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AnnouncementStatus' }
+      responses:
+        '200': { $ref: '#/components/responses/AnnouncementPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+    post:
+      summary: Create an announcement draft
+      operationId: createAnnouncementDraft
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AnnouncementInput' } } } }
+      responses:
+        '201': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/audience-directory:
+    get:
+      summary: Search the current tenant's users or roles by name for an announcement audience
+      description: Read-only; authorized by announcements.manage in the current tenant. ids resolves stored targets back to names and returns only those that still exist.
+      operationId: searchAnnouncementAudience
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/AudienceKindTenant'
+        - $ref: '#/components/parameters/AudienceSearch'
+        - $ref: '#/components/parameters/AudienceIDs'
+        - $ref: '#/components/parameters/AudienceLimit'
+      responses:
+        '200': { $ref: '#/components/responses/AudienceDirectory' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}/audience/count:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    get:
+      summary: Count the recipients the head version of an announcement would be delivered to now
+      description: Read-only; resolves recipients with the same query publication uses and writes nothing.
+      operationId: countAnnouncementAudience
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/AudienceCount' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    get:
+      summary: Get the current announcement version
+      operationId: getAnnouncement
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+    patch:
+      summary: Update an announcement draft
+      operationId: updateAnnouncementDraft
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AnnouncementUpdate' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}/schedule:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Schedule an announcement
+      operationId: scheduleAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ScheduleInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}/publish:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Publish an announcement
+      operationId: publishAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VersionInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}/revise:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Create a revised announcement draft
+      operationId: reviseAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AnnouncementRevise' } } } }
+      responses:
+        '201': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}/withdraw:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Withdraw an announcement
+      operationId: withdrawAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/VersionInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}/archive:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Archive a tenant announcement for reversible deletion
+      operationId: archiveAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/announcements/{id}/restore:
+    parameters: [{ $ref: '#/components/parameters/AnnouncementID' }]
+    post:
+      summary: Restore an archived tenant announcement
+      operationId: restoreAnnouncement
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/LifecycleInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/Announcement' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/account/messages:
+    get:
+      summary: List the current user's in-app messages
+      operationId: listAccountMessages
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: offset
+          in: query
+          description: Page by position (page-number pagination). Cannot be combined with cursor.
+          schema: { type: integer, minimum: 0, maximum: 10000 }
+        - name: filter
+          in: query
+          schema: { type: string, enum: [read, unread] }
+      responses:
+        '200': { $ref: '#/components/responses/InboxPage' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/account/messages/{event_id}/delivered:
+    parameters: [{ $ref: '#/components/parameters/EventID' }]
+    post:
+      summary: Mark an in-app message delivered
+      operationId: markMessageDelivered
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StateInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/InboxState' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/account/messages/{event_id}/read:
+    parameters: [{ $ref: '#/components/parameters/EventID' }]
+    post:
+      summary: Mark an in-app message read
+      operationId: markMessageRead
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/StateInput' } } } }
+      responses:
+        '200': { $ref: '#/components/responses/InboxState' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    AnnouncementID: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    EventID: { name: event_id, in: path, required: true, schema: { type: string, format: uuid } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$' } }
+    IfMatch: { name: If-Match, in: header, required: true, schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    Cursor: { name: cursor, in: query, schema: { type: string, maxLength: 512 } }
+    AudienceKindTenant: { name: kind, in: query, required: true, schema: { type: string, enum: [user, role] } }
+    AudienceKindGlobal: { name: kind, in: query, required: true, schema: { type: string, enum: [tenant, role, user] } }
+    AudienceSearch: { name: search, in: query, description: Case-insensitive name substring; mutually exclusive with ids., schema: { type: string, maxLength: 128 } }
+    AudienceIDs: { name: ids, in: query, description: Comma-separated IDs to resolve to names (at most 100)., schema: { type: string } }
+    AudienceLimit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+  schemas:
+    AnnouncementStatus: { type: string, enum: [draft, scheduled, published, withdrawn, archived] }
+    Audience:
+      type: object
+      description: user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty.
+      required: [all]
+      properties:
+        all: { type: boolean }
+        user_ids: { type: array, maxItems: 10000, items: { type: string, format: uuid } }
+        group_ids: { type: array, maxItems: 10000, items: { type: string, format: uuid } }
+      examples:
+        - { all: true }
+        - { all: false, user_ids: [018f2ef5-3902-7c3a-8d7d-14a4d8f321e9] }
+    GlobalRoleTarget:
+      type: object
+      additionalProperties: false
+      required: [scope_id, role_id]
+      properties:
+        scope_id: { type: string, format: uuid }
+        role_id: { type: string, format: uuid }
+    GlobalUserTarget:
+      type: object
+      additionalProperties: false
+      required: [scope_id, user_id]
+      properties:
+        scope_id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+    GlobalAudience:
+      type: object
+      additionalProperties: false
+      description: all_tenants=true requires all target arrays to be empty; otherwise their combined size is 1..10000 and their union is used.
+      required: [all_tenants, tenant_scope_ids, role_targets, user_targets]
+      properties:
+        all_tenants: { type: boolean }
+        tenant_scope_ids: { type: array, maxItems: 10000, items: { type: string, format: uuid } }
+        role_targets: { type: array, maxItems: 10000, items: { $ref: '#/components/schemas/GlobalRoleTarget' } }
+        user_targets: { type: array, maxItems: 10000, items: { $ref: '#/components/schemas/GlobalUserTarget' } }
+    GlobalAnnouncementInput:
+      allOf:
+        - $ref: '#/components/schemas/GlobalAudience'
+        - type: object
+          required: [title, body, withdrawal_visibility]
+          properties:
+            title: { type: string, minLength: 1, maxLength: 160 }
+            body:
+              type: string
+              minLength: 0
+              x-max-bytes: 65536
+              description: Required for format=content; empty for format=link. HTML content is rendered in a script-disabled sandbox with remote resource loading blocked.
+            format: { type: string, enum: [content, link], default: content }
+            link_url: { type: string, format: uri, description: Required for format=link and limited to http(s). }
+            sort_order: { type: integer, minimum: 0, maximum: 999999, default: 100 }
+            visible: { type: boolean, default: true }
+            popup: { type: boolean, default: false }
+            red: { type: boolean, default: false }
+            bold: { type: boolean, default: false }
+            withdrawal_visibility: { type: string, enum: [retain, hide] }
+    GlobalAnnouncementUpdate:
+      allOf:
+        - $ref: '#/components/schemas/GlobalAnnouncementInput'
+        - type: object
+          required: [expected_revision]
+          properties:
+            expected_revision: { type: integer, minimum: 1 }
+    GlobalTransitionInput:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: { type: integer, minimum: 1 }
+    AnnouncementInput:
+      type: object
+      description: user_ids and group_ids combined must contain at most 10000 entries; all=true requires both arrays to be empty.
+      required: [title, body, all, user_ids, group_ids, withdrawal_visibility]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 160 }
+        body:
+          type: string
+          minLength: 0
+          x-max-bytes: 65536
+          description: Required for format=content; empty for format=link. UTF-8 encoded body must not exceed 65536 bytes; only the documented safe Markdown subset is accepted.
+        format: { type: string, enum: [content, link], default: content }
+        link_url: { type: string, format: uri, description: Required for format=link and limited to http(s). }
+        sort_order: { type: integer, minimum: 0, maximum: 999999, default: 100 }
+        visible: { type: boolean, default: true }
+        popup: { type: boolean, default: false }
+        red: { type: boolean, default: false }
+        bold: { type: boolean, default: false }
+        all: { type: boolean }
+        user_ids: { type: array, maxItems: 10000, items: { type: string, format: uuid } }
+        group_ids: { type: array, maxItems: 10000, items: { type: string, format: uuid } }
+        withdrawal_visibility: { type: string, enum: [retain, hide] }
+    AnnouncementUpdate:
+      allOf:
+        - $ref: '#/components/schemas/AnnouncementInput'
+        - type: object
+          required: [version, expected_revision]
+          properties:
+            version: { type: integer, minimum: 1 }
+            expected_revision: { type: integer, minimum: 1 }
+    AnnouncementRevise:
+      allOf:
+        - $ref: '#/components/schemas/AnnouncementInput'
+        - type: object
+          required: [expected_head_version]
+          properties:
+            expected_head_version: { type: integer, minimum: 1 }
+    VersionInput:
+      type: object
+      required: [version, expected_revision]
+      properties:
+        version: { type: integer, minimum: 1 }
+        expected_revision: { type: integer, minimum: 1 }
+    ScheduleInput:
+      allOf:
+        - $ref: '#/components/schemas/VersionInput'
+        - type: object
+          required: [publish_at]
+          properties:
+            publish_at: { type: string, format: date-time }
+    StateInput:
+      type: object
+      required: [expected_revision]
+      properties: { expected_revision: { type: integer, minimum: 1 } }
+    LifecycleInput:
+      type: object
+      additionalProperties: false
+      required: [expected_lifecycle_revision]
+      properties: { expected_lifecycle_revision: { type: integer, minimum: 1 } }
+    Announcement:
+      type: object
+      required: [id, scope_id, version, head_version, revision, status, title, body, format, sort_order, visible, popup, red, bold, audience, withdrawal_visibility, created_at, state_changed_at, archived, lifecycle_revision]
+      properties:
+        id: { type: string, format: uuid }
+        scope_id: { type: string, format: uuid }
+        version: { type: integer }
+        head_version: { type: integer }
+        revision: { type: integer }
+        status: { $ref: '#/components/schemas/AnnouncementStatus' }
+        title: { type: string }
+        body: { type: string }
+        format: { type: string, enum: [content, link] }
+        link_url: { type: string, format: uri }
+        sort_order: { type: integer, minimum: 0, maximum: 999999 }
+        visible: { type: boolean }
+        popup: { type: boolean }
+        red: { type: boolean }
+        bold: { type: boolean }
+        audience: { $ref: '#/components/schemas/Audience' }
+        withdrawal_visibility: { type: string, enum: [retain, hide] }
+        scheduled_at: { type: string, format: date-time }
+        published_at: { type: string, format: date-time }
+        withdrawn_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        state_changed_at: { type: string, format: date-time }
+        archived: { type: boolean }
+        lifecycle_revision: { type: integer, minimum: 1 }
+        archived_at: { type: string, format: date-time }
+        replayed: { type: boolean }
+    GlobalAnnouncement:
+      type: object
+      required: [id, platform_scope_id, version, revision, status, title, body, format, sort_order, visible, popup, red, bold, audience, withdrawal_visibility, recipient_count, created_at, state_changed_at, archived, lifecycle_revision]
+      properties:
+        id: { type: string, format: uuid }
+        platform_scope_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1 }
+        revision: { type: integer, minimum: 1 }
+        status: { type: string, enum: [draft, published, withdrawn] }
+        title: { type: string }
+        body: { type: string }
+        format: { type: string, enum: [content, link] }
+        link_url: { type: string, format: uri }
+        sort_order: { type: integer, minimum: 0, maximum: 999999 }
+        visible: { type: boolean }
+        popup: { type: boolean }
+        red: { type: boolean }
+        bold: { type: boolean }
+        audience: { $ref: '#/components/schemas/GlobalAudience' }
+        withdrawal_visibility: { type: string, enum: [retain, hide] }
+        recipient_count: { type: integer, minimum: 0 }
+        published_at: { type: string, format: date-time }
+        withdrawn_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        state_changed_at: { type: string, format: date-time }
+        archived: { type: boolean }
+        lifecycle_revision: { type: integer, minimum: 1 }
+        archived_at: { type: string, format: date-time }
+        replayed: { type: boolean }
+    InboxMessage:
+      type: object
+      required: [id, announcement_id, announcement_version, title, body, published_at, state_revision]
+      properties:
+        id: { type: string, format: uuid }
+        announcement_id: { type: string, format: uuid }
+        announcement_version: { type: integer }
+        title: { type: string }
+        body: { type: string }
+        format: { type: string, enum: [content, link] }
+        link_url: { type: string, format: uri }
+        sort_order: { type: integer, minimum: 0, maximum: 999999 }
+        visible: { type: boolean }
+        popup: { type: boolean }
+        red: { type: boolean }
+        bold: { type: boolean }
+        published_at: { type: string, format: date-time }
+        delivered_at: { type: string, format: date-time }
+        read_at: { type: string, format: date-time }
+        state_revision: { type: integer }
+    AnnouncementPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Announcement' } }
+        next_cursor: { type: string }
+    GlobalAnnouncementPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/GlobalAnnouncement' } }
+        next_cursor: { type: string }
+    InboxPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/InboxMessage' } }
+        next_cursor: { type: string }
+        total:
+          type: integer
+          minimum: 0
+          description: Messages matching the filter in this snapshot; returned for a first or offset page, omitted on cursor pages.
+    InboxState:
+      type: object
+      required: [event_id, revision]
+      properties:
+        event_id: { type: string, format: uuid }
+        delivered_at: { type: string, format: date-time }
+        read_at: { type: string, format: date-time }
+        revision: { type: integer }
+        replayed: { type: boolean }
+    AudienceCount:
+      type: object
+      required: [announcement_id, recipient_count]
+      properties:
+        announcement_id: { type: string, format: uuid }
+        version: { type: integer, minimum: 1, description: Tenant announcement version counted; omitted for global announcements. }
+        recipient_count: { type: integer, minimum: 0 }
+    AudienceDirectoryEntry:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        scope_id: { type: string, format: uuid, description: Tenant scope of a role or user in global results. }
+        name: { type: string }
+        detail: { type: string, description: Username for users, display ID for tenants. }
+        system: { type: boolean, description: True for built-in roles. }
+    AudienceDirectory:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AudienceDirectoryEntry' } }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string }
+            details:
+              description: >-
+                On a 400 validation_error of an announcement draft that names the refused body field: field is title, body,
+                link_url, sort_order, format, all / user_ids / group_ids (tenant) or all_tenants / tenant_scope_ids /
+                role_targets / user_targets (global), or withdrawal_visibility; reason is a machine code (required, too_long,
+                invalid_format, out_of_range, invalid). Other refusals have no details.
+              x-description-zh: 公告草稿 400 validation_error 能定位字段时附带 field（请求体 JSON 名）与 reason 机器码；其它拒绝不带 details。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$' }
+                reason: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+              example: { field: title, reason: too_long }
+  responses:
+    Announcement: { description: Announcement, content: { application/json: { schema: { $ref: '#/components/schemas/Announcement' } } } }
+    AnnouncementPage: { description: Announcement page, content: { application/json: { schema: { $ref: '#/components/schemas/AnnouncementPage' } } } }
+    GlobalAnnouncement: { description: Platform global announcement, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalAnnouncement' } } } }
+    GlobalAnnouncementPage: { description: Platform global announcement page, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalAnnouncementPage' } } } }
+    InboxPage: { description: Inbox page, content: { application/json: { schema: { $ref: '#/components/schemas/InboxPage' } } } }
+    InboxState: { description: Inbox state, content: { application/json: { schema: { $ref: '#/components/schemas/InboxState' } } } }
+    AudienceCount: { description: Audience recipient count, content: { application/json: { schema: { $ref: '#/components/schemas/AudienceCount' } } } }
+    AudienceDirectory: { description: Audience directory entries, content: { application/json: { schema: { $ref: '#/components/schemas/AudienceDirectory' } } } }
+    Error: { description: Stable API error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

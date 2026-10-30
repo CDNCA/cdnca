@@ -1,0 +1,70 @@
+<!-- CDNCA CDN 前台概览（cdnca_ClientAreaOutput，ThinkPHP 模板，{$var} 默认 HTML 转义） -->
+<style>
+  .cdnca-overview { max-width: 720px; padding: 16px 4px; font-size: 14px; color: #303133; }
+  .cdnca-overview dl { display: grid; grid-template-columns: 140px 1fr; row-gap: 10px; margin: 0 0 16px; }
+  .cdnca-overview dt { color: #909399; }
+  .cdnca-overview dd { margin: 0; }
+  .cdnca-overview .muted { color: #909399; font-size: 12px; }
+  .cdnca-overview .btn { display: inline-block; padding: 8px 18px; border: 0; border-radius: 4px; background: #2f6bff; color: #fff; cursor: pointer; }
+  .cdnca-overview .btn[disabled] { opacity: .6; cursor: not-allowed; }
+  .cdnca-overview .alert { padding: 12px 16px; border-radius: 4px; background: #fdf6ec; color: #b88230; }
+  .cdnca-overview .err { margin-top: 8px; color: #f56c6c; }
+</style>
+<div class="cdnca-overview">
+  {if $cdnca_ok}
+  <dl>
+    <dt>套餐</dt><dd>{$cdnca_product} <span class="muted">{$cdnca_period}</span></dd>
+    <dt>状态</dt><dd>{$cdnca_status}</dd>
+    <dt>到期时间</dt><dd>{$cdnca_ends_at}</dd>
+    <dt>CDN 用户名</dt><dd>{$cdnca_username}</dd>
+    <dt>本周期流量</dt><dd>{$cdnca_traffic} <span class="muted">{$cdnca_usage_window}</span></dd>
+  </dl>
+  {if $cdnca_can_login}
+  <button type="button" class="btn" id="cdnca-login">登录 CDN 控制台</button>
+  <div class="err" id="cdnca-login-error" role="alert" aria-live="polite"></div>
+  {else /}
+  <p class="muted">服务当前不可登录（{$cdnca_status}）。</p>
+  {/if}
+  {else /}
+  <div class="alert" role="alert">暂时无法读取 CDN 服务信息：{$cdnca_error}</div>
+  {/if}
+</div>
+<script>
+(function () {
+  var button = document.getElementById('cdnca-login');
+  if (!button) { return; }
+  var api = '{$MODULE_CUSTOM_API|default=""}';
+  var urlJwt = '{$Think.get.jwt|default=""}';
+  var errorBox = document.getElementById('cdnca-login-error');
+  button.addEventListener('click', function () {
+    errorBox.textContent = '';
+    // 先同步开窗口，避免异步拿到链接后被浏览器拦截弹窗。
+    var win = window.open('', '_blank');
+    button.disabled = true;
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', api);
+    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+    // 老版前台用 ?jwt= 传入的 JWT；V10 兼容层用 localStorage.jwt（两种都按公开模块的写法，待真机核对）。
+    if (urlJwt) {
+      xhr.setRequestHeader('Authorization', 'JWT ' + urlJwt);
+    } else if (window.localStorage && localStorage.getItem('jwt')) {
+      xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('jwt'));
+    }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      button.disabled = false;
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      var url = data && (data.url || (data.data && data.data.url));
+      var ok = data && (data.status === 200 || data.status === 'success');
+      if (ok && url) {
+        if (win) { win.location.href = url; } else { window.location.href = url; }
+        return;
+      }
+      if (win) { win.close(); }
+      errorBox.textContent = (data && data.msg) || ('登录失败（HTTP ' + xhr.status + '）');
+    };
+    xhr.send('func=LoginConsole');
+  });
+})();
+</script>

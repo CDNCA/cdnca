@@ -1,0 +1,350 @@
+{
+ "id": "security-ip-lists",
+ "prefix": "/v1/security-ip-lists",
+ "operations": [
+  {
+   "operation_id": "listSecurityIPLists",
+   "method": "GET",
+   "path": "/v1/security-ip-lists",
+   "summary": "List named IP lists",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.read. Tenant identities only: the tenant's own lists (writable) and the platform lists (read only, platform true).",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Lists ordered own first, then by name.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SecurityIPList>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createSecurityIPList",
+   "method": "POST",
+   "path": "/v1/security-ip-lists",
+   "summary": "Create a named IP list",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage. Entries are canonicalized (masked, deduplicated, ordered). Audit security.ip_list.create. At most 200 live lists per scope.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string"
+     },
+     {
+      "name": "entries",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created, or an identical request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "entries",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical CIDRs (addresses as /32 or /128) in order."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform",
+       "type": "boolean",
+       "required": true,
+       "description": "A platform list (read only for tenants)."
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSecurityIPList",
+   "method": "PUT",
+   "path": "/v1/security-ip-lists/{list_id}",
+   "summary": "Replace a named IP list",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage and the current revision. Every tenant whose bound WAF policy references the list is republished automatically (system trigger ip_list). Audit security.ip_list.update.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "list_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string"
+     },
+     {
+      "name": "entries",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Replaced (revision + 1), or an identical request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "entries",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical CIDRs (addresses as /32 or /128) in order."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform",
+       "type": "boolean",
+       "required": true,
+       "description": "A platform list (read only for tenants)."
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSecurityIPList",
+   "method": "DELETE",
+   "path": "/v1/security-ip-lists/{list_id}",
+   "summary": "Delete a named IP list",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires security_policies.manage and the current revision. A list any live policy version references is refused (409 ip_list_in_use). Audit security.ip_list.delete.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "list_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "expected_revision",
+     "in": "query",
+     "type": "integer",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

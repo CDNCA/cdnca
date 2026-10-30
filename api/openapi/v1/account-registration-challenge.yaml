@@ -1,0 +1,170 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Account Registration Challenge API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Sessionless human and contact verification for account registration. Human
+    tokens, one-time codes, destinations, and proof references are never echoed.
+servers:
+  - url: /
+security: []
+tags:
+  - name: Account registration challenge
+paths:
+  /v1/auth/registration-challenges:
+    post:
+      tags: [Account registration challenge]
+      operationId: createAccountRegistrationChallenge
+      security: []
+      summary: Verify a human and queue one contact verification code
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ChallengeRequest'}
+      responses:
+        '202':
+          description: Challenge accepted without identifying existing accounts.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChallengeResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/auth/registration-challenge-verifications:
+    post:
+      tags: [Account registration challenge]
+      operationId: verifyAccountRegistrationChallenge
+      security: []
+      summary: Consume one contact verification code and issue a registration proof cookie
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VerificationRequest'}
+      responses:
+        '204':
+          description: Contact verified. The proof reference is available only in a secure host cookie.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Set-Cookie:
+              description: Secure, HttpOnly, SameSite=Strict, host-only registration proof cookie.
+              schema: {type: string}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+  headers:
+    RequestID:
+      schema: {type: string, minLength: 1, maxLength: 128}
+    RetryAfter:
+      schema: {type: string, pattern: '^[0-9]+$'}
+  responses:
+    ErrorResponse:
+      description: Stable error without provider details or sensitive input.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    RateLimited:
+      description: Bounded retry response without identifying the limiting dimension.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Retry-After: {$ref: '#/components/headers/RetryAfter'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    ChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [username, email, phone, verification_channel, human_token]
+      properties:
+        username: {type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
+        email: {type: string, format: email, minLength: 3, maxLength: 254}
+        phone: {type: string, minLength: 6, maxLength: 21, pattern: '^\+?[0-9]{6,20}$'}
+        verification_channel: {type: string, enum: [email, sms]}
+        human_token:
+          type: string
+          writeOnly: true
+          minLength: 22
+          maxLength: 4096
+    VerificationRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, username, email, phone, verification_channel, otp]
+      properties:
+        challenge_id: {type: string, format: uuid}
+        username: {type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]*$'}
+        email: {type: string, format: email, minLength: 3, maxLength: 254}
+        phone: {type: string, minLength: 6, maxLength: 21, pattern: '^\+?[0-9]{6,20}$'}
+        verification_channel: {type: string, enum: [email, sms]}
+        otp:
+          type: string
+          writeOnly: true
+          pattern: '^[0-9]{6}$'
+    ChallengeResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [accepted, challenge_id, expires_at, replayed]
+          properties:
+            accepted: {type: boolean, const: true}
+            challenge_id: {type: string, format: uuid}
+            expires_at: {type: string, format: date-time}
+            replayed: {type: boolean}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - account_registration_challenge_invalid
+                - account_registration_challenge_rate_limited
+                - account_registration_challenge_conflict
+                - account_registration_challenge_unavailable
+            request_id: {type: string, minLength: 1, maxLength: 128}

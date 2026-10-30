@@ -1,0 +1,111 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+target_version='@DEBIAN_VERSION@'
+target_release='@VERSION@'
+target_sequence='@RELEASE_SEQUENCE@'
+rollback_key_version='@ROLLBACK_KEY_VERSION@'
+state_root=/var/lib/cdnca-edge-agent-packaging
+pending=/run/cdnca-edge-agent/deb-rollback-pending
+
+fail_reason() {
+  code=$1
+  shift
+  printf 'reason_code=%s %s\n' "${code}" "$*" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  install|upgrade) ;;
+  abort-upgrade) exit 0 ;;
+  *) fail_reason PKG_PREFLIGHT_FAILED "unsupported preinst action ${1:-missing}" ;;
+esac
+
+for command in awk cmp date dpkg dpkg-query getent grep openssl readlink sed sha256sum stat systemctl systemd wc; do
+  command -v "${command}" >/dev/null 2>&1 ||
+    fail_reason PKG_PREFLIGHT_FAILED "required command is unavailable: ${command}"
+done
+
+[ -r /etc/os-release ] || fail_reason PKG_HOST_UNSUPPORTED 'missing /etc/os-release'
+# shellcheck disable=SC1091
+. /etc/os-release
+case "${ID:-}:${VERSION_ID:-}" in
+  debian:12) minimum_systemd_version=252 ;;
+  ubuntu:24.04) minimum_systemd_version=255 ;;
+  *) fail_reason PKG_HOST_UNSUPPORTED "unsupported host ${ID:-unknown}:${VERSION_ID:-unknown}" ;;
+esac
+systemd_version=$(systemd --version | awk 'NR == 1 {print $2}')
+case "${systemd_version}" in
+  ''|*[!0-9]*) fail_reason PKG_HOST_UNSUPPORTED 'invalid systemd version' ;;
+esac
+[ "${systemd_version}" -ge "${minimum_systemd_version}" ] ||
+  fail_reason PKG_HOST_UNSUPPORTED "${ID} ${VERSION_ID} requires systemd ${minimum_systemd_version} or newer"
+[ -f /sys/fs/cgroup/cgroup.controllers ] || fail_reason PKG_HOST_UNSUPPORTED 'cgroup v2 is required'
+
+mkdir -p /run/cdnca-edge-agent
+chmod 0755 /run/cdnca-edge-agent
+if systemctl is-active --quiet cdnca-edge-agent.service; then
+  printf 'active\n' >"${pending}.service"
+else
+  printf 'inactive\n' >"${pending}.service"
+fi
+chmod 0600 "${pending}.service"
+
+installed_version=$(dpkg-query -W -f='${Version}' cdnca-edge-agent 2>/dev/null || true)
+[ -n "${installed_version}" ] || exit 0
+dpkg --compare-versions "${target_version}" ge "${installed_version}" && exit 0
+
+# A failed health gate leaves dpkg unconfigured while the packaging transaction
+# already restored this exact release. Reinstalling it only restores dpkg
+# coherence: current and the accepted replay floor already name this release.
+accepted=${state_root}/accepted-manifest
+if [ "$(dpkg-query -W -f='${db:Status-Status}' cdnca-edge-agent 2>/dev/null || true)" != installed ] &&
+  [ "$(readlink /usr/lib/cdnca-edge-agent/current 2>/dev/null || true)" = "versions/${target_release}" ] &&
+  [ -f "${accepted}" ] && [ ! -L "${accepted}" ] &&
+  grep -Fx "version=${target_release}" "${accepted}" >/dev/null &&
+  grep -Fx "release_sequence=${target_sequence}" "${accepted}" >/dev/null; then
+  printf 'reason_code=PKG_RECOVERY_REINSTALL from=%s to=%s sequence=%s\n' \
+    "${installed_version}" "${target_version}" "${target_sequence}"
+  exit 0
+fi
+
+authorization=/etc/cdnca-edge-agent/deb-rollback-authorization
+signature=${authorization}.sig
+trusted_key=/etc/cdnca-edge-agent/rollback-authority-v${rollback_key_version}.pem
+for file in "${authorization}" "${signature}" "${trusted_key}"; do
+  [ -f "${file}" ] && [ ! -L "${file}" ] ||
+    fail_reason PKG_DOWNGRADE_REFUSED "missing signed rollback authorization input"
+  facts=$(stat -c '%u:%g:%a:%h' "${file}" 2>/dev/null || true)
+  case "${facts}" in
+    0:0:400:1|0:0:440:1|0:0:444:1|0:0:600:1|0:0:640:1|0:0:644:1) ;;
+    *) fail_reason PKG_ROLLBACK_AUTH_INVALID "unsafe rollback authorization input" ;;
+  esac
+done
+
+expected=$(printf 'schema=cdnca.edge.deb-rollback/v1\nkey_version=%s\nfrom_version=%s\nto_version=%s\nto_release_sequence=%s' \
+  "${rollback_key_version}" "${installed_version}" "${target_version}" "${target_sequence}")
+prefix=$(sed -n '1,5p' "${authorization}")
+[ "${prefix}" = "${expected}" ] || fail_reason PKG_ROLLBACK_AUTH_INVALID 'rollback authorization binding mismatch'
+[ "$(wc -l <"${authorization}" | awk '{print $1}')" -eq 7 ] ||
+  fail_reason PKG_ROLLBACK_AUTH_INVALID 'rollback authorization must have exactly seven lines'
+expires=$(sed -n '6s/^expires_epoch=//p' "${authorization}")
+nonce=$(sed -n '7s/^nonce=//p' "${authorization}")
+case "${expires}" in ''|*[!0-9]*) fail_reason PKG_ROLLBACK_AUTH_INVALID 'invalid authorization expiry' ;; esac
+case "${nonce}" in
+  ''|*[!A-Za-z0-9._-]*) fail_reason PKG_ROLLBACK_AUTH_INVALID 'invalid authorization nonce' ;;
+  *) [ "${#nonce}" -le 128 ] || fail_reason PKG_ROLLBACK_AUTH_INVALID 'nonce too long' ;;
+esac
+[ "${expires}" -ge "$(date +%s)" ] || fail_reason PKG_ROLLBACK_AUTH_EXPIRED 'rollback authorization expired'
+openssl pkeyutl -verify -pubin -inkey "${trusted_key}" -rawin -in "${authorization}" \
+  -sigfile "${signature}" >/dev/null 2>&1 || fail_reason PKG_ROLLBACK_AUTH_INVALID 'signature verification failed'
+
+authorization_sha=$(sha256sum "${authorization}" | awk '{print $1}')
+used=${state_root}/rollback-authorizations/${authorization_sha}.used
+[ ! -e "${used}" ] && [ ! -L "${used}" ] || fail_reason PKG_ROLLBACK_AUTH_REPLAY 'authorization was already consumed'
+printf '%s\n' "${authorization_sha}" >"${pending}"
+chmod 0600 "${pending}"
+printf 'reason_code=PKG_ROLLBACK_AUTH_ACCEPTED from=%s to=%s sequence=%s\n' \
+  "${installed_version}" "${target_version}" "${target_sequence}"

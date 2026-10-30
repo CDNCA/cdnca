@@ -1,0 +1,821 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Certificate Assets API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant certificate asset upload, inspection, activation, site binding
+    and deletion. This package-owned contract is independently
+    testable and is mounted only when the control-api Config factory is injected.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Certificate assets
+    description: Tenant-targeted certificate and encrypted private-key lifecycle.
+paths:
+  /v1/certificate-assets:
+    get:
+      tags: [Certificate assets]
+      operationId: listCertificateAssets
+      summary: List active certificate assets
+      description: >-
+        Tenant sessions target their own scope. Platform sessions retain their
+        platform actor scope. Only this collection GET may omit target_scope_id
+        to list assets across active tenants, with live certificates.read authorization.
+        An explicit target limits the collection to that tenant. Detail and write
+        operations still require an explicit platform target.
+      x-required-permissions: [certificates.read]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/AssetStatus'
+        - $ref: '#/components/parameters/AssetFilterDomain'
+        - $ref: '#/components/parameters/AssetFilterDomains'
+        - $ref: '#/components/parameters/AssetFilterUser'
+        - $ref: '#/components/parameters/AssetFilterCertificateID'
+        - $ref: '#/components/parameters/AssetFilterName'
+        - $ref: '#/components/parameters/AssetFilterRemark'
+        - $ref: '#/components/parameters/AssetFilterSource'
+        - $ref: '#/components/parameters/AssetFilterDNSProviderID'
+        - $ref: '#/components/parameters/AssetFilterExpiry'
+        - $ref: '#/components/parameters/AssetFilterAutoRenew'
+        - $ref: '#/components/parameters/AssetFilterIssue'
+        - $ref: '#/components/parameters/AssetFilterSync'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/AssetListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      tags: [Certificate assets]
+      operationId: uploadCertificateAsset
+      summary: Upload a certificate and private key
+      description: >-
+        Requires certificates.manage. The private key crosses this request
+        boundary once, is encrypted by the certificate store, and is never
+        returned in a response. Exact replay uses the same request body,
+        X-Request-ID and Idempotency-Key without adding facts.
+        owner_user_id records an active member of the target tenant and is immutable.
+        Tenant uploads default to the actor and cannot assign another user.
+        For compatibility, platform clients may omit owner_user_id; these assets
+        remain legacy_unknown. The admin UI requires explicit ownership. Omitted-owner
+        legacy requests retain their original idempotency digest and receipt ownership.
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        x-maxBodyBytes: 393216
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UploadAssetRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/AssetDetailCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/certificate-assets/{asset_id}:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    get:
+      tags: [Certificate assets]
+      operationId: getCertificateAsset
+      summary: Get a certificate asset and its public versions
+      description: Private-key plaintext, ciphertext and envelope metadata are never returned.
+      x-required-permissions: [certificates.read]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/AssetDetailOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    delete:
+      tags: [Certificate assets]
+      operationId: deleteCertificateAsset
+      summary: Soft-delete an unreferenced certificate asset
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeleteAssetRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/AssetOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/auto-renew:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    patch:
+      tags: [Certificate assets]
+      operationId: setCertificateAssetAutoRenew
+      summary: Turn automatic renewal of an ACME certificate on or off
+      description: >-
+        Renewal intent lives on the certificate asset (migration 540); the issuing order's auto_renew
+        stays an immutable snapshot. Uploaded certificates return 409 certificate_asset_auto_renew_unsupported.
+        Audited as certificate.auto_renew.update.
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SetAutoRenewRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/AssetOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/disabled:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    patch:
+      tags: [Certificate assets]
+      operationId: setCertificateAssetDisabled
+      summary: Disable or re-enable a certificate
+      description: >-
+        A disabled certificate cannot be bound to a site and is not auto-renewed (migration 552).
+        A certificate still bound to a site returns 409 certificate_asset_referenced; binding a disabled one
+        returns 409 certificate_asset_disabled. Audited as certificate.asset.disable / certificate.asset.enable.
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SetDisabledRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/AssetOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/download:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    get:
+      tags: [Certificate assets]
+      operationId: downloadCertificateAsset
+      summary: Download the current certificate version with its private key
+      description: >-
+        下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the
+        latest activated version. Requires certificates.manage; a tenant downloads only its own certificates.
+        Audited as certificate.asset.download in the same transaction before the key is returned.
+        A revoked current version returns 409 certificate_asset_download_unavailable.
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Certificate zip (Content-Disposition attachment, named after the primary domain).
+          content:
+            application/zip:
+              schema: {type: string, format: binary}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          description: Private key envelope unavailable (certificate_asset_envelope_unavailable)
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  /v1/certificate-assets/{asset_id}/versions/{version_id}/activate:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+      - $ref: '#/components/parameters/VersionID'
+    post:
+      tags: [Certificate assets]
+      operationId: activateCertificateAssetVersion
+      summary: Atomically activate one immutable certificate version
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RevisionRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/VersionOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/bindings:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+    get:
+      tags: [Certificate assets]
+      operationId: listCertificateAssetBindings
+      summary: List current site bindings for one certificate asset
+      x-required-permissions: [certificates.read]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/BindingListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+    post:
+      tags: [Certificate assets]
+      operationId: bindCertificateAsset
+      summary: Bind an active version to a tenant site
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BindAssetRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/BindingOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-assets/{asset_id}/bindings/{site_id}:
+    parameters:
+      - $ref: '#/components/parameters/AssetID'
+      - $ref: '#/components/parameters/SiteID'
+    delete:
+      tags: [Certificate assets]
+      operationId: unbindCertificateAsset
+      summary: Append an immutable site unbind fact
+      x-required-permissions: [certificates.manage]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RevisionRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/BindingOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/RequestTooLarge'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/sites/{site_id}/certificate-binding:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+    get:
+      tags: [Certificate assets]
+      operationId: getCertificateSiteBinding
+      summary: Get the active certificate binding for one site
+      description: >-
+        Returns the current bound fact and its active immutable certificate
+        version in one tenant-scoped read. An unbound site returns the stable
+        certificate_site_binding_not_found error code.
+      x-required-permissions: [certificates.read]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/SiteBindingDetailOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    OptionalRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/RequestMetadata'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/RequestMetadata'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Retry an unknown result only with this exact key and unchanged request.
+      schema: {$ref: '#/components/schemas/RequestMetadata'}
+    TargetScopeID:
+      name: target_scope_id
+      in: query
+      required: false
+      description: Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, default: 1}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+    Search:
+      name: search
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+    AssetStatus:
+      name: status
+      in: query
+      required: false
+      description: >-
+        normal/expiring/expired by the latest version (expiring: active or
+        default and expiring within 30 days; expired: not_after passed);
+        auto_renew/manual_renew by whether an auto-renewing order issued the asset.
+      schema: {type: string, enum: [normal, expiring, expired, auto_renew, manual_renew]}
+    AssetFilterDomain:
+      name: domain
+      in: query
+      required: false
+      description: Advanced search (CERT-05); every advanced filter narrows items, total and counts alike. A SAN of any version contains it, case-insensitive.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    AssetFilterDomains:
+      name: domains
+      in: query
+      required: false
+      description: Comma-separated domains; the latest version's SANs contain every one exactly (case-insensitive). At most 100.
+      schema: {type: string, minLength: 1, maxLength: 25600}
+    AssetFilterUser:
+      name: user
+      in: query
+      required: false
+      description: The recorded owner's display ID, username, email or phone contains it.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    AssetFilterCertificateID:
+      name: certificate_id
+      in: query
+      required: false
+      description: The asset display ID contains it.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    AssetFilterName:
+      name: name
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+    AssetFilterRemark:
+      name: remark
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128}
+    AssetFilterSource:
+      name: source
+      in: query
+      required: false
+      schema: {type: string, enum: [uploaded, acme]}
+    AssetFilterDNSProviderID:
+      name: dns_provider_id
+      in: query
+      required: false
+      description: The DNS provider of the order that issued the asset.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    AssetFilterExpiry:
+      name: expiry
+      in: query
+      required: false
+      description: within30/within90 are latest versions in force (active or default, not expired) expiring within 30/90 days; expired is a passed not_after. Expired assets are never within30/within90.
+      schema: {type: string, enum: [within30, within90, expired]}
+    AssetFilterAutoRenew:
+      name: auto_renew
+      in: query
+      required: false
+      description: Whether an auto-renewing order issued the asset.
+      schema: {type: string, enum: ['true', 'false']}
+    AssetFilterIssue:
+      name: issue
+      in: query
+      required: false
+      description: issued is an asset issued by an order; failed is an asset whose issuing order or one of its renewal orders failed.
+      schema: {type: string, enum: [issued, failed]}
+    AssetFilterSync:
+      name: sync
+      in: query
+      required: false
+      description: Publication of the asset's current site bindings; failed when one permanently failed, complete when every one succeeded and its apply rollout has every node deployment healthy, pending otherwise. An unbound asset matches none.
+      schema: {type: string, enum: [complete, pending, failed]}
+    AssetID:
+      name: asset_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    VersionID:
+      name: version_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    RequestMetadata:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    PositiveRevision:
+      type: integer
+      format: int64
+      minimum: 1
+    PositiveDisplayID:
+      type: string
+      pattern: '^[1-9][0-9]{0,18}$'
+    UploadAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [name, certificate_pem, private_key_pem]
+      properties:
+        owner_user_id:
+          $ref: '#/components/schemas/CanonicalUUID'
+          description: Active target-tenant member. Immutable after creation. Tenant actors may only select themselves; omitted platform ownership stays unknown for legacy clients.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          x-maxUtf8Bytes: 128
+        remark:
+          type: string
+          maxLength: 256
+          x-maxUtf8Bytes: 256
+          description: Optional; trimmed, no control characters. Part of the idempotency digest.
+        certificate_pem:
+          type: string
+          minLength: 1
+          maxLength: 262144
+        private_key_pem:
+          type: string
+          minLength: 1
+          maxLength: 65536
+          description: Never returned by this API.
+    SetAutoRenewRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, expected_revision]
+      properties:
+        enabled: {type: boolean}
+        expected_revision: {$ref: '#/components/schemas/PositiveRevision'}
+    SetDisabledRequest:
+      type: object
+      additionalProperties: false
+      required: [disabled, expected_revision]
+      properties:
+        disabled: {type: boolean}
+        expected_revision: {$ref: '#/components/schemas/PositiveRevision'}
+    DeleteAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: {$ref: '#/components/schemas/PositiveRevision'}
+    RevisionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: {$ref: '#/components/schemas/PositiveRevision'}
+    BindAssetRequest:
+      type: object
+      additionalProperties: false
+      required: [site_id, version_id, expected_revision, default]
+      properties:
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        expected_revision: {type: integer, format: int64, minimum: 0}
+        default: {type: boolean}
+    CertificateAsset:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, tenant, owner, owner_status, name, source, auto_renew, disabled, revision, created_by, created_by_display_id, updated_by, updated_by_display_id, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        display_id:
+          $ref: '#/components/schemas/PositiveDisplayID'
+          description: Unique only within tenant_scope_id; use the UUID id for row identity and operations.
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant:
+          $ref: '#/components/schemas/CertificateAssetTenant'
+          description: Actual tenant joined through tenant_scope_id. Older idempotency receipts receive this additive projection from the current tenant fact without changing their recorded ownership.
+        owner:
+          oneOf:
+            - $ref: '#/components/schemas/CertificateAssetOwner'
+            - type: 'null'
+          description: Recorded user identity, not created_by or inferred current tenant membership. Null for legacy assets, including empty or multi-member tenants.
+        owner_status: {type: string, enum: [recorded, legacy_unknown]}
+        name: {type: string, minLength: 1, maxLength: 128, x-maxUtf8Bytes: 128}
+        remark: {type: string, maxLength: 256, x-maxUtf8Bytes: 256, description: Set at upload or from the issuing order; empty when none.}
+        source: {type: string, enum: [uploaded, acme]}
+        auto_renew: {type: boolean, description: Whether this certificate renews automatically; always false for uploaded certificates.}
+        disabled: {type: boolean, description: 'Disabled certificates cannot be bound and are not auto-renewed (migration 552).'}
+        revision: {$ref: '#/components/schemas/PositiveRevision'}
+        created_by: {$ref: '#/components/schemas/CanonicalUUID'}
+        created_by_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        updated_by: {$ref: '#/components/schemas/CanonicalUUID'}
+        updated_by_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        deleted_at: {type: string, format: date-time}
+    CertificateAssetTenant:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, name]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        name: {type: string}
+    CertificateAssetOwner:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, username, display_name]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        username: {type: string}
+        display_name: {type: string}
+    CertificateAssetVersion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - asset_id
+        - tenant_scope_id
+        - version
+        - status
+        - fingerprint_sha256
+        - certificate_pem
+        - sans
+        - subject
+        - serial_number
+        - public_key_algorithm
+        - public_key_bits
+        - signature_algorithm
+        - not_before
+        - not_after
+        - renewal_due
+        - imported_by
+        - imported_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        asset_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        version: {$ref: '#/components/schemas/PositiveRevision'}
+        status: {type: string, enum: [default, pending_activation, active, superseded, revoked, expired]}
+        fingerprint_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        certificate_pem:
+          type: string
+          format: byte
+          description: Public certificate chain only; no private-key material.
+        sans:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: {type: string}
+        subject: {type: string}
+        serial_number: {type: string}
+        public_key_algorithm: {type: string}
+        public_key_bits: {type: integer, minimum: 1}
+        signature_algorithm: {type: string}
+        not_before: {type: string, format: date-time}
+        not_after: {type: string, format: date-time}
+        acme_order_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        renewal_due_at: {type: string, format: date-time}
+        renewal_due: {type: boolean}
+        imported_by: {$ref: '#/components/schemas/CanonicalUUID'}
+        imported_at: {type: string, format: date-time}
+    CertificateAssetList:
+      type: object
+      additionalProperties: false
+      required: [items, total, counts]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/CertificateAsset'}
+        total: {type: integer, format: int64, minimum: 0, description: Assets under search and status.}
+        counts:
+          description: Assets per status under search (not status), over every page.
+          type: object
+          additionalProperties: false
+          required: [all, normal, expiring, expired, auto_renew, manual_renew]
+          properties:
+            all: {type: integer, format: int64, minimum: 0}
+            normal: {type: integer, format: int64, minimum: 0}
+            expiring: {type: integer, format: int64, minimum: 0}
+            expired: {type: integer, format: int64, minimum: 0}
+            auto_renew: {type: integer, format: int64, minimum: 0}
+            manual_renew: {type: integer, format: int64, minimum: 0}
+    CertificateAssetDetail:
+      type: object
+      additionalProperties: false
+      required: [asset, versions]
+      properties:
+        asset: {$ref: '#/components/schemas/CertificateAsset'}
+        versions:
+          type: array
+          items: {$ref: '#/components/schemas/CertificateAssetVersion'}
+    CertificateAssetBinding:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, site_id, asset_id, version_id, revision, default, bound, changed_by, changed_at]
+      properties:
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        asset_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {$ref: '#/components/schemas/PositiveRevision'}
+        default: {type: boolean}
+        bound: {type: boolean}
+        changed_by: {$ref: '#/components/schemas/CanonicalUUID'}
+        changed_at: {type: string, format: date-time}
+    CertificateAssetBindingList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/CertificateAssetBinding'}
+    CertificateSiteBindingDetail:
+      type: object
+      additionalProperties: false
+      required: [binding, version]
+      properties:
+        binding: {$ref: '#/components/schemas/CertificateAssetBinding'}
+        version: {$ref: '#/components/schemas/CertificateAssetVersion'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string, minLength: 1, maxLength: 128}
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {$ref: '#/components/schemas/RequestMetadata'}
+  responses:
+    AssetListOK:
+      description: Certificate assets
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateAssetList'}
+    AssetDetailOK:
+      description: Certificate asset detail
+      headers:
+        ETag: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateAssetDetail'}
+    AssetDetailCreated:
+      description: Certificate asset created or exactly replayed
+      headers:
+        ETag: {schema: {type: string}}
+        Idempotency-Replayed: {schema: {type: string, const: 'true'}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateAssetDetail'}
+    AssetOK:
+      description: Certificate asset
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateAsset'}
+    VersionOK:
+      description: Certificate asset version
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateAssetVersion'}
+    BindingOK:
+      description: Current binding fact
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateAssetBinding'}
+    BindingListOK:
+      description: Current certificate asset bindings
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateAssetBindingList'}
+    SiteBindingDetailOK:
+      description: Active site certificate binding and version
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CertificateSiteBindingDetail'}
+    BadRequest:
+      description: Invalid request, metadata or certificate material
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Unauthorized:
+      description: Bearer session missing or invalid
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Forbidden:
+      description: Tenant scope or live permission denied
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    NotFound:
+      description: Certificate asset or version not found
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    MethodNotAllowed:
+      description: Method not allowed
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Conflict:
+      description: Revision, idempotency, reference or lifecycle conflict
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    RequestTooLarge:
+      description: Request body exceeds 384 KiB
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    UnsupportedMediaType:
+      description: Content-Type is not application/json with optional UTF-8 charset
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    InternalError:
+      description: Sanitized internal failure
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Unavailable:
+      description: Certificate private-key envelope service unavailable
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}

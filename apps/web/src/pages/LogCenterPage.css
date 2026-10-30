@@ -1,0 +1,107 @@
+/* redesign-a: 日志中心审计日志页签（artifacts/redesign-a/DESIGN-log-center.md）。
+   All rules sit under the new root class .log-center-v2 (DefaultLookLock);
+   colors come from the shared --cdnca-* variables only. */
+
+.log-center-v2 .log-center-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px 20px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+
+.log-center-v2 .log-center-table {
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.log-center-v2 .log-center-table .ant-table-tbody > tr {
+  cursor: pointer;
+}
+
+.log-center-v2 .log-center-table .ant-table-tbody > tr > td {
+  vertical-align: top;
+}
+
+.log-center-v2 .log-center-table .ant-table-tbody > tr > td:first-child {
+  border-left: 3px solid transparent;
+}
+
+.log-center-v2 .log-center-table .ant-table-tbody > tr.log-center-row--failure > td:first-child {
+  border-left-color: var(--cdnca-color-error);
+}
+
+.log-center-v2 .log-center-table .ant-table-tbody > tr.log-center-row--denied > td:first-child {
+  border-left-color: var(--cdnca-color-warning);
+}
+
+.log-center-v2 .log-center-cell {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.log-center-v2 .log-center-main {
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.log-center-v2 .log-center-sub {
+  overflow: hidden;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-center-v2 .log-center-sub-label {
+  margin-right: 6px;
+}
+
+.log-center-v2 .log-center-time {
+  color: var(--cdnca-color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.log-center-v2 .log-center-ip {
+  font-variant-numeric: tabular-nums;
+}
+
+.log-center-v2 .log-center-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+/* detail drawer (rendered inside the page root) */
+.log-center-detail-head {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.log-center-detail-head .log-center-detail-summary {
+  margin: 8px 0 0;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.log-center-before {
+  color: var(--cdnca-color-text-secondary);
+}

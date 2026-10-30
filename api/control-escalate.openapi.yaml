@@ -1,0 +1,683 @@
+openapi: 3.1.0
+info:
+  title: cdnca Attack Escalation API
+  version: 1.0.0
+  description: >-
+    攻击自动升级 (module.escalate, official free plugin, migration 460). A site under attack
+    (auto defense reports attack or protect_origin) whose total over all its nodes stays above the
+    next level's QPS or bit-per-second threshold for sustain_seconds moves level by level:
+    A (the package's line group) -> B (a high defense line group) -> C (an unlimited line group, or
+    the site owner's own Cloudflare when bound and synced) -> D (黑洞: DNS to 0.0.0.0 with TTL 60 and the
+    nodes drop the site). It returns level by level once below threshold x recover_permille for
+    sustain_seconds and the level was held for min_dwell_seconds. B/C are published to the new line
+    group's nodes and confirmed before DNS moves. The package owner configures B/C and the threshold
+    ranges; the site owner switches the plugin on or off and picks thresholds inside the ranges; the
+    platform administrator may lock a level or reset to A. Every write needs the lease feature
+    module.escalate (403 escalate_not_entitled otherwise); reads do not.
+paths:
+  /v1/security/escalate/sites/{site_id}:
+    parameters: [{$ref: '#/components/parameters/SiteID'}]
+    get:
+      operationId: getEscalateSite
+      summary: Read a site's attack escalation settings, thresholds in force and state
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      responses:
+        '200': {$ref: '#/components/responses/Site'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putEscalateSite
+      summary: Switch attack escalation on or off for a site and set its thresholds inside the package ranges
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.escalate]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/SiteRequest'}}}
+      responses:
+        '200': {$ref: '#/components/responses/Site'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/security/escalate/sites/{site_id}/events:
+    parameters: [{$ref: '#/components/parameters/SiteID'}]
+    get:
+      operationId: listEscalateSiteEvents
+      summary: List a site's level history, newest first (100 rows)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      responses:
+        '200': {$ref: '#/components/responses/Events'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/security/escalate/sites/{site_id}/cname-changed:
+    parameters: [{$ref: '#/components/parameters/SiteID'}]
+    post:
+      operationId: confirmEscalateCNAMEChange
+      summary: Confirm the site's domain now points at the CNAME split off for escalation
+      description: >-
+        A site on a package-mode (shared) CNAME gets a site-mode CNAME at its first escalation; until the
+        owner points the domain at it the site's state shows pending_reason cname_change_required.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.escalate]
+      responses:
+        '200':
+          description: Whether a confirmation was recorded, and the site.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recorded, site]
+                properties:
+                  recorded: {type: boolean}
+                  site: {$ref: '#/components/schemas/SiteResponse'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/escalate/sites/{site_id}:
+    parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+    get:
+      operationId: getAdminEscalateSite
+      summary: Read a site of any tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      responses:
+        '200': {$ref: '#/components/responses/Site'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/escalate/sites/{site_id}/events:
+    parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+    get:
+      operationId: listAdminEscalateSiteEvents
+      summary: List the level history of a site of any tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      responses:
+        '200': {$ref: '#/components/responses/Events'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/escalate/sites/{site_id}/lock:
+    parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+    post:
+      operationId: lockEscalateSite
+      summary: Hold a site at a level (管理员锁定) until unlocked
+      description: >-
+        422 escalate_level_unavailable when the site's package cannot put the level in force (B/C without a line group,
+        C via Cloudflare not bound and synced, D with the blackhole off, or no policy).
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      x-required-features: [module.escalate]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [level, revision]
+              properties:
+                level: {$ref: '#/components/schemas/Level'}
+                revision: {$ref: '#/components/schemas/StateRevision'}
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/escalate/sites/{site_id}/unlock:
+    parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+    post:
+      operationId: unlockEscalateSite
+      summary: Release a site's lock (automatic levels resume)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      x-required-features: [module.escalate]
+      requestBody: {$ref: '#/components/requestBodies/Revision'}
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/escalate/sites/{site_id}/reset:
+    parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+    post:
+      operationId: resetEscalateSite
+      summary: Send a site back to level A now (一键回切), unlocking it
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      x-required-features: [module.escalate]
+      requestBody: {$ref: '#/components/requestBodies/Revision'}
+      responses:
+        '200': {$ref: '#/components/responses/State'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/packages/{product_id}/escalate-policy:
+    parameters: [{name: product_id, in: path, required: true, schema: {type: string, format: uuid}}]
+    get:
+      operationId: getPackageEscalatePolicy
+      summary: Read a package's attack escalation policy
+      description: >-
+        Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant
+        scope (ADR 0018 RS-04); only the package owner (owner_scope_id) reads it, another owner's package returns
+        403 escalate_permission_denied.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [packages.manage, reseller.packages.manage]
+      responses:
+        '200': {$ref: '#/components/responses/Policy'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putPackageEscalatePolicy
+      summary: Write a package's B/C line groups, Cloudflare and blackhole switches and threshold ranges
+      description: >-
+        Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant
+        scope (ADR 0018 RS-04); only the package owner (owner_scope_id) writes it, another owner's package returns
+        403 escalate_permission_denied. A is the package's main line group. B must be a high defense line group and
+        C an unlimited one the package owner may use (its own or granted to the reseller, 422
+        escalate_line_group_unusable otherwise). revision is the current revision (0 creates).
+      security: [{bearerAuth: []}]
+      x-required-permissions: [packages.manage, reseller.packages.manage]
+      x-required-features: [module.escalate]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/Policy'}}}
+      responses:
+        '200': {$ref: '#/components/responses/Policy'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/escalate/line-groups:
+    get:
+      operationId: listEscalateLineGroups
+      summary: List the line groups the session scope may use for B/C (own and granted) with their tier
+      security: [{bearerAuth: []}]
+      x-required-permissions: [node_scheduling.read]
+      responses:
+        '200':
+          description: Usable line groups.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/UsableLineGroup'}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/escalate/line-groups/{line_group_id}/tier:
+    parameters: [{name: line_group_id, in: path, required: true, schema: {type: string, format: uuid}}]
+    put:
+      operationId: putEscalateLineGroupTier
+      summary: Mark one of the session scope's own line groups 普通 / 高防 / 无限防
+      security: [{bearerAuth: []}]
+      x-required-permissions: [node_scheduling.manage]
+      x-required-features: [module.escalate]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [tier]
+              properties:
+                tier: {$ref: '#/components/schemas/Tier'}
+      responses:
+        '200':
+          description: The tier written.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [line_group_id, tier]
+                properties:
+                  line_group_id: {type: string, format: uuid}
+                  tier: {$ref: '#/components/schemas/Tier'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/escalate/line-groups/grants:
+    get:
+      operationId: listEscalateLineGroupGrants
+      summary: The grants the session scope made, newest first, revoked ones included
+      description: >-
+        NODE-N05. Cursor paged by (created_at, id) descending; next_cursor is empty on the last page. Only the
+        session scope's own grants (grantor_scope_id); a reseller gets none, as 1.0.35 has one level. Revoked grants
+        carry revoked_at so the history stays visible; only live ones can be revoked.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - {name: cursor, in: query, required: false, schema: {type: string, maxLength: 128}}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 50}}
+      responses:
+        '200':
+          description: A page of grants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, next_cursor]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/GrantRecord'}}
+                  next_cursor: {type: string}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    post:
+      operationId: grantEscalateLineGroup
+      summary: Grant a platform line group to an active reseller
+      description: >-
+        ADR 0018 §6. Only the platform grants, only its own line groups, and only to an active reseller
+        (GET /v1/escalate/grantees). 1.0.35 has one reseller level, so may_regrant must be false
+        (422 escalate_regrant_unsupported); a grantee that is not an active reseller is 422 escalate_grantee_not_reseller;
+        a tenant caller or a line group the platform does not own is 403 escalate_grant_denied.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [node_scheduling.manage]
+      x-required-features: [module.escalate]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [owner_scope_id, line_group_id, grantee_scope_id, may_regrant]
+              properties:
+                owner_scope_id: {type: string, format: uuid}
+                line_group_id: {type: string, format: uuid}
+                grantee_scope_id: {type: string, format: uuid}
+                may_regrant: {type: boolean, description: Must be false in 1.0.35.}
+      responses:
+        '201':
+          description: The grant.
+          content: {application/json: {schema: {$ref: '#/components/schemas/Grant'}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/escalate/line-groups/grants/{grant_id}:
+    parameters: [{name: grant_id, in: path, required: true, schema: {type: string, format: uuid}}]
+    delete:
+      operationId: revokeEscalateLineGroupGrant
+      summary: Revoke a grant; the reseller's packages using the line group are withdrawn and their B/C cleared
+      description: >-
+        ADR 0018 §6, user decision 10-24 Q5. In one transaction: the grant (and anything passed on) is revoked,
+        every published package of the reseller that uses the line group is withdrawn, and B/C pointing at it are
+        cleared (audited in the reseller's scope as package.escalate_policy.grant_revoked). Sold subscriptions keep
+        their snapshot until they expire.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [node_scheduling.manage]
+      x-required-features: [module.escalate]
+      responses:
+        '200':
+          description: What the revocation did.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RevokeResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/escalate/grantees:
+    get:
+      operationId: listEscalateGrantees
+      summary: Active resellers the session scope may grant line groups to
+      description: >-
+        ADR 0018 §6. The platform gets the active resellers (an active tenant with an active reseller profile);
+        a tenant (reseller) gets an empty list, as 1.0.35 has one level. Replaces GET /v1/admin/tenant-scopes in the
+        grant dialog.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - {name: search, in: query, required: false, schema: {type: string, maxLength: 128},
+           description: 'Short tenant ID, or a case-insensitive substring of the tenant name or scope UUID.'}
+      responses:
+        '200':
+          description: At most 200 resellers ordered by name.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: {type: array, items: {$ref: '#/components/schemas/Grantee'}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: opaque-session}
+  parameters:
+    SiteID: {name: site_id, in: path, required: true, schema: {type: string, format: uuid}}
+    TenantScopeID: {name: tenant_scope_id, in: query, required: true, schema: {type: string, format: uuid}}
+  requestBodies:
+    Revision:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [revision]
+            properties:
+              revision: {$ref: '#/components/schemas/StateRevision'}
+  schemas:
+    Level: {type: string, enum: [A, B, C, D]}
+    Tier: {type: string, enum: [normal, high_defense, unlimited]}
+    StateRevision:
+      type: integer
+      format: int64
+      minimum: 0
+      description: The state revision read (0 when the site was never stepped).
+    Range:
+      type: object
+      required: [default, min, max]
+      description: 0 means the metric does not trigger; min <= default <= max <= 2^50.
+      properties:
+        default: {type: integer, format: int64, minimum: 0}
+        min: {type: integer, format: int64, minimum: 0}
+        max: {type: integer, format: int64, minimum: 0}
+    LevelRanges:
+      type: object
+      required: [qps, bps]
+      properties:
+        qps: {$ref: '#/components/schemas/Range'}
+        bps: {$ref: '#/components/schemas/Range'}
+    LineGroupRef:
+      type: object
+      required: [owner_scope_id, line_group_id]
+      properties:
+        owner_scope_id: {type: string, format: uuid}
+        line_group_id: {type: string, format: uuid}
+    Policy:
+      type: object
+      required: [b, c, c_cloudflare, blackhole_enabled, thresholds, sustain_seconds, recover_permille, min_dwell_seconds, revision]
+      properties:
+        product_id: {type: string, format: uuid}
+        b: {oneOf: [{$ref: '#/components/schemas/LineGroupRef'}, {type: 'null'}]}
+        c: {oneOf: [{$ref: '#/components/schemas/LineGroupRef'}, {type: 'null'}]}
+        c_cloudflare: {type: boolean, description: C may use the site owner's Cloudflare when bound and synced.}
+        blackhole_enabled: {type: boolean}
+        thresholds:
+          type: object
+          required: [b, c, d]
+          properties:
+            b: {$ref: '#/components/schemas/LevelRanges'}
+            c: {$ref: '#/components/schemas/LevelRanges'}
+            d: {$ref: '#/components/schemas/LevelRanges'}
+        sustain_seconds: {type: integer, minimum: 10, maximum: 3600}
+        recover_permille: {type: integer, minimum: 100, maximum: 900}
+        min_dwell_seconds: {type: integer, minimum: 60, maximum: 86400}
+        revision: {type: integer, format: int64, minimum: 0}
+        b_line_group_name:
+          type: string
+          readOnly: true
+          description: Name of B's line group, filled on every read; absent when B is null. A write ignores it.
+        c_line_group_name:
+          type: string
+          readOnly: true
+          description: Name of C's line group, filled on every read; absent when C is null. A write ignores it.
+    SiteValue:
+      type: object
+      properties:
+        qps: {type: integer, format: int64, minimum: 0}
+        bps: {type: integer, format: int64, minimum: 0}
+    SiteThresholds:
+      type: object
+      properties:
+        b: {$ref: '#/components/schemas/SiteValue'}
+        c: {$ref: '#/components/schemas/SiteValue'}
+        d: {$ref: '#/components/schemas/SiteValue'}
+    SiteRequest:
+      type: object
+      additionalProperties: false
+      required: [enabled, thresholds, revision]
+      properties:
+        enabled: {type: boolean}
+        thresholds: {$ref: '#/components/schemas/SiteThresholds'}
+        revision: {type: integer, format: int64, minimum: 0}
+    Threshold:
+      type: object
+      required: [qps, bps]
+      properties:
+        qps: {type: integer, format: int64, minimum: 0}
+        bps: {type: integer, format: int64, minimum: 0}
+    State:
+      type: object
+      required: [level, applied_level, c_via, pending_reason, last_qps, last_bps, attacked, revision]
+      properties:
+        level: {$ref: '#/components/schemas/Level'}
+        applied_level: {$ref: '#/components/schemas/Level'}
+        c_via:
+          type: string
+          enum: ['', line_group, cloudflare, unlimited]
+          description: unlimited — level D in force on the administrator's unlimited line group (fallback chain last level, not the blackhole).
+        pending_reason:
+          type: string
+          description: >-
+            Why level is not in force yet ('' when it is): publishing, dns_pending, dns_failed, line_group_empty, cname_splitting,
+            cname_change_required, cname_not_settled, cloudflare_unavailable, level_unavailable, observation_missing (no traffic
+            observation for the window: not every node of the site is ingested past it, the level is held), apply_failed.
+        entered_at: {type: string, format: date-time}
+        last_qps: {type: integer, format: int64, minimum: 0}
+        last_bps: {type: integer, format: int64, minimum: 0}
+        attacked: {type: boolean}
+        locked_level: {$ref: '#/components/schemas/Level'}
+        revision: {$ref: '#/components/schemas/StateRevision'}
+        updated_at: {type: string, format: date-time}
+        dns_ttl:
+          type: integer
+          format: int32
+          minimum: 1
+          description: >-
+            TTL the site CNAME's latest retarget carries at the DNS provider; absent when the CNAME was
+            never retargeted.
+        ttl_clamped:
+          type: boolean
+          description: >-
+            The provider's TTL floor raised the requested TTL (name.com writes the level D blackhole's
+            60 seconds as 300).
+        dropped_packets_5m:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >-
+            Packets the nodes dropped for the site (level D, XDP / nftables) in the last 5 minutes of node
+            telemetry; absent below level D.
+        drop_shared:
+          type: boolean
+          description: >-
+            A node's drop counters are not per site: some of dropped_packets_5m were counted for several
+            level D sites of one node together.
+        platform_dns_hosted:
+          type: boolean
+          description: >-
+            Every active domain of the site lies in a zone of a verified DNS provider of the site's tenant.
+            A split site that is hosted (and has no wildcard or zone apex domain) has its domains' default-line
+            records pointed at split_cname by the control plane (cname_auto); otherwise it stays
+            cname_change_required until POST cname-changed.
+        split_cname:
+          type: string
+          description: >-
+            The site's own CNAME hostname once the split for attack escalation (A->B, package mode CNAME)
+            has settled: the target the site's domains must point at. Absent before that.
+        cname_auto:
+          type: object
+          description: >-
+            Latest automatic change of the domains' records after the split; absent before any. changed: every
+            domain points at split_cname (counts as confirmed). failed: code says why (dns_record_conflict,
+            dns_record_unconfirmed, dns_provider_*), retried automatically every 10 minutes, the owner may change
+            the record and POST cname-changed. manual: not changed automatically (wildcard_domain, apex_domain,
+            zone_not_hosted, auto_change_unavailable), the owner is told.
+          required: [status, at]
+          properties:
+            status: {type: string, enum: [changed, failed, manual]}
+            code: {type: string}
+            at: {type: string, format: date-time}
+    SiteResponse:
+      type: object
+      required: [settings, policy, effective, state]
+      properties:
+        settings:
+          type: object
+          required: [site_id, enabled, thresholds, revision]
+          properties:
+            site_id: {type: string, format: uuid}
+            enabled: {type: boolean}
+            thresholds: {$ref: '#/components/schemas/SiteThresholds'}
+            revision: {type: integer, format: int64, minimum: 0}
+        policy: {$ref: '#/components/schemas/Policy'}
+        effective:
+          type: object
+          required: [b, c, d]
+          properties:
+            b: {$ref: '#/components/schemas/Threshold'}
+            c: {$ref: '#/components/schemas/Threshold'}
+            d: {$ref: '#/components/schemas/Threshold'}
+        state: {$ref: '#/components/schemas/State'}
+    Event:
+      type: object
+      required: [id, from_level, to_level, reason, detail, qps, bps, occurred_at]
+      properties:
+        id: {type: string, format: uuid}
+        from_level: {$ref: '#/components/schemas/Level'}
+        to_level: {$ref: '#/components/schemas/Level'}
+        reason: {type: string, enum: [escalate, recover, lock, unlock, reset, applied, skipped, apply_failed, plugin_off]}
+        detail: {type: string}
+        qps: {type: integer, format: int64, minimum: 0}
+        bps: {type: integer, format: int64, minimum: 0}
+        actor_user_id: {type: string, format: uuid}
+        occurred_at: {type: string, format: date-time}
+    UsableLineGroup:
+      type: object
+      required: [owner_scope_id, line_group_id, name, tier, own]
+      properties:
+        owner_scope_id: {type: string, format: uuid}
+        line_group_id: {type: string, format: uuid}
+        name: {type: string}
+        tier: {$ref: '#/components/schemas/Tier'}
+        own: {type: boolean}
+    Grant:
+      type: object
+      required: [id, owner_scope_id, line_group_id, grantor_scope_id, grantee_scope_id, may_regrant, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        owner_scope_id: {type: string, format: uuid}
+        line_group_id: {type: string, format: uuid}
+        grantor_scope_id: {type: string, format: uuid}
+        grantee_scope_id: {type: string, format: uuid}
+        may_regrant: {type: boolean}
+        created_at: {type: string, format: date-time}
+    GrantRecord:
+      type: object
+      required: [id, owner_scope_id, line_group_id, grantor_scope_id, grantee_scope_id, may_regrant, created_at,
+        line_group_name, grantee_tenant_name, grantee_display_id, revoked_at]
+      properties:
+        id: {type: string, format: uuid}
+        owner_scope_id: {type: string, format: uuid}
+        line_group_id: {type: string, format: uuid}
+        grantor_scope_id: {type: string, format: uuid}
+        grantee_scope_id: {type: string, format: uuid}
+        may_regrant: {type: boolean}
+        created_at: {type: string, format: date-time}
+        line_group_name: {type: string, description: Empty when the line group no longer exists.}
+        grantee_tenant_name: {type: string}
+        grantee_display_id: {type: string}
+        revoked_at: {type: [string, 'null'], format: date-time, description: Null while the grant is live.}
+    RevokeResult:
+      type: object
+      required: [revoked, withdrawn_products, cleared_policies]
+      properties:
+        revoked: {type: integer, minimum: 0}
+        withdrawn_products: {type: array, items: {type: string, format: uuid}}
+        cleared_policies: {type: array, items: {type: string, format: uuid}}
+    Grantee:
+      type: object
+      required: [scope_id, tenant_name, display_id]
+      properties:
+        scope_id: {type: string, format: uuid}
+        tenant_name: {type: string}
+        display_id: {type: string}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+  responses:
+    Site:
+      description: The site's settings, its package's ranges, the thresholds in force and its state.
+      content: {application/json: {schema: {$ref: '#/components/schemas/SiteResponse'}}}
+    State:
+      description: The site's state after the write.
+      content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}
+    Events:
+      description: Level history, newest first.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [items]
+            properties:
+              items: {type: array, items: {$ref: '#/components/schemas/Event'}}
+    Policy:
+      description: The package policy.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Policy'}}}
+    Error:
+      description: Error.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

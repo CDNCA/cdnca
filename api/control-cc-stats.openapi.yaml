@@ -1,0 +1,120 @@
+openapi: 3.1.0
+info:
+  title: cdnca CC Rule Statistics API
+  version: 1.0.0
+  description: >-
+    CC rule statistics of one site: what the CC rules matched, triggered, challenged,
+    blocked and let through, per step and per rule, and the triggered top clients and paths. Nodes report
+    them every 10 seconds; the same ClickHouse table feeds automatic defense.
+paths:
+  /v1/security/cc-stats:
+    get:
+      operationId: getSiteCCStats
+      summary: Read the CC rule statistics of a site of the session tenant
+      security: [{bearerSession: []}]
+      x-required-permissions: [security_policies.read]
+      parameters:
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/Range'}
+      responses:
+        '200': {$ref: '#/components/responses/Stats'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/cc-stats:
+    get:
+      operationId: getAdminSiteCCStats
+      summary: Read the CC rule statistics of a site of any tenant scope
+      security: [{bearerSession: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      parameters:
+        - {name: tenant_scope_id, in: query, required: true, schema: {type: string, format: uuid}}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/Range'}
+      responses:
+        '200': {$ref: '#/components/responses/Stats'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerSession: {type: http, scheme: bearer, bearerFormat: opaque-session}
+  parameters:
+    SiteID: {name: site_id, in: query, required: true, schema: {type: string, format: uuid}}
+    Range:
+      name: range
+      in: query
+      required: false
+      description: 1h (1 minute steps, default), 6h (5 minutes) or 24h (15 minutes).
+      schema: {type: string, enum: ['1h', '6h', '24h'], default: '1h'}
+  schemas:
+    Counter: {type: integer, format: int64, minimum: 0}
+    Counts:
+      type: object
+      required: [matched, triggered, challenged, blocked, passed, ja4_unavailable]
+      properties:
+        matched: {$ref: '#/components/schemas/Counter'}
+        triggered: {$ref: '#/components/schemas/Counter'}
+        challenged: {$ref: '#/components/schemas/Counter'}
+        blocked: {$ref: '#/components/schemas/Counter'}
+        passed: {$ref: '#/components/schemas/Counter'}
+        ja4_unavailable: {$ref: '#/components/schemas/Counter'}
+    Top:
+      type: object
+      additionalProperties: false
+      required: [value, count]
+      properties:
+        value: {type: string, maxLength: 256}
+        count: {$ref: '#/components/schemas/Counter'}
+    Stats:
+      type: object
+      required: [tenant_scope_id, range, site_id, from, to, step_seconds, series, rules, top_clients, top_paths]
+      properties:
+        tenant_scope_id: {type: string, format: uuid}
+        range: {type: string, enum: ['1h', '6h', '24h']}
+        site_id: {type: string, format: uuid}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        step_seconds: {type: integer, enum: [60, 300, 900]}
+        series:
+          type: array
+          items:
+            allOf:
+              - {$ref: '#/components/schemas/Counts'}
+              - {type: object, required: [at], properties: {at: {type: string, format: date-time}}}
+        rules:
+          type: array
+          description: Totals per CC rule, most triggered first; rule_id null is the site level count (a challenge ban outside any rule).
+          items:
+            allOf:
+              - {$ref: '#/components/schemas/Counts'}
+              - type: object
+                required: [rule_id, policy_id]
+                properties:
+                  rule_id: {type: [string, 'null'], format: uuid}
+                  policy_id: {type: string}
+        top_clients: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/Top'}}
+        top_paths: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/Top'}}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            request_id: {type: string}
+  responses:
+    Stats:
+      description: The site's CC rule statistics.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Stats'}}}
+    Error:
+      description: Error.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

@@ -1,0 +1,488 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Package Monitor API
+  version: 0.1.0
+  description: >-
+    Read-only views over the durable package-monitor policy heads, alert heads,
+    and immutable transition facts introduced by control migration 078, plus
+    durable alert acknowledgement commands introduced by migration 121.
+    Responses intentionally omit threshold_identity, evidence_digest,
+    source_event_id, notification_event_id, job_id, and request_id.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/package-monitor/enforcement-status:
+    get:
+      operationId: listTenantPackageEnforcementStatus
+      summary: List package cycle enforcement and reset recovery status
+      description: Tenant scope and owner are derived from the current server-side session. Internal job, request, claim, and digest facts are never returned.
+      responses: {$ref: '#/components/x-responses/EnforcementStatusResponses'}
+  /v1/package-monitor/policies:
+    get:
+      operationId: listTenantPackageMonitorPolicies
+      summary: List the current package-monitor policies owned by the tenant user
+      description: Tenant scope and owner are derived from the current server-side session. Requires package_subscriptions.read.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses: {$ref: '#/components/x-responses/PolicyPageResponses'}
+  /v1/package-monitor/alerts:
+    get:
+      operationId: listTenantPackageMonitorAlerts
+      summary: List the current package-monitor alert heads owned by the tenant user
+      description: Tenant scope and owner are derived from the current server-side session. Requires package_subscriptions.read.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/CurrentPhaseFilter'
+        - $ref: '#/components/parameters/ThresholdIDFilter'
+      responses: {$ref: '#/components/x-responses/AlertPageResponses'}
+  /v1/package-monitor/alerts/{alert_id}:
+    get:
+      operationId: getTenantPackageMonitorAlert
+      summary: Get one current package-monitor alert owned by the tenant user
+      description: >-
+        Tenant scope and owner are derived from the current server-side session.
+        Cross-scope and foreign-owner identifiers return not_found.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+      responses: {$ref: '#/components/x-responses/AlertResponses'}
+  /v1/package-monitor/alerts/{alert_id}/acknowledgements:
+    post:
+      operationId: acknowledgeTenantPackageMonitorAlert
+      summary: Acknowledge the current triggered alert revision
+      description: >-
+        The tenant and owner are derived from the current server-side session.
+        The alert must still be triggered at expected_revision. The command is
+        durable, append-only fact, idempotent, and audited; recovered and suppressed alerts cannot
+        be acknowledged.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/AcknowledgeAlertRequest'}
+      responses: {$ref: '#/components/x-responses/AcknowledgementResponses'}
+  /v1/package-monitor/alerts/{alert_id}/transitions:
+    get:
+      operationId: listTenantPackageMonitorTransitions
+      summary: List immutable transition facts for a tenant-owned alert
+      description: >-
+        Tenant scope and owner are derived from the current server-side session.
+        The first page freezes the alert head revision. The signed cursor is
+        bound to the exact phase filter, including an explicit empty filter.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PhaseFilter'
+      responses: {$ref: '#/components/x-responses/TransitionPageResponses'}
+  /v1/package-monitor/alerts/{alert_id}/transitions/{revision}:
+    get:
+      operationId: getTenantPackageMonitorTransition
+      summary: Get one immutable transition fact for a tenant-owned alert
+      description: Tenant scope and owner are derived from the current server-side session.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+        - $ref: '#/components/parameters/Revision'
+      responses: {$ref: '#/components/x-responses/TransitionResponses'}
+  /v1/admin/package-monitor/policies:
+    get:
+      operationId: listAdminPackageMonitorPolicies
+      summary: List current package-monitor policies in an explicit tenant scope
+      description: Platform callers must provide scope_id explicitly and require billing.adjustments.manage or platform.admin.
+      parameters:
+        - $ref: '#/components/parameters/ScopeID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses: {$ref: '#/components/x-responses/PolicyPageResponses'}
+  /v1/admin/package-monitor/enforcement-status:
+    get:
+      operationId: listAdminPackageEnforcementStatus
+      summary: List package cycle enforcement and reset recovery status in a tenant scope
+      description: Platform callers must provide scope_id explicitly and require billing.adjustments.manage or platform.admin. Inconsistent durable facts fail closed.
+      parameters:
+        - $ref: '#/components/parameters/ScopeID'
+      responses: {$ref: '#/components/x-responses/EnforcementStatusResponses'}
+  /v1/admin/package-monitor/alerts:
+    get:
+      operationId: listAdminPackageMonitorAlerts
+      summary: List current package-monitor alert heads in an explicit tenant scope
+      description: Platform callers must provide scope_id explicitly and require billing.adjustments.manage or platform.admin.
+      parameters:
+        - $ref: '#/components/parameters/ScopeID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/CurrentPhaseFilter'
+        - $ref: '#/components/parameters/ThresholdIDFilter'
+      responses: {$ref: '#/components/x-responses/AlertPageResponses'}
+  /v1/admin/package-monitor/alerts/{alert_id}:
+    get:
+      operationId: getAdminPackageMonitorAlert
+      summary: Get one current package-monitor alert in an explicit tenant scope
+      description: >-
+        Platform callers must provide scope_id explicitly and require
+        billing.adjustments.manage or platform.admin.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+        - $ref: '#/components/parameters/ScopeID'
+      responses: {$ref: '#/components/x-responses/AlertResponses'}
+  /v1/admin/package-monitor/alerts/{alert_id}/acknowledgements:
+    post:
+      operationId: acknowledgeAdminPackageMonitorAlert
+      summary: Acknowledge a current triggered alert revision in a tenant scope
+      description: >-
+        Platform callers must provide scope_id explicitly and use a current
+        server-side session with billing.adjustments.manage or platform.admin.
+        The command is durable, idempotent, and audited.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+        - $ref: '#/components/parameters/ScopeID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/AcknowledgeAlertRequest'}
+      responses: {$ref: '#/components/x-responses/AcknowledgementResponses'}
+  /v1/admin/package-monitor/alerts/{alert_id}/transitions:
+    get:
+      operationId: listAdminPackageMonitorTransitions
+      summary: List immutable transition facts in an explicit tenant scope
+      description: >-
+        Platform callers must provide scope_id explicitly. The first page
+        freezes the alert head revision. The signed cursor is bound to the
+        exact phase filter, including an explicit empty filter.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+        - $ref: '#/components/parameters/ScopeID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PhaseFilter'
+      responses: {$ref: '#/components/x-responses/TransitionPageResponses'}
+  /v1/admin/package-monitor/alerts/{alert_id}/transitions/{revision}:
+    get:
+      operationId: getAdminPackageMonitorTransition
+      summary: Get one immutable transition fact in an explicit tenant scope
+      description: Platform callers must provide scope_id explicitly.
+      parameters:
+        - $ref: '#/components/parameters/AlertID'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/ScopeID'
+      responses: {$ref: '#/components/x-responses/TransitionResponses'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ScopeID:
+      name: scope_id
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    AlertID:
+      name: alert_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Revision:
+      name: revision
+      in: path
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    PhaseFilter:
+      name: phase
+      in: query
+      description: Exact immutable threshold transition phase.
+      schema: {$ref: '#/components/schemas/Phase'}
+    CurrentPhaseFilter:
+      name: current_phase
+      in: query
+      description: Exact alert phase projected from the latest immutable receipt in the frozen snapshot.
+      schema: {$ref: '#/components/schemas/Phase'}
+    ThresholdIDFilter:
+      name: threshold_id
+      in: query
+      description: Exact lowercase SHA-256 threshold identity. Input-only and never returned.
+      schema: {$ref: '#/components/schemas/LowerSHA256'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+  x-responses:
+    EnforcementStatusResponses:
+      '200':
+        description: Current cycle enforcement heads with the latest immutable reset and recovery aggregate.
+        content: {application/json: {schema: {$ref: '#/components/schemas/PackageEnforcementStatusPage'}}}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '405': {$ref: '#/components/responses/MethodNotAllowed'}
+      '408': {$ref: '#/components/responses/RequestTimeout'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    PolicyPageResponses:
+      '200':
+        description: Stable keyset page of current policy heads.
+        content: {application/json: {schema: {$ref: '#/components/schemas/PackageMonitorPolicyPage'}}}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '405': {$ref: '#/components/responses/MethodNotAllowed'}
+      '408': {$ref: '#/components/responses/RequestTimeout'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    AlertPageResponses:
+      '200':
+        description: Stable keyset page of current alert heads.
+        content: {application/json: {schema: {$ref: '#/components/schemas/PackageMonitorAlertPage'}}}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '405': {$ref: '#/components/responses/MethodNotAllowed'}
+      '408': {$ref: '#/components/responses/RequestTimeout'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    AlertResponses:
+      '200':
+        description: Current alert head joined to its immutable policy thresholds and creation fact.
+        content: {application/json: {schema: {$ref: '#/components/schemas/PackageMonitorAlertDetail'}}}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '404': {$ref: '#/components/responses/NotFound'}
+      '405': {$ref: '#/components/responses/MethodNotAllowed'}
+      '408': {$ref: '#/components/responses/RequestTimeout'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    TransitionPageResponses:
+      '200':
+        description: Frozen-revision keyset page of immutable transition facts.
+        content: {application/json: {schema: {$ref: '#/components/schemas/PackageMonitorTransitionPage'}}}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '404': {$ref: '#/components/responses/NotFound'}
+      '405': {$ref: '#/components/responses/MethodNotAllowed'}
+      '408': {$ref: '#/components/responses/RequestTimeout'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    TransitionResponses:
+      '200':
+        description: One immutable transition fact.
+        content: {application/json: {schema: {$ref: '#/components/schemas/PackageMonitorTransition'}}}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '404': {$ref: '#/components/responses/NotFound'}
+      '405': {$ref: '#/components/responses/MethodNotAllowed'}
+      '408': {$ref: '#/components/responses/RequestTimeout'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    AcknowledgementResponses:
+      '200':
+        description: Durable alert acknowledgement, including an exact idempotent replay.
+        content: {application/json: {schema: {$ref: '#/components/schemas/PackageMonitorAlertAcknowledgement'}}}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '404': {$ref: '#/components/responses/NotFound'}
+      '405': {$ref: '#/components/responses/MethodNotAllowed'}
+      '408': {$ref: '#/components/responses/RequestTimeout'}
+      '409': {$ref: '#/components/responses/Conflict'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  requestBodies:
+    AcknowledgeAlertRequest:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PackageMonitorAlertAcknowledgementRequest'}
+  responses:
+    BadRequest: {description: Invalid request, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Unauthorized: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Forbidden: {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    NotFound: {description: Resource not found, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    MethodNotAllowed: {description: Method not allowed, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    RequestTimeout: {description: Request cancelled, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    ServiceUnavailable: {description: Dependency unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Conflict: {description: Current alert revision or idempotency body conflicts, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  schemas:
+    CanonicalUUID: {type: string, format: uuid, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+    LowerSHA256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    Revision: {type: integer, format: int64, minimum: 1}
+    UnsignedDecimal: {type: string, pattern: '^(0|[1-9][0-9]{0,19})$'}
+    SignedDecimal: {type: string, pattern: '^-?(0|[1-9][0-9]{0,19})$'}
+    Timestamp: {type: string, format: date-time}
+    Metric: {type: string, enum: [traffic_bytes, bandwidth_bps, connections, expiration]}
+    Phase: {type: string, enum: [before, triggered, recovered, suppressed_stale]}
+    PackageMonitorPolicy:
+      type: object
+      additionalProperties: false
+      required: [policy_id, revision, subscription_id, metric, trigger_value, recovery_value, enabled, head_revision, policy_created_at, head_updated_at]
+      properties:
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {$ref: '#/components/schemas/Revision'}
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        metric: {$ref: '#/components/schemas/Metric'}
+        trigger_value: {$ref: '#/components/schemas/UnsignedDecimal'}
+        recovery_value: {$ref: '#/components/schemas/UnsignedDecimal'}
+        stale_after_seconds: {type: integer, format: int64, minimum: 1}
+        enabled: {type: boolean}
+        next_evaluation_at: {$ref: '#/components/schemas/Timestamp'}
+        head_revision: {$ref: '#/components/schemas/Revision'}
+        policy_created_at: {$ref: '#/components/schemas/Timestamp'}
+        head_updated_at: {$ref: '#/components/schemas/Timestamp'}
+    PackageMonitorAlertHead:
+      type: object
+      additionalProperties: false
+      required: [alert_id, subscription_id, policy_id, policy_revision, metric, period_key, state, revision, last_source_watermark, last_finalized_through, last_evaluated_at, updated_at]
+      properties:
+        alert_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_revision: {$ref: '#/components/schemas/Revision'}
+        metric: {$ref: '#/components/schemas/Metric'}
+        period_key: {type: string, minLength: 1, maxLength: 256}
+        state: {$ref: '#/components/schemas/Phase'}
+        revision: {$ref: '#/components/schemas/Revision'}
+        last_source_watermark: {$ref: '#/components/schemas/UnsignedDecimal'}
+        last_finalized_through: {$ref: '#/components/schemas/Timestamp'}
+        last_evaluated_at: {$ref: '#/components/schemas/Timestamp'}
+        updated_at: {$ref: '#/components/schemas/Timestamp'}
+    PackageMonitorAlertDetail:
+      type: object
+      additionalProperties: false
+      required: [alert_id, subscription_id, policy_id, policy_revision, metric, period_key, state, revision, last_source_watermark, last_finalized_through, last_evaluated_at, updated_at, trigger_value, recovery_value, created_at]
+      properties:
+        alert_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_revision: {$ref: '#/components/schemas/Revision'}
+        metric: {$ref: '#/components/schemas/Metric'}
+        period_key: {type: string, minLength: 1, maxLength: 256}
+        state: {$ref: '#/components/schemas/Phase'}
+        revision: {$ref: '#/components/schemas/Revision'}
+        last_source_watermark: {$ref: '#/components/schemas/UnsignedDecimal'}
+        last_finalized_through: {$ref: '#/components/schemas/Timestamp'}
+        last_evaluated_at: {$ref: '#/components/schemas/Timestamp'}
+        updated_at: {$ref: '#/components/schemas/Timestamp'}
+        trigger_value: {$ref: '#/components/schemas/UnsignedDecimal'}
+        recovery_value: {$ref: '#/components/schemas/UnsignedDecimal'}
+        stale_after_seconds: {type: integer, format: int64, minimum: 1}
+        created_at: {$ref: '#/components/schemas/Timestamp'}
+    PackageMonitorTransition:
+      type: object
+      additionalProperties: false
+      required: [alert_id, revision, subscription_id, policy_id, policy_revision, metric, period_key, phase, observed_value, metric_schema_version, source_watermark, observed_at, finalized_through, evaluated_at, reason_code]
+      properties:
+        alert_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {$ref: '#/components/schemas/Revision'}
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_revision: {$ref: '#/components/schemas/Revision'}
+        metric: {$ref: '#/components/schemas/Metric'}
+        period_key: {type: string, minLength: 1, maxLength: 256}
+        phase: {$ref: '#/components/schemas/Phase'}
+        observed_value: {$ref: '#/components/schemas/SignedDecimal'}
+        metric_schema_version: {type: string, enum: [package-monitor-metric/v1, deadline/v1]}
+        source_watermark: {$ref: '#/components/schemas/UnsignedDecimal'}
+        observed_at: {$ref: '#/components/schemas/Timestamp'}
+        finalized_through: {$ref: '#/components/schemas/Timestamp'}
+        evaluated_at: {$ref: '#/components/schemas/Timestamp'}
+        reason_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+    PackageMonitorPolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PackageMonitorPolicy'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    PackageMonitorAlertPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PackageMonitorAlertHead'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    PackageMonitorTransitionPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/PackageMonitorTransition'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    PackagePeriodReset:
+      type: object
+      additionalProperties: false
+      required: [reset_id, prior_period_key, new_period_key, completed_at, recovery_authorized, recovery_job_count, recovery_pending_count, recovery_succeeded_count, recovery_failed_count, recovery_state]
+      properties:
+        reset_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        prior_period_key: {type: string, minLength: 1, maxLength: 256}
+        new_period_key: {type: string, minLength: 1, maxLength: 256}
+        completed_at: {$ref: '#/components/schemas/Timestamp'}
+        recovery_authorized: {type: boolean}
+        recovery_job_count: {type: integer, minimum: 0, maximum: 1000000}
+        recovery_pending_count: {type: integer, minimum: 0, maximum: 1000000}
+        recovery_succeeded_count: {type: integer, minimum: 0, maximum: 1000000}
+        recovery_failed_count: {type: integer, minimum: 0, maximum: 1000000}
+        recovery_state: {type: string, enum: [not_required, pending, healthy, failed]}
+    PackageEnforcementStatus:
+      type: object
+      additionalProperties: false
+      required: [subscription_id, period_key, cycle_starts_at, cycle_ends_at, timezone, status, blocked_operations, revision, lkg_status, updated_at]
+      properties:
+        subscription_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        period_key: {type: string, minLength: 1, maxLength: 256}
+        cycle_starts_at: {$ref: '#/components/schemas/Timestamp'}
+        cycle_ends_at: {$ref: '#/components/schemas/Timestamp'}
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        status: {type: string, enum: [active, suspended, unknown]}
+        reason_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        blocked_operations: {type: array, maxItems: 2, items: {type: string, enum: [create, expand]}}
+        revision: {$ref: '#/components/schemas/Revision'}
+        lkg_status: {type: string, enum: [active, suspended]}
+        lkg_reason_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        updated_at: {$ref: '#/components/schemas/Timestamp'}
+        latest_reset: {$ref: '#/components/schemas/PackagePeriodReset'}
+    PackageEnforcementStatusPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/PackageEnforcementStatus'}}
+    PackageMonitorAlertAcknowledgementRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: {$ref: '#/components/schemas/Revision'}
+        note: {type: string, minLength: 1, maxLength: 500}
+    PackageMonitorAlertAcknowledgement:
+      type: object
+      additionalProperties: false
+      required: [acknowledgement_id, alert_id, alert_revision, state, acknowledged_at]
+      properties:
+        acknowledgement_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        alert_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        alert_revision: {$ref: '#/components/schemas/Revision'}
+        state: {type: string, enum: [triggered]}
+        acknowledged_at: {$ref: '#/components/schemas/Timestamp'}
+        note: {type: string, minLength: 1, maxLength: 500}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}

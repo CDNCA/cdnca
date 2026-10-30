@@ -1,0 +1,1822 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Site Publication API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable HTTP contract for immutable Site/L4 configuration
+    publication and rollout observation. Platform routes require customer
+    control-plane platform identities. Tenant routes always bind writes and
+    reads to the authenticated tenant scope. This fragment is
+    mounted by control-api main.
+servers:
+  - url: /
+paths:
+  /v1/admin/site-publications:
+    get:
+      operationId: listAdminSitePublications
+      summary: List publications for one tenant scope
+      description: >-
+        Requires a platform-scoped principal with edge_publications.read. The
+        opaque keyset cursor is bound to the tenant scope and stable ordering.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.read]
+      parameters:
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AdminPublicationPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: publishSiteConfiguration
+      summary: Publish the current Site/L4 revision to an immutable target snapshot
+      description: >-
+        Requires a platform-scoped principal with edge_publications.manage.
+        Exactly one nodes or line_group_snapshot target is accepted. The domain
+        service performs source revision CAS, target eligibility checks, local
+        non-grace entitlement verification, canonical compilation, signing,
+        config/rollout/deployment/outbox persistence, idempotency, and success
+        audit in one transaction. An unknown write result may be retried only
+        with the same Idempotency-Key and original business payload.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublishRequest'}
+      responses:
+        '201':
+          description: Created publication, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdminPublication'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-publications/{publication_id}:
+    get:
+      operationId: getAdminSitePublication
+      summary: Get one publication in an explicit tenant scope
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.read]
+      parameters:
+        - $ref: '#/components/parameters/PublicationID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+      responses:
+        '200': {$ref: '#/components/responses/AdminPublicationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-publications/{publication_id}/rollback:
+    post:
+      operationId: rollbackSitePublication
+      summary: Roll selected nodes back to their direct previous published configuration
+      description: >-
+        Creates a rollback rollout for the immutable configuration referenced by
+        the selected publication. Every selected node must currently name that
+        configuration as its direct previous version. No new configuration or
+        artifact bytes are created, and rollback remains available when an
+        entitlement no longer permits expansion.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/PublicationID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RollbackRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/RollbackCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts:
+    get:
+      operationId: listAdminSiteRollouts
+      summary: List rollouts for one tenant scope
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.read]
+      parameters:
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AdminRolloutPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/{rollout_id}:
+    get:
+      operationId: getAdminSiteRollout
+      summary: Get deterministic rollout progress for one tenant scope
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.read]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+      responses:
+        '200': {$ref: '#/components/responses/AdminRolloutOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/{rollout_id}/deployments:
+    get:
+      operationId: listAdminSiteRolloutDeployments
+      summary: List latest per-node deployment attempts
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.read]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AdminDeploymentPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/{rollout_id}/start:
+    post:
+      operationId: startSiteRollout
+      summary: Start a held progressive rollout
+      description: >-
+        Releases only frozen cohort zero. Target membership and cohort assignment
+        were fixed at publication time by ascending UUID bytes; later inventory
+        changes cannot alter the rollout. Uses rollout revision CAS and domain
+        idempotency.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RolloutCommandRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RolloutCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/{rollout_id}/pause:
+    post:
+      operationId: pauseSiteRollout
+      summary: Pause a running progressive rollout
+      description: >-
+        Re-holds commands in the released cohort that have not been claimed.
+        Status reports already in flight remain durable facts but cannot release
+        another cohort while the rollout is paused.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RolloutCommandRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RolloutCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/{rollout_id}/resume:
+    post:
+      operationId: resumeSiteRollout
+      summary: Resume a paused progressive rollout
+      description: >-
+        Recomputes the current cohort under the rollout lock. If it is terminal,
+        the next cohort alone is released or the rollout becomes terminal;
+        otherwise remaining held commands in the current cohort are released.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RolloutCommandRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RolloutCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/{rollout_id}/cancel:
+    post:
+      operationId: cancelSiteRollout
+      summary: Cancel queued work in a rollout
+      description: >-
+        Progressive cancellation marks held or unclaimed commands and their
+        queued deployment facts cancelled; already claimed or in-flight work
+        may still report durable terminal facts. Legacy rollouts retain their
+        all-pending precondition. Uses rollout revision CAS and idempotency.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RolloutCommandRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RolloutCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/{rollout_id}/retry-failed:
+    post:
+      operationId: retryFailedSiteRolloutDeployments
+      summary: Append attempts for retryable failed deployments
+      description: >-
+        Only failed or rollback_failed latest attempts below max_attempts are
+        retried. Existing attempts and artifact bindings remain immutable. The
+        original rollout deadline remains authoritative; at or after that
+        deadline can_retry is false and retry returns 409.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RolloutCommandRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RolloutCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/site-rollouts/reconciliations:
+    post:
+      operationId: reconcileAdminNodeConfiguration
+      summary: Record the configuration proven to be active after an uncertain deployment result
+      description: >-
+        Clears the rollback_failed reconciliation gate only when the named node,
+        tenant scope, source deployment attempt, and observed immutable config
+        all match persisted facts. It also permits operator-confirmed recovery of
+        a legacy failed apply only when the deployment artifact, previous identity,
+        fresh mTLS heartbeat pointer chain, missing current/loaded identity, stopped
+        conservative OpenResty projection, and absence of active deployments all
+        agree. That recovery moves only the version pointers; the next healthy
+        publication establishes the current immutable identity. The append-only
+        reconciliation record, live IAM authorization, node-state update, and audit
+        event commit atomically. Retrying with the same Idempotency-Key returns the
+        same fact; changing the payload with that key returns 409.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [edge_publications.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/NodeConfigReconciliationRequest'}
+      responses:
+        '201':
+          description: Created reconciliation fact, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NodeConfigReconciliation'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-publications:
+    get:
+      operationId: listTenantSitePublications
+      summary: List publications in the authenticated tenant scope
+      description: >-
+        Requires a tenant-scoped principal with sites.read. scope_id is not
+        accepted. Signatures, hashes, target snapshot metadata, and platform
+        scope identifiers are omitted from tenant responses.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/TenantPublicationPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: publishTenantSiteConfiguration
+      summary: Publish the authenticated tenant scope
+      description: >-
+        Requires a tenant session with sites.manage. configuration_scope_id
+        must exactly equal the authenticated scope; authorization and scope
+        binding complete before any publication mutation.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublishRequest'}
+      responses:
+        '201':
+          description: Created tenant publication, or the stored result of an identical retry.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TenantPublication'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-publications/{publication_id}:
+    get:
+      operationId: getTenantSitePublication
+      summary: Get one publication in the authenticated tenant scope
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/PublicationID'
+      responses:
+        '200': {$ref: '#/components/responses/TenantPublicationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-publications/security-activations:
+    get:
+      operationId: getSecurityPolicyActivationStatus
+      summary: Get the authoritative security binding and latest activation candidate
+      description: >-
+        Requires security_policies.read in the authenticated tenant scope, or a
+        platform session holding security_policies.read or platform.admin, which
+        reads the site's own tenant scope (the site edit page of the platform
+        console). When no binding exists, binding, latest_candidate, and
+        operation are null;
+        clients use binding and active-policy CAS values 0/0 for first publish.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [security_policies.read]
+      parameters:
+        - $ref: '#/components/parameters/SecurityActivationSiteID'
+        - $ref: '#/components/parameters/SecurityActivationPolicyKind'
+      responses:
+        '200':
+          description: Authoritative binding and latest candidate from one permission-checked transaction.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityActivationStatusResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: createSecurityPolicyActivation
+      summary: Stage a security policy candidate and start its canary rollout
+      description: >-
+        Requires security_policies.manage in the authenticated tenant scope. A
+        platform session holding security_policies.manage or platform.admin
+        starts it in the site's tenant scope without switching identity; the
+        candidate and the audit event record the platform actor, the audit
+        event's scope is the site's tenant scope. The candidate pins one source revision, config version, signed artifact
+        digest, and target snapshot. The active policy and source revision do
+        not advance until every pinned target reports healthy.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityActivationCreateRequest'}
+      responses:
+        '201':
+          description: Candidate claimed and immutable canary rollout created.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityActivationStartResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-publications/security-activations/rebind-status:
+    get:
+      operationId: getSecurityPolicyRebindStatus
+      summary: Count bound sites still behind their WAF/CC library and those the package does not entitle
+      description: >-
+        Requires security_policies.read in the authenticated tenant scope; a
+        platform session is refused (403), it has no tenant scope to count. A
+        library saved without a site context is republished automatically to
+        every bound site whose binding is behind it (the site's package
+        primary/backup line-group nodes, canary first). pending_sites counts
+        the scope's sites still behind for policy_kind; package_denied_sites
+        counts those whose package does not include the feature (they are
+        retried and publish once it is enabled).
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [security_policies.read]
+      parameters:
+        - name: policy_kind
+          in: query
+          required: true
+          schema: {type: string, enum: [waf, cc]}
+      responses:
+        '200':
+          description: Counts of the authenticated scope only.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityPolicyRebindStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-publications/security-activations/{candidate_id}:
+    get:
+      operationId: getSecurityPolicyActivation
+      summary: Get a security policy activation candidate
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [security_policies.read]
+      parameters:
+        - $ref: '#/components/parameters/SecurityActivationCandidateID'
+      responses:
+        '200':
+          description: Current persisted candidate identity and status.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityActivationCandidate'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-publications/security-activations/{candidate_id}/reconcile:
+    post:
+      operationId: reconcileSecurityPolicyActivation
+      summary: Reconcile canary, expansion, recovery, and promotion
+      description: >-
+        Reuses the candidate config and artifact digest for every phase.
+        Promotion uses the complete expected active, binding, publication,
+        config, artifact, source revision, and target snapshot CAS identity.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/SecurityActivationCandidateID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [promotion_cas]
+              properties:
+                promotion_cas: {$ref: '#/components/schemas/SecurityActivationPromotionCAS'}
+      responses:
+        '200':
+          description: Reconciled candidate state or identical stored replay.
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityActivationReconcileResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-publications/security-activations/{candidate_id}/rollback:
+    post:
+      operationId: rollbackSecurityPolicyActivation
+      summary: Clone an old policy into a new monotonic version and stage it
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/SecurityActivationCandidateID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/CorrelationID'
+        - $ref: '#/components/parameters/TaskID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SecurityActivationRollbackRequest'}
+      responses:
+        '201':
+          description: New monotonic rollback candidate claimed.
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SecurityActivationStartResult'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-rollouts:
+    get:
+      operationId: listTenantSiteRollouts
+      summary: List rollouts in the authenticated tenant scope
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/TenantRolloutPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-rollouts/{rollout_id}:
+    get:
+      operationId: getTenantSiteRollout
+      summary: Get rollout progress in the authenticated tenant scope
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+      responses:
+        '200': {$ref: '#/components/responses/TenantRolloutOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/site-rollouts/{rollout_id}/deployments:
+    get:
+      operationId: listTenantSiteRolloutDeployments
+      summary: List deployment progress without node target metadata
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RolloutID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/TenantDeploymentPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Send `CdncaKey <key_id>.<secret>`.
+  parameters:
+    RequiredScopeID:
+      name: scope_id
+      in: query
+      required: true
+      description: Platform route target tenant access-scope UUID.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    PublicationID:
+      name: publication_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    RolloutID:
+      name: rollout_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    SecurityActivationCandidateID:
+      name: candidate_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    SecurityActivationSiteID:
+      name: site_id
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    SecurityActivationPolicyKind:
+      name: policy_kind
+      in: query
+      required: true
+      schema:
+        type: string
+        enum: [cc, acl, waf]
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        Versioned base64url HMAC-SHA256 envelope returned by the immediately
+        preceding page. It is bound to audience, resolved tenant scope,
+        resource kind, and the rollout ID for deployment pages. It cannot be
+        reused across those boundaries or modified.
+      schema: {$ref: '#/components/schemas/SignedCursor'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Stable for the frozen business payload. Request, correlation, trace,
+        and task identifiers may change on an identical retry.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    WriteRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Traceparent:
+      name: Traceparent
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^00-(?!0{32}-)[0-9a-f]{32}-(?!0{16}-)[0-9a-f]{16}-[0-9a-f]{2}$'
+    CorrelationID:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Defaults to X-Request-ID when omitted.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    TaskID:
+      name: X-Task-ID
+      in: header
+      required: false
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+  headers:
+    RequestID:
+      description: Request correlation UUID. Invalid incoming IDs are replaced on read/error responses.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    IdempotencyReplayed:
+      description: Present and true only when returning a stored idempotent result.
+      schema: {type: string, const: 'true'}
+    RolloutETag:
+      description: Quoted decimal rollout revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  schemas:
+    SecurityActivationBinding:
+      type: object
+      additionalProperties: false
+      required: [id, policy_id, binding_revision, active_policy_version, last_claimed_policy_version]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        binding_revision: {type: integer, format: int64, minimum: 0}
+        active_policy_version: {type: integer, format: int64, minimum: 0}
+        last_claimed_policy_version: {type: integer, format: int64, minimum: 0}
+    SecurityPolicyRebindStatus:
+      type: object
+      additionalProperties: false
+      required: [pending_sites, package_denied_sites]
+      properties:
+        pending_sites: {type: integer, minimum: 0}
+        package_denied_sites: {type: integer, minimum: 0}
+    SecurityActivationStatusResult:
+      type: object
+      additionalProperties: false
+      required: [binding, latest_candidate, operation]
+      properties:
+        binding:
+          oneOf:
+            - $ref: '#/components/schemas/SecurityActivationBinding'
+            - type: 'null'
+        latest_candidate:
+          oneOf:
+            - $ref: '#/components/schemas/SecurityActivationCandidate'
+            - type: 'null'
+        operation:
+          type: [string, 'null']
+          enum: [activation, rollback, null]
+        failure_reasons:
+          description: When latest_candidate failed, each failed node's own failure text (at most 10; message at most 512 bytes).
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            additionalProperties: false
+            required: [node_id, node_name, node_ip, phase, message]
+            properties:
+              node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+              node_name: {type: string, description: The node's name ("" when the node is gone).}
+              node_ip: {type: string, description: The node's IPv4, else IPv6, else "".}
+              phase: {type: string}
+              code: {type: string}
+              reason:
+                type: string
+                enum: [waf_engine_unavailable]
+                description: A stable cause the page explains (waf_engine_unavailable = the node has no managed WAF engine module); omitted when none applies.
+              message: {type: string, maxLength: 512}
+        latest_detach:
+          type: boolean
+          description: The latest candidate withdraws the site's library of this kind (sec-rebind).
+        rollback:
+          description: Whether the latest promotion can be rolled back (to the library version active before it), and the rollback request's candidate and source version; reason says why not.
+          type: object
+          additionalProperties: false
+          required: [available]
+          properties:
+            available: {type: boolean}
+            reason: {type: string, enum: [no_candidate, in_flight, no_previous, previous_policy_deleted]}
+            candidate_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            source_policy_version: {type: integer, format: int64, minimum: 1}
+    SecurityActivationCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [site_id, policy_id, policy_version, expected_binding_revision, expected_active_policy_version, expires_at]
+      properties:
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        policy_version: {type: integer, format: int64, minimum: 1}
+        expected_binding_revision: {type: integer, format: int64, minimum: 0}
+        expected_active_policy_version: {type: integer, format: int64, minimum: 0}
+        target_node_ids:
+          description: Omitted or empty targets the active nodes of the site's own and its package's primary/backup line groups (no_target_nodes when there are none).
+          type: array
+          maxItems: 10000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        canary_size: {type: integer, minimum: 0, maximum: 10000, description: 0 or omitted is 1 when the targets are resolved from the site.}
+        expires_at: {type: string, format: date-time, description: At most 15 minutes ahead (activation_expiry_too_late).}
+        detach:
+          type: boolean
+          description: Withdraw the site's active library of this kind (policy_id/policy_version are the binding's active ones; the library may be deleted). policy_id differing from the binding's library rebinds the site to it; a deleted library cannot be bound (security_policy_deleted).
+    SecurityActivationPromotionCAS:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, binding_id, binding_revision, last_bundle_id, last_claimed_policy_version, expected_active_policy_version, candidate_source_revision, candidate_config_version_id, candidate_artifact_sha256, target_snapshot_sha256]
+      properties:
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        binding_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        binding_revision: {type: integer, format: int64, minimum: 1}
+        last_bundle_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        last_claimed_policy_version: {type: integer, format: int64, minimum: 1}
+        expected_active_policy_version: {type: integer, format: int64, minimum: 0}
+        candidate_source_revision: {type: integer, format: int64, minimum: 2}
+        candidate_config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        candidate_artifact_sha256: {$ref: '#/components/schemas/SHA256Bytes'}
+        target_snapshot_sha256: {$ref: '#/components/schemas/SHA256Bytes'}
+    SecurityActivationCandidate:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, site_id, binding_id, binding_revision, last_bundle_id, last_claimed_policy_version, expected_active_policy_version, candidate_source_revision, candidate_config_version_id, candidate_artifact_sha256, target_snapshot_sha256, required_capabilities, candidate_status, canary_node_ids, expand_node_ids, expires_at, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        binding_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        binding_revision: {type: integer, format: int64, minimum: 1}
+        last_bundle_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        last_claimed_policy_version: {type: integer, format: int64, minimum: 1}
+        expected_active_policy_version: {type: integer, format: int64, minimum: 0}
+        candidate_source_revision: {type: integer, format: int64, minimum: 2}
+        candidate_config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        candidate_artifact_sha256: {$ref: '#/components/schemas/SHA256Bytes'}
+        target_snapshot_sha256: {$ref: '#/components/schemas/SHA256Bytes'}
+        required_capabilities:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/SecurityActivationCapability'}
+        candidate_status:
+          type: string
+          enum: [claimed, canary, expanding, healthy, failed, cancelled, expired, promoted]
+        canary_node_ids:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        expand_node_ids:
+          type: array
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        expires_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        recovered_at: {type: string, format: date-time}
+    SecurityActivationCapability:
+      type: object
+      additionalProperties: false
+      required: [name, api_version]
+      properties:
+        name:
+          type: integer
+          enum: [1, 12, 13, 15, 20]
+        api_version: {type: integer, format: int32, const: 1}
+    SecurityActivationRollbackRequest:
+      type: object
+      additionalProperties: false
+      required: [source_policy_version, expected_binding_revision, expected_active_policy_version, expires_at]
+      properties:
+        source_policy_version: {type: integer, format: int64, minimum: 1}
+        expected_binding_revision: {type: integer, format: int64, minimum: 1}
+        expected_active_policy_version: {type: integer, format: int64, minimum: 0}
+        target_node_ids:
+          description: Omitted or empty targets the candidate site's line-group nodes, as SecurityActivationCreateRequest.
+          type: array
+          maxItems: 10000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        canary_size: {type: integer, minimum: 0, maximum: 10000}
+        expires_at: {type: string, format: date-time, description: At most 15 minutes ahead (activation_expiry_too_late).}
+    SecurityActivationStartResult:
+      type: object
+      additionalProperties: false
+      required: [candidate]
+      properties:
+        candidate: {$ref: '#/components/schemas/SecurityActivationCandidate'}
+        replayed: {type: boolean}
+    SecurityActivationReconcileResult:
+      type: object
+      additionalProperties: false
+      required: [candidate, action]
+      properties:
+        candidate: {$ref: '#/components/schemas/SecurityActivationCandidate'}
+        action: {type: string, enum: ['', wait, expand, promote, recover, fail, cancel, expire]}
+        replayed: {type: boolean}
+    SHA256Bytes:
+      type: array
+      minItems: 32
+      maxItems: 32
+      items: {type: integer, minimum: 0, maximum: 255}
+    PublishRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - configuration_scope_id
+        - expected_source_revision
+        - target
+        - health_check
+        - max_attempts
+        - deadline
+      properties:
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        expected_source_revision: {type: integer, format: int64, minimum: 1}
+        target:
+          oneOf:
+            - $ref: '#/components/schemas/ExplicitNodeTarget'
+            - $ref: '#/components/schemas/LineGroupSnapshotTarget'
+          discriminator:
+            propertyName: kind
+            mapping:
+              nodes: '#/components/schemas/ExplicitNodeTarget'
+              line_group_snapshot: '#/components/schemas/LineGroupSnapshotTarget'
+        health_check: {$ref: '#/components/schemas/HealthCheck'}
+        rollout: {$ref: '#/components/schemas/RolloutPolicyInput'}
+        max_attempts: {type: integer, minimum: 1, maximum: 10}
+        deadline:
+          type: string
+          format: date-time
+          description: Future RFC3339 deployment deadline.
+    RollbackRequest:
+      type: object
+      additionalProperties: false
+      required: [configuration_scope_id, target, health_check, max_attempts, deadline]
+      properties:
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        target:
+          oneOf:
+            - $ref: '#/components/schemas/ExplicitNodeTarget'
+            - $ref: '#/components/schemas/LineGroupSnapshotTarget'
+          discriminator:
+            propertyName: kind
+            mapping:
+              nodes: '#/components/schemas/ExplicitNodeTarget'
+              line_group_snapshot: '#/components/schemas/LineGroupSnapshotTarget'
+        health_check: {$ref: '#/components/schemas/HealthCheck'}
+        rollout: {$ref: '#/components/schemas/RolloutPolicyInput'}
+        max_attempts: {type: integer, minimum: 1, maximum: 10}
+        deadline:
+          type: string
+          format: date-time
+          description: Future RFC3339 rollback deadline.
+    ExplicitNodeTarget:
+      type: object
+      additionalProperties: false
+      required: [kind, node_ids]
+      properties:
+        kind: {type: string, const: nodes}
+        node_ids:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+    LineGroupSnapshotTarget:
+      type: object
+      additionalProperties: false
+      required: [kind, snapshot_id, revision, resolver_sha256]
+      properties:
+        kind: {type: string, const: line_group_snapshot}
+        snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        resolver_sha256:
+          type: string
+          pattern: '^(?!0{64}$)[0-9a-f]{64}$'
+          description: Digest committed by the production TargetResolver snapshot.
+    HealthCheck:
+      type: object
+      additionalProperties: false
+      required:
+        - activation_timeout_ms
+        - observation_window_ms
+        - required_consecutive_successes
+      properties:
+        activation_timeout_ms: {type: integer, format: int64, minimum: 1, maximum: 86400000}
+        observation_window_ms: {type: integer, format: int64, minimum: 1, maximum: 86400000}
+        required_consecutive_successes: {type: integer, minimum: 1, maximum: 100}
+    RolloutCommandRequest:
+      type: object
+      additionalProperties: false
+      required: [configuration_scope_id, expected_revision]
+      properties:
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    NodeConfigReconciliationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - configuration_scope_id
+        - node_id
+        - source_deployment_id
+        - source_deployment_attempt
+        - observed_config_version_id
+        - resolution
+        - evidence
+      properties:
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        source_deployment_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        source_deployment_attempt: {type: integer, format: int32, minimum: 1, maximum: 10}
+        observed_config_version_id:
+          oneOf:
+            - $ref: '#/components/schemas/CanonicalUUID'
+            - type: 'null'
+        resolution: {type: string, enum: [agent_observed, operator_confirmed]}
+        evidence: {type: string, minLength: 1, maxLength: 512}
+    NodeConfigReconciliation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - node_id
+        - configuration_scope_id
+        - source_deployment_id
+        - source_deployment_attempt
+        - previous_config_version_id
+        - current_config_version_id
+        - resolution
+        - reconciliation_required
+        - reconciled_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        source_deployment_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        source_deployment_attempt: {type: integer, format: int32, minimum: 1, maximum: 10}
+        previous_config_version_id:
+          oneOf:
+            - $ref: '#/components/schemas/CanonicalUUID'
+            - type: 'null'
+        current_config_version_id:
+          oneOf:
+            - $ref: '#/components/schemas/CanonicalUUID'
+            - type: 'null'
+        resolution: {type: string, enum: [agent_observed, operator_confirmed]}
+        reconciliation_required: {type: boolean, const: false}
+        reconciled_at: {type: string, format: date-time}
+    RolloutPolicyInput:
+      type: object
+      additionalProperties: false
+      required: [strategy, canary_size, batch_size, failure_threshold, auto_start]
+      description: >-
+        Progressive policy for a target frozen at publication time. Nodes are
+        ordered by UUID bytes, then assigned to the canary and fixed-size
+        cohorts. Commands outside the released cohort remain held. The failure
+        threshold is an absolute failed-node count within the current cohort;
+        reaching it pauses the rollout.
+      properties:
+        strategy: {type: string, const: canary}
+        canary_size: {type: integer, minimum: 1, maximum: 1000}
+        batch_size: {type: integer, minimum: 1, maximum: 1000}
+        failure_threshold: {type: integer, minimum: 1, maximum: 10000}
+        auto_start: {type: boolean}
+    PublicationTarget:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, resolved_sha256]
+          properties:
+            kind: {type: string, const: nodes}
+            resolved_sha256: {$ref: '#/components/schemas/SHA256'}
+        - type: object
+          additionalProperties: false
+          required: [kind, snapshot_id, revision, resolver_sha256, resolved_sha256]
+          properties:
+            kind: {type: string, const: line_group_snapshot}
+            snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            revision: {type: integer, format: int64, minimum: 1}
+            resolver_sha256: {$ref: '#/components/schemas/SHA256'}
+            resolved_sha256: {$ref: '#/components/schemas/SHA256'}
+      discriminator:
+        propertyName: kind
+    TenantPublicationTarget:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: {type: string, enum: [nodes, line_group_snapshot]}
+    AdminPublication:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - configuration_scope_id
+        - source_revision
+        - config_version_id
+        - rollout_id
+        - canonical_source_sha256
+        - artifact_sha256
+        - target
+        - node_count
+        - created_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        source_revision: {type: integer, format: int64, minimum: 1}
+        config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        rollout_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        canonical_source_sha256: {$ref: '#/components/schemas/SHA256'}
+        artifact_sha256: {$ref: '#/components/schemas/SHA256'}
+        target: {$ref: '#/components/schemas/PublicationTarget'}
+        node_count: {type: integer, minimum: 1, maximum: 10000}
+        created_at: {type: string, format: date-time}
+        replayed: {type: boolean, default: false}
+    TenantPublication:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - source_revision
+        - config_version_id
+        - rollout_id
+        - target
+        - node_count
+        - created_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        source_revision: {type: integer, format: int64, minimum: 1}
+        config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        rollout_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        target: {$ref: '#/components/schemas/TenantPublicationTarget'}
+        node_count: {type: integer, minimum: 1, maximum: 10000}
+        created_at: {type: string, format: date-time}
+    AdminRollback:
+      type: object
+      additionalProperties: false
+      required:
+        - publication_id
+        - configuration_scope_id
+        - config_version_id
+        - rollout_id
+        - action
+        - target
+        - node_count
+        - created_at
+      properties:
+        publication_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        rollout_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        action: {type: string, const: rollback}
+        target: {$ref: '#/components/schemas/PublicationTarget'}
+        node_count: {type: integer, minimum: 1, maximum: 10000}
+        created_at: {type: string, format: date-time}
+        replayed: {type: boolean, default: false}
+    RolloutState:
+      type: string
+      enum: [queued, running, paused, succeeded, partial_failed, failed, cancelled]
+    RolloutProgress:
+      type: object
+      additionalProperties: false
+      required: [total, pending, running, succeeded, failed, cancelled, superseded, frozen]
+      properties:
+        total: {type: integer, minimum: 1, maximum: 10000}
+        pending: {type: integer, minimum: 0, maximum: 10000}
+        running: {type: integer, minimum: 0, maximum: 10000}
+        succeeded: {type: integer, minimum: 0, maximum: 10000}
+        failed: {type: integer, minimum: 0, maximum: 10000}
+        cancelled: {type: integer, minimum: 0, maximum: 10000}
+        superseded:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Nodes that ignored this old release because they already run a newer one (or it was rolled back). Not a failure; a rollout whose other nodes succeeded is succeeded.
+        frozen:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Nodes that refused this release while frozen (expired service ticket, existing sites keep serving). Waiting for redelivery, which the system starts once the node renews its ticket. Not a failure.
+    AdminRollout:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - configuration_scope_id
+        - config_version_id
+        - action
+        - state
+        - revision
+        - max_attempts
+        - progress
+        - can_cancel
+        - can_retry
+        - created_at
+        - updated_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        configuration_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        action: {type: string, enum: [apply, rollback]}
+        state: {$ref: '#/components/schemas/RolloutState'}
+        revision: {type: integer, format: int64, minimum: 1}
+        max_attempts: {type: integer, minimum: 1, maximum: 10}
+        progress: {$ref: '#/components/schemas/RolloutProgress'}
+        can_cancel: {type: boolean}
+        can_retry: {type: boolean}
+        can_start: {type: boolean}
+        can_pause: {type: boolean}
+        can_resume: {type: boolean}
+        rollout: {$ref: '#/components/schemas/RolloutPolicyView'}
+        pause_reason: {type: string, enum: ['', operator, failure_threshold]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        replayed: {type: boolean, default: false}
+    TenantRollout:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - config_version_id
+        - action
+        - state
+        - revision
+        - max_attempts
+        - progress
+        - can_cancel
+        - can_retry
+        - created_at
+        - updated_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        action: {type: string, enum: [apply, rollback]}
+        state: {$ref: '#/components/schemas/RolloutState'}
+        revision: {type: integer, format: int64, minimum: 1}
+        max_attempts: {type: integer, minimum: 1, maximum: 10}
+        progress: {$ref: '#/components/schemas/RolloutProgress'}
+        can_cancel: {type: boolean}
+        can_retry: {type: boolean}
+        can_start: {type: boolean}
+        can_pause: {type: boolean}
+        can_resume: {type: boolean}
+        rollout: {$ref: '#/components/schemas/RolloutPolicyView'}
+        pause_reason: {type: string, enum: ['', operator, failure_threshold]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RolloutPolicyView:
+      type: object
+      additionalProperties: false
+      required: [strategy, canary_size, batch_size, failure_threshold, cohort_count, released_cohort]
+      properties:
+        strategy: {type: string, const: canary}
+        canary_size: {type: integer, minimum: 1, maximum: 1000}
+        batch_size: {type: integer, minimum: 1, maximum: 1000}
+        failure_threshold: {type: integer, minimum: 1, maximum: 10000}
+        cohort_count: {type: integer, minimum: 1, maximum: 10000}
+        released_cohort: {type: integer, minimum: -1, maximum: 10000}
+    DeploymentState:
+      type: string
+      enum:
+        - queued
+        - delivered
+        - staged
+        - prechecked
+        - activated
+        - healthy
+        - failed
+        - reverting
+        - reverted
+        - rollback_failed
+        - cancelled
+    AdminDeployment:
+      type: object
+      additionalProperties: false
+      required: [id, node_id, attempt, max_attempts, state, created_at, updated_at, can_retry]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        attempt: {type: integer, minimum: 1, maximum: 10}
+        max_attempts: {type: integer, minimum: 1, maximum: 10}
+        state: {$ref: '#/components/schemas/DeploymentState'}
+        error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Z0-9_]+$'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        can_retry: {type: boolean}
+        cohort: {type: integer, minimum: 0, maximum: 10000}
+        released: {type: boolean}
+        superseded:
+          type: boolean
+          description: The node ignored this old release (error_code ERROR_CODE_STALE_ATTEMPT or ERROR_CODE_REVOKED, running configuration unchanged). Not a failure and never retried.
+        frozen:
+          type: boolean
+          description: The node refused this release while frozen (error_code ERROR_CODE_FAILED_PRECONDITION, installation_frozen). Waiting for redelivery after the node renews its ticket; not a failure and not retried by hand. Once redelivered it reads as superseded.
+        warnings:
+          type: array
+          description: Faults the node reported with a successful deployment (the release runs). post_activation_maintenance_failed = activated, the node's state save or retention afterwards failed; ddos_protection_fault = the node DDoS protection table failed to apply or the node cannot run one.
+          maxItems: 2
+          uniqueItems: true
+          items: {type: string, enum: [ddos_protection_fault, post_activation_maintenance_failed]}
+    TenantDeployment:
+      type: object
+      additionalProperties: false
+      required: [id, attempt, max_attempts, state, created_at, updated_at, can_retry]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        attempt: {type: integer, minimum: 1, maximum: 10}
+        max_attempts: {type: integer, minimum: 1, maximum: 10}
+        state: {$ref: '#/components/schemas/DeploymentState'}
+        error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Z0-9_]+$'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        can_retry: {type: boolean}
+        cohort: {type: integer, minimum: 0, maximum: 10000}
+        released: {type: boolean}
+        superseded:
+          type: boolean
+          description: The node ignored this old release (error_code ERROR_CODE_STALE_ATTEMPT or ERROR_CODE_REVOKED, running configuration unchanged). Not a failure and never retried.
+        frozen:
+          type: boolean
+          description: The node refused this release while frozen (error_code ERROR_CODE_FAILED_PRECONDITION, installation_frozen). Waiting for redelivery after the node renews its ticket; not a failure and not retried by hand. Once redelivered it reads as superseded.
+    AdminPublicationPage:
+      type: object
+      additionalProperties: false
+      required: [items, current_source_revision]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/AdminPublication'}
+        current_source_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Current Site/L4 source revision to use for publication compare-and-swap.
+        next_cursor: {$ref: '#/components/schemas/SignedCursor'}
+        pending_modules:
+          type: array
+          maxItems: 256
+          description: Modules the scope's latest publication uses that the entitlement no longer grants; the scope is pending republication and is republished automatically when they are granted again. Omitted when none.
+          items: {$ref: '#/components/schemas/PendingModule'}
+        automatic_failure: {$ref: '#/components/schemas/AutomaticPublicationFailure'}
+    TenantPublicationPage:
+      type: object
+      additionalProperties: false
+      required: [items, current_source_revision]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/TenantPublication'}
+        current_source_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Current Site/L4 source revision observed with this page.
+        next_cursor: {$ref: '#/components/schemas/SignedCursor'}
+        pending_modules:
+          type: array
+          maxItems: 256
+          description: Modules the scope's latest publication uses that the entitlement no longer grants; the scope is pending republication and is republished automatically when they are granted again. Omitted when none.
+          items: {$ref: '#/components/schemas/PendingModule'}
+        automatic_failure: {$ref: '#/components/schemas/AutomaticPublicationFailure'}
+    AutomaticPublicationFailure:
+      type: object
+      additionalProperties: false
+      required: [reason, source_revision, failed_at]
+      description: The scope's latest automatic publication published nothing and no later publication exists. no_target_nodes means no enabled node serves the sites' line groups (their own or their package's primary/backup group); node_capability_unavailable means every target node's agent lacks a capability or JS challenge policy the release needs; node_artifacts_syncing means the target nodes are refused only because a node artifact the release needs (a rule pack, the IP library) is still reaching them through their node artifact set; node_scope_conflict means a target node carries another tenant's configuration this one cannot share (such as its managed WAF), so the request ended instead of retrying, and the next configuration change or a manual publish tries again. The first three are republished automatically once they change. Omitted otherwise.
+      properties:
+        reason: {type: string, enum: [no_target_nodes, node_capability_unavailable, node_artifacts_syncing, node_scope_conflict]}
+        source_revision: {type: integer, format: int64, minimum: 1}
+        failed_at: {type: string, format: date-time}
+        artifact_sync: {$ref: '#/components/schemas/NodeArtifactSyncProgress'}
+    NodeArtifactSyncProgress:
+      type: object
+      additionalProperties: false
+      required: [received_segments, total_segments, remaining_minutes]
+      description: For node_artifacts_syncing, the segments the refused nodes have received of their newest node artifact sets, and the whole minutes the slowest node is estimated to still need (its remaining segments and the set, at the pace its segments arrived). Omitted before any refused node has a set.
+      properties:
+        received_segments: {type: integer, minimum: 0}
+        total_segments: {type: integer, minimum: 1}
+        remaining_minutes: {type: integer, minimum: 1}
+    PendingModule:
+      type: object
+      additionalProperties: false
+      required: [module, source_revision]
+      properties:
+        module: {type: string, pattern: '^(module|pack|theme)\.[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$', maxLength: 128}
+        source_revision: {type: integer, format: int64, minimum: 1}
+    AdminRolloutPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/AdminRollout'}
+        next_cursor: {$ref: '#/components/schemas/SignedCursor'}
+    TenantRolloutPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/TenantRollout'}
+        next_cursor: {$ref: '#/components/schemas/SignedCursor'}
+    AdminDeploymentPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/AdminDeployment'}
+        next_cursor: {$ref: '#/components/schemas/SignedCursor'}
+    TenantDeploymentPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/TenantDeployment'}
+        next_cursor: {$ref: '#/components/schemas/SignedCursor'}
+    SHA256:
+      type: string
+      pattern: '^(?!0{64}$)[0-9a-f]{64}$'
+    SignedCursor:
+      type: string
+      minLength: 1
+      maxLength: 4096
+      pattern: '^[A-Za-z0-9_-]+$'
+      description: Opaque authenticated pagination state. Clients must not parse or construct it.
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^(?!00000000-0000-0000-0000-000000000000$)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ChallengePolicyRefusal:
+      type: object
+      additionalProperties: false
+      description: >-
+        The first target node missing a JS challenge policy of the release, the
+        site it belongs to, and the further nodes missing this or another
+        challenge policy of the release.
+      required: [node_id, site_id, domain, policy_version, other_node_ids]
+      properties:
+        node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        domain: {type: string, minLength: 1, maxLength: 253}
+        policy_version: {type: integer, minimum: 1}
+        other_node_ids:
+          type: array
+          maxItems: 10000
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+    RulePackRefusal:
+      type: object
+      additionalProperties: false
+      description: >-
+        The first target node whose node artifact set lacks a rule pack the
+        release's sites use (a mounted pack or a managed WAF's CRS profile pack),
+        the packs it lacks, and the further target nodes lacking a pack. The
+        release is recorded and published automatically once the packs reach
+        the nodes.
+      required: [node_id, sha256, other_node_ids]
+      properties:
+        node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        sha256:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items: {type: string, pattern: '^[0-9a-f]{64}$'}
+        other_node_ids:
+          type: array
+          maxItems: 10000
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+        auto_resume:
+          type: boolean
+          description: >-
+            Present (true) when a refused security activation was recorded: it
+            starts by itself once every target node has applied the packs.
+    CapabilityRefusal:
+      type: object
+      additionalProperties: false
+      description: >-
+        The first target node whose agent lacks a gated capability version, the
+        capability and version required, and the further target nodes lacking
+        the same or another gated capability. The release is not persisted;
+        upgrade the nodes or remove the feature and publish again.
+      required: [node_id, capability, required_version, other_node_ids]
+      properties:
+        node_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        capability: {type: string, pattern: '^CAPABILITY_NAME_[A-Z0-9_]{1,64}$'}
+        required_version: {type: integer, minimum: 1, maximum: 4294967295}
+        other_node_ids:
+          type: array
+          maxItems: 10000
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - permission_denied
+                - validation_error
+                - publication_resource_not_found
+                - idempotency_conflict
+                - target_snapshot_conflict
+                - publication_state_conflict
+                - publication_deadline_expired
+                - revision_conflict
+                - source_revision_already_published
+                - site_locked
+                - security_policy_deleted
+                - activation_expiry_too_late
+                - no_target_nodes
+                - node_scope_conflict
+                - challenge_policy_unavailable
+                - quick_block_site_override_conflict
+                - node_capability_unavailable
+                - rule_pack_unavailable
+                - rule_pack_out_of_profile
+                - package_resource_quota_exceeded
+                - package_feature_denied
+                - package_subscription_inactive
+                - package_addon_in_use
+                - publication_not_allowed
+                - publication_not_ready
+                - publication_service_unavailable
+                - entitlement_feature_denied
+            message: {type: string}
+            request_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            challenge: {$ref: '#/components/schemas/ChallengePolicyRefusal'}
+            capability: {$ref: '#/components/schemas/CapabilityRefusal'}
+            rule_packs: {$ref: '#/components/schemas/RulePackRefusal'}
+            modules:
+              description: Module, pack or theme feature codes the local lease does not grant (PA-15).
+              type: array
+              minItems: 1
+              items: {type: string, pattern: '^(module|pack|theme)\.[a-z][a-z0-9_-]*(\.[a-z][a-z0-9_-]*)*$'}
+          allOf:
+            - if:
+                properties: {code: {const: challenge_policy_unavailable}}
+              then: {required: [challenge]}
+              else: {not: {required: [challenge]}}
+            - if:
+                properties: {code: {const: node_capability_unavailable}}
+              then: {required: [capability]}
+              else: {not: {required: [capability]}}
+            - if:
+                properties: {code: {const: rule_pack_unavailable}}
+              then: {required: [rule_packs]}
+              else: {not: {required: [rule_packs]}}
+            - if:
+                properties: {code: {const: entitlement_feature_denied}}
+              then: {required: [modules]}
+              else: {not: {required: [modules]}}
+  responses:
+    AdminPublicationPageOK:
+      description: Stable publication page. Response body is limited to 1 MiB.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminPublicationPage'}
+    TenantPublicationPageOK:
+      description: Stable tenant publication page with target metadata redacted.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/TenantPublicationPage'}
+    AdminPublicationOK:
+      description: Platform publication detail.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminPublication'}
+    TenantPublicationOK:
+      description: Tenant publication detail with internal metadata redacted.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/TenantPublication'}
+    AdminRolloutPageOK:
+      description: Stable platform rollout page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminRolloutPage'}
+    TenantRolloutPageOK:
+      description: Stable tenant rollout page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/TenantRolloutPage'}
+    AdminRolloutOK:
+      description: Platform rollout detail derived from latest deployment attempts.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/RolloutETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminRollout'}
+    TenantRolloutOK:
+      description: Tenant rollout detail.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/RolloutETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/TenantRollout'}
+    AdminDeploymentPageOK:
+      description: Latest deployment attempt for each targeted node.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminDeploymentPage'}
+    TenantDeploymentPageOK:
+      description: Latest deployment attempts with node target IDs omitted.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/TenantDeploymentPage'}
+    RolloutCommandOK:
+      description: Updated rollout, or the stored result of an identical command retry.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/RolloutETag'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminRollout'}
+    RollbackCreated:
+      description: Created rollback rollout, or the stored result of an identical retry.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminRollback'}
+    BadRequest:
+      description: Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unauthorized:
+      description: Authentication is missing or invalid.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Forbidden:
+      description: Wrong audience, missing permission, or tenant scope override.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    NotFound:
+      description: Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Conflict:
+      description: Idempotency, target snapshot, rollout state, active deployment, or retry conflict.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    PreconditionFailed:
+      description: The source or rollout expected revision is stale.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    UnprocessableEntity:
+      description: Entitlement or target/resource readiness prevents publication.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    ServiceUnavailable:
+      description: Storage, signing, cancellation, response validation, or another internal dependency is unavailable.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

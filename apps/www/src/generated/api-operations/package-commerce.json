@@ -1,0 +1,2541 @@
+{
+ "id": "package-commerce",
+ "prefix": "/v1/package-commerce",
+ "operations": [
+  {
+   "operation_id": "listPublishedPackageOffers",
+   "method": "GET",
+   "path": "/v1/package-commerce/catalog",
+   "summary": "List package products purchasable by the authenticated tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires package_subscriptions.read. Only enabled products linked to a currently visible package group are returned. The first page freezes the authenticated tenant/user scope, business-time snapshot, catalog publish watermark, and package-group visibility watermark; later pages reuse the endpoint- and principal-bound signed cursor so catalog changes cannot produce mixed pages. Purchasing a returned offer separately requires package_subscriptions.manage.",
+   "permissions": [
+    "package_subscriptions.read"
+   ],
+   "params": [
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string",
+     "required": true,
+     "description": "Public catalog projection kind. This endpoint currently exposes package products only."
+    },
+    {
+     "name": "group_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "BILL-13: only products in this visible package group (an ID from the first page's groups). Bound to the signed cursor; a cursor minted for another group, or for no group, is refused with 400."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable public package catalog page and current caller eligibility.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PackageCatalogItem>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "eligibility",
+       "type": "CatalogEligibility",
+       "required": true
+      },
+      {
+       "name": "groups",
+       "type": "array<PackageCatalogGroup>",
+       "description": "BILL-13: first page only. Visible package groups holding at least one product purchasable at the same catalog snapshot, in the admin group order; independent of the group_id filter."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listMyPackageOrders",
+   "method": "GET",
+   "path": "/v1/package-commerce/orders",
+   "summary": "List the authenticated tenant user's package orders",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires package_subscriptions.read. Results are constrained by both principal scope and principal user ID. tenant_id is rejected.",
+   "permissions": [
+    "package_subscriptions.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    },
+    {
+     "name": "product_kind",
+     "in": "query",
+     "type": "string: package_subscription / traffic_package",
+     "description": "Optional order product filter shared by tenant and platform order reads."
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: created / paid / fulfilled / cancelled / refund_applied / void_applied / failed",
+     "description": "Optional latest order state filter shared by tenant and platform order reads."
+    },
+    {
+     "name": "request_id",
+     "in": "query",
+     "type": "string",
+     "description": "Optional X-Request-ID the order was created with, so a buyer can confirm the outcome of the original command."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable keyset page ordered by created_at and order UUID descending.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Order>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "getMyPackageOrder",
+   "method": "GET",
+   "path": "/v1/package-commerce/orders/{order_id}",
+   "summary": "Get one visible package order",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A foreign-tenant or different-owner order returns the same 404 as an unknown order and does not disclose existence.",
+   "permissions": [
+    "package_subscriptions.read"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized visible order.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Positive tenant-scope package-order identifier. The UUID remains canonical for links and commands."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_display_id",
+       "type": "string",
+       "required": true,
+       "description": "Stable user-facing identifier. The user UUID remains canonical for ownership and commands."
+      },
+      {
+       "name": "operation",
+       "type": "string: purchase / renew / upgrade / downgrade / traffic_package_purchase",
+       "required": true
+      },
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "product_kind",
+       "type": "string: package_subscription / traffic_package",
+       "required": true
+      },
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "protection",
+       "type": "object",
+       "description": "Required for package-subscription orders and frozen from the exact purchased product revision. Traffic-package orders may omit it."
+      },
+      {
+       "name": "traffic_product_snapshot_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "package_period",
+       "type": "string: month / quarter / year"
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "original_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "discount_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "payable_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "settlement_direction",
+       "type": "string: debit / credit / hold",
+       "required": true
+      },
+      {
+       "name": "funding_source",
+       "type": "string: balance / provider / reseller",
+       "required": true,
+       "description": "reseller = a reseller placed the order for its customer; only the reseller's wholesale cost was charged."
+      },
+      {
+       "name": "effective_mode",
+       "type": "string: immediate / next_cycle",
+       "required": true
+      },
+      {
+       "name": "effective_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: created / paid / fulfilled / cancelled / refund_applied / void_applied / failed",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "seller_scope_id",
+       "type": "object",
+       "description": "Package owner that sold the order (the platform scope, or the customer's reseller). Traffic packages are always the platform's."
+      },
+      {
+       "name": "wholesale_minor",
+       "type": "integer(int64)",
+       "description": "Reseller's prepaid wholesale cost W of the order. Platform responses only; tenant responses always carry 0."
+      },
+      {
+       "name": "product_name",
+       "type": "string",
+       "description": "Package name from the order's product snapshot. Only the reseller customer orders route returns it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listMyPackageOrderEvents",
+   "method": "GET",
+   "path": "/v1/package-commerce/orders/{order_id}/events",
+   "summary": "List sanitized order state events in revision order",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Event payload, actor, request/trace IDs, approval IDs, ledger IDs, holds, provider data, and digests are deliberately omitted.",
+   "permissions": [
+    "package_subscriptions.read"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable event page ordered by revision ascending.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<OrderEvent>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "applyVerifiedPaymentProviderCallback",
+   "method": "POST",
+   "path": "/v1/package-commerce/provider-callbacks/{provider}",
+   "summary": "Authenticate and apply one raw payment-provider callback",
+   "auth": [
+    "none"
+   ],
+   "description": "No bearer identity is accepted as proof. All four callback headers must each have exactly one non-empty value without surrounding whitespace. The timestamp is canonical Unix seconds within the configured freshness window. The HMAC-SHA256 input is eleven newline-separated values in this order: cdnca.package-commerce.provider-callback.v1, the provider path value, provider_account_id, key ID, timestamp, external_event_id, external_payment_id, event_kind, canonical decimal amount_minor, currency, and the lowercase hexadecimal SHA-256 of the exact raw body. X-CDNCA-Callback-Signature is v1= followed by the canonical base64url-no-padding encoding of the 32-byte HMAC. Verification binds the provider, account, and key before the normalized callback reaches the commerce core. Exact and concurrent signed retries pass authentication; durable external_event_id plus raw payload SHA-256 idempotency returns the committed replay, while a changed payload returns provider_event_conflict. Raw payloads, credentials, keyring contents, and secrets are never returned by this endpoint.",
+   "params": [
+    {
+     "name": "provider",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-CDNCA-Callback-Version",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exactly one value selecting callback signature version 1."
+    },
+    {
+     "name": "X-CDNCA-Callback-Key-ID",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exactly one configured key identifier bound to the provider and provider account."
+    },
+    {
+     "name": "X-CDNCA-Callback-Timestamp",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exactly one canonical base-10 Unix-seconds value that fits signed int64."
+    },
+    {
+     "name": "X-CDNCA-Callback-Signature",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exactly one v1= prefixed canonical base64url-no-padding encoding of the 32-byte HMAC-SHA256."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "version",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "provider_account_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "external_event_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "external_payment_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "event_kind",
+      "type": "string: payment_succeeded / payment_failed / refund_succeeded / void_succeeded",
+      "required": true
+     },
+     {
+      "name": "amount_minor",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "currency",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "occurred_at",
+      "type": "string(date-time)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Normalized provider event processed or replayed.",
+     "fields": [
+      {
+       "name": "processing_result",
+       "type": "string: applied / rejected_signature / rejected_mismatch / ignored_terminal / ignored_out_of_order / failed_fulfillment",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed because a required single-value callback header, provider/account/key binding, freshness check, canonical HMAC signature, application/json content type, strict UTF-8 JSON body, or 256 KiB body bound was invalid. The commerce core was not invoked, and the response does not reveal whether a provider, account, or key exists."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Callback verification is unavailable before the commerce core is invoked (payment_callback_provider_unavailable), or the write outcome is unknown after a verified callback reaches the core (package_commerce_result_unknown). The stable error code distinguishes whether an unchanged signed request may be retried."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "purchasePackageSubscription",
+   "method": "POST",
+   "path": "/v1/package-commerce/purchases",
+   "summary": "Purchase a package subscription for the authenticated tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a tenant principal with package_subscriptions.manage. Tenant and buyer IDs are derived from the live principal and cannot be supplied in the request body. Unknown results may be retried only with the original Idempotency-Key, If-Match value where applicable, and identical payload.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     },
+     {
+      "name": "site_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     },
+     {
+      "name": "node_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     },
+     {
+      "name": "timezone",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "cycle_policy",
+      "type": "object | object",
+      "required": true
+     },
+     {
+      "name": "traffic_factor",
+      "type": "TrafficFactor",
+      "required": true
+     },
+     {
+      "name": "promotion",
+      "type": "PromotionReference"
+     },
+     {
+      "name": "payment",
+      "type": "BalancePayment | ProviderPayment",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerListCustomerOrders",
+   "method": "GET",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/orders",
+   "summary": "A reseller lists one of its customers' package orders",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Reseller tenant session with reseller.customers.read or reseller.customers.manage; the customer must be under the caller's active reseller scope (otherwise 403). Lists the whole customer scope (every owner); wholesale_minor is the reseller's own cost and is returned. tenant_id and operation are rejected.",
+   "permissions": [
+    "reseller.customers.read"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    },
+    {
+     "name": "product_kind",
+     "in": "query",
+     "type": "string: package_subscription / traffic_package",
+     "description": "Optional order product filter shared by tenant and platform order reads."
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: created / paid / fulfilled / cancelled / refund_applied / void_applied / failed",
+     "description": "Optional latest order state filter shared by tenant and platform order reads."
+    },
+    {
+     "name": "request_id",
+     "in": "query",
+     "type": "string",
+     "description": "Optional X-Request-ID the order was created with, so a buyer can confirm the outcome of the original command."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable keyset page ordered by created_at and order UUID descending.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Order>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerPurchaseForCustomer",
+   "method": "POST",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/purchases",
+   "summary": "A reseller buys one of its packages for its own customer",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The caller is a reseller tenant session with reseller.customers.manage; the customer must be under it and the package must be the reseller's. Only the reseller's prepaid wholesale cost (W, from its price list) is charged; the customer's balance is untouched (funding_source reseller). The subscription belongs to owner_user_id in the customer scope. 422 reseller_prepaid_insufficient when the prepaid balance is short of W (nothing is written); 422 reseller_wholesale_unpriced when the main line group has no wholesale price for the period.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "owner_user_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerListCustomerSubscriptions",
+   "method": "GET",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions",
+   "summary": "A reseller lists one of its customers' package subscriptions",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Same snapshot and paging rules as /v1/package-commerce/subscriptions, over the whole customer scope; reseller.customers.read or reseller.customers.manage, customer under the caller (otherwise 403).",
+   "permissions": [
+    "reseller.customers.read"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / expired / cancelled",
+     "description": "Effective status at the frozen snapshot. active ends after snapshot_at; expired ends at or before snapshot_at; cancelled always follows the immutable cancelled lifecycle fact regardless of end_at."
+    },
+    {
+     "name": "end_at_from",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Inclusive canonical UTC microsecond lower bound for end_at."
+    },
+    {
+     "name": "end_at_to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Exclusive canonical UTC microsecond upper bound for end_at."
+    },
+    {
+     "name": "include_product_name",
+     "in": "query",
+     "type": "string: true / false",
+     "description": "Accepts exactly one lowercase true or false. Empty, repeated, or other values return 400. Omitted or false preserves the legacy response shape. true includes product_name only when the selected effective entitlement's immutable product_snapshot.name is a JSON string, preserved without normalization. Missing, null, or non-string names are omitted. The current product catalog is never used. This projection does not change subscription membership, ordering, or the cursor's tenant, owner, time, and high-water bounds."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer",
+     "description": "Page-jump mode (1-based, max 10000, mutually exclusive with cursor)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable effective-subscription projection page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Subscription>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "description": "Present only in page-jump mode (tenant list)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerCancelCustomerSubscription",
+   "method": "POST",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/cancel",
+   "summary": "A reseller cancels its customer's subscription",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Same behavior as the platform's cancel (the sites stop, no refund or ledger entry). The customer must be under the caller's active reseller scope.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal package subscription revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Cancelled subscription or exact idempotent replay.",
+     "fields": [
+      {
+       "name": "subscription",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "intent",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "412",
+     "description": "If-Match does not equal the current subscription revision."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerDowngradeForCustomer",
+   "method": "POST",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/downgrade",
+   "summary": "A reseller downgrades its customer's subscription to another of its packages",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only between the reseller's own packages, immediately. The customer pays nothing; the reseller's prepaid balance moves by the wholesale difference prorated over the remaining part of the current cycle (old price rounded down, new price rounded up, as proration-utc-v1). An upgrade charges it (422 reseller_prepaid_insufficient when short: nothing is written); a downgrade returns it. The order's seller is the reseller and wholesale_minor is the difference. If-Match is the quoted current subscription revision.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal package subscription revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "412",
+     "description": "If-Match does not equal the current subscription revision."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerRenewForCustomer",
+   "method": "POST",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/renew",
+   "summary": "A reseller renews its customer's subscription to one of its packages",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Same rules as the reseller purchase: only W is charged. If-Match is the quoted current subscription revision. A renewal carrying a platform add-on cannot be reseller-placed (409).",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal package subscription revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "412",
+     "description": "If-Match does not equal the current subscription revision."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerSuspendCustomerSubscription",
+   "method": "POST",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/suspend",
+   "summary": "Suspend one package subscription as the customer's reseller",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The subscription after the change (or unchanged when already in that state), or an exact idempotent replay.",
+     "fields": [
+      {
+       "name": "subscription",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerUnsuspendCustomerSubscription",
+   "method": "POST",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/unsuspend",
+   "summary": "Unsuspend one package subscription as the customer's reseller",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The subscription after the change (or unchanged when already in that state), or an exact idempotent replay.",
+     "fields": [
+      {
+       "name": "subscription",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    }
+   ]
+  },
+  {
+   "operation_id": "resellerUpgradeForCustomer",
+   "method": "POST",
+   "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/upgrade",
+   "summary": "A reseller upgrades its customer's subscription to another of its packages",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only between the reseller's own packages, immediately. The customer pays nothing; the reseller's prepaid balance moves by the wholesale difference prorated over the remaining part of the current cycle (old price rounded down, new price rounded up, as proration-utc-v1). An upgrade charges it (422 reseller_prepaid_insufficient when short: nothing is written); a downgrade returns it. The order's seller is the reseller and wholesale_minor is the difference. If-Match is the quoted current subscription revision.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "customer_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal package subscription revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "412",
+     "description": "If-Match does not equal the current subscription revision."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "listMySoldPackageSubscriptions",
+   "method": "GET",
+   "path": "/v1/package-commerce/subscriptions",
+   "summary": "List effective sold-subscription projections owned by the current user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Uses a fixed-time effective entitlement projection. Future scheduled entitlements do not hide the currently effective revision. Each subsequent page reuses all three values from the endpoint-, tenant-, and owner-bound signed cursor, so later entitlement backfills, renewals, or cancellations cannot create mixed facts.",
+   "permissions": [
+    "package_subscriptions.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / expired / cancelled",
+     "description": "Effective status at the frozen snapshot. active ends after snapshot_at; expired ends at or before snapshot_at; cancelled always follows the immutable cancelled lifecycle fact regardless of end_at."
+    },
+    {
+     "name": "end_at_from",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Inclusive canonical UTC microsecond lower bound for end_at."
+    },
+    {
+     "name": "end_at_to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Exclusive canonical UTC microsecond upper bound for end_at."
+    },
+    {
+     "name": "include_product_name",
+     "in": "query",
+     "type": "string: true / false",
+     "description": "Accepts exactly one lowercase true or false. Empty, repeated, or other values return 400. Omitted or false preserves the legacy response shape. true includes product_name only when the selected effective entitlement's immutable product_snapshot.name is a JSON string, preserved without normalization. Missing, null, or non-string names are omitted. The current product catalog is never used. This projection does not change subscription membership, ordering, or the cursor's tenant, owner, time, and high-water bounds."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer",
+     "description": "Page-jump mode (1-based, max 10000, mutually exclusive with cursor). Uses OFFSET within the same frozen snapshot and returns total."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable effective-subscription projection page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Subscription>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "description": "Present only in page-jump mode (tenant list)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "downgradePackageSubscription",
+   "method": "POST",
+   "path": "/v1/package-commerce/subscriptions/{subscription_id}/downgrade",
+   "summary": "Downgrade a package immediately or at the next cycle",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal package subscription revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     },
+     {
+      "name": "effective_mode",
+      "type": "string: immediate / next_cycle",
+      "required": true
+     },
+     {
+      "name": "site_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     },
+     {
+      "name": "node_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "412",
+     "description": "If-Match does not equal the current subscription revision."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "renewPackageSubscription",
+   "method": "POST",
+   "path": "/v1/package-commerce/subscriptions/{subscription_id}/renew",
+   "summary": "Renew an active package subscription",
+   "auth": [
+    "bearer"
+   ],
+   "description": "If-Match is the quoted current package_subscriptions revision and is passed to the core transaction as expected_revision.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal package subscription revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     },
+     {
+      "name": "promotion",
+      "type": "PromotionReference"
+     },
+     {
+      "name": "payment",
+      "type": "BalancePayment | ProviderPayment",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "412",
+     "description": "If-Match does not equal the current subscription revision."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "upgradePackageSubscription",
+   "method": "POST",
+   "path": "/v1/package-commerce/subscriptions/{subscription_id}/upgrade",
+   "summary": "Upgrade a package immediately or at the next cycle",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal package subscription revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     },
+     {
+      "name": "effective_mode",
+      "type": "string: immediate / next_cycle",
+      "required": true
+     },
+     {
+      "name": "site_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     },
+     {
+      "name": "node_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "412",
+     "description": "If-Match does not equal the current subscription revision."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "purchaseTrafficPackage",
+   "method": "POST",
+   "path": "/v1/package-commerce/traffic-purchases",
+   "summary": "Purchase a versioned traffic package snapshot",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_snapshot_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "promotion",
+      "type": "PromotionReference"
+     },
+     {
+      "name": "payment",
+      "type": "BalancePayment | ProviderPayment",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "getMyTrafficPackagePurchase",
+   "method": "GET",
+   "path": "/v1/package-commerce/traffic-purchases/{order_id}",
+   "summary": "Get a sanitized traffic-purchase order and grant result",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "package_subscriptions.read"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized traffic order and an optional grant while provider payment is pending.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "grant",
+       "type": "TrafficGrant"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  }
+ ]
+}

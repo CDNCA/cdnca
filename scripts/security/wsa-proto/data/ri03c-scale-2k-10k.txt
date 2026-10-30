@@ -1,0 +1,25 @@
+== scale 2000 x 32
+rc=0
+INFO scale sites=2000 tiers=2 prepare=73ms node_rules=90620B
+INFO round 0 no-waf p50=134us p90=162us p99=245us mean=141us non200=0 master_rss=16568kB worker_rss=34932kB start=576ms reload=133ms
+INFO round 0 waf p50=717us p90=1083us p99=1269us mean=802us non200=0 master_rss=41824kB worker_rss=69528kB start=692ms reload=286ms
+INFO round 0 waf-2000x32 p50=840us p90=1192us p99=1486us mean=912us non200=0 master_rss=462484kB worker_rss=489372kB start=3.729s reload=11.079s
+SCALE {"extra_p50_us":583,"master_rss_kb":{"no_waf":"16568","targets":"462484","waf":"41824"},"no_waf_p50_us":134,"no_waf_p99_us":245,"reload_ms":{"targets":11078,"waf":286},"requests_per_round":3000,"rounds":1,"sites":2000,"targets_extra_p50_us":123,"targets_extra_p99_us":217,"targets_p50_us":840,"targets_p99_us":1486,"targets_per_site":32,"tiers":2,"waf_p50_us":717,"waf_p99_us":1269}
+RESULT failures=0
+== scale 2000 x 1
+rc=0
+INFO scale sites=2000 tiers=2 prepare=72ms node_rules=90620B
+INFO round 0 no-waf p50=130us p90=159us p99=222us mean=141us non200=0 master_rss=16404kB worker_rss=34584kB start=493ms reload=134ms
+INFO round 0 waf p50=719us p90=1080us p99=1371us mean=808us non200=0 master_rss=41772kB worker_rss=69328kB start=669ms reload=281ms
+INFO round 0 waf-2000x1 p50=823us p90=1162us p99=1294us mean=887us non200=0 master_rss=341076kB worker_rss=368116kB start=2.936s reload=7.666s
+SCALE {"extra_p50_us":589,"master_rss_kb":{"no_waf":"16404","targets":"341076","waf":"41772"},"no_waf_p50_us":130,"no_waf_p99_us":222,"reload_ms":{"targets":7665,"waf":280},"requests_per_round":3000,"rounds":1,"sites":2000,"targets_extra_p50_us":104,"targets_extra_p99_us":-77,"targets_p50_us":823,"targets_p99_us":1294,"targets_per_site":1,"tiers":2,"waf_p50_us":719,"waf_p99_us":1371}
+RESULT failures=0
+== scale 10000 x 32
+rc=0
+INFO scale sites=10000 tiers=2 prepare=76ms node_rules=90620B
+INFO round 0 no-waf p50=129us p90=160us p99=266us mean=136us non200=0 master_rss=16376kB worker_rss=46256kB start=1.272s reload=136ms
+INFO round 0 waf p50=757us p90=1141us p99=1456us mean=861us non200=0 master_rss=42060kB worker_rss=75348kB start=1.64s reload=306ms
+INFO round 0 waf-10000x32 p50=1282us p90=1770us p99=2762us mean=1353us non200=0 master_rss=2147260kB worker_rss=2187240kB start=1m5.837s reload=5m11.609s
+SCALE {"extra_p50_us":628,"master_rss_kb":{"no_waf":"16376","targets":"2147260","waf":"42060"},"no_waf_p50_us":129,"no_waf_p99_us":266,"reload_ms":{"targets":311608,"waf":305},"requests_per_round":3000,"rounds":1,"sites":10000,"targets_extra_p50_us":525,"targets_extra_p99_us":1306,"targets_p50_us":1282,"targets_p99_us":2762,"targets_per_site":32,"tiers":2,"waf_p50_us":757,"waf_p99_us":1456}
+RESULT failures=0
+EXIT=0

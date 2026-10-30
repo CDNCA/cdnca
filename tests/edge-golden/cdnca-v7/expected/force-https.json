@@ -1,0 +1,175 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "force-https",
+  "scenario_sha256": "2f572185647a0d0afe0865c08391d91e202a075b03123c634645c6c1626e064e",
+  "steps": [
+    {
+      "id": "redirect",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 301,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "166",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "https://secure.example.test:18446/a/b?c=1",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 166,
+            "sha256": "87a9323ac85ce28867d5d7ce590c8f29b8d1a999961fca71bb33adef48683691",
+            "text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "redirect-post",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 301,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "166",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "https://secure.example.test:18446/form",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 166,
+            "sha256": "87a9323ac85ce28867d5d7ce590c8f29b8d1a999961fca71bb33adef48683691",
+            "text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "acme",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "63",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 63,
+            "sha256": "1fb66e31fafdde34fc88ffaa5e4c392056d029a615ba9e68ba4951a3d805ed85",
+            "text": "secure secure.example.test /.well-known/acme-challenge/token123"
+          },
+          "origin": [
+            {
+              "origin": "secure",
+              "method": "GET",
+              "uri": "/.well-known/acme-challenge/token123",
+              "host": "secure.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "https",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/2.0",
+          "headers": {
+            "content-length": "29",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 29,
+            "sha256": "5d73fee921965ea3957fff0706bdcca4bea2720bf469aaeaefd500ab470e8f19",
+            "text": "secure secure.example.test /a"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "h2",
+            "subject": "secure.example.test",
+            "names": [
+              "secure.example.test"
+            ],
+            "serial": 201,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "secure",
+              "method": "GET",
+              "uri": "/a",
+              "host": "secure.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "other-site",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "27",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 27,
+            "sha256": "3768d2636077d6ed2954a11f76b3b15b16ecf66beed01ee2fad37c04274acd73",
+            "text": "plain plain.example.test /x"
+          },
+          "origin": [
+            {
+              "origin": "plain",
+              "method": "GET",
+              "uri": "/x",
+              "host": "plain.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

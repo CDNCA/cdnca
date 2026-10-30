@@ -1,0 +1,67 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/waf-scheme-wrapper",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "参数协议包装器",
+ "description": "参数值含 php:// phar:// gopher:// 等包装器即记录。自有写法；思路来源 wargio/naxsi naxsi_core.rules（GPL-3.0，未复制规则文本）",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "scheme-wrapper"
+ ],
+ "rules": [
+  {
+   "id": "scheme-wrapper",
+   "name": "参数含协议包装器",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "contains",
+       "values": [
+        "data://",
+        "dict://",
+        "expect://",
+        "file://",
+        "ftp://",
+        "glob://",
+        "gopher://",
+        "jar:",
+        "ldap://",
+        "phar://",
+        "php://",
+        "zip://",
+        "zlib://"
+       ],
+       "filters": [
+        "unicode_decode",
+        "lowercase"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

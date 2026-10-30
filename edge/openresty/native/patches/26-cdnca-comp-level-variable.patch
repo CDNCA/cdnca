@@ -1,0 +1,281 @@
+--- a/nginx-1.31.1/src/http/modules/ngx_http_gzip_filter_module.c
++++ b/nginx-1.31.1/src/http/modules/ngx_http_gzip_filter_module.c
+@@ -22,6 +22,7 @@
+ 
+     size_t               postpone_gzipping;
+     ngx_int_t            level;
++    ngx_http_complex_value_t  *level_value;
+     size_t               wbits;
+     size_t               memlevel;
+     ssize_t              min_length;
+@@ -50,6 +51,7 @@
+ 
+     int                  wbits;
+     int                  memlevel;
++    int                  level;
+ 
+     unsigned             flush:4;
+     unsigned             redo:1;
+@@ -98,6 +100,10 @@
+     void *parent, void *child);
+ static char *ngx_http_gzip_window(ngx_conf_t *cf, void *post, void *data);
+ static char *ngx_http_gzip_hash(ngx_conf_t *cf, void *post, void *data);
++static char *ngx_http_gzip_comp_level(ngx_conf_t *cf, ngx_command_t *cmd,
++    void *conf);
++static ngx_int_t ngx_http_gzip_level(ngx_http_request_t *r,
++    ngx_http_gzip_conf_t *conf);
+ 
+ 
+ static ngx_conf_num_bounds_t  ngx_http_gzip_comp_level_bounds = {
+@@ -134,7 +140,7 @@
+ 
+     { ngx_string("gzip_comp_level"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_num_slot,
++      ngx_http_gzip_comp_level,
+       NGX_HTTP_LOC_CONF_OFFSET,
+       offsetof(ngx_http_gzip_conf_t, level),
+       &ngx_http_gzip_comp_level_bounds },
+@@ -272,6 +278,7 @@
+ 
+     ctx->request = r;
+     ctx->buffering = (conf->postpone_gzipping != 0);
++    ctx->level = (int) ngx_http_gzip_level(r, conf);
+ 
+     ngx_http_gzip_filter_memory(r, ctx);
+ 
+@@ -523,7 +530,7 @@
+          * and 128K hash.
+          */
+ 
+-        if (conf->level == 1) {
++        if (ctx->level == 1) {
+             wbits = ngx_max(wbits, 13);
+         }
+ 
+@@ -623,7 +630,7 @@
+     ctx->zstream.zfree = ngx_http_gzip_filter_free;
+     ctx->zstream.opaque = ctx;
+ 
+-    rc = deflateInit2(&ctx->zstream, (int) conf->level, Z_DEFLATED,
++    rc = deflateInit2(&ctx->zstream, ctx->level, Z_DEFLATED,
+                       ctx->wbits + 16, ctx->memlevel, Z_DEFAULT_STRATEGY);
+ 
+     if (rc != Z_OK) {
+@@ -1106,6 +1113,9 @@
+ 
+     ngx_conf_merge_size_value(conf->postpone_gzipping, prev->postpone_gzipping,
+                               0);
++    if (conf->level == NGX_CONF_UNSET && conf->level_value == NULL) {
++        conf->level_value = prev->level_value;
++    }
+     ngx_conf_merge_value(conf->level, prev->level, 1);
+     ngx_conf_merge_size_value(conf->wbits, prev->wbits, MAX_WBITS);
+     ngx_conf_merge_size_value(conf->memlevel, prev->memlevel,
+@@ -1182,4 +1192,82 @@
+     }
+ 
+     return "must be 512, 1k, 2k, 4k, 8k, 16k, 32k, 64k, or 128k";
++}
++
++
++/*
++ * gzip_comp_level with variables (CDNCA): evaluated once per compressed
++ * response. An empty value is the inherited static level (an outer
++ * gzip_comp_level, default 1); a value that is not 1-9 is logged and also
++ * uses it. Without variables the stock bounded number slot applies.
++ */
++
++static char *
++ngx_http_gzip_comp_level(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
++{
++    ngx_http_gzip_conf_t  *gcf = conf;
++
++    ngx_str_t                         *value;
++    ngx_http_compile_complex_value_t   ccv;
++
++    value = cf->args->elts;
++
++    if (gcf->level_value != NULL) {
++        return "is duplicate";
++    }
++
++    if (ngx_http_script_variables_count(&value[1]) == 0) {
++        return ngx_conf_set_num_slot(cf, cmd, conf);
++    }
++
++    if (gcf->level != NGX_CONF_UNSET) {
++        return "is duplicate";
++    }
++
++    gcf->level_value = ngx_palloc(cf->pool, sizeof(ngx_http_complex_value_t));
++    if (gcf->level_value == NULL) {
++        return NGX_CONF_ERROR;
++    }
++
++    ngx_memzero(&ccv, sizeof(ngx_http_compile_complex_value_t));
++
++    ccv.cf = cf;
++    ccv.value = &value[1];
++    ccv.complex_value = gcf->level_value;
++
++    if (ngx_http_compile_complex_value(&ccv) != NGX_OK) {
++        return NGX_CONF_ERROR;
++    }
++
++    return NGX_CONF_OK;
+ }
++
++
++static ngx_int_t
++ngx_http_gzip_level(ngx_http_request_t *r, ngx_http_gzip_conf_t *conf)
++{
++    ngx_int_t  level;
++    ngx_str_t  value;
++
++    if (conf->level_value == NULL) {
++        return conf->level;
++    }
++
++    if (ngx_http_complex_value(r, conf->level_value, &value) != NGX_OK) {
++        return conf->level;
++    }
++
++    if (value.len == 0) {
++        return conf->level;
++    }
++
++    level = ngx_atoi(value.data, value.len);
++
++    if (level < 1 || level > 9) {
++        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
++                      "invalid gzip_comp_level value \"%V\"", &value);
++        return conf->level;
++    }
++
++    return level;
++}
+--- a/ngx_brotli/filter/ngx_http_brotli_filter_module.c
++++ b/ngx_brotli/filter/ngx_http_brotli_filter_module.c
+@@ -35,6 +35,8 @@
+ 
+   /* Brotli encoder parameter: quality */
+   ngx_int_t quality;
++  /* CDNCA: brotli_comp_level with variables (evaluated per response) */
++  ngx_http_complex_value_t* quality_value;
+ 
+   /* Brotli encoder parameter: (max) lg_win */
+   size_t lg_win;
+@@ -110,6 +112,10 @@
+ 
+ static char* ngx_http_brotli_parse_wbits(ngx_conf_t* cf, void* post,
+                                          void* data);
++static char* ngx_http_brotli_comp_level(ngx_conf_t* cf, ngx_command_t* cmd,
++                                        void* conf);
++static ngx_int_t ngx_http_brotli_quality(ngx_http_request_t* r,
++                                         ngx_http_brotli_conf_t* conf);
+ 
+ /* Configuration literals. */
+ 
+@@ -143,7 +149,7 @@
+     {ngx_string("brotli_comp_level"),
+      NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF |
+          NGX_CONF_TAKE1,
+-     ngx_conf_set_num_slot, NGX_HTTP_LOC_CONF_OFFSET,
++     ngx_http_brotli_comp_level, NGX_HTTP_LOC_CONF_OFFSET,
+      offsetof(ngx_http_brotli_conf_t, quality),
+      &ngx_http_brotli_comp_level_bounds},
+ 
+@@ -534,6 +540,7 @@
+   ngx_http_brotli_conf_t* conf;
+   BROTLI_BOOL ok;
+   size_t wbits;
++  ngx_int_t quality;
+ 
+   if (ctx->initialized) {
+     return NGX_OK;
+@@ -560,12 +567,13 @@
+     return NGX_ERROR;
+   }
+ 
++  quality = ngx_http_brotli_quality(r, conf);
+   ok = BrotliEncoderSetParameter(ctx->encoder, BROTLI_PARAM_QUALITY,
+-                                 (uint32_t)conf->quality);
++                                 (uint32_t)quality);
+   if (!ok) {
+     ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
+                   "BrotliEncoderSetParameter(QUALITY, %uD) failed",
+-                  (uint32_t)conf->quality);
++                  (uint32_t)quality);
+     return NGX_ERROR;
+   }
+ 
+@@ -592,7 +600,7 @@
+   ctx->out_chain->next = NULL;
+ 
+   ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+-                 "brotli encoder initialized: lvl:%i win:%d", conf->quality,
++                 "brotli encoder initialized: lvl:%i win:%d", quality,
+                  (1 << wbits));
+ 
+   return NGX_OK;
+@@ -730,6 +738,9 @@
+ 
+   ngx_conf_merge_value(conf->enable, prev->enable, 0);
+ 
++  if (conf->quality == NGX_CONF_UNSET && conf->quality_value == NULL) {
++    conf->quality_value = prev->quality_value;
++  }
+   ngx_conf_merge_value(conf->quality, prev->quality, 6);
+   ngx_conf_merge_size_value(conf->lg_win, prev->lg_win, 19);
+   ngx_conf_merge_value(conf->min_length, prev->min_length, 20);
+@@ -773,3 +784,49 @@
+   return "must be 1k, 2k, 4k, 8k, 16k, 32k, 64k, 128k, 256k, 512k, 1m, 2m, 4m, "
+          "8m or 16m";
+ }
++
++/* CDNCA: brotli_comp_level with variables, evaluated once per compressed
++   response. An empty value is the inherited static quality (an outer
++   brotli_comp_level, default 6); a value outside 0-11 is logged and also uses
++   it. Without variables the stock bounded number slot applies. */
++static char* ngx_http_brotli_comp_level(ngx_conf_t* cf, ngx_command_t* cmd,
++                                        void* conf) {
++  ngx_http_brotli_conf_t* bcf = conf;
++  ngx_str_t* value;
++  ngx_http_compile_complex_value_t ccv;
++
++  value = cf->args->elts;
++  if (bcf->quality_value != NULL) return "is duplicate";
++  if (ngx_http_script_variables_count(&value[1]) == 0) {
++    return ngx_conf_set_num_slot(cf, cmd, conf);
++  }
++  if (bcf->quality != NGX_CONF_UNSET) return "is duplicate";
++
++  bcf->quality_value = ngx_palloc(cf->pool, sizeof(ngx_http_complex_value_t));
++  if (bcf->quality_value == NULL) return NGX_CONF_ERROR;
++  ngx_memzero(&ccv, sizeof(ngx_http_compile_complex_value_t));
++  ccv.cf = cf;
++  ccv.value = &value[1];
++  ccv.complex_value = bcf->quality_value;
++  if (ngx_http_compile_complex_value(&ccv) != NGX_OK) return NGX_CONF_ERROR;
++  return NGX_CONF_OK;
++}
++
++static ngx_int_t ngx_http_brotli_quality(ngx_http_request_t* r,
++                                         ngx_http_brotli_conf_t* conf) {
++  ngx_int_t quality;
++  ngx_str_t value;
++
++  if (conf->quality_value == NULL) return conf->quality;
++  if (ngx_http_complex_value(r, conf->quality_value, &value) != NGX_OK) {
++    return conf->quality;
++  }
++  if (value.len == 0) return conf->quality;
++  quality = ngx_atoi(value.data, value.len);
++  if (quality < BROTLI_MIN_QUALITY || quality > BROTLI_MAX_QUALITY) {
++    ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
++                  "invalid brotli_comp_level value \"%V\"", &value);
++    return conf->quality;
++  }
++  return quality;
++}

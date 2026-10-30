@@ -1,0 +1,52 @@
+// cdnca-dump: GoTestWAF test cases as JSON (same yaml.v2 parse as internal/db/load.go).
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v2"
+)
+
+type yamlConfig struct {
+	Payloads     []string      `yaml:"payload"`
+	Encoders     []string      `yaml:"encoder"`
+	Placeholders []interface{} `yaml:"placeholder"`
+	Type         string        `yaml:"type"`
+}
+
+func plain(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[interface{}]interface{}:
+		m := map[string]interface{}{}
+		for k, x := range t {
+			m[k.(string)] = plain(x)
+		}
+		return m
+	case []interface{}:
+		for i := range t {
+			t[i] = plain(t[i])
+		}
+	}
+	return v
+}
+
+func main() {
+	files, _ := filepath.Glob(filepath.Join(os.Args[1], "*", "*.yml"))
+	sort.Strings(files)
+	out := []map[string]interface{}{}
+	for _, f := range files {
+		raw, _ := os.ReadFile(f)
+		var c yamlConfig
+		if err := yaml.Unmarshal(raw, &c); err != nil {
+			panic(f + ": " + err.Error())
+		}
+		parts := strings.Split(f, string(os.PathSeparator))
+		out = append(out, map[string]interface{}{"set": parts[len(parts)-2], "case": strings.TrimSuffix(parts[len(parts)-1], ".yml"),
+			"payload": c.Payloads, "encoder": c.Encoders, "placeholder": plain(c.Placeholders)})
+	}
+	_ = json.NewEncoder(os.Stdout).Encode(out)
+}

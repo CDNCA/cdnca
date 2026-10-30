@@ -1,0 +1,335 @@
+openapi: 3.1.0
+info:
+  title: Package addon administration
+  version: 1.0.0
+  description: Independent addon products and administrator allocations. Requires a live platform session and billing.adjustments.manage or platform.admin. Allocation never debits a wallet. Catalog edits do not change existing immutable assignment snapshots. Traffic quantity is GiB; custom_cc and waf enable a feature. Renewal uses the snapshot monthly price times allocation amount times period months.
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/package-addons:
+    get:
+      operationId: listPackageAddons
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Addon products ordered by descending display ID
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Product' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/admin/package-addons/bindings:
+    get:
+      operationId: listPackageAddonBindings
+      description: Minimal product choices under the same addon administration permission.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Existing catalog product identity and name
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [id, name]
+                          properties:
+                            id: { type: string, format: uuid }
+                            name: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/admin/package-addons/assignments:
+    get:
+      operationId: listPackageAddonAssignments
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/User'
+        - $ref: '#/components/parameters/AddonID'
+      responses:
+        '200':
+          description: Unrevoked assignments with immutable product snapshots
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/Assignment' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/admin/package-addons/subscriptions:
+    get:
+      operationId: listPackageAddonEligibleSubscriptions
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/User'
+        - $ref: '#/components/parameters/AddonID'
+      responses:
+        '200':
+          description: Active subscription choices from the authoritative owner projection; addon filter excludes incompatible and duplicate allocations
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/SubscriptionOption' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/admin/package-addons/quote:
+    get:
+      operationId: quotePackageAddonPurchase
+      description: Price of buying `amount` of an add-on for a sold package now (549). The monthly price is prorated over the remaining days (a started day counts whole, a month is 30 days, half-up to the cent), then the matching automatic package_addon discounts apply (tenant and the owner's user group). Includes the owner tenant's balance and available balance (balance minus active holds).
+      parameters:
+        - { name: addon_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: subscription_id, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: amount, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 1000000, default: 1 } }
+      responses:
+        '200':
+          description: Current purchase price
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Quote' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        default: { $ref: '#/components/responses/Error' }
+  /v1/admin/package-addons/commands:
+    post:
+      operationId: commandPackageAddon
+      description: Writes are transactional with audit and actor/scope-bound idempotency receipts. Reusing a key with a different body returns package_addon_conflict. assignment.create is the administrator's free allocation (never charges). assignment.purchase (549) charges the owner tenant's balance at the quoted price on the owner's behalf (the administrator is the recorded actor), creates a paid add-on order, and adds to an existing assignment of the same add-on; a changed price returns package_addon_price_changed, an insufficient available balance returns insufficient_funds (422). Product deletion and assignment deletion retain history. WAF is fixed to one allocation and deletion is rejected while bound policies use it.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+        - name: X-Request-ID
+          in: header
+          description: Optional correlation ID; the server generates one when absent or invalid.
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Command' }
+      responses:
+        '200':
+          description: Mutation or exact replay result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, revision, charged_minor]
+                properties:
+                  id: { type: string, format: uuid }
+                  revision: { type: integer, minimum: 1 }
+                  charged_minor: { type: integer, minimum: 0, description: 0 except for assignment.purchase }
+                  order: { $ref: '#/components/schemas/Order' }
+        '409': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        default: { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100000, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+    User:
+      name: user
+      in: query
+      description: Exact user UUID or display ID, or username, email, or phone substring
+      schema: { type: string, maxLength: 128 }
+    AddonID:
+      name: addon_id
+      in: query
+      schema: { type: string, format: uuid }
+  responses:
+    Error:
+      description: Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message, request_id]
+                properties:
+                  code:
+                    type: string
+                    examples: [package_addon_invalid, package_addon_conflict, package_addon_duplicate, package_addon_waf_in_use, package_addon_forbidden, package_addon_not_found, package_addon_unavailable]
+                  message: { type: string }
+                  request_id: { type: string }
+  schemas:
+    Page:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        total: { type: integer, minimum: 0 }
+        page: { type: integer, minimum: 1 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+    ProductFields:
+      type: object
+      required: [name, remark, kind, quantity, monthly_price_minor, product_ids, enabled]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 128 }
+        remark: { type: string, maxLength: 512 }
+        kind: { type: string, enum: [traffic, domains, root_domains, http_ports, stream_ports, custom_cc, waf] }
+        quantity: { type: integer, minimum: 1, maximum: 1000000000 }
+        monthly_price_minor: { type: integer, minimum: 0, maximum: 1000000000000 }
+        product_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: { type: string, format: uuid }
+        enabled: { type: boolean }
+    Product:
+      allOf:
+        - $ref: '#/components/schemas/ProductFields'
+        - type: object
+          required: [id, display_id, revision, created_at, updated_at]
+          properties:
+            id: { type: string, format: uuid }
+            display_id: { type: string }
+            revision: { type: integer, minimum: 1 }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+    SubscriptionOption:
+      type: object
+      required: [id, tenant_scope_id, owner_user_id, owner_display_id, owner_name, name, product_id]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_scope_id: { type: string, format: uuid }
+        owner_user_id: { type: string, format: uuid }
+        owner_display_id: { type: string }
+        owner_name: { type: string }
+        name: { type: string }
+        product_id: { type: string, format: uuid }
+    Assignment:
+      type: object
+      required: [id, display_id, addon_id, tenant_scope_id, owner_user_id, owner_display_id, owner_name, subscription_id, subscription_name, kind, amount, snapshot, charged_minor, revision, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        display_id: { type: string }
+        addon_id: { type: string, format: uuid }
+        tenant_scope_id: { type: string, format: uuid }
+        owner_user_id: { type: string, format: uuid }
+        owner_display_id: { type: string }
+        owner_name: { type: string }
+        subscription_id: { type: string, format: uuid }
+        subscription_name: { type: string }
+        kind: { type: string, enum: [traffic, domains, root_domains, http_ports, stream_ports, custom_cc, waf] }
+        amount: { type: integer, minimum: 1, maximum: 1000000 }
+        snapshot: { $ref: '#/components/schemas/Product' }
+        charged_minor: { type: integer, const: 0 }
+        revision: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Command:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [product.create, product.update, product.delete, assignment.create, assignment.purchase, assignment.update, assignment.delete] }
+        id: { type: string, format: uuid }
+        expected_revision: { type: integer, minimum: 1 }
+        product: { $ref: '#/components/schemas/ProductFields' }
+        addon_id: { type: string, format: uuid }
+        owner_user_id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        amount: { type: integer, minimum: 1, maximum: 1000000 }
+        expected_payable_minor: { type: integer, minimum: 0, description: Required by assignment.purchase; the payable amount shown to the operator }
+      allOf:
+        - if: { properties: { action: { enum: [product.create, product.update] } } }
+          then: { required: [product] }
+        - if: { properties: { action: { enum: [product.update, product.delete, assignment.update, assignment.delete] } } }
+          then: { required: [id, expected_revision] }
+        - if: { properties: { action: { const: assignment.create } } }
+          then: { required: [addon_id, owner_user_id, subscription_id, amount] }
+        - if: { properties: { action: { const: assignment.purchase } } }
+          then: { required: [addon_id, owner_user_id, subscription_id, amount, expected_payable_minor] }
+        - if: { properties: { action: { const: assignment.update } } }
+          then: { required: [amount] }
+    AppliedPolicy:
+      type: object
+      required: [policy_id, revision, name, discount_minor]
+      properties:
+        policy_id: { type: string, format: uuid }
+        revision: { type: integer, minimum: 1 }
+        name: { type: string }
+        discount_minor: { type: integer, minimum: 0 }
+    Quote:
+      type: object
+      required: [addon_id, subscription_id, tenant_scope_id, owner_user_id, amount, monthly_price_minor, remaining_days, subscription_ends_at, currency, original_amount_minor, discount_amount_minor, payable_amount_minor, policies, balance_minor, available_minor, merges]
+      properties:
+        addon_id: { type: string, format: uuid }
+        subscription_id: { type: string, format: uuid }
+        tenant_scope_id: { type: string, format: uuid }
+        owner_user_id: { type: string, format: uuid }
+        amount: { type: integer, minimum: 1 }
+        monthly_price_minor: { type: integer, minimum: 0 }
+        remaining_days: { type: integer, minimum: 1 }
+        subscription_ends_at: { type: string, format: date-time }
+        currency: { type: string, const: CNY }
+        original_amount_minor: { type: integer, minimum: 0 }
+        discount_amount_minor: { type: integer, minimum: 0 }
+        payable_amount_minor: { type: integer, minimum: 0 }
+        policies: { type: array, items: { $ref: '#/components/schemas/AppliedPolicy' } }
+        balance_minor: { type: integer }
+        available_minor: { type: integer }
+        merges: { type: boolean, description: The subscription already holds this add-on; buying adds to it }
+    Order:
+      type: object
+      required: [id, display_id, assignment_id, amount, remaining_days, original_amount_minor, discount_amount_minor, payable_amount_minor, balance_after_minor, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        display_id: { type: string }
+        assignment_id: { type: string, format: uuid }
+        amount: { type: integer, minimum: 1 }
+        remaining_days: { type: integer, minimum: 1 }
+        original_amount_minor: { type: integer, minimum: 0 }
+        discount_amount_minor: { type: integer, minimum: 0 }
+        payable_amount_minor: { type: integer, minimum: 0 }
+        billing_transaction_id: { type: string, format: uuid }
+        balance_after_minor: { type: integer }
+        created_at: { type: string, format: date-time }

@@ -1,0 +1,529 @@
+{
+ "id": "admin-package-addons",
+ "prefix": "/v1/admin/package-addons",
+ "operations": [
+  {
+   "operation_id": "listPackageAddons",
+   "method": "GET",
+   "path": "/v1/admin/package-addons",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Addon products ordered by descending display ID",
+     "fields": [
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<Product>"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "default",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPackageAddonAssignments",
+   "method": "GET",
+   "path": "/v1/admin/package-addons/assignments",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "user",
+     "in": "query",
+     "type": "string",
+     "description": "Exact user UUID or display ID, or username, email, or phone substring"
+    },
+    {
+     "name": "addon_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Unrevoked assignments with immutable product snapshots",
+     "fields": [
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<Assignment>"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "default",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPackageAddonBindings",
+   "method": "GET",
+   "path": "/v1/admin/package-addons/bindings",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Minimal product choices under the same addon administration permission.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Existing catalog product identity and name",
+     "fields": [
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<object>"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "default",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "commandPackageAddon",
+   "method": "POST",
+   "path": "/v1/admin/package-addons/commands",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Writes are transactional with audit and actor/scope-bound idempotency receipts. Reusing a key with a different body returns package_addon_conflict. assignment.create is the administrator's free allocation (never charges). assignment.purchase (549) charges the owner tenant's balance at the quoted price on the owner's behalf (the administrator is the recorded actor), creates a paid add-on order, and adds to an existing assignment of the same add-on; a changed price returns package_addon_price_changed, an insufficient available balance returns insufficient_funds (422). Product deletion and assignment deletion retain history. WAF is fixed to one allocation and deletion is rejected while bound policies use it.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Optional correlation ID; the server generates one when absent or invalid."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "action",
+      "type": "string: product.create / product.update / product.delete / assignment.create / assignment.purchase / assignment.update / assignment.delete",
+      "required": true
+     },
+     {
+      "name": "id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer"
+     },
+     {
+      "name": "product",
+      "type": "ProductFields"
+     },
+     {
+      "name": "addon_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "owner_user_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "subscription_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "amount",
+      "type": "integer"
+     },
+     {
+      "name": "expected_payable_minor",
+      "type": "integer",
+      "description": "Required by assignment.purchase; the payable amount shown to the operator"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Mutation or exact replay result",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "charged_minor",
+       "type": "integer",
+       "required": true,
+       "description": "0 except for assignment.purchase"
+      },
+      {
+       "name": "order",
+       "type": "Order"
+      }
+     ]
+    },
+    {
+     "status": "409",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "422",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "default",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "quotePackageAddonPurchase",
+   "method": "GET",
+   "path": "/v1/admin/package-addons/quote",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Price of buying `amount` of an add-on for a sold package now (549). The monthly price is prorated over the remaining days (a started day counts whole, a month is 30 days, half-up to the cent), then the matching automatic package_addon discounts apply (tenant and the owner's user group). Includes the owner tenant's balance and available balance (balance minus active holds).",
+   "params": [
+    {
+     "name": "addon_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "subscription_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "amount",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current purchase price",
+     "fields": [
+      {
+       "name": "addon_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "amount",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "monthly_price_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "remaining_days",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "subscription_ends_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "original_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "discount_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "payable_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "policies",
+       "type": "array<AppliedPolicy>",
+       "required": true
+      },
+      {
+       "name": "balance_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "available_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "merges",
+       "type": "boolean",
+       "required": true,
+       "description": "The subscription already holds this add-on; buying adds to it"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "404",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "409",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "default",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPackageAddonEligibleSubscriptions",
+   "method": "GET",
+   "path": "/v1/admin/package-addons/subscriptions",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "user",
+     "in": "query",
+     "type": "string",
+     "description": "Exact user UUID or display ID, or username, email, or phone substring"
+    },
+    {
+     "name": "addon_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Active subscription choices from the authoritative owner projection; addon filter excludes incompatible and duplicate allocations",
+     "fields": [
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<SubscriptionOption>"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    },
+    {
+     "status": "default",
+     "description": "Stable error code. HTTP 400 invalid, 401 unauthenticated, 403 forbidden, 404 not found, 409 conflict/duplicate/WAF in use, 503 unavailable."
+    }
+   ]
+  }
+ ]
+}

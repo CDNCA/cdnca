@@ -1,0 +1,201 @@
+{
+ "id": "node-registrations",
+ "prefix": "/v1/node-registrations",
+ "operations": [
+  {
+   "operation_id": "registerNode",
+   "method": "POST",
+   "path": "/v1/node-registrations",
+   "summary": "Self-register a node host (called by install-node.sh)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Unauthenticated except for the registration credential in the body; rate limited per source IP (10/min) and globally (120/min) per control-api process. Creates a pending node (待初始化) named after the host and records the observed public source IP and OS details, then returns a one-time initial_enrollment token (10 minutes) for the Gateway enrollment. Dedupe: the node ID is a keyed hash of the machine fingerprint, so the same machine reuses its pending node (200) instead of creating a duplicate; once it has enrolled or been initialized the call returns 409 node_already_registered. A deleted (retired) node lets the machine register again as a new node. Self-registered nodes stay pending after enrollment and receive no configuration until an administrator sets admin_state=active. A new node gets the region of the region catalog when it has exactly one region, else an empty region.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "credential",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "machine_fingerprint",
+      "type": "string",
+      "required": true,
+      "description": "Lowercase hex SHA-256 of \"cdnca-node-registration-v1\" NUL machine-id NUL DMI product_uuid (empty when unreadable)."
+     },
+     {
+      "name": "hostname",
+      "type": "string"
+     },
+     {
+      "name": "os_name",
+      "type": "string"
+     },
+     {
+      "name": "kernel_version",
+      "type": "string"
+     },
+     {
+      "name": "architecture",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Pending node created.",
+     "fields": [
+      {
+       "name": "node",
+       "type": "Node",
+       "required": true
+      },
+      {
+       "name": "enrollment_token",
+       "type": "IssuedEnrollmentToken",
+       "required": true
+      },
+      {
+       "name": "reused",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Existing pending node of this machine reused; a fresh token is issued.",
+     "fields": [
+      {
+       "name": "node",
+       "type": "Node",
+       "required": true
+      },
+      {
+       "name": "enrollment_token",
+       "type": "IssuedEnrollmentToken",
+       "required": true
+      },
+      {
+       "name": "reused",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "invalid_registration_credential - the credential is invalid or was reset."
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "429",
+     "description": "node_registration_rate_limited; retry after the Retry-After seconds."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "recoverNodeRegistrationIdentity",
+   "method": "POST",
+   "path": "/v1/node-registrations/identity",
+   "summary": "Fetch the issued identity of an interrupted node install (called by install-node.sh --resume)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "For an install whose Gateway enrollment committed on the controller (certificate issued) but whose host never wrote its identity directory. Authenticated by the registration credential in the body and rate limited together with POST /v1/node-registrations (same per source IP and global window). Returns the live initial certificate of this machine's registered node whose enrollment CSR has the given SHA-256, in the agent.v1.EnrollResponse JSON shape; the Agent binds it to the private keys it kept in its pending enrollment state. Any miss (unknown machine, no issued certificate, CSR digest mismatch) is 404 node_identity_not_found, so the response never reveals whether another node exists. Every lookup of a registered machine is audited as node.registration.identity_fetch (success or denied). A node installed with a one-time enrollment token has no reusable credential and cannot use this endpoint.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "credential",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "machine_fingerprint",
+      "type": "string",
+      "required": true,
+      "description": "The registration fingerprint sent to POST /v1/node-registrations."
+     },
+     {
+      "name": "csr_sha256",
+      "type": "string",
+      "required": true,
+      "description": "Lowercase hex SHA-256 of the CSR DER in the Agent's pending enrollment state (edge-agent enroll --print-pending-csr-sha256)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The issued identity of this machine.",
+     "fields": [
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "selected_protocol_version",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "artifact_encryption_key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "certificate",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "invalid_registration_credential - the credential is invalid or was reset."
+    },
+    {
+     "status": "404",
+     "description": "node_identity_not_found - no issued identity matches this machine and CSR digest."
+    },
+    {
+     "status": "429",
+     "description": "node_registration_rate_limited; retry after the Retry-After seconds."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

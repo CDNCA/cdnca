@@ -1,0 +1,535 @@
+{
+ "id": "reseller",
+ "prefix": "/v1/reseller",
+ "operations": [
+  {
+   "operation_id": "listResellerCustomers",
+   "method": "GET",
+   "path": "/v1/reseller/customers",
+   "summary": "A reseller lists its own customers",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant session of an active reseller with reseller.customers.read or reseller.customers.manage. Items are the owner users of tenants whose parent_scope_id is the caller's scope (ManagedUser shape, metadata always set, group always null).",
+   "permissions": [
+    "reseller.customers.read"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Username, name, email, phone or display ID substring."
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / disabled"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of customers.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ManagedUser>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createResellerCustomer",
+   "method": "POST",
+   "path": "/v1/reseller/customers",
+   "summary": "A reseller opens a customer tenant under itself",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Creates tenant + tenant scope + owner user in one transaction with parent_scope_id = the caller's scope (the 480 guard re-checks the active reseller and customer_limit). Audit identity.user.create in both scopes. 422 reseller_customer_limit when the limit is reached; 409 username_conflict.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "username",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "password",
+      "type": "string",
+      "required": true,
+      "description": "8 to 1024 printable ASCII characters (no space) with at least two of upper case, lower case, digits and symbols; otherwise password_policy_unmet."
+     },
+     {
+      "name": "display_name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "email",
+      "type": "string | null"
+     },
+     {
+      "name": "phone",
+      "type": "string | null"
+     },
+     {
+      "name": "remark",
+      "type": "string | null"
+     },
+     {
+      "name": "qq",
+      "type": "string | null"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "The customer's owner user.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string(email) | null(email)",
+       "required": true
+      },
+      {
+       "name": "phone",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string: tenant_owner / tenant_viewer",
+       "required": true
+      },
+      {
+       "name": "group_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "group_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "metadata",
+       "type": "ManagedUserMetadata",
+       "description": "Returned only with include=user_metadata on administrator user endpoints. Never included in self-service profile or authentication responses. Historical idempotency receipts without this projection omit the entire object."
+      },
+      {
+       "name": "verification",
+       "type": "ManagedUserVerification",
+       "description": "Present only when user_verification is requested on the administrator user list. Flags belong to the returned user and tenant scope, match current approved identity bindings and settled evidence, and do not disclose names, document numbers, fingerprints, materials or provider data. Detail, mutation, self-service and authentication responses never include this projection."
+      },
+      {
+       "name": "reseller",
+       "type": "ManagedUserReseller",
+       "description": "Present only when reseller is requested on the administrator user list. Reseller identity and owning reseller belong to the user's tenant, so every member of a tenant carries the same values. Platform administrators carry is_reseller false and null fields."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "The request is well formed but breaks a business rule (error.code names it)."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listResellerCustomerSites",
+   "method": "GET",
+   "path": "/v1/reseller/customers/{scope_id}/sites",
+   "summary": "A reseller lists one of its customers' sites (read only)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant session of an active reseller with reseller.customers.read or reseller.customers.manage. The scope must be a customer tenant under the caller's active reseller scope (same check as the reseller package-commerce routes); any other scope, the caller's own included, is 403. Items carry only id, display_id and domain, newest first.",
+   "permissions": [
+    "reseller.customers.read"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "The customer's tenant scope ID."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive domain substring."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of the customer's sites.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "setResellerCustomerStatus",
+   "method": "PUT",
+   "path": "/v1/reseller/customers/{user_id}/status",
+   "summary": "A reseller suspends (disabled) or resumes (active) one of its customers",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only the owner user of the caller's own customer tenant; anything else is 404. Disabling revokes the user's sessions. Audit reseller.customer.status in both scopes. 409 version_conflict on a stale expected_revision.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "status",
+      "type": "string: active / disabled",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The customer's owner user after the change.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string(email) | null(email)",
+       "required": true
+      },
+      {
+       "name": "phone",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string: tenant_owner / tenant_viewer",
+       "required": true
+      },
+      {
+       "name": "group_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "group_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "metadata",
+       "type": "ManagedUserMetadata",
+       "description": "Returned only with include=user_metadata on administrator user endpoints. Never included in self-service profile or authentication responses. Historical idempotency receipts without this projection omit the entire object."
+      },
+      {
+       "name": "verification",
+       "type": "ManagedUserVerification",
+       "description": "Present only when user_verification is requested on the administrator user list. Flags belong to the returned user and tenant scope, match current approved identity bindings and settled evidence, and do not disclose names, document numbers, fingerprints, materials or provider data. Detail, mutation, self-service and authentication responses never include this projection."
+      },
+      {
+       "name": "reseller",
+       "type": "ManagedUserReseller",
+       "description": "Present only when reseller is requested on the administrator user list. Reseller identity and owning reseller belong to the user's tenant, so every member of a tenant carries the same values. Platform administrators carry is_reseller false and null fields."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

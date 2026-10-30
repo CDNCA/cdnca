@@ -1,0 +1,103 @@
+{
+ "id": "admin-system-backup-runs",
+ "prefix": "/v1/admin/system-backup-runs",
+ "operations": [
+  {
+   "operation_id": "listSystemBackupRuns",
+   "method": "GET",
+   "path": "/v1/admin/system-backup-runs",
+   "summary": "Read persisted control-plane backup run history",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Reads only signed start and terminal facts persisted by the controlled backup runner. A missing terminal or an unverifiable fact is returned as an unknown outcome and is never inferred from plans, approvals, or audit events. With no backup runner bound it answers an empty page with unconfigured=true; a partial or invalid binding is unavailable.",
+   "params": [
+    {
+     "name": "backup_id",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: succeeded / failed / unknown"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer: 10 / 30 / 100 / 300"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Signed continuation bound to the backup ID, state, and effective time range; omitted times retain the first page range."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Persisted backup run facts",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<BackupRunHistoryRecord>",
+       "required": true
+      },
+      {
+       "name": "total_count",
+       "type": "integer",
+       "required": true,
+       "description": "All records matching the filters before cursor pagination."
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "unconfigured",
+       "type": "boolean",
+       "description": "True when no backup runner (manifest directory, source cluster and signing trust) is bound to this control plane; items is then empty because there is no backup target."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid query or cursor"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Platform administrator permission required"
+    },
+    {
+     "status": "503",
+     "description": "Protected backup history capability unavailable"
+    }
+   ]
+  }
+ ]
+}

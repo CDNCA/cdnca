@@ -1,0 +1,382 @@
+{
+ "id": "admin-package-monitor",
+ "prefix": "/v1/admin/package-monitor",
+ "operations": [
+  {
+   "operation_id": "listAdminPackageMonitorAlerts",
+   "method": "GET",
+   "path": "/v1/admin/package-monitor/alerts",
+   "summary": "List current package-monitor alert heads in an explicit tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform callers must provide scope_id explicitly and require billing.adjustments.manage or platform.admin.",
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "current_phase",
+     "in": "query",
+     "type": "string: before / triggered / recovered / suppressed_stale",
+     "description": "Exact alert phase projected from the latest immutable receipt in the frozen snapshot."
+    },
+    {
+     "name": "threshold_id",
+     "in": "query",
+     "type": "string",
+     "description": "Exact lowercase SHA-256 threshold identity. Input-only and never returned."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable keyset page of current alert heads.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PackageMonitorAlertHead>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "408",
+     "description": "Request cancelled"
+    },
+    {
+     "status": "503",
+     "description": "Dependency unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "listAdminPackageMonitorTransitions",
+   "method": "GET",
+   "path": "/v1/admin/package-monitor/alerts/{alert_id}/transitions",
+   "summary": "List immutable transition facts in an explicit tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform callers must provide scope_id explicitly. The first page freezes the alert head revision. The signed cursor is bound to the exact phase filter, including an explicit empty filter.",
+   "params": [
+    {
+     "name": "alert_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "phase",
+     "in": "query",
+     "type": "string: before / triggered / recovered / suppressed_stale",
+     "description": "Exact immutable threshold transition phase."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Frozen-revision keyset page of immutable transition facts.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PackageMonitorTransition>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "408",
+     "description": "Request cancelled"
+    },
+    {
+     "status": "503",
+     "description": "Dependency unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminPackageMonitorTransition",
+   "method": "GET",
+   "path": "/v1/admin/package-monitor/alerts/{alert_id}/transitions/{revision}",
+   "summary": "Get one immutable transition fact in an explicit tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform callers must provide scope_id explicitly.",
+   "params": [
+    {
+     "name": "alert_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "revision",
+     "in": "path",
+     "type": "integer(int64)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One immutable transition fact.",
+     "fields": [
+      {
+       "name": "alert_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "policy_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "metric",
+       "type": "string: traffic_bytes / bandwidth_bps / connections / expiration",
+       "required": true
+      },
+      {
+       "name": "period_key",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "phase",
+       "type": "string: before / triggered / recovered / suppressed_stale",
+       "required": true
+      },
+      {
+       "name": "observed_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "metric_schema_version",
+       "type": "string: package-monitor-metric/v1 / deadline/v1",
+       "required": true
+      },
+      {
+       "name": "source_watermark",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "finalized_through",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "evaluated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "408",
+     "description": "Request cancelled"
+    },
+    {
+     "status": "503",
+     "description": "Dependency unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "listAdminPackageMonitorPolicies",
+   "method": "GET",
+   "path": "/v1/admin/package-monitor/policies",
+   "summary": "List current package-monitor policies in an explicit tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform callers must provide scope_id explicitly and require billing.adjustments.manage or platform.admin.",
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable keyset page of current policy heads.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PackageMonitorPolicy>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "408",
+     "description": "Request cancelled"
+    },
+    {
+     "status": "503",
+     "description": "Dependency unavailable"
+    }
+   ]
+  }
+ ]
+}

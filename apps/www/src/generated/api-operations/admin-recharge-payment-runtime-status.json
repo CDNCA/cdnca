@@ -1,0 +1,67 @@
+{
+ "id": "admin-recharge-payment-runtime-status",
+ "prefix": "/v1/admin/recharge-payment-runtime-status",
+ "operations": [
+  {
+   "operation_id": "getRechargePaymentRuntimeStatus",
+   "method": "GET",
+   "path": "/v1/admin/recharge-payment-runtime-status",
+   "summary": "Read non-secret recharge payment runtime status",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns provider configuration/readiness state without credentials or endpoint details.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Runtime status",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: disabled / unavailable / degraded / ready",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "ready",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "alipay",
+       "type": "RechargePaymentProviderStatus",
+       "required": true
+      },
+      {
+       "name": "wechat",
+       "type": "RechargePaymentProviderStatus",
+       "required": true
+      },
+      {
+       "name": "bank_transfer",
+       "type": "RechargePaymentProviderStatus",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Administrator session required"
+    },
+    {
+     "status": "403",
+     "description": "Platform system configuration read permission required"
+    }
+   ]
+  }
+ ]
+}

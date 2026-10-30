@@ -1,0 +1,2125 @@
+openapi: 3.1.0
+info:
+  title: Smart Auto Defense API (module.autodefense)
+  version: 1.0.0
+  description: >-
+    ADR 0010 sections 7.4, 7A, 9.1, 9.3 and 9.4 (AD-11). Tenant routes live under /v1/security/autodefense and act on
+    the session tenant; the same routes under /v1/admin/security/autodefense need platform.admin and a
+    tenant_scope_id query parameter (optional on the list reads: without it they read every tenant). Reads need security_policies.read, writes security_policies.manage (the adaptive WAF
+    routes sites/{site_id}/waf-adapt waf_adapt.read / waf_adapt.manage). Every route
+    needs the module.autodefense lease feature; starting protection, switching a module to auto and resuming automatic
+    items need module.autodefense.auto. A refusal is 403 entitlement_feature_denied with error.capability.feature
+    naming the missing feature. Locking an item (a person raising or lowering it) needs module.autodefense only and the
+    item stays manual until a person resumes it (user decision Q3). Every write appends a security.autodefense.* audit
+    event; item_manual and item_auto record the operator and time.
+paths:
+  /v1/security/autodefense/sites:
+    get:
+      operationId: listAutoDefenseSites
+      summary: "Sites with mode, baseline maturity, circuit, overlay and the auto-mitigation grant"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites:
+    get:
+      operationId: adminListAutoDefenseSites
+      summary: "Sites with mode, baseline maturity, circuit, overlay and the auto-mitigation grant"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/mode:
+    post:
+      operationId: setAutoDefenseSiteModes
+      summary: "Batch 开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台 (follow); protect needs module.autodefense.auto; one audit event per site"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      requestBody: {$ref: '#/components/requestBodies/ModeChange'}
+      responses:
+        '200': {$ref: '#/components/responses/ModeChanged'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/mode:
+    post:
+      operationId: adminSetAutoDefenseSiteModes
+      summary: "Batch 开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台 (follow); protect needs module.autodefense.auto; one audit event per site"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/ModeChange'}
+      responses:
+        '200': {$ref: '#/components/responses/ModeChanged'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}:
+    get:
+      operationId: getAutoDefenseSite
+      summary: "One site with its overlay"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteDetail'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      operationId: updateAutoDefenseSite
+      summary: "Sensitivity and cross-site federation (revision guarded)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/SiteSettings'}
+      responses:
+        '200': {$ref: '#/components/responses/Site'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}:
+    get:
+      operationId: adminGetAutoDefenseSite
+      summary: "One site with its overlay"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteDetail'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      operationId: adminUpdateAutoDefenseSite
+      summary: "Sensitivity and cross-site federation (revision guarded)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/SiteSettings'}
+      responses:
+        '200': {$ref: '#/components/responses/Site'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/release:
+    post:
+      operationId: releaseAutoDefenseSite
+      summary: "一键解除: undo every automatic mitigation and hold the site in observe only (default 30 minutes)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/SiteRelease'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/release:
+    post:
+      operationId: adminReleaseAutoDefenseSite
+      summary: "一键解除: undo every automatic mitigation and hold the site in observe only (default 30 minutes)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/SiteRelease'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/drifts/confirm:
+    post:
+      operationId: confirmAutoDefenseSiteDrifts
+      summary: "确认基线漂移: confirm the site's pending baseline drifts (node baselines are not changed)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/DriftList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/drifts/confirm:
+    post:
+      operationId: adminConfirmAutoDefenseSiteDrifts
+      summary: "确认基线漂移: confirm the site's pending baseline drifts (node baselines are not changed)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/DriftList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/circuit/resume:
+    post:
+      operationId: resumeAutoDefenseSiteCircuit
+      summary: "恢复自动防护: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/Site'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/circuit/resume:
+    post:
+      operationId: adminResumeAutoDefenseSiteCircuit
+      summary: "恢复自动防护: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/Site'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/allows:
+    get:
+      operationId: listAutoDefenseSiteAllows
+      summary: "白名单: the site's allow list as the nodes get it (ACL allow rules = user, 解除并加白 = release, admin sign-in sources = admin_login); never mitigated"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteAllowList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/allows/remove:
+    post:
+      operationId: removeAutoDefenseSiteAllow
+      summary: "移出白名单: remove one 解除并加白 entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/SiteAllowRemove'}
+      responses:
+        '200': {$ref: '#/components/responses/SiteAllow'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/allows:
+    get:
+      operationId: adminListAutoDefenseSiteAllows
+      summary: "白名单: the site's allow list as the nodes get it (ACL allow rules = user, 解除并加白 = release, admin sign-in sources = admin_login); never mitigated"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteAllowList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/allows/remove:
+    post:
+      operationId: adminRemoveAutoDefenseSiteAllow
+      summary: "移出白名单: remove one 解除并加白 entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/SiteAllowRemove'}
+      responses:
+        '200': {$ref: '#/components/responses/SiteAllow'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/releases/status:
+    get:
+      operationId: getAutoDefenseReleaseStatus
+      summary: "解除状态: per node delivery of the site's single release of one target (已保存 → 待节点 → 全部节点已生效 / 部分失败)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/ReleaseKind'}, {$ref: '#/components/parameters/ReleaseTarget'}]
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseStatus'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/releases/retry:
+    post:
+      operationId: retryAutoDefenseRelease
+      summary: "重试: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/ReleaseRetry'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseStatus'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/releases/status:
+    get:
+      operationId: adminGetAutoDefenseReleaseStatus
+      summary: "解除状态: per node delivery of the site's single release of one target (已保存 → 待节点 → 全部节点已生效 / 部分失败)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}, {$ref: '#/components/parameters/ReleaseKind'}, {$ref: '#/components/parameters/ReleaseTarget'}]
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseStatus'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/releases/retry:
+    post:
+      operationId: adminRetryAutoDefenseRelease
+      summary: "重试: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/ReleaseRetry'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseStatus'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules:
+    get:
+      operationId: listAutoDefenseSiteModules
+      summary: "Modules site (site.max_level), bot, cc, scan, waf with every item state 自动/人工"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      responses:
+        '200': {$ref: '#/components/responses/ModuleList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules:
+    get:
+      operationId: adminListAutoDefenseSiteModules
+      summary: "Modules site (site.max_level), bot, cc, scan, waf with every item state 自动/人工"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      responses:
+        '200': {$ref: '#/components/responses/ModuleList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules/{module}/mode:
+    put:
+      operationId: setAutoDefenseSiteModuleMode
+      summary: "manual / auto / suggest; auto needs module.autodefense.auto"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}]
+      requestBody: {$ref: '#/components/requestBodies/ModuleMode'}
+      responses:
+        '200': {$ref: '#/components/responses/ModuleModeSet'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/mode:
+    put:
+      operationId: adminSetAutoDefenseSiteModuleMode
+      summary: "manual / auto / suggest; auto needs module.autodefense.auto"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/ModuleMode'}
+      responses:
+        '200': {$ref: '#/components/responses/ModuleModeSet'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules/{module}/resume:
+    post:
+      operationId: resumeAutoDefenseSiteModule
+      summary: "全部恢复自动: every manual item of the module returns to automatic"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/ItemList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/resume:
+    post:
+      operationId: adminResumeAutoDefenseSiteModule
+      summary: "全部恢复自动: every manual item of the module returns to automatic"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/ItemList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}:
+    put:
+      operationId: lockAutoDefenseSiteItem
+      summary: "A person sets the item: it becomes manual and runs on this value until resumed (Q3)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Field'}]
+      requestBody: {$ref: '#/components/requestBodies/ItemValue'}
+      responses:
+        '200': {$ref: '#/components/responses/Item'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}:
+    put:
+      operationId: adminLockAutoDefenseSiteItem
+      summary: "A person sets the item: it becomes manual and runs on this value until resumed (Q3)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Field'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/ItemValue'}
+      responses:
+        '200': {$ref: '#/components/responses/Item'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume:
+    post:
+      operationId: resumeAutoDefenseSiteItem
+      summary: "恢复自动 for one item"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Field'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/ItemList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume:
+    post:
+      operationId: adminResumeAutoDefenseSiteItem
+      summary: "恢复自动 for one item"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Field'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/ItemList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range:
+    put:
+      operationId: setAutoDefenseSiteItemRange
+      summary: "Narrow the item's automatic range (上下限); state and manual value unchanged"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Field'}]
+      requestBody: {$ref: '#/components/requestBodies/ItemRange'}
+      responses:
+        '200': {$ref: '#/components/responses/Item'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range:
+    put:
+      operationId: adminSetAutoDefenseSiteItemRange
+      summary: "Narrow the item's automatic range (上下限); state and manual value unchanged"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Field'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/ItemRange'}
+      responses:
+        '200': {$ref: '#/components/responses/Item'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules/{module}/values:
+    get:
+      operationId: listAutoDefenseSiteModuleValues
+      summary: "Each node's newest value of every item (in force or suggested) and its reason"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}]
+      responses:
+        '200': {$ref: '#/components/responses/NodeValueList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/values:
+    get:
+      operationId: adminListAutoDefenseSiteModuleValues
+      summary: "Each node's newest value of every item (in force or suggested) and its reason"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      responses:
+        '200': {$ref: '#/components/responses/NodeValueList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/modules/{module}/history:
+    get:
+      operationId: listAutoDefenseSiteModuleHistory
+      summary: "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/HistoryList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/history:
+    get:
+      operationId: adminListAutoDefenseSiteModuleHistory
+      summary: "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/SiteModuleName'}, {$ref: '#/components/parameters/TenantScopeID'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/HistoryList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/waf-adapt:
+    get:
+      operationId: getAutoDefenseSiteWAFAdapt
+      summary: "Adaptive WAF (智能自动): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [waf_adapt.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      responses:
+        '200': {$ref: '#/components/responses/WAFAdapt'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/waf-adapt:
+    get:
+      operationId: adminGetAutoDefenseSiteWAFAdapt
+      summary: "Adaptive WAF (智能自动): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, waf_adapt.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      responses:
+        '200': {$ref: '#/components/responses/WAFAdapt'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge:
+    put:
+      operationId: setAutoDefenseSiteGreyChallenge
+      summary: "Grey zone challenge inherit / on / off (only 严格 / 极严格 tiers challenge)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [waf_adapt.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/GreyChallenge'}
+      responses:
+        '200': {$ref: '#/components/responses/GreyChallengeChange'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge:
+    put:
+      operationId: adminSetAutoDefenseSiteGreyChallenge
+      summary: "Grey zone challenge inherit / on / off (only 严格 / 极严格 tiers challenge)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, waf_adapt.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/GreyChallenge'}
+      responses:
+        '200': {$ref: '#/components/responses/GreyChallengeChange'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat:
+    put:
+      operationId: setAutoDefenseSiteGreyRepeat
+      summary: "Repeated grey zone source threshold / window of the site (null = node defaults 20 / 60 s)"
+      description: Only nodes declaring CAPABILITY_NAME_WAF_REPEAT_SITE use the site value; other nodes keep the defaults.
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [waf_adapt.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}]
+      requestBody: {$ref: '#/components/requestBodies/GreyRepeat'}
+      responses:
+        '200': {$ref: '#/components/responses/GreyRepeatChange'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat:
+    put:
+      operationId: adminSetAutoDefenseSiteGreyRepeat
+      summary: "Repeated grey zone source threshold / window of the site (null = node defaults 20 / 60 s)"
+      description: Only nodes declaring CAPABILITY_NAME_WAF_REPEAT_SITE use the site value; other nodes keep the defaults.
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, waf_adapt.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/GreyRepeat'}
+      responses:
+        '200': {$ref: '#/components/responses/GreyRepeatChange'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}:
+    post:
+      operationId: decideAutoDefenseSiteWAFExclusion
+      summary: "A person's decision: adopt (采纳, a manual exclusion), reject (驳回), revoke (撤销), manual (设为人工), resume (恢复自动); module.autodefense only"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [waf_adapt.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/WAFExclusionID'}, {$ref: '#/components/parameters/WAFDecisionAction'}]
+      requestBody: {$ref: '#/components/requestBodies/WAFDecision'}
+      responses:
+        '200': {$ref: '#/components/responses/WAFExclusion'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}:
+    post:
+      operationId: adminDecideAutoDefenseSiteWAFExclusion
+      summary: "A person's decision: adopt (采纳, a manual exclusion), reject (驳回), revoke (撤销), manual (设为人工), resume (恢复自动); module.autodefense only"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, waf_adapt.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/WAFExclusionID'}, {$ref: '#/components/parameters/WAFDecisionAction'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/WAFDecision'}
+      responses:
+        '200': {$ref: '#/components/responses/WAFExclusion'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/events:
+    get:
+      operationId: listAutoDefenseEvents
+      summary: "Attack event timeline, newest first"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/EventList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/events:
+    get:
+      operationId: adminListAutoDefenseEvents
+      summary: "Attack event timeline, newest first"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/EventList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/verdicts:
+    get:
+      operationId: listAutoDefenseVerdicts
+      summary: "Recent individual verdicts"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/VerdictList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/verdicts:
+    get:
+      operationId: adminListAutoDefenseVerdicts
+      summary: "Recent individual verdicts"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/VerdictList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/verdicts/{verdict_id}/release:
+    post:
+      operationId: releaseAutoDefenseVerdict
+      summary: "解除 / 解除并加白 / 标记误判"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/VerdictID'}]
+      requestBody: {$ref: '#/components/requestBodies/Release'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/verdicts/{verdict_id}/release:
+    post:
+      operationId: adminReleaseAutoDefenseVerdict
+      summary: "解除 / 解除并加白 / 标记误判"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/VerdictID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Release'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/blocks:
+    get:
+      operationId: listAutoDefenseBlocks
+      summary: "Ban list entries with source autodefense"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/BlockList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/blocks:
+    get:
+      operationId: adminListAutoDefenseBlocks
+      summary: "Ban list entries with source autodefense"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/IPQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/BlockList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/blocks/{block_id}/release:
+    post:
+      operationId: releaseAutoDefenseBlock
+      summary: "Unblock (Lua and kernel), optionally whitelist and report a false positive"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/BlockID'}]
+      requestBody: {$ref: '#/components/requestBodies/Release'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/blocks/{block_id}/release:
+    post:
+      operationId: adminReleaseAutoDefenseBlock
+      summary: "Unblock (Lua and kernel), optionally whitelist and report a false positive"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/BlockID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Release'}
+      responses:
+        '200': {$ref: '#/components/responses/ReleaseResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/signatures:
+    get:
+      operationId: listAutoDefenseSignatures
+      summary: "Automatic rules (signatures)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/SignatureList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/signatures:
+    get:
+      operationId: adminListAutoDefenseSignatures
+      summary: "Automatic rules (signatures)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/SignatureList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/signatures/{signature_id}/solidify:
+    post:
+      operationId: solidifyAutoDefenseSignature
+      summary: "固化为我的规则: becomes a user WAF/CC rule and leaves automatic management"
+      description: >-
+        Writes the signature as the tenant's user-layer rule pack user/<tenant>/autodefense-<id> (one rule: waf block or
+        cc JS challenge), enables it on the site and publishes the site's rule pack mounts with the three-layer conflict
+        check. 409 autodefense_rule_conflict: the pack conflicts with the site's other enabled packs (nothing is written);
+        422 autodefense_not_compilable: a condition a user rule cannot match (ua, header order, behaviour buckets; cc has
+        no JA4 / IP library match). The automatic signature is then withdrawn from every node.
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SignatureID'}]
+      requestBody: {$ref: '#/components/requestBodies/Solidify'}
+      responses:
+        '200': {$ref: '#/components/responses/Signature'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/signatures/{signature_id}/solidify:
+    post:
+      operationId: adminSolidifyAutoDefenseSignature
+      summary: "固化为我的规则 is the tenant's own decision: platform administrators get 403 autodefense_permission_denied"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SignatureID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Solidify'}
+      responses:
+        '200': {$ref: '#/components/responses/Signature'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/signatures/{signature_id}/revoke:
+    post:
+      operationId: revokeAutoDefenseSignature
+      summary: "禁用此签名"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SignatureID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/Signature'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/signatures/{signature_id}/revoke:
+    post:
+      operationId: adminRevokeAutoDefenseSignature
+      summary: "禁用此签名"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SignatureID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/Signature'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/false-positives:
+    get:
+      operationId: listAutoDefenseFalsePositives
+      summary: "False positive reports"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/FalsePositiveList'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: reportAutoDefenseFalsePositive
+      summary: "Report a verdict or signature as a false positive (the signature is withdrawn at once)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      requestBody: {$ref: '#/components/requestBodies/FalsePositive'}
+      responses:
+        '201': {$ref: '#/components/responses/FalsePositive'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/false-positives:
+    get:
+      operationId: adminListAutoDefenseFalsePositives
+      summary: "False positive reports"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}, {$ref: '#/components/parameters/SiteIDQuery'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/FalsePositiveList'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: adminReportAutoDefenseFalsePositive
+      summary: "Report a verdict or signature as a false positive (the signature is withdrawn at once)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeID'}]
+      requestBody: {$ref: '#/components/requestBodies/FalsePositive'}
+      responses:
+        '201': {$ref: '#/components/responses/FalsePositive'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/security/autodefense/metrics:
+    get:
+      operationId: listAutoDefenseSiteMetrics
+      summary: "Per site report figures of the last 30 days (mitigations, false positive reports, attack events)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteMetricsList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/metrics:
+    get:
+      operationId: adminListAutoDefenseSiteMetrics
+      summary: "Per site report figures of the last 30 days (mitigations, false positive reports, attack events)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/TenantScopeFilter'}]
+      responses:
+        '200': {$ref: '#/components/responses/SiteMetricsList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups:
+    get:
+      operationId: listAutoDefensePortGroups
+      summary: "Layer 4 port groups the control plane derives for a node (website TCP ports, one per forward)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}]
+      responses:
+        '200': {$ref: '#/components/responses/PortGroupList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules:
+    get:
+      operationId: listAutoDefensePortGroupModules
+      summary: "Layer 4 overlay of one node port group (platform only)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}]
+      responses:
+        '200': {$ref: '#/components/responses/ModuleList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/mode:
+    put:
+      operationId: setAutoDefensePortGroupModuleMode
+      summary: "manual / auto / suggest of l4; auto needs module.autodefense.auto"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}]
+      requestBody: {$ref: '#/components/requestBodies/ModuleMode'}
+      responses:
+        '200': {$ref: '#/components/responses/ModuleModeSet'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/resume:
+    post:
+      operationId: resumeAutoDefensePortGroupModule
+      summary: "全部恢复自动 of l4"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/ItemList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}:
+    put:
+      operationId: lockAutoDefensePortGroupItem
+      summary: "A person sets an l4 item (manual until resumed)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}, {$ref: '#/components/parameters/Field'}]
+      requestBody: {$ref: '#/components/requestBodies/ItemValue'}
+      responses:
+        '200': {$ref: '#/components/responses/Item'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/resume:
+    post:
+      operationId: resumeAutoDefensePortGroupItem
+      summary: "恢复自动 for one l4 item"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}, {$ref: '#/components/parameters/Field'}]
+      requestBody: {$ref: '#/components/requestBodies/Empty'}
+      responses:
+        '200': {$ref: '#/components/responses/ItemList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/range:
+    put:
+      operationId: setAutoDefensePortGroupItemRange
+      summary: "Narrow the item's automatic range (上下限); state and manual value unchanged"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}, {$ref: '#/components/parameters/Field'}]
+      requestBody: {$ref: '#/components/requestBodies/ItemRange'}
+      responses:
+        '200': {$ref: '#/components/responses/Item'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/values:
+    get:
+      operationId: listAutoDefensePortGroupModuleValues
+      summary: "Each node's newest value of every item (in force or suggested) and its reason"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}]
+      responses:
+        '200': {$ref: '#/components/responses/NodeValueList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/history:
+    get:
+      operationId: listAutoDefensePortGroupModuleHistory
+      summary: "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}, {$ref: '#/components/parameters/NodeID'}, {$ref: '#/components/parameters/PortGroupID'}, {$ref: '#/components/parameters/PortGroupModuleName'}, {$ref: '#/components/parameters/Limit'}]
+      responses:
+        '200': {$ref: '#/components/responses/HistoryList'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/admin/security/autodefense/platform-settings:
+    get:
+      operationId: getAutoDefensePlatformSettings
+      summary: "Platform defaults, budgets and breaker thresholds (platform.admin)"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      x-required-features: [module.autodefense]
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      responses:
+        '200': {$ref: '#/components/responses/PlatformSettings'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putAutoDefensePlatformSettings
+      summary: "Replace the platform settings (revision guarded, platform.admin); default_mode protect needs module.autodefense.auto and applies to every following site"
+      tags: [autodefense]
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      x-required-features: [module.autodefense, module.autodefense.auto]
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      requestBody: {$ref: '#/components/requestBodies/PlatformSettings'}
+      responses:
+        '200': {$ref: '#/components/responses/PlatformSettings'}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: session
+  parameters:
+    ReleaseKind:
+      name: kind
+      in: query
+      required: true
+      schema: {type: string, enum: [ip, cidr, ja4]}
+    ReleaseTarget:
+      name: target
+      in: query
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Echoed in X-Request-ID and error.request_id; generated when absent.
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    TenantScopeID:
+      name: tenant_scope_id
+      in: query
+      required: true
+      description: Admin routes only; the tenant scope the platform administrator acts on.
+      schema: {type: string, format: uuid}
+    TenantScopeFilter:
+      name: tenant_scope_id
+      in: query
+      required: false
+      description: >-
+        Admin list routes only; filters the list to one tenant scope. Without it the platform administrator reads every
+        tenant of this control plane (each row carries tenant_scope_id); the limit caps still apply.
+      schema: {type: string, format: uuid}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 500, default: 50}
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    WAFExclusionID:
+      name: exclusion_id
+      in: path
+      required: true
+      description: WAFExclusionID (SHA-256 of "<rule>:<loc>:<name>", first 16 hex digits).
+      schema: {type: string, pattern: '^[0-9a-f]{16}$'}
+    WAFDecisionAction:
+      name: action
+      in: path
+      required: true
+      schema: {type: string, enum: [adopt, reject, revoke, manual, resume]}
+    SiteIDQuery:
+      name: site_id
+      in: query
+      required: false
+      schema: {type: string, format: uuid}
+    IPQuery:
+      name: ip
+      in: query
+      required: false
+      schema: {type: string, anyOf: [{format: ipv4}, {format: ipv6}]}
+    VerdictID:
+      name: verdict_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    BlockID:
+      name: block_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    SignatureID:
+      name: signature_id
+      in: path
+      required: true
+      description: SHA-256 of the canonical conditions, first 16 hex digits (contract 3.4).
+      schema: {$ref: '#/components/schemas/SignatureID'}
+    NodeID:
+      name: node_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    PortGroupID:
+      name: port_group_id
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+    SiteModuleName:
+      name: module
+      in: path
+      required: true
+      description: site holds the single item site.max_level (no module mode).
+      schema: {type: string, enum: [site, bot, cc, scan, waf]}
+    PortGroupModuleName:
+      name: module
+      in: path
+      required: true
+      schema: {type: string, enum: [l4]}
+    Field:
+      name: field
+      in: path
+      required: true
+      description: A field of the frozen registry (libs/edgeconfig/autodefense FieldSpecs) of the module; waf.group:<slug> per rule group.
+      schema: {type: string, pattern: '^[a-z0-9_]+\.[a-z0-9_]+(:[a-z0-9][a-z0-9_-]{0,63})?$'}
+  requestBodies:
+    ReleaseRetry:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [kind, target]
+            properties:
+              kind: {type: string, enum: [ip, cidr, ja4]}
+              target: {type: string, minLength: 1, maxLength: 128}
+    SiteAllowRemove:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            description: Exactly one of cidr and ja4.
+            properties:
+              cidr: {type: string, minLength: 1, maxLength: 64, description: The 解除并加白 entry (IP address or network).}
+              ja4: {type: string, minLength: 1, maxLength: 64, description: The 解除并加白 entry (JA4 fingerprint).}
+    GreyChallenge:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [value]
+            properties:
+              value: {type: string, enum: [inherit, 'on', 'off']}
+    GreyRepeat:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [value]
+            properties:
+              value: {oneOf: [{$ref: '#/components/schemas/GreyRepeat'}, {type: 'null'}]}
+    WAFDecision:
+      required: false
+      description: >-
+        manual: exclude true keeps the parameter excluded, false locks it without exclusion. reject / revoke: the
+        reason code (false_positive 误判, attack 攻击, unneeded 不需要; ADR 0011 section 4.3 waf_rejections). adopt and
+        resume take no body.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - type: object
+                additionalProperties: false
+                required: [exclude]
+                properties:
+                  exclude: {type: boolean}
+              - type: object
+                additionalProperties: false
+                required: [reason]
+                properties:
+                  reason: {type: string, enum: [false_positive, attack, unneeded]}
+    Empty:
+      required: false
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false}
+    ModeChange:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [site_ids, mode, confirm]
+            properties:
+              site_ids: {type: array, minItems: 1, maxItems: 500, uniqueItems: true, items: {type: string, format: uuid}}
+              mode: {$ref: '#/components/schemas/StoredSiteMode'}
+              confirm: {type: boolean, const: true, description: Batch operations need an explicit confirmation.}
+    SiteSettings:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [revision]
+            minProperties: 2
+            properties:
+              sensitivity: {$ref: '#/components/schemas/Sensitivity'}
+              cross_site: {type: boolean}
+              revision: {type: integer, minimum: 1}
+    SiteRelease:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              observe_minutes: {type: integer, minimum: 0, maximum: 1440, default: 30, description: 0 = no observe-only hold.}
+              reason: {$ref: '#/components/schemas/Reason'}
+    Release:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            properties:
+              whitelist: {type: boolean, description: 解除并加白 (IP, CIDR and JA4 targets).}
+              allow_until:
+                allOf: [{$ref: '#/components/schemas/Timestamp'}]
+                description: When the 解除并加白 entry expires (absent = permanent; only with whitelist; after now and within 365 days). An entry already listed keeps the longer expiry.
+              false_positive: {type: boolean, description: 标记误判; reason is then required and a false_positive_report is audited.}
+              reason: {$ref: '#/components/schemas/Reason'}
+    ModuleMode:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [mode]
+            properties:
+              mode: {$ref: '#/components/schemas/ModuleMode'}
+    ItemValue:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [value]
+            properties:
+              value: {type: integer, description: 'Within the field platform range; enum fields take the ordinal, bool 0 or 1.'}
+    ItemRange:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [min, max]
+            properties:
+              min: {type: integer, description: 'Within the field platform range, min <= max; bound to the manual value as the field requires.'}
+              max: {type: integer}
+    Solidify:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [kind]
+            properties:
+              kind: {type: string, enum: [waf, cc]}
+    FalsePositive:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [site_id, reason]
+            anyOf: [{required: [verdict_id]}, {required: [signature_id]}]
+            properties:
+              site_id: {type: string, format: uuid}
+              verdict_id: {type: string, format: uuid}
+              signature_id: {$ref: '#/components/schemas/SignatureID'}
+              reason: {allOf: [{$ref: '#/components/schemas/Reason'}, {minLength: 1}]}
+    PlatformSettings:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PlatformSettingsInput'}
+  responses:
+    WAFAdapt:
+      description: The site's adaptive WAF state.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/WAFAdapt'}
+    WAFExclusion:
+      description: The exclusion after the decision.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/WAFExclusion'}
+    GreyChallengeChange:
+      description: The grey zone challenge before and after.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [before, value]
+            properties:
+              before: {type: string, enum: [inherit, 'on', 'off']}
+              value: {type: string, enum: [inherit, 'on', 'off']}
+    GreyRepeatChange:
+      description: The repeat setting before and after (null = node defaults).
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [before, value]
+            properties:
+              before: {oneOf: [{$ref: '#/components/schemas/GreyRepeat'}, {type: 'null'}]}
+              value: {oneOf: [{$ref: '#/components/schemas/GreyRepeat'}, {type: 'null'}]}
+    Error:
+      description: ErrorEnvelope; entitlement_feature_denied carries error.capability.feature.
+      headers:
+        X-Request-ID: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    SiteList:
+      description: Sites of the tenant.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items, auto_mitigation_granted]
+            properties:
+              items: {type: array, items: {$ref: '#/components/schemas/Site'}}
+              auto_mitigation_granted: {type: boolean}
+    Site:
+      description: One site.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Site'}
+    SiteDetail:
+      description: One site with the snapshot delivery state of every node serving it.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SiteDetail'}
+    ModeChanged:
+      description: The sites and their mode before and after.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [site_id, before, after, effective]
+                  properties:
+                    site_id: {type: string, format: uuid}
+                    before: {$ref: '#/components/schemas/StoredSiteMode'}
+                    after: {$ref: '#/components/schemas/StoredSiteMode'}
+                    effective: {$ref: '#/components/schemas/SiteMode'}
+    ModuleList:
+      description: Modules with their items.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items, auto_mitigation_granted, overlay]
+            properties:
+              items: {type: array, items: {$ref: '#/components/schemas/Module'}}
+              auto_mitigation_granted: {type: boolean, description: false = the page shows 需开通自动处置 and every item runs on its manual value.}
+              overlay: {$ref: '#/components/schemas/OverlayState'}
+    ModuleModeSet:
+      description: The module mode now in force.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [module, mode]
+            properties:
+              module: {type: string}
+              mode: {$ref: '#/components/schemas/ModuleMode'}
+    Item:
+      description: The locked item.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Item'}
+    ItemList:
+      description: Items that changed (empty when nothing was manual).
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items: {type: array, items: {$ref: '#/components/schemas/Item'}}
+    PortGroupList:
+      description: The node's derived port groups in ID order.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items: {type: array, items: {$ref: '#/components/schemas/PortGroup'}}
+    NodeValueList:
+      description: Each node's newest value per item.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items: {type: array, items: {$ref: '#/components/schemas/NodeValue'}}
+    HistoryList:
+      description: Item changes, newest first.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [items]
+            properties:
+              items: {type: array, items: {$ref: '#/components/schemas/HistoryEntry'}}
+    EventList:
+      description: Attack events.
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Event'}}}}
+    VerdictList:
+      description: Verdicts.
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Verdict'}}}}
+    BlockList:
+      description: Ban list entries with source autodefense.
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/BlockEntry'}}}}
+    SignatureList:
+      description: Automatic rules.
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Signature'}}}}
+    Signature:
+      description: One automatic rule.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Signature'}
+    SiteAllowList:
+      description: The site's allow list in CIDR order.
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/SiteAllow'}}}}
+    SiteAllow:
+      description: The removed allow list entry.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SiteAllow'}
+    DriftList:
+      description: The drifts the confirmation changed (empty when none was pending).
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Drift'}}}}
+    FalsePositiveList:
+      description: False positive reports.
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/FalsePositive'}}}}
+    SiteMetricsList:
+      description: Report figures per live site of the tenant (at most 500).
+      content:
+        application/json:
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/SiteMetrics'}}}}
+    FalsePositive:
+      description: The recorded report.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/FalsePositive'}
+    ReleaseStatus:
+      description: The per node delivery of a single release.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ReleaseStatus'}
+    ReleaseResult:
+      description: What the release undid.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ReleaseResult'}
+    PlatformSettings:
+      description: Platform settings.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PlatformSettings'}
+  schemas:
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum: [autodefense_authentication_required, autodefense_conflict, autodefense_invalid_request,
+                autodefense_method_not_allowed, autodefense_not_compilable, autodefense_not_found, autodefense_permission_denied,
+                autodefense_rule_conflict, autodefense_timeout, autodefense_unavailable, entitlement_feature_denied]
+            message: {type: string, description: Diagnostic English text; pages show translated text for code.}
+            request_id: {type: string}
+            capability:
+              type: object
+              additionalProperties: false
+              required: [feature]
+              properties:
+                feature: {type: string, enum: [module.autodefense, module.autodefense.auto]}
+      if:
+        properties: {error: {properties: {code: {const: entitlement_feature_denied}}}}
+      then:
+        properties: {error: {required: [capability]}}
+      else:
+        properties: {error: {not: {required: [capability]}}}
+    SiteMode:
+      type: string
+      enum: [off, learning, observe, protect]
+      description: off is absent from the node snapshot; learning only learns; observe judges and suggests; protect mitigates (module.autodefense.auto).
+    StoredSiteMode:
+      type: string
+      enum: [off, learning, observe, protect, follow]
+      description: The site's own mode; follow = 跟随平台 (the site takes the platform default_mode and changes with it).
+    Sensitivity: {type: string, enum: [low, medium, high]}
+    ModuleMode: {type: string, enum: [manual, auto, suggest]}
+    Reason: {type: string, maxLength: 512, pattern: '^[^\r\n\u0000]*$'}
+    SignatureID: {type: string, pattern: '^[0-9a-f]{16}$'}
+    Timestamp: {type: string, format: date-time}
+    Circuit:
+      type: object
+      additionalProperties: false
+      required: [state, manual_resume]
+      properties:
+        state: {type: string, enum: [closed, open]}
+        reason: {type: string, enum: [agent_fault, baseline_stale, false_positive_limit, whole_site_mitigated, delivery_failure]}
+        since: {$ref: '#/components/schemas/Timestamp'}
+        manual_resume: {type: boolean, description: A second break within 24 hours needs an administrator to resume (Q6).}
+    OverlayState:
+      type: string
+      enum: [active, frozen, inactive]
+      description: 'Automatic overlay of the modules: active; frozen = an agent_fault circuit is open (ADR 0010 section 10.2), mitigations held where they are and attacked sites keep defending, the overlay still runs on the nodes; inactive = effective values are the manual ones.'
+    Item:
+      type: object
+      additionalProperties: false
+      required: [field, kind, state, manual, min, max, platform_min, platform_max, effective]
+      description: >-
+        effective = state manual ? manual : clamp(auto, min, max), and manual whenever the overlay is inactive (module not
+        auto, site not protecting, module.autodefense.auto not granted, circuit open, observe-only hold).
+      properties:
+        field: {type: string}
+        kind: {type: string, enum: [int, enum, bool]}
+        unit: {type: string}
+        enum: {type: array, items: {type: string}}
+        state: {type: string, enum: [auto, manual]}
+        manual: {type: integer}
+        auto: {type: integer}
+        min: {type: integer}
+        max: {type: integer}
+        platform_min: {type: integer}
+        platform_max: {type: integer}
+        effective: {type: integer}
+        suggestion: {type: integer, description: suggest mode only.}
+        locked_by: {type: string, description: 'user:<id> who locked the item (state manual).'}
+        locked_at: {$ref: '#/components/schemas/Timestamp'}
+        resumed_by: {type: string, description: 'user:<id> who last chose 恢复自动 (state auto).'}
+        resumed_at: {$ref: '#/components/schemas/Timestamp'}
+        frozen_until: {$ref: '#/components/schemas/Timestamp'}
+    Module:
+      type: object
+      additionalProperties: false
+      required: [name, mode, items]
+      properties:
+        name: {type: string, enum: [site, bot, cc, scan, waf, l4]}
+        mode: {$ref: '#/components/schemas/ModuleMode'}
+        items: {type: array, items: {$ref: '#/components/schemas/Item'}}
+    Site:
+      type: object
+      additionalProperties: false
+      required: [site_id, tenant_scope_id, mode, follow_platform, sensitivity, maturity, cross_site, circuit, revision, updated_at, domain, tenant_name, state, current_level,
+        auto_mitigation_granted, overlay, max_level, modules]
+      properties:
+        site_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid, description: The tenant scope owning the row (the platform view lists every tenant).}
+        domain: {type: string, description: The site's primary domain (derived, read only).}
+        tenant_name: {type: string, description: Display name of the site's tenant (derived, read only; empty when unknown).}
+        state:
+          type: string
+          enum: [normal, surge, protect_origin, attack, cooldown, circuit_open, baseline_stale]
+          description: 'Derived: circuit_open while the breaker is open, else the most severe state its nodes report (normal without reports).'
+        current_level: {type: integer, minimum: 0, maximum: 5, description: 'Derived: the highest disposition level its nodes report.'}
+        last_event_reason: {type: string, description: 'Derived: reason of the newest step of the newest event.'}
+        mode: {$ref: '#/components/schemas/SiteMode', description: The mode in force (the platform default_mode while follow_platform).}
+        follow_platform: {type: boolean, description: The site has no mode of its own and follows the platform default_mode.}
+        sensitivity: {$ref: '#/components/schemas/Sensitivity'}
+        maturity: {type: string, enum: [prior, hour, day, week]}
+        cross_site: {type: boolean}
+        circuit: {$ref: '#/components/schemas/Circuit'}
+        observe_until: {$ref: '#/components/schemas/Timestamp'}
+        last_event_at: {$ref: '#/components/schemas/Timestamp'}
+        revision: {type: integer, minimum: 1}
+        updated_at: {$ref: '#/components/schemas/Timestamp'}
+        auto_mitigation_granted: {type: boolean}
+        overlay: {$ref: '#/components/schemas/OverlayState'}
+        max_level: {$ref: '#/components/schemas/Item'}
+        modules: {type: array, items: {$ref: '#/components/schemas/Module'}}
+        drifts:
+          description: Baseline drifts of the site per node (GET of one site only; ADR 0010 section 4.3 item 4).
+          type: array
+          items: {$ref: '#/components/schemas/Drift'}
+    PortGroup:
+      type: object
+      additionalProperties: false
+      required: [id, kind, protocol, ports, tenant_scope_ids, mode]
+      properties:
+        id: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}
+        kind: {type: string, enum: [web, stream], description: 'web: the TCP ports of the websites on the node; stream: one layer 4 forward.'}
+        protocol: {type: string, enum: [tcp, udp]}
+        ports:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [from, to]
+            properties:
+              from: {type: integer, minimum: 1, maximum: 65535}
+              to: {type: integer, minimum: 1, maximum: 65535}
+        name: {type: string}
+        stream_id: {type: string, format: uuid}
+        tenant_scope_ids: {type: array, items: {type: string, format: uuid}}
+        mode: {type: string, enum: [manual, auto, suggest]}
+    NodeValue:
+      type: object
+      additionalProperties: false
+      required: [field, node_id, node_name, value, previous, reason, suggest, reported_at]
+      properties:
+        field: {type: string}
+        node_id: {type: string, format: uuid}
+        node_name: {type: string}
+        value: {type: integer}
+        previous: {type: integer}
+        reason: {type: string}
+        suggest: {type: boolean, description: 'A suggestion (suggest mode, or auto without module.autodefense.auto): never in force.'}
+        frozen_until: {$ref: '#/components/schemas/Timestamp'}
+        reported_at: {$ref: '#/components/schemas/Timestamp'}
+    HistoryEntry:
+      type: object
+      additionalProperties: false
+      required: [id, at, kind, field, actor]
+      properties:
+        id: {type: string, format: uuid}
+        at: {$ref: '#/components/schemas/Timestamp'}
+        kind: {type: string, enum: [adjust, manual, auto, range]}
+        field: {type: string}
+        from: {type: integer}
+        to: {type: integer}
+        actor: {type: string}
+        reason: {type: string}
+    SiteAllow:
+      type: object
+      additionalProperties: false
+      required: [source]
+      description: A network (cidr) or a 解除并加白 JA4 (ja4); exactly one is set. until absent = permanent.
+      properties:
+        cidr: {type: string}
+        ja4: {type: string}
+        source: {type: string, enum: [user, release, admin_login]}
+        until: {$ref: '#/components/schemas/Timestamp'}
+        created_by: {type: string}
+        created_at: {$ref: '#/components/schemas/Timestamp'}
+    Drift:
+      type: object
+      additionalProperties: false
+      required: [site_id, node_id, metrics, days, reported_at, pending]
+      properties:
+        site_id: {type: string, format: uuid}
+        node_id: {type: string, format: uuid}
+        metrics:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: {type: string, enum: [byte_rate, cache_hit, latency_p95, latency_p99, ratio_404, ratio_4xx, ratio_5xx, request_rate, upstream_error, upstream_timeout]}
+        days: {type: integer, minimum: 1, maximum: 255}
+        reported_at: {$ref: '#/components/schemas/Timestamp'}
+        pending: {type: boolean, description: "Not confirmed, or reported metrics outside the confirmed ones."}
+        confirmed_by: {type: string}
+        confirmed_at: {$ref: '#/components/schemas/Timestamp'}
+    SiteDetail:
+      description: >-
+        GET of one site (Site plus delivery). nodes are the nodes serving the site (its line group's current target
+        snapshot) with the AutoDefenseCommand delivery state; unsupported_nodes are the names of those whose newest
+        receipt is not_supported (the node runs no automatic defense, so the site is not defended there).
+      type: object
+      additionalProperties: false
+      required: [site_id, tenant_scope_id, mode, follow_platform, sensitivity, maturity, cross_site, circuit, revision, updated_at, domain, tenant_name, state, current_level,
+        auto_mitigation_granted, overlay, max_level, modules, nodes, unsupported_nodes]
+      properties:
+        site_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid, description: The tenant scope owning the row (the platform view lists every tenant).}
+        domain: {type: string, description: As Site.}
+        tenant_name: {type: string, description: As Site.}
+        state: {type: string, enum: [normal, surge, protect_origin, attack, cooldown, circuit_open, baseline_stale], description: As Site.}
+        current_level: {type: integer, minimum: 0, maximum: 5, description: As Site.}
+        last_event_reason: {type: string, description: As Site.}
+        mode: {$ref: '#/components/schemas/SiteMode'}
+        follow_platform: {type: boolean, description: As Site.}
+        sensitivity: {$ref: '#/components/schemas/Sensitivity'}
+        maturity: {type: string, enum: [prior, hour, day, week]}
+        cross_site: {type: boolean}
+        circuit: {$ref: '#/components/schemas/Circuit'}
+        observe_until: {$ref: '#/components/schemas/Timestamp'}
+        last_event_at: {$ref: '#/components/schemas/Timestamp'}
+        revision: {type: integer, minimum: 1}
+        updated_at: {$ref: '#/components/schemas/Timestamp'}
+        auto_mitigation_granted: {type: boolean}
+        overlay: {$ref: '#/components/schemas/OverlayState'}
+        max_level: {$ref: '#/components/schemas/Item'}
+        modules: {type: array, items: {$ref: '#/components/schemas/Module'}}
+        drifts:
+          type: array
+          items: {$ref: '#/components/schemas/Drift'}
+        nodes: {type: array, items: {$ref: '#/components/schemas/SiteNode'}}
+        unsupported_nodes: {type: array, items: {type: string}}
+    SiteNode:
+      type: object
+      additionalProperties: false
+      required: [node_id, name, status, revision, receipt_revision]
+      properties:
+        node_id: {type: string, format: uuid}
+        name: {type: string}
+        status:
+          type: string
+          enum: [applied, pending, failed, unsupported, not_sent]
+          description: >-
+            applied = the node applied the newest revision; pending = sent, no receipt for it yet; failed = the node
+            refused it (receipt_error); unsupported = newest receipt not_supported; not_sent = no snapshot was sent
+            to the node (the site is off or the licence is missing).
+        revision: {type: integer, minimum: 0, description: Newest revision sent (0 = none).}
+        receipt_revision: {type: integer, minimum: 0}
+        receipt_error:
+          type: string
+          enum: [untrusted_signature, invalid_snapshot, wrong_node, stale_revision, incomplete_parts, runtime_unavailable, not_supported]
+        receipt_at: {$ref: '#/components/schemas/Timestamp'}
+    Event:
+      type: object
+      additionalProperties: false
+      required: [id, site_id, status, started_at, peak_request_milli, affected_requests, mitigated_requests, challenge_pass_permille, steps]
+      properties:
+        id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        status: {type: string}
+        started_at: {$ref: '#/components/schemas/Timestamp'}
+        ended_at: {$ref: '#/components/schemas/Timestamp'}
+        peak_request_milli: {type: integer}
+        affected_requests: {type: integer}
+        mitigated_requests: {type: integer}
+        challenge_pass_permille: {type: integer, minimum: 0, maximum: 1000}
+        steps:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [at, kind, level, reason]
+            properties:
+              at: {$ref: '#/components/schemas/Timestamp'}
+              kind: {type: string, description: detected / escalate / de-escalate / signature / promote / ended ...}
+              level: {type: integer, minimum: 0, maximum: 5}
+              reason: {type: string}
+    Verdict:
+      type: object
+      additionalProperties: false
+      required: [id, site_id, tenant_scope_id, ip, asn, country, score, level, reason, created_at, released]
+      properties:
+        id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid, description: The tenant scope owning the row (the platform view lists every tenant).}
+        ip: {type: string}
+        asn: {type: integer}
+        country: {type: string}
+        score: {type: integer, minimum: 0, maximum: 100}
+        level: {type: integer, minimum: 0, maximum: 5}
+        reason: {type: string}
+        created_at: {$ref: '#/components/schemas/Timestamp'}
+        expires_at: {$ref: '#/components/schemas/Timestamp'}
+        released: {type: boolean}
+    BlockEntry:
+      type: object
+      additionalProperties: false
+      required: [id, site_id, tenant_scope_id, kind, target, level, kernel, scope, source, offences, reason, since, until, released]
+      properties:
+        id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid, description: The tenant scope owning the row (the platform view lists every tenant).}
+        kind: {type: string, enum: [ip, cidr, ja4, site]}
+        target: {type: string}
+        level: {type: integer, minimum: 1, maximum: 5}
+        kernel: {type: boolean}
+        scope: {type: string, enum: [site, tenant]}
+        source: {type: string, const: autodefense}
+        offences: {type: integer, minimum: 0}
+        reason: {type: string}
+        since: {$ref: '#/components/schemas/Timestamp'}
+        until: {$ref: '#/components/schemas/Timestamp'}
+        released: {type: boolean}
+    Signature:
+      type: object
+      additionalProperties: false
+      required: [id, site_id, tenant_scope_id, conditions, stage, cover_permille, fpr_ppm, hits, reason, managed, revoked, origin, evaluation, scope, created_at]
+      properties:
+        id: {$ref: '#/components/schemas/SignatureID'}
+        site_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid, description: The tenant scope owning the row (the platform view lists every tenant).}
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items:
+            type: object
+            additionalProperties: false
+            required: [dim, value]
+            properties:
+              dim: {type: string}
+              value: {type: string}
+        stage: {type: string, enum: [shadow, challenge, block, standby]}
+        cover_permille: {type: integer}
+        fpr_ppm: {type: integer}
+        hits: {type: integer}
+        reason: {type: string}
+        managed: {type: boolean, description: false after 固化为我的规则.}
+        solidified_kind: {type: string, enum: [waf, cc]}
+        solidified_rule_id: {type: string, format: uuid}
+        solidified_pack_id: {type: string, description: The user rule pack the signature became.}
+        solidified_version: {type: string}
+        revoked: {type: boolean}
+        origin: {type: string, enum: [node, control], description: node = mined by origin_node_id.}
+        origin_node_id: {type: string, format: uuid}
+        evaluation:
+          type: object
+          additionalProperties: false
+          description: Control plane evaluation over every node and site that reported the signature (AD-10).
+          required: [state, confidence_permille, nodes, sites, misfire_ppm, reason]
+          properties:
+            state: {type: string, enum: [pending, qualified, rejected, withdrawn], description: "qualified = broadcast to the site's other nodes (and to the tenant's other sites when seen on two or more)."}
+            confidence_permille: {type: integer, minimum: 0, maximum: 1000}
+            nodes: {type: integer, minimum: 0}
+            sites: {type: integer, minimum: 0}
+            misfire_ppm: {type: integer, minimum: 0, description: Worst normal hit rate a reporting node measured.}
+            reason: {type: string}
+            last_seen_at: {$ref: '#/components/schemas/Timestamp'}
+        scope: {type: string, enum: [site, tenant, none], description: "Where it is in force: site (this site's nodes), tenant (broadcast to the tenant's other sites too), none (withdrawn, rejected, disabled or solidified)."}
+        created_at: {$ref: '#/components/schemas/Timestamp'}
+    FalsePositive:
+      type: object
+      additionalProperties: false
+      required: [id, site_id, tenant_scope_id, reason, reported_by, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid, description: The tenant scope owning the row (the platform view lists every tenant).}
+        verdict_id: {type: string, format: uuid}
+        block_id: {type: string, format: uuid}
+        signature_id: {$ref: '#/components/schemas/SignatureID'}
+        target: {type: string}
+        reason: {type: string}
+        reported_by: {type: string}
+        created_at: {$ref: '#/components/schemas/Timestamp'}
+    SiteMetrics:
+      type: object
+      additionalProperties: false
+      required: [site_id, tenant_scope_id, mitigations, false_positive_reports, false_positive_permille, events, event_seconds_p50]
+      properties:
+        site_id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid, description: The tenant scope owning the row (the platform view lists every tenant).}
+        mitigations: {type: integer, minimum: 0, description: Automatic mitigations (ban list entries) started in the window.}
+        false_positive_reports: {type: integer, minimum: 0}
+        false_positive_permille: {type: integer, minimum: 0, maximum: 1000, description: Reports per thousand mitigations (capped at 1000).}
+        events: {type: integer, minimum: 0, description: Attack events started in the window.}
+        event_seconds_p50: {type: integer, minimum: 0, description: Median length of the ended events (0 without one).}
+    ReleaseResult:
+      type: object
+      additionalProperties: false
+      required: [site_id, released_targets, shadowed_signatures, whitelisted, allows]
+      properties:
+        site_id: {type: string, format: uuid}
+        released_targets: {type: array, items: {type: string}}
+        shadowed_signatures: {type: array, items: {$ref: '#/components/schemas/SignatureID'}}
+        whitelisted: {type: array, items: {type: string}}
+        allows: {type: array, description: The stored 解除并加白 entries with the expiry in force., items: {$ref: '#/components/schemas/SiteAllow'}}
+        observe_until: {$ref: '#/components/schemas/Timestamp'}
+        false_positive_id: {type: string, format: uuid}
+    ReleaseStatus:
+      type: object
+      additionalProperties: false
+      required: [site_id, kind, target, released_at, retry, state, nodes]
+      properties:
+        site_id: {type: string, format: uuid}
+        kind: {type: string, enum: [ip, cidr, ja4]}
+        target: {type: string}
+        released_at: {$ref: '#/components/schemas/Timestamp'}
+        retry: {type: integer, minimum: 0, maximum: 100}
+        state: {type: string, enum: [pending, applied, partial_failed, no_nodes], description: "pending = 待节点, applied = 全部节点已生效, partial_failed = 部分失败"}
+        nodes:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [node_id, name, state]
+            properties:
+              node_id: {type: string, format: uuid}
+              name: {type: string}
+              state: {type: string, enum: [pending, applied, failed]}
+              error_code: {type: string, enum: [gate_write_failed, kernel_unban_failed]}
+              reported_at: {$ref: '#/components/schemas/Timestamp'}
+    PlatformSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [default_mode, default_sensitivity, admin_login_whitelist_days, max_sites_per_node, ban_l3_per_site_minute,
+        ban_l4_per_site_minute, circuit_resume_minutes,
+        circuit_manual_after_breaks, waf_adapt_shadow_hours, waf_adapt_active_days, waf_grey_challenge, waf_exclusion_latency_us,
+        waf_exclusion_memory_percent, revision]
+      properties:
+        default_mode: {$ref: '#/components/schemas/SiteMode', description: "Mode of every site that follows the platform (new sites and sites without a mode of their own; default learning, ADR 0010 Q5). protect needs module.autodefense.auto; sites still on the prior or short of samples mitigate within their maturity cap (prior <= L1, immature <= L2)."}
+        default_sensitivity: {$ref: '#/components/schemas/Sensitivity'}
+        following_sites: {type: integer, minimum: 0, readOnly: true, description: Live sites following the platform default_mode (ignored on PUT).}
+        admin_login_whitelist_days: {type: integer, minimum: 0, maximum: 30}
+        max_sites_per_node: {type: integer, minimum: 1, maximum: 10000}
+        ban_l3_per_site_minute: {type: integer, minimum: 1, maximum: 100000}
+        ban_l4_per_site_minute: {type: integer, minimum: 1, maximum: 100000}
+        circuit_resume_minutes: {type: integer, minimum: 1, maximum: 1440}
+        circuit_manual_after_breaks: {type: integer, minimum: 1, maximum: 10}
+        waf_adapt_shadow_hours: {type: integer, minimum: 24, maximum: 720, description: ADR 0011 Q5 automatic exclusion shadow period (default 72).}
+        waf_adapt_active_days: {type: integer, minimum: 1, maximum: 90, description: ADR 0011 Q5 active span, renewed on evidence (default 30).}
+        waf_grey_challenge: {type: boolean, description: Grey zone challenge of sites that inherit it (default true).}
+        waf_exclusion_latency_us: {type: integer, minimum: 100, maximum: 5000, description: "waf-exclcap2: extra time one request may pay for its site's automatic exclusions on a node (default 500 us); each node applies floor(95% of the budget / its measured per exclusion cost) of a site's ranked exclusions (5% headroom)."}
+        waf_exclusion_memory_percent: {type: integer, minimum: 1, maximum: 50, description: "waf-exclcap2: share of node memory all automatic exclusions of a node may take (default 5); beyond it the lowest traffic sites lose their lowest ranked exclusions first."}
+        revision: {type: integer, minimum: 1}
+        updated_at: {$ref: '#/components/schemas/Timestamp'}
+    PlatformSettings:
+      allOf: [{$ref: '#/components/schemas/PlatformSettingsInput'}]
+      required: [updated_at, following_sites]
+    GreyRepeat:
+      type: object
+      additionalProperties: false
+      required: [threshold, window]
+      properties:
+        threshold: {type: integer, minimum: 2, maximum: 1000, description: Grey zone transactions of one source (site x address x JA4).}
+        window: {type: integer, minimum: 10, maximum: 600, description: Window seconds; the previous window counts too.}
+    WAFAdapt:
+      type: object
+      additionalProperties: false
+      required: [site_id, runtime, automatic, auto_granted, waf_mode, frozen, grey_challenge, grey_repeat, revision, evaluated_at, settings,
+        exclusions, typed_params, rule_advice, limits, node_limits]
+      properties:
+        site_id: {type: string, format: uuid}
+        runtime:
+          type: object
+          additionalProperties: false
+          description: The site runtime; only the dynamic routing runtime runs the adaptive WAF (ADR 0011 3.10), the page hides the area otherwise.
+          required: [schema, supported]
+          properties:
+            schema: {type: string, minLength: 1}
+            supported: {type: boolean}
+        automatic: {type: boolean, description: module.autodefense.auto granted and the waf module auto; otherwise exclusions stop at suggested.}
+        auto_granted: {type: boolean}
+        waf_mode: {type: string, enum: [manual, auto, suggest]}
+        frozen: {type: boolean, description: Under attack, degraded observation or circuit open; nothing learned, promoted or renewed.}
+        grey_challenge:
+          type: object
+          additionalProperties: false
+          required: [value, effective, platform_default, available, profile, available_profiles]
+          properties:
+            value: {type: string, enum: [inherit, 'on', 'off']}
+            effective: {type: boolean}
+            platform_default: {type: boolean}
+            available: {type: boolean, description: The site's effective CRS profile challenges in the grey zone (严格防护 / 极严格防护); otherwise the switch has no effect.}
+            profile: {type: string, description: The effective CRS profile pack ID ("" without a managed WAF).}
+            available_profiles: {type: array, items: {type: string}, description: Downloaded CRS profiles that challenge in the grey zone.}
+        grey_repeat:
+          type: object
+          additionalProperties: false
+          description: Repeated grey zone source setting; value null = the node defaults. Nodes without CAPABILITY_NAME_WAF_REPEAT_SITE keep the defaults.
+          required: [value, default, effective]
+          properties:
+            value: {oneOf: [{$ref: '#/components/schemas/GreyRepeat'}, {type: 'null'}]}
+            default: {$ref: '#/components/schemas/GreyRepeat'}
+            effective: {$ref: '#/components/schemas/GreyRepeat'}
+        revision: {type: integer, minimum: 1}
+        evaluated_at: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        settings:
+          type: object
+          additionalProperties: false
+          required: [shadow_hours, active_days]
+          properties:
+            shadow_hours: {type: integer}
+            active_days: {type: integer}
+        exclusions: {type: array, maxItems: 96, items: {$ref: '#/components/schemas/WAFExclusion'}}
+        typed_params:
+          type: array
+          maxItems: 64
+          items:
+            type: object
+            additionalProperties: false
+            required: [key, type, max_len_bucket, charset, delivered]
+            properties:
+              key: {type: string, pattern: '^[0-9a-f]{16}$'}
+              type: {type: string, enum: [number, ident, binary]}
+              max_len_bucket: {type: integer, minimum: 0, maximum: 7}
+              charset: {type: integer, minimum: 0, maximum: 8191}
+              delivered: {type: boolean}
+        rule_advice:
+          type: array
+          description: Rules proposed on more than limits.site_rule_params parameters; only "站点级关闭该规则" is suggested.
+          items:
+            type: object
+            additionalProperties: false
+            required: [rule, params]
+            properties:
+              rule: {type: integer}
+              params: {type: integer}
+        limits:
+          type: object
+          additionalProperties: false
+          required: [max_active, max_candidates, daily_activations, site_rule_params]
+          properties:
+            max_active: {type: integer, description: "Safety bound of a site's exclusions in force (512, against abnormal input only); what a node applies is node_limits (waf-exclcap2)."}
+            max_candidates: {type: integer, description: A site's automatic candidates kept at most (512; the fewest hits are pruned).}
+            daily_activations: {type: integer}
+            site_rule_params: {type: integer}
+        node_limits:
+          type: array
+          description: "waf-exclcap2: per node, how many of the site's delivered active exclusions it applies (the first by rank, from its own measured cost and the platform budgets); the newest report per node, node name order."
+          items:
+            type: object
+            additionalProperties: false
+            required: [node_id, node_name, delivered, applied, latency_trimmed, memory_trimmed, reported_at]
+            properties:
+              node_id: {type: string, format: uuid}
+              node_name: {type: string}
+              delivered: {type: integer, minimum: 1, maximum: 512}
+              applied: {type: integer, minimum: 0}
+              latency_trimmed: {type: integer, minimum: 0}
+              memory_trimmed: {type: integer, minimum: 0}
+              reported_at: {$ref: '#/components/schemas/Timestamp'}
+    WAFExclusion:
+      type: object
+      additionalProperties: false
+      required: [id, rule, rule_set, rule_set_name, param, stage, stage_since, until, manual, manual_by, manual_at, rejections,
+        reject_reason, permanent, cooldown_until, value_type, len_bucket, evidence, flipped, flipped_attack, first_seen, last_seen]
+      properties:
+        id: {type: string, pattern: '^[0-9a-f]{16}$'}
+        rule: {type: integer, minimum: 900000, maximum: 999999}
+        rule_set: {type: string, description: 'The site profile''s rule set of the rule, key without waf_set: (crs_sqli); "" when none.'}
+        rule_set_name: {type: string, description: The set's display name (SQL注入); "" when none.}
+        param:
+          type: object
+          additionalProperties: false
+          required: [loc, name]
+          properties:
+            loc: {type: string, enum: [args, cookie, header]}
+            name: {type: string, pattern: '^[A-Za-z0-9_.\[\]-]{1,64}$'}
+        stage: {type: string, enum: [candidate, shadow, suggested, active, rejected]}
+        stage_since: {$ref: '#/components/schemas/Timestamp'}
+        until: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        manual: {type: string, enum: [none, exclude, keep]}
+        manual_by: {type: [string, 'null']}
+        manual_at: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        rejections: {type: integer, minimum: 0, maximum: 3}
+        reject_reason: {oneOf: [{type: string, enum: [false_positive, attack, unneeded]}, {type: 'null'}], description: The reason code of the last person's rejection or revocation (rejected rows).}
+        permanent: {type: boolean}
+        cooldown_until: {oneOf: [{$ref: '#/components/schemas/Timestamp'}, {type: 'null'}]}
+        value_type: {type: string, enum: [number, ident, text, json, binary, url]}
+        len_bucket: {type: integer, minimum: 0, maximum: 7}
+        evidence:
+          type: object
+          additionalProperties: false
+          required: [hits, challenged, passed, failed_sources, clean, attack_after, sources, days, qualifies]
+          properties:
+            hits: {type: integer}
+            challenged: {type: integer}
+            passed: {type: integer}
+            failed_sources: {type: integer}
+            clean: {type: integer}
+            attack_after: {type: integer}
+            sources: {type: integer, description: Estimated distinct /24 (/48) sources.}
+            days: {type: integer}
+            qualifies: {type: boolean}
+        flipped: {type: integer}
+        flipped_attack: {type: integer}
+        first_seen: {$ref: '#/components/schemas/Timestamp'}
+        last_seen: {$ref: '#/components/schemas/Timestamp'}

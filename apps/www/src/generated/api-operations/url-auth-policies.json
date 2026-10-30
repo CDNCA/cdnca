@@ -1,0 +1,813 @@
+{
+ "id": "url-auth-policies",
+ "prefix": "/v1/url-auth-policies",
+ "operations": [
+  {
+   "operation_id": "listURLAuthPolicies",
+   "method": "GET",
+   "path": "/v1/url-auth-policies",
+   "summary": "List tenant URL authentication policies",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires url_auth_policies.read. Tenant identities are restricted to their active scope and owner metadata is omitted.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: enabled / disabled"
+    },
+    {
+     "name": "name",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page ordered newest first. Secret material is never returned.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<URLAuthPolicy>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createURLAuthPolicy",
+   "method": "POST",
+   "path": "/v1/url-auth-policies",
+   "summary": "Create a site-bound HMAC-SHA256 URL authentication policy",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires url_auth_policies.manage. The generated key secret is returned exactly once on the first successful request. An identical idempotent replay returns the same policy with replayed=true and no secret. Third-party panel Type A, Type B, and MD5 are migration provenance only and cannot be selected for new execution. This endpoint records a deterministic edge-compatible snapshot but does not publish it to Gateway or an edge node.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "algorithm",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "signature_parameter",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "expiration_parameter",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "key_id_parameter",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "bind_client_ip",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "max_clock_skew_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "max_validity_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "max_signature_uses",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "excluded_query_parameters",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "trusted_proxy_cidrs",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Policy, revision-one snapshot, and first-response-only key secret.",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "URLAuthPolicy",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string",
+       "description": "Present only in the first successful create or rotate response. Never persisted in idempotency responses."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getURLAuthPolicy",
+   "method": "GET",
+   "path": "/v1/url-auth-policies/{id}",
+   "summary": "Get URL authentication policy metadata",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current policy and key metadata without secret, digest, or ciphertext.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "algorithm",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "signature_parameter",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expiration_parameter",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "key_id_parameter",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "bind_client_ip",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "max_clock_skew_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_validity_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_signature_uses",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "excluded_query_parameters",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "trusted_proxy_cidrs",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "URLAuthOwner | null",
+       "description": "Present only for platform identities."
+      },
+      {
+       "name": "site",
+       "type": "URLAuthSite",
+       "required": true
+      },
+      {
+       "name": "migration_marker",
+       "type": "string: cdnfly_type_a_md5 / cdnfly_type_b_md5",
+       "description": "Read-only import provenance. It never selects the executable edge algorithm."
+      },
+      {
+       "name": "current_key",
+       "type": "URLAuthKeyMetadata",
+       "required": true
+      },
+      {
+       "name": "previous_key",
+       "type": "URLAuthKeyMetadata"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateURLAuthPolicy",
+   "method": "PATCH",
+   "path": "/v1/url-auth-policies/{id}",
+   "summary": "Replace URL authentication policy fields using optimistic concurrency",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Requires url_auth_policies.manage. The algorithm remains fixed to hmac-sha256 and migration_marker is read-only.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "algorithm",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "signature_parameter",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "expiration_parameter",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "key_id_parameter",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "bind_client_ip",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "max_clock_skew_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "max_validity_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "max_signature_uses",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "excluded_query_parameters",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "trusted_proxy_cidrs",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated policy and immutable snapshot, or a matching replay.",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "URLAuthPolicy",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getURLAuthPolicyEdgeSnapshot",
+   "method": "GET",
+   "path": "/v1/url-auth-policies/{id}/edge-snapshot",
+   "summary": "Get the deterministic edge-compatible policy snapshot",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Returns the current cdnca.edge.urlauth/v1 document and its SHA-256. Key paths are deterministic references; no key material is returned. Gateway packaging and delivery are intentionally outside this slice.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current immutable edge snapshot.",
+     "fields": [
+      {
+       "name": "policy_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "document",
+       "type": "URLAuthEdgePolicy",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "revokeURLAuthPolicyPreviousKey",
+   "method": "POST",
+   "path": "/v1/url-auth-policies/{id}/revoke",
+   "summary": "Revoke the current previous key",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "The current signing key cannot be revoked. Disable the policy first when URL authentication must stop.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "key_id",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Previous key revoked and policy version incremented.",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "URLAuthPolicy",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "rotateURLAuthPolicyKey",
+   "method": "POST",
+   "path": "/v1/url-auth-policies/{id}/rotate",
+   "summary": "Rotate the current HMAC key",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Promotes the current key to previous, revokes an older previous key, and returns the new secret exactly once. Matching idempotent replay returns no secret.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Rotated policy and first-response-only key secret.",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "URLAuthPolicy",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string",
+       "description": "Present only in the first successful create or rotate response. Never persisted in idempotency responses."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

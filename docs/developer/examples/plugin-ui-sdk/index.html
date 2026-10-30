@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- Example ui_page page: serve it with cdnca-plugin-ui.mjs from your registered https origin. -->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Acme 报表</title>
+  <style>
+    body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; margin: 16px; color: #15222c; }
+    body.dark { background: #141414; color: #e6e6e6; }
+    .error { color: #c62828; }
+  </style>
+</head>
+<body>
+  <h1 id="title">报表</h1>
+  <p id="who" aria-live="polite">正在连接主控…</p>
+  <button type="button" id="load">加载近 7 天报表</button>
+  <pre id="result" aria-live="polite"></pre>
+  <script type="module">
+    import { connect } from './cdnca-plugin-ui.mjs'
+
+    const who = document.getElementById('who')
+    const result = document.getElementById('result')
+    try {
+      const host = await connect()
+      const ctx = await host.context()
+      document.documentElement.lang = ctx.locale
+      document.body.classList.toggle('dark', ctx.theme === 'dark')
+      // textContent only: never inject context or backend data as HTML.
+      who.textContent = `${ctx.user.display_name}（${ctx.user.role}）${ctx.site_id ? ` · 网站 ${ctx.site_id}` : ''}`
+      document.getElementById('load').addEventListener('click', async () => {
+        result.textContent = '加载中…'
+        try {
+          const response = await host.request({ method: 'GET', path: '/reports', query: 'range=7d' })
+          result.textContent = response.status === 200 ? JSON.stringify(response.body, null, 2) : `后端返回 ${response.status}`
+        } catch (error) {
+          result.textContent = `调用失败：${error.code}`
+        }
+      })
+    } catch (error) {
+      who.className = 'error'
+      who.textContent = `无法连接主控：${error.code ?? error.message}`
+    }
+  </script>
+</body>
+</html>

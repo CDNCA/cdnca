@@ -1,0 +1,201 @@
+{
+ "id": "plugin-ui",
+ "prefix": "/v1/plugin-ui",
+ "operations": [
+  {
+   "operation_id": "listPluginUIPages",
+   "method": "GET",
+   "path": "/v1/plugin-ui/pages",
+   "summary": "List the ui_page plugin pages this principal may open",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Any authenticated session. Only plugins enabled on this installation (and still served by the license service) are listed, filtered by the page role (platform scope = admin), its required_permission (no platform.admin fallback) and its required_module (lease). The web app mounts each page in <iframe sandbox=\"allow-scripts allow-forms\"> on the plugin origin.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Mountable pages.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PluginUIPage>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPluginUISigningKey",
+   "method": "GET",
+   "path": "/v1/plugin-ui/signing-key",
+   "summary": "The installation public key plugin backends verify proxied calls with",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires plugin_installations.read or plugin_installations.manage (any scope) or platform.admin in the platform scope. Public material only: the administrator hands public_key to a ui_page plugin backend so it can verify X-Cdnca-Plugin-Signature; key_id equals X-Cdnca-Plugin-Key-Id. 503 plugin_ui_proxy_unavailable when this installation has no key configured.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "The installation signing key.",
+     "fields": [
+      {
+       "name": "installation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "algorithm",
+       "type": "any",
+       "required": true
+      },
+      {
+       "name": "public_key",
+       "type": "string",
+       "required": true,
+       "description": "base64url (no padding) raw 32-byte Ed25519 public key"
+      },
+      {
+       "name": "signature_domain",
+       "type": "any",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "proxyPluginUIRequest",
+   "method": "POST",
+   "path": "/v1/plugin-ui/{plugin_id}/proxy",
+   "summary": "Call a ui_page plugin's own backend on behalf of one of its pages",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Any authenticated session that may open page_id. The control plane forwards method/path/query/body to the plugin's declared api_base_url (public addresses only, no redirects, JSON only) without the user's session or token; it adds X-Cdnca-Plugin-Context (base64url JSON, schema cdnca.plugin-ui-context/v1, 60 s), X-Cdnca-Plugin-Signature (Ed25519 by the installation key over \"cdnca-plugin-ui-proxy/v1\\n\" + METHOD + \"\\n\" + path?query + \"\\n\" + hex(sha256(body)) + \"\\n\" + context) and X-Cdnca-Plugin-Key-Id. site_id must be a site the caller can access. Writes and refusals are audited as plugin.ui_page.proxy. 120 calls per minute per user and plugin.",
+   "params": [
+    {
+     "name": "plugin_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "method",
+      "type": "any",
+      "required": true
+     },
+     {
+      "name": "path",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "query",
+      "type": "string"
+     },
+     {
+      "name": "body",
+      "type": "any",
+      "description": "JSON body (not with GET)"
+     },
+     {
+      "name": "page_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "site_id",
+      "type": "string(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The plugin backend answer (status and JSON body only).",
+     "fields": [
+      {
+       "name": "status",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "body",
+       "type": "any",
+       "required": true,
+       "description": "JSON value"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "429",
+     "description": "plugin_ui_rate_limited"
+    },
+    {
+     "status": "502",
+     "description": "plugin_ui_backend_unavailable"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,546 @@
+/* fix-waflog: 统计分析 → WAF 日志 重新设计（artifacts/fix-waflog/DESIGN-waf-log.md）。
+   Every rule sits under the new root class .waf-v2 (the drawer, portaled out
+   of the page, under .waf-v2-detail), so other pages keep their look
+   (DefaultLookLock). Colors come from the shared --cdnca-* variables only. */
+
+.waf-v2 .waf-v2-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ---- filters: one white row, rarely used fields behind 更多筛选 ---- */
+.waf-v2 .waf-v2-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--cdnca-color-bg-soft);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.waf-v2 .waf-v2-overview > .waf-v2-filters {
+  margin-bottom: 0;
+}
+
+.waf-v2 .waf-v2-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.waf-v2 .waf-v2-filter-more {
+  padding-top: 12px;
+  border-top: 1px dashed var(--cdnca-color-border-secondary);
+}
+
+.waf-v2 .waf-v2-field {
+  display: flex;
+  flex: 0 1 200px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+}
+
+.waf-v2 .waf-v2-field > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.waf-v2 .waf-v2-range-field {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.waf-v2 .waf-v2-domain-field {
+  flex: 1 1 260px;
+  max-width: 420px;
+}
+
+.waf-v2 .waf-v2-action-field {
+  flex-basis: 120px;
+  min-width: 120px;
+}
+
+.waf-v2 .waf-v2-path-field {
+  flex-basis: 300px;
+}
+
+.waf-v2 .waf-v2-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.waf-v2 .waf-v2-filter-actions .ant-btn {
+  min-height: 32px;
+}
+
+.waf-v2 .waf-v2-filter-actions .ant-btn:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+.waf-v2 .waf-v2-filter-actions .ant-btn {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* ---- 命中概况: one strip, six cells, the total carries the accent ---- */
+.waf-v2 .waf-v2-summary {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.waf-v2 .waf-v2-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 18px;
+}
+
+.waf-v2 .waf-v2-summary-item + .waf-v2-summary-item {
+  border-left: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.waf-v2 .waf-v2-summary-item > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.waf-v2 .waf-v2-summary-item > strong {
+  color: var(--cdnca-color-title);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 32px;
+}
+
+.waf-v2 .waf-v2-summary-item--attacks > strong {
+  color: var(--cdnca-color-primary);
+}
+
+/* fix-waflogdetail3: a hit count's card shows its trend line color. */
+.waf-v2 .waf-v2-summary-item span > i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  background: var(--waf-series-color);
+  border-radius: 50%;
+}
+
+.waf-v2 .waf-v2-summary-item > small,
+.waf-v2 .waf-v2-summary-drill > small {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* fix-waflogdetail: a hit count opens its log details; the whole cell is the target. */
+.waf-v2 .waf-v2-summary-item:has(> .waf-v2-summary-drill) {
+  padding: 0;
+}
+
+.waf-v2 .waf-v2-summary-drill {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 18px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  transition: background-color 150ms ease;
+}
+
+.waf-v2 .waf-v2-summary-drill > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.waf-v2 .waf-v2-summary-drill > strong {
+  color: var(--cdnca-color-title);
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 32px;
+}
+
+.waf-v2 .waf-v2-summary-item--attacks > .waf-v2-summary-drill > strong {
+  color: var(--cdnca-color-primary);
+}
+
+.waf-v2 .waf-v2-summary-drill:hover {
+  background: var(--cdnca-color-bg-hover);
+}
+
+.waf-v2 .waf-v2-summary-drill:hover > span {
+  color: var(--cdnca-color-primary);
+}
+
+.waf-v2 .waf-v2-summary-drill:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waf-v2 .waf-v2-summary-drill {
+    transition: none;
+  }
+}
+
+/* ---- cards: trend 2/3 + attack types 1/3, rankings 3 × 2 ---- */
+.waf-v2 .waf-v2-card {
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.waf-v2 .waf-v2-card > h2 {
+  margin: 0 0 10px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.waf-v2 .waf-v2-insight {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 16px;
+}
+
+.waf-v2 .waf-v2-trend .waf-overview-trend {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.waf-v2 .waf-v2-rankings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.waf-v2 .waf-v2-rank-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.waf-v2 .waf-v2-rank-table th {
+  padding: 0 0 6px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.waf-v2 .waf-v2-rank-table td {
+  height: 34px;
+  padding: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.waf-v2 .waf-v2-rank-table th:last-child,
+.waf-v2 .waf-v2-rank-table td:last-child {
+  width: 80px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.waf-v2 .waf-v2-rank-table td[colspan] {
+  color: var(--cdnca-color-text-secondary);
+  text-align: center;
+}
+
+/* a ranking row's share of the top entry, as a soft bar behind the name */
+.waf-v2 .waf-v2-ranking .waf-v2-rank-table td:first-child {
+  padding-left: 8px;
+  background: linear-gradient(90deg, var(--cdnca-color-primary-bg) var(--waf-share), transparent var(--waf-share));
+  background-clip: content-box;
+  background-size: calc(100% - 8px) 24px;
+  background-position: 0 center;
+  background-repeat: no-repeat;
+}
+
+/* attack types: name / share bar / share / count */
+.waf-v2 .waf-v2-attack-types .waf-v2-rank-table th:nth-child(2),
+.waf-v2 .waf-v2-attack-types .waf-v2-rank-table td:nth-child(2) {
+  width: 22%;
+  padding: 0 8px;
+}
+
+.waf-v2 .waf-v2-attack-types .waf-v2-rank-table th:nth-child(3),
+.waf-v2 .waf-v2-attack-types .waf-v2-rank-table td:nth-child(3) {
+  width: 64px;
+  color: var(--cdnca-color-text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.waf-v2 .waf-v2-attack-types .waf-v2-rank-table th:last-child,
+.waf-v2 .waf-v2-attack-types .waf-v2-rank-table td:last-child {
+  width: 64px;
+}
+
+.waf-v2 .waf-v2-bar {
+  display: block;
+  height: 6px;
+  background: linear-gradient(90deg, var(--cdnca-color-primary) var(--waf-share), var(--cdnca-color-primary-bg) var(--waf-share));
+  border-radius: 3px;
+}
+
+.waf-v2 .waf-v2-drill {
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-primary);
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  background: none;
+  border: 0;
+}
+
+.waf-v2 .waf-v2-drill:hover {
+  text-decoration: underline;
+}
+
+.waf-v2 .waf-v2-drill:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ---- log table: six merged columns, row opens the details ---- */
+.waf-v2 .analytics-block-log-page .analytics-log-table .ant-table-tbody > tr {
+  cursor: pointer;
+}
+
+.waf-v2 .analytics-block-log-page .analytics-log-table .ant-table-tbody > tr > td {
+  vertical-align: top;
+}
+
+.waf-v2 .analytics-block-log-page .analytics-log-table .ant-table-tbody > tr > td:first-child {
+  border-left: 3px solid transparent;
+}
+
+.waf-v2 .analytics-block-log-page .analytics-log-table .ant-table-tbody > tr.waf-v2-row--block > td:first-child,
+.waf-v2 .analytics-block-log-page .analytics-log-table .ant-table-tbody > tr.waf-v2-row--deny > td:first-child {
+  border-left-color: var(--cdnca-color-error);
+}
+
+.waf-v2 .analytics-block-log-page .analytics-log-table .ant-table-tbody > tr.waf-v2-row--challenge > td:first-child {
+  border-left-color: var(--cdnca-color-warning);
+}
+
+.waf-v2 .waf-v2-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.waf-v2 .waf-v2-cell-main,
+.waf-v2 .waf-v2-cell-sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waf-v2 .waf-v2-cell-main {
+  color: var(--cdnca-color-text);
+}
+
+.waf-v2 .waf-v2-cell-sub {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.waf-v2 .waf-v2-cell-sub .analytics-log-code,
+.waf-v2 .waf-v2-cell-sub .analytics-log-idc-tag {
+  font-size: 12px;
+}
+
+.waf-v2 .waf-v2-count::before {
+  content: " · ";
+}
+
+.waf-v2 .waf-v2-action,
+.waf-v2-detail .waf-v2-action {
+  margin: 0;
+}
+
+/* ---- details drawer: head sentence + three groups ---- */
+.waf-v2-detail .waf-v2-detail-head {
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.waf-v2-detail .waf-v2-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.waf-v2-detail .waf-v2-detail-rule {
+  margin: 8px 0 2px;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.waf-v2-detail .waf-v2-detail-target {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+  word-break: break-all;
+}
+
+.waf-v2-detail .waf-v2-detail-group + .waf-v2-detail-group {
+  margin-top: 16px;
+}
+
+.waf-v2-detail .waf-v2-detail-group > h3 {
+  margin: 0 0 8px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+/* ---- responsive ---- */
+@media (max-width: 1280px) {
+  .waf-v2 .waf-v2-insight {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .waf-v2 .waf-v2-rankings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* six cells fold into two rows of three */
+  .waf-v2 .waf-v2-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .waf-v2 .waf-v2-summary-item:nth-child(3n + 1) {
+    border-left: 0;
+  }
+
+  .waf-v2 .waf-v2-summary-item:nth-child(n + 4) {
+    border-top: 1px solid var(--cdnca-color-border-secondary);
+  }
+}
+
+@media (max-width: 900px) {
+  .waf-v2 .waf-v2-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .waf-v2 .waf-v2-summary-item + .waf-v2-summary-item {
+    border-left: 0;
+  }
+
+  .waf-v2 .waf-v2-summary-item:nth-child(n + 3) {
+    border-top: 1px solid var(--cdnca-color-border-secondary);
+  }
+
+  .waf-v2 .waf-v2-summary-item:nth-child(even) {
+    border-left: 1px solid var(--cdnca-color-border-secondary);
+  }
+
+  .waf-v2 .waf-v2-rankings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .waf-v2 .analytics-block-log-page .analytics-log-table .ant-table-content {
+    overflow-x: auto;
+  }
+
+  .waf-v2 .analytics-block-log-page .analytics-log-table table {
+    min-width: 900px;
+  }
+}
+
+@media (max-width: 460px) {
+  .waf-v2 .waf-v2-field,
+  .waf-v2 .waf-v2-range-field,
+  .waf-v2 .waf-v2-domain-field {
+    flex-basis: 100%;
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .waf-v2 .waf-v2-filter-actions .ant-btn {
+    transition: none;
+  }
+
+  .waf-v2 .waf-v2-filter-actions .ant-btn:not(:disabled):active {
+    transform: none;
+  }
+}
+
+/* fix-advfilter: the shared AdvancedFilters row inside the WAF filter card — common fields, time range and buttons on one line at 1440. */
+.waf-v2 .waf-v2-filters .cdnca-adv-filters {
+  margin-bottom: 0;
+}
+
+.waf-v2 .waf-v2-filters .cdnca-adv-filters .waf-v2-field {
+  flex: 0 1 150px;
+  min-width: 120px;
+}
+
+.waf-v2 .waf-v2-filters .cdnca-adv-filters .waf-v2-domain-field {
+  flex: 0 1 200px;
+}
+
+.waf-v2 .waf-v2-filters .cdnca-adv-filters .waf-v2-action-field {
+  flex: 0 0 120px;
+  min-width: 120px;
+}
+
+.waf-v2 .waf-v2-filters .cdnca-adv-filters .waf-v2-range-field {
+  flex: 0 0 auto;
+}

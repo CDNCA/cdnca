@@ -1,0 +1,399 @@
+{
+ "id": "admin-recharges",
+ "prefix": "/v1/admin/recharges",
+ "operations": [
+  {
+   "operation_id": "listAdminRechargeOrders",
+   "method": "GET",
+   "path": "/v1/admin/recharges/orders",
+   "summary": "List reconciled recharge order heads",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "channel",
+     "in": "query",
+     "type": "string: alipay / wechat / transfer"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required"
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "user_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "snapshot_at",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Reuse snapshot_at returned by the first page to keep later pages and CSV on the same fact boundary."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable database snapshot",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<RechargeOrder>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "401",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "403",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    }
+   ]
+  },
+  {
+   "operation_id": "getRechargeReconciliation",
+   "method": "GET",
+   "path": "/v1/admin/recharges/orders/{order_id}/reconciliation",
+   "summary": "Read exact order, callback, ledger and statistics identities",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Exact four-way reconciliation",
+     "fields": [
+      {
+       "name": "order",
+       "type": "RechargeOrder",
+       "required": true
+      },
+      {
+       "name": "callback",
+       "type": "RechargeCallbackFact",
+       "required": true
+      },
+      {
+       "name": "ledger",
+       "type": "RechargeLedgerFact",
+       "required": true
+      },
+      {
+       "name": "statistic",
+       "type": "RechargeStatistic",
+       "required": true
+      },
+      {
+       "name": "provider_events",
+       "type": "array<RechargeProviderEventFact>",
+       "required": true
+      },
+      {
+       "name": "ledger_entries",
+       "type": "array<RechargeLedgerFact>",
+       "required": true
+      },
+      {
+       "name": "gross_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "refunded_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "net_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "403",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "404",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "503",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    }
+   ]
+  },
+  {
+   "operation_id": "listRechargeStatistics",
+   "method": "GET",
+   "path": "/v1/admin/recharges/statistics",
+   "summary": "List immutable settlement statistics facts",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "channel",
+     "in": "query",
+     "type": "string: alipay / wechat / transfer"
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "user_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "snapshot_at",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Reuse snapshot_at returned by the first page to keep later pages and CSV on the same fact boundary."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Totals and rows from one stable snapshot",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<RechargeStatistic>",
+       "required": true
+      },
+      {
+       "name": "total_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "total_gross_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "total_refunded_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "total_net_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "total_orders",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "401",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "403",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    }
+   ]
+  },
+  {
+   "operation_id": "exportRechargeStatistics",
+   "method": "GET",
+   "path": "/v1/admin/recharges/statistics.csv",
+   "summary": "Export the same bounded settlement snapshot as CSV",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "channel",
+     "in": "query",
+     "type": "string: alipay / wechat / transfer"
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "user_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "snapshot_at",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Reuse snapshot_at returned by the first page to keep later pages and CSV on the same fact boundary."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "UTF-8 CSV, at most 10000 facts"
+    },
+    {
+     "status": "400",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "401",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    },
+    {
+     "status": "403",
+     "description": "Stable error code; message is not safe for direct UI rendering"
+    }
+   ]
+  }
+ ]
+}

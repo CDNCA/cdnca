@@ -1,0 +1,45 @@
+{
+  "schema": "cdnca.edge.modsecurity.sources/v2",
+  "reviewed_at": "2026-10-15",
+  "selection": "docs/security/waf-engine-selection.md",
+  "sources": {
+    "libmodsecurity": {
+      "version": "3.0.17",
+      "url": "https://github.com/owasp-modsecurity/ModSecurity/releases/download/v3.0.17/modsecurity-v3.0.17.tar.gz",
+      "file": "modsecurity-v3.0.17.tar.gz",
+      "sha256": "f283b33d5c21130fd3a15c84a93a1abe12bd1949edaf44288b12af571b671a50",
+      "license": "Apache-2.0"
+    },
+    "modsecurity_nginx": {
+      "version": "1.0.4",
+      "url": "https://github.com/owasp-modsecurity/ModSecurity-nginx/releases/download/v1.0.4/ModSecurity-nginx-v1.0.4.tar.gz",
+      "file": "ModSecurity-nginx-v1.0.4.tar.gz",
+      "sha256": "6bdc7570911be884c1e43aaf85046137f9fde0cfa0dd4a55b853c81c45a13313",
+      "license": "Apache-2.0"
+    },
+    "yajl": {
+      "version": "2.1.0",
+      "url": "https://github.com/lloyd/yajl/archive/refs/tags/2.1.0.tar.gz",
+      "file": "yajl-2.1.0.tar.gz",
+      "sha256": "3fb73364a5a30efe615046d07e6db9d09fd2b41c763c5f7d3bfb121cd5c5ac5a",
+      "license": "ISC"
+    },
+    "libxml2": {
+      "version": "2.15.4",
+      "url": "https://download.gnome.org/sources/libxml2/2.15/libxml2-2.15.4.tar.xz",
+      "file": "libxml2-2.15.4.tar.xz",
+      "sha256": "98087fd181d9070724f3fbc65c7377db03038eb92bd882374daff44940138821",
+      "license": "MIT"
+    }
+  },
+  "patches": [
+    {
+      "file": "patches/01-cdnca-rule-ids-variable.patch",
+      "applies_to": "modsecurity_nginx",
+      "sha256": "92be97624cbfb842d1f5c78684e680253a9db9dfecc0cccf5811fc3753aeaf3d",
+      "origin": "CDNCA original; no upstream equivalent",
+      "adaptation": "New nginx variable $modsecurity_rule_ids: the IDs of the rule messages the request's own transaction keeps (msc_get_rules_messages_rule_ids, the rules with log), ',<id>,...,' (',' for none), not found without a transaction; not cacheable. Lets Lua read a transaction outcome in the log phase without libmodsecurity's process-wide setenv."
+    }
+  ],
+  "note": "OWASP CRS rule text is not part of the engine extension: it is pinned by libs/edgeconfig/crs/manifest.json and delivered as signed system rule catalog data (libs/entitlement/rulecatalog/crs/rules.json, source coreruleset v4.30.0 sha256 a4bb3688ef6205b64471a9ccbf0d7b024eb8edf39b97c6f6c0006e7a948f8550)."
+}

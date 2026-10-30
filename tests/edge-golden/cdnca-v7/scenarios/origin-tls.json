@@ -1,0 +1,306 @@
+{
+  "name": "origin-tls",
+  "description": "HTTPS 回源：受信 CA 与 SNI 正确时成功、源站证书由其他 CA 签发时拒绝（502）、回源 SNI 与证书名不符时拒绝。",
+  "covers": [
+    "回源 TLS",
+    "trust_ref",
+    "回源 SNI",
+    "证书校验"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b2008-0000-4000-8000-000000000001",
+      "source_revision": 7,
+      "config_version_id": "0a1b2008-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "ipv6",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 6
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b2008-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "trusted.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18087",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18087,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o1",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "https",
+                  "host": "127.0.0.1",
+                  "port": 19281,
+                  "weight": 1,
+                  "sni": "origin.example.test",
+                  "trust_ref": "${trust:origin}"
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2008-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "untrusted.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18087",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18087,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o2",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "https",
+                  "host": "127.0.0.1",
+                  "port": 19282,
+                  "weight": 1,
+                  "sni": "origin.example.test",
+                  "trust_ref": "${trust:origin}"
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2008-0000-4000-8000-000000000103",
+          "revision": 1,
+          "domains": [
+            "wrongname.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18087",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18087,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o3",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "https",
+                  "host": "127.0.0.1",
+                  "port": 19283,
+                  "weight": 1,
+                  "sni": "other-name.example.test",
+                  "trust_ref": "${trust:origin}"
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        }
+      ]
+    },
+    "node": {
+      "health_port": 18907
+    },
+    "origin_trust": [
+      "origin"
+    ]
+  },
+  "origins": [
+    {
+      "name": "trusted",
+      "address": "127.0.0.1:19281",
+      "tls": {
+        "ca": "origin",
+        "names": [
+          "origin.example.test"
+        ]
+      }
+    },
+    {
+      "name": "untrusted",
+      "address": "127.0.0.1:19282",
+      "tls": {
+        "ca": "other",
+        "names": [
+          "origin.example.test"
+        ]
+      }
+    },
+    {
+      "name": "wrongname",
+      "address": "127.0.0.1:19283",
+      "tls": {
+        "ca": "origin",
+        "names": [
+          "origin.example.test"
+        ]
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "trusted",
+      "port": 18087,
+      "host": "trusted.example.test",
+      "path": "/t"
+    },
+    {
+      "id": "untrusted-ca",
+      "port": 18087,
+      "host": "untrusted.example.test",
+      "path": "/u"
+    },
+    {
+      "id": "wrong-sni",
+      "port": 18087,
+      "host": "wrongname.example.test",
+      "path": "/w"
+    }
+  ]
+}

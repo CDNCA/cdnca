@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "keys": [
+    {
+      "key_id": "cdnca-edge-artifact-bootstrap-v1",
+      "public_key_pem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAxYgU+H5EsCGKqoz2T16aeH/cbM0n9Gi+/A6io/pXLME=\n-----END PUBLIC KEY-----\n"
+    }
+  ]
+}

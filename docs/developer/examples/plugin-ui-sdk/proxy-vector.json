@@ -1,0 +1,14 @@
+{
+  "api_base_path": "/v1",
+  "body": "{\"range\":\"7d\"}",
+  "headers": {
+    "X-Cdnca-Plugin-Context": "eyJzY2hlbWEiOiJjZG5jYS5wbHVnaW4tdWktY29udGV4dC92MSIsImluc3RhbGxhdGlvbl9pZCI6IjAxOTlhYWFhLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMSIsInBsdWdpbl9pZCI6ImFjbWUucmVwb3J0cyIsInBhZ2VfaWQiOiJyZXBvcnQiLCJ1c2VyX2lkIjoiMDE5OWFhYWEtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwiZGlzcGxheV9uYW1lIjoi566h55CG5ZGYIiwicm9sZSI6ImFkbWluIiwidGVuYW50X3Njb3BlX2lkIjoiMDE5OWFhYWEtMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMDA0Iiwic2l0ZV9pZCI6IjAxOTlhYWFhLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDAwMyIsImxvY2FsZSI6InpoLUNOIiwicmVxdWVzdF9pZCI6InJlcS0xIiwibm9uY2UiOiJBQUFBQUFBQUFBQUFBQUFBQUFBQUFBIiwiaXNzdWVkX2F0IjoiMjAyNi0xMC0xOVQwODowMDowMFoiLCJleHBpcmVzX2F0IjoiMjAyNi0xMC0xOVQwODowMTowMFoifQ",
+    "X-Cdnca-Plugin-Key-Id": "fe812c12f3ab4ce6",
+    "X-Cdnca-Plugin-Signature": "caE0TnxbQWlOkXKwH7lu7Isz5uaJ2dByuUlScQ0cb60lB5NBAzzzcjTINPbStkn0e7ss-5XMfTjx0F8keJ2gCg"
+  },
+  "key_id": "fe812c12f3ab4ce6",
+  "method": "POST",
+  "now": "2026-10-19T08:00:10Z",
+  "path_with_query": "/v1/reports/run?site=1",
+  "public_key": "6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw"
+}

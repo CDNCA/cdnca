@@ -1,0 +1,44 @@
+/* 用户编辑「代理商」页签与用户列表代理商筛选提示（ADR 0018 RS-06），沿用 user-form-tab-panel 的排版。 */
+.reseller-panel-help {
+  max-width: 600px;
+  margin: 0 0 12px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.reseller-panel-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.reseller-panel .ant-form-item .reseller-panel-inline {
+  margin-bottom: 0;
+}
+
+.reseller-panel-muted {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.reseller-panel-parent {
+  width: 260px;
+  max-width: 100%;
+}
+
+.reseller-panel .ant-input-number,
+.reseller-panel .ant-input-number-group-wrapper {
+  width: 200px;
+}
+
+
+.reseller-wholesale-toolbar {
+  margin-bottom: 8px;
+}
+
+.reseller-wholesale {
+  margin-bottom: 16px;
+}

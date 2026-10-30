@@ -1,0 +1,471 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Recharge API
+  version: 1.0.0
+  description: |
+    Versioned recharge-order, verified provider callback, immutable ledger reconciliation,
+    statistics and CSV export contract. Provider secrets and raw callback bodies are never returned.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/recharges/policy:
+    get:
+      operationId: getRechargePolicy
+      summary: Read the effective platform recharge policy for an authenticated tenant
+      x-required-permissions: [billing.account.read, billing.recharges.create]
+      description: |
+        Requires billing.recharges.create on the caller's current active tenant session. The response contains
+        only non-sensitive payment availability, default selection and verification restriction fields. Order
+        creation and provider checkout re-read and lock the same policy, so this projection cannot bypass a
+        concurrent administrator change.
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Current platform recharge policy
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RechargePolicy'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/recharges/orders:
+    post:
+      operationId: createRechargeOrder
+      summary: Create an authenticated tenant recharge order
+      x-required-permissions: [billing.account.read, billing.recharges.create]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateRechargeOrder'}
+      responses:
+        '201':
+          description: Created or exact replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RechargeOrder'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    get:
+      operationId: listOwnRechargeOrders
+      summary: List recharge orders owned by the authenticated tenant user
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Channel'
+        - $ref: '#/components/parameters/State'
+        - $ref: '#/components/parameters/FromOptional'
+        - $ref: '#/components/parameters/ToOptional'
+        - $ref: '#/components/parameters/SnapshotAt'
+      responses:
+        '200':
+          description: Stable database snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RechargeOrderPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/recharges/providers/{provider}/callbacks:
+    post:
+      security: []
+      operationId: applyRechargeProviderCallback
+      summary: Verify and atomically settle one provider event
+      description: |
+        The provider adapter verifies the signature before any mutation. The unique provider,
+        account and event identity allows only a byte-identical digest replay. A paid event
+        commits the order head, callback fact, balanced ledger transaction, settlement and
+        statistics fact in one PostgreSQL transaction.
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: provider
+          in: path
+          required: true
+          schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        - name: X-Provider-Signature
+          in: header
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 8192}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, maxProperties: 128}
+      responses:
+        '200':
+          description: Applied, ignored terminal, or exact replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RechargeCallbackResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharges/orders:
+    get:
+      operationId: listAdminRechargeOrders
+      summary: List reconciled recharge order heads
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Channel'
+        - $ref: '#/components/parameters/State'
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/UserID'
+        - $ref: '#/components/parameters/FromOptional'
+        - $ref: '#/components/parameters/ToOptional'
+        - $ref: '#/components/parameters/SnapshotAt'
+      responses:
+        '200':
+          description: Stable database snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RechargeOrderPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharges/orders/{order_id}/reconciliation:
+    get:
+      operationId: getRechargeReconciliation
+      summary: Read exact order, callback, ledger and statistics identities
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - name: order_id
+          in: path
+          required: true
+          schema: {$ref: '#/components/schemas/UUID'}
+      responses:
+        '200':
+          description: Exact four-way reconciliation
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RechargeReconciliation'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharges/statistics:
+    get:
+      operationId: listRechargeStatistics
+      summary: List immutable settlement statistics facts
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Channel'
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/UserID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SnapshotAt'
+      responses:
+        '200':
+          description: Totals and rows from one stable snapshot
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RechargeStatisticsPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharges/statistics.csv:
+    get:
+      operationId: exportRechargeStatistics
+      summary: Export the same bounded settlement snapshot as CSV
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Channel'
+        - $ref: '#/components/parameters/TenantScopeID'
+        - $ref: '#/components/parameters/UserID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SnapshotAt'
+      responses:
+        '200':
+          description: UTF-8 CSV, at most 10000 facts
+          headers:
+            Content-Disposition:
+              schema: {type: string, const: 'attachment; filename="recharges.csv"'}
+          content:
+            text/csv:
+              schema: {type: string}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 1, default: 1}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Channel:
+      name: channel
+      in: query
+      schema: {$ref: '#/components/schemas/RechargeChannel'}
+    State:
+      name: state
+      in: query
+      schema: {$ref: '#/components/schemas/RechargeState'}
+    TenantScopeID:
+      name: tenant_scope_id
+      in: query
+      schema: {$ref: '#/components/schemas/UUID'}
+    UserID:
+      name: user_id
+      in: query
+      schema: {$ref: '#/components/schemas/UUID'}
+    From:
+      name: from
+      in: query
+      required: true
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      required: true
+      schema: {type: string, format: date-time}
+    FromOptional:
+      name: from
+      in: query
+      schema: {type: string, format: date-time}
+    ToOptional:
+      name: to
+      in: query
+      schema: {type: string, format: date-time}
+    SnapshotAt:
+      name: snapshot_at
+      in: query
+      description: Reuse snapshot_at returned by the first page to keep later pages and CSV on the same fact boundary.
+      schema: {type: string, format: date-time}
+  responses:
+    Error:
+      description: Stable error code; message is not safe for direct UI rendering
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    PositiveDisplayID:
+      type: string
+      pattern: '^[1-9][0-9]{0,18}$'
+      readOnly: true
+    RechargeChannel:
+      type: string
+      enum: [alipay, wechat, transfer]
+    RechargeState:
+      type: string
+      enum: [pending, paid, partially_refunded, refunded, voided, failed, canceled, reconcile_required]
+    RechargePolicy:
+      type: object
+      additionalProperties: false
+      required: [wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, default_recharge_method, recharge_restriction, available_methods]
+      properties:
+        wechat_payment_enabled: {type: boolean}
+        alipay_payment_enabled: {type: boolean}
+        bank_transfer_enabled: {type: boolean}
+        default_recharge_method: {type: string, enum: [none, wechat, alipay, bank_transfer]}
+        recharge_restriction: {type: string, enum: [none, individual_verified, enterprise_verified]}
+        available_methods:
+          type: array
+          uniqueItems: true
+          description: >-
+            Methods the customer can use now: the switch is on and, for wechat/alipay, an enabled payment
+            channel is configured. Empty means recharge is not offered and the balance page shows no recharge block.
+          items: {type: string, enum: [wechat, alipay, bank_transfer]}
+    CreateRechargeOrder:
+      type: object
+      additionalProperties: false
+      required: [channel, amount_minor]
+      properties:
+        channel: {$ref: '#/components/schemas/RechargeChannel'}
+        amount_minor: {type: integer, format: int64, minimum: 1, maximum: 9000000000000000}
+    RechargeOrder:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, tenant_id, user_id, user_display_id, channel, provider, amount_minor, captured_minor, refunded_minor, net_minor, currency, state, revision, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        tenant_id: {$ref: '#/components/schemas/UUID'}
+        user_id: {$ref: '#/components/schemas/UUID'}
+        user_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        channel: {$ref: '#/components/schemas/RechargeChannel'}
+        provider: {type: string, maxLength: 64}
+        amount_minor: {type: integer, format: int64, minimum: 1, maximum: 9000000000000000}
+        captured_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        refunded_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        net_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        currency: {type: string, const: CNY}
+        state: {$ref: '#/components/schemas/RechargeState'}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RechargeOrderPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit, snapshot_at]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/RechargeOrder'}}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        snapshot_at: {type: string, format: date-time}
+    RechargeCallbackResult:
+      type: object
+      additionalProperties: false
+      required: [order_id, state, replayed]
+      properties:
+        order_id: {$ref: '#/components/schemas/UUID'}
+        state: {$ref: '#/components/schemas/RechargeState'}
+        transaction_id: {$ref: '#/components/schemas/UUID'}
+        replayed: {type: boolean}
+    RechargeStatistic:
+      type: object
+      additionalProperties: false
+      required: [id, order_id, display_id, callback_id, transaction_id, tenant_scope_id, tenant_id, user_id, user_display_id, tenant_name, channel, amount_minor, gross_amount_minor, refunded_amount_minor, net_amount_minor, currency, settled_at]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        callback_id: {$ref: '#/components/schemas/UUID'}
+        transaction_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        tenant_id: {$ref: '#/components/schemas/UUID'}
+        user_id: {$ref: '#/components/schemas/UUID'}
+        user_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        tenant_name: {type: string, maxLength: 256}
+        channel: {$ref: '#/components/schemas/RechargeChannel'}
+        amount_minor: {type: integer, format: int64, minimum: 1, maximum: 9000000000000000}
+        gross_amount_minor: {type: integer, format: int64, minimum: 1, maximum: 9000000000000000}
+        refunded_amount_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        net_amount_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        currency: {type: string, const: CNY}
+        settled_at: {type: string, format: date-time}
+    RechargeStatisticsPage:
+      type: object
+      additionalProperties: false
+      required: [items, total_amount_minor, total_gross_amount_minor, total_refunded_amount_minor, total_net_amount_minor, total_orders, page, limit, snapshot_at]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/RechargeStatistic'}}
+        total_amount_minor: {type: integer, format: int64, minimum: 0}
+        total_gross_amount_minor: {type: integer, format: int64, minimum: 0}
+        total_refunded_amount_minor: {type: integer, format: int64, minimum: 0}
+        total_net_amount_minor: {type: integer, format: int64, minimum: 0}
+        total_orders: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        snapshot_at: {type: string, format: date-time}
+    RechargeCallbackFact:
+      type: object
+      additionalProperties: false
+      required: [id, order_id, tenant_scope_id, amount_minor, currency, state]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        amount_minor: {type: integer, format: int64, minimum: 1}
+        currency: {type: string, const: CNY}
+        state: {type: string, const: paid}
+    RechargeLedgerFact:
+      type: object
+      additionalProperties: false
+      required: [transaction_id, provider_event_id, order_id, tenant_scope_id, amount_minor, currency, direction, operation]
+      properties:
+        transaction_id: {$ref: '#/components/schemas/UUID'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        amount_minor: {type: integer, format: int64, minimum: 1}
+        currency: {type: string, const: CNY}
+        direction: {type: string, enum: [credit, debit]}
+        provider_event_id: {$ref: '#/components/schemas/UUID'}
+        operation: {type: string, enum: [recharge_payment, recharge_refund, recharge_void]}
+    RechargeProviderEventFact:
+      type: object
+      additionalProperties: false
+      required: [id, order_id, tenant_scope_id, event_kind, provider_status, amount_minor, currency, processing_result]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        event_kind: {type: string, enum: [payment, refund, void]}
+        provider_status: {type: string, enum: [succeeded, failed, unknown]}
+        amount_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        currency: {type: string, const: CNY}
+        processing_result: {type: string, enum: [applied, deferred, ignored]}
+    RechargeReconciliation:
+      type: object
+      additionalProperties: false
+      required: [order, callback, ledger, statistic, provider_events, ledger_entries, gross_amount_minor, refunded_amount_minor, net_amount_minor]
+      properties:
+        order: {$ref: '#/components/schemas/RechargeOrder'}
+        callback: {$ref: '#/components/schemas/RechargeCallbackFact'}
+        ledger: {$ref: '#/components/schemas/RechargeLedgerFact'}
+        statistic: {$ref: '#/components/schemas/RechargeStatistic'}
+        provider_events: {type: array, items: {$ref: '#/components/schemas/RechargeProviderEventFact'}}
+        ledger_entries: {type: array, items: {$ref: '#/components/schemas/RechargeLedgerFact'}}
+        gross_amount_minor: {type: integer, format: int64, minimum: 1, maximum: 9000000000000000}
+        refunded_amount_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        net_amount_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum: [validation_error, unauthenticated, permission_denied, identity_verification_required, recharge_method_unavailable, not_found, idempotency_conflict, signature_invalid, reconciliation_failed, service_unavailable]
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: >-
+                On a 400 validation_error of POST /v1/recharges/orders that names the refused body field: field is channel or
+                amount_minor; reason is a machine code (invalid, out_of_range). Other refusals have no details.
+              x-description-zh: 充值下单 400 validation_error 能定位字段时附带 field（channel / amount_minor）与 reason 机器码；其它拒绝不带 details。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$'
+                reason:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_]{0,63}$'
+              example: {field: amount_minor, reason: out_of_range}

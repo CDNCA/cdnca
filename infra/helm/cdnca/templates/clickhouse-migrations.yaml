@@ -1,0 +1,129 @@
+{{- if .Values.clickhouseMigrations.enabled }}
+{{- $component := "clickhouse-migrate" -}}
+{{- $values := .Values.clickhouseMigrations -}}
+{{- $grants := $values.grantUsers -}}
+{{- if and (or $grants.query $grants.ingest $grants.rollup) (not (and $grants.query $grants.ingest $grants.rollup)) }}
+{{- fail "clickhouseMigrations.grantUsers needs query, ingest and rollup together, or none" }}
+{{- end }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+  annotations:
+    # Before control-api starts serving the new release (its migrate job is -20).
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-15"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  activeDeadlineSeconds: {{ $values.activeDeadlineSeconds }}
+  # A failed migration fails the release; a retry is a new helm upgrade.
+  backoffLimit: 0
+  ttlSecondsAfterFinished: {{ $values.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        {{- include "cdnca.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      {{- include "cdnca.imagePullSecrets" . | trim | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: migrate
+          image: {{ include "cdnca.image" $values.image | quote }}
+          imagePullPolicy: {{ $values.image.pullPolicy }}
+          args: [{{ $values.action | quote }}]
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          env:
+            - name: CLICKHOUSE_MIGRATE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $values.secret.existingSecret | quote }}
+                  key: {{ $values.secret.keys.url | quote }}
+            - name: CLICKHOUSE_MIGRATE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $values.secret.existingSecret | quote }}
+                  key: {{ $values.secret.keys.username | quote }}
+            - name: CLICKHOUSE_MIGRATE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $values.secret.existingSecret | quote }}
+                  key: {{ $values.secret.keys.password | quote }}
+            - name: CLICKHOUSE_MIGRATE_DATABASE
+              value: {{ $values.database | quote }}
+            - name: CLICKHOUSE_MIGRATE_CLUSTER
+              value: {{ $values.cluster | quote }}
+            {{- if $grants.query }}
+            - name: CLICKHOUSE_MIGRATE_GRANT_QUERY_USER
+              value: {{ $grants.query | quote }}
+            - name: CLICKHOUSE_MIGRATE_GRANT_INGEST_USER
+              value: {{ $grants.ingest | quote }}
+            - name: CLICKHOUSE_MIGRATE_GRANT_ROLLUP_USER
+              value: {{ $grants.rollup | quote }}
+            {{- end }}
+            {{- if $values.caSecret.existingSecret }}
+            - name: CLICKHOUSE_MIGRATE_CA_FILE
+              value: /var/run/secrets/cdnca/clickhouse-ca/ca.pem
+            {{- end }}
+          resources:
+            {{- toYaml $values.resources | nindent 12 }}
+          {{- if $values.caSecret.existingSecret }}
+          volumeMounts:
+            - name: clickhouse-ca
+              mountPath: /var/run/secrets/cdnca/clickhouse-ca
+              readOnly: true
+          {{- end }}
+      {{- if $values.caSecret.existingSecret }}
+      volumes:
+        - name: clickhouse-ca
+          secret:
+            secretName: {{ $values.caSecret.existingSecret | quote }}
+            items:
+              - key: {{ $values.caSecret.key | quote }}
+                path: ca.pem
+      {{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-16"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.dns.namespaceSelector | nindent 14 }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    {{- if .Values.networkPolicy.dataStores.clickhouse.cidrs }}
+    - to:
+        {{- range .Values.networkPolicy.dataStores.clickhouse.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.networkPolicy.dataStores.clickhouse.port }}
+          protocol: TCP
+    {{- end }}
+{{- end }}
+{{- end }}

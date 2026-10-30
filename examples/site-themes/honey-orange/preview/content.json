@@ -1,0 +1,26 @@
+{
+  "schema": "cdnca.control-site/v1",
+  "enabled": true,
+  "brand": { "name": "示例小站", "title": "示例小站 · 轻量加速", "description": "示例数据，仅用于本地预览" },
+  "plugin_content": {
+    "hero_title": "小站点，也值得被认真加速",
+    "hero_subtitle": "三分钟接入，按量计费，不用懂运维。",
+    "hero_cta": "免费开始",
+    "features_title": "为什么选我们",
+    "features": [
+      { "icon": "asset:4e70e096d21835c047c4fe8233e9bfc290312ba7b3164d009dbd2401697f8db8", "title": "上手快", "body": "填域名、改 CNAME，三步完成接入。" },
+      { "icon": "asset:4e70e096d21835c047c4fe8233e9bfc290312ba7b3164d009dbd2401697f8db8", "title": "按量付", "body": "用多少付多少，月底账单清清楚楚。" },
+      { "icon": "asset:4e70e096d21835c047c4fe8233e9bfc290312ba7b3164d009dbd2401697f8db8", "title": "有人管", "body": "工单与社区群，工作日两小时内响应。" }
+    ],
+    "plans": [
+      { "name": "体验", "price": "¥0", "unit": "/月", "points": "10 GB 流量\n免费证书", "featured": "", "action": { "label": "立即体验", "href": "/dashboard/register" } },
+      { "name": "标准", "price": "¥29", "unit": "/月", "points": "200 GB 流量\n基础防护\n自定义缓存规则", "featured": "yes", "action": { "label": "选这个", "href": "/dashboard/register" } },
+      { "name": "进阶", "price": "¥129", "unit": "/月", "points": "1 TB 流量\nCC 防护\n多站点", "featured": "", "action": { "label": "选这个", "href": "/dashboard/register" } }
+    ],
+    "faq": [
+      { "question": "流量用完了会怎样？", "answer": "会先通知你，超出部分按量计费，也可以随时加购流量包。" },
+      { "question": "支持 HTTPS 吗？", "answer": "支持，免费证书自动签发和续期。" }
+    ],
+    "footer_text": "© 2026 示例小站（示例数据）"
+  }
+}

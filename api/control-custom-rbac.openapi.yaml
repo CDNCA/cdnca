@@ -1,0 +1,514 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Tenant Custom RBAC API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable IAM-12 tenant custom RBAC HTTP contract over migration 042.
+    Every operation accepts only an authenticated customer-control tenant session. Actor,
+    tenant scope, and authentication session are derived from trusted authentication facts;
+    platform and operator identities are rejected. Reads revalidate the live session and
+    identity.roles.manage permission. Writes delegate to rbacmanager's transaction and use
+    an injected transaction-bound StepUpVerifier for critical permissions. The client cannot
+    assert that step-up was verified. A transaction-bound MFA adapter is provided but this
+    fragment is not mounted by control-api main or the aggregate OpenAPI contract yet.
+servers:
+  - url: /
+tags:
+  - name: Tenant custom RBAC
+    description: Tenant custom roles, delegable permissions, and immutable grant facts.
+paths:
+  /v1/custom-rbac/permissions:
+    get:
+      tags: [Tenant custom RBAC]
+      operationId: listTenantDelegablePermissions
+      summary: List the tenant-delegable permission catalog
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      responses:
+        '200': {$ref: '#/components/responses/PermissionCatalogOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/custom-rbac/roles:
+    get:
+      tags: [Tenant custom RBAC]
+      operationId: listTenantCustomRoles
+      summary: Page through custom roles in the authenticated tenant scope
+      description: >-
+        The signed cursor is bound to the authenticated scope and include_deactivated filter,
+        and freezes role creation, revision, and deactivation state at a durable commit-ordered
+        database watermark from the first page.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: include_deactivated
+          in: query
+          required: false
+          schema: {type: boolean, default: false}
+      responses:
+        '200': {$ref: '#/components/responses/RolePageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+    post:
+      tags: [Tenant custom RBAC]
+      operationId: createTenantCustomRole
+      summary: Create a custom role and its first immutable revision
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepUpProof'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateRoleRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/RoleCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '428': {$ref: '#/components/responses/StepUpRequired'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/custom-rbac/roles/{role_id}:
+    get:
+      tags: [Tenant custom RBAC]
+      operationId: getTenantCustomRole
+      summary: Get a custom role in the authenticated tenant scope
+      description: Unknown and cross-tenant role IDs return the same 404 response.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters: [{$ref: '#/components/parameters/RoleID'}]
+      responses:
+        '200': {$ref: '#/components/responses/RoleOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/custom-rbac/roles/{role_id}/rename:
+    post:
+      tags: [Tenant custom RBAC]
+      operationId: renameTenantCustomRole
+      summary: Rename a custom role with revision compare-and-swap
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/RoleID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepUpProof'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RenameRoleRequest'}
+      responses: {$ref: '#/components/x-responses/RoleMutation'}
+  /v1/custom-rbac/roles/{role_id}/publish:
+    post:
+      tags: [Tenant custom RBAC]
+      operationId: publishTenantCustomRoleRevision
+      summary: Publish a new permission revision with compare-and-swap
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/RoleID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepUpProof'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PublishRoleRequest'}
+      responses: {$ref: '#/components/x-responses/RoleMutation'}
+  /v1/custom-rbac/roles/{role_id}/deactivate:
+    post:
+      tags: [Tenant custom RBAC]
+      operationId: deactivateTenantCustomRole
+      summary: Deactivate a custom role with compare-and-swap
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/RoleID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepUpProof'
+      responses: {$ref: '#/components/x-responses/RoleMutation'}
+  /v1/custom-rbac/grants:
+    get:
+      tags: [Tenant custom RBAC]
+      operationId: listTenantCustomRoleGrants
+      summary: Page through active or revoked custom-role grants
+      description: >-
+        The signed cursor freezes grant creation and revocation state at the durable
+        commit-ordered database watermark captured by the first page.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: role_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+        - name: subject_user_id
+          in: query
+          required: false
+          schema: {type: string, format: uuid}
+        - name: state
+          in: query
+          required: false
+          schema: {type: string, enum: [active, revoked, all], default: active}
+      responses:
+        '200': {$ref: '#/components/responses/GrantPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+    post:
+      tags: [Tenant custom RBAC]
+      operationId: assignTenantCustomRole
+      summary: Assign the current role revision to another active tenant member
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepUpProof'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AssignRoleRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/GrantCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '428': {$ref: '#/components/responses/StepUpRequired'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/custom-rbac/grants/{grant_id}/revoke:
+    post:
+      tags: [Tenant custom RBAC]
+      operationId: revokeTenantCustomRoleGrant
+      summary: Append a custom-role grant revocation fact
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.roles.manage]
+      parameters:
+        - $ref: '#/components/parameters/GrantID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+        - $ref: '#/components/parameters/StepUpProof'
+      responses:
+        '200': {$ref: '#/components/responses/RevocationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '428': {$ref: '#/components/responses/StepUpRequired'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    RoleID:
+      name: role_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    GrantID:
+      name: grant_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive decimal current role revision, for example "3".
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    Traceparent:
+      name: Traceparent
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+    StepUpProof:
+      name: X-Step-Up-Proof
+      in: header
+      required: false
+      description: >-
+        Opaque 32-byte base64url MFA proof. Required when the affected permission set contains
+        a catalog entry with step_up_required=true. The server consumes it in the RBAC transaction
+        and binds the use to the operation, authenticated tenant actor and session, target role,
+        subject or grant, expected revision, normalized business payload, and idempotency key.
+        Reusing the proof for a different logical mutation is rejected even when request IDs match.
+      schema: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+  schemas:
+    PermissionName:
+      type: string
+      pattern: '^[a-z][a-z0-9._:-]{0,127}$'
+    PermissionList:
+      type: array
+      minItems: 1
+      maxItems: 128
+      uniqueItems: true
+      items: {$ref: '#/components/schemas/PermissionName'}
+    CreateRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [name, permissions]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        permissions: {$ref: '#/components/schemas/PermissionList'}
+    RenameRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+    PublishRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [permissions]
+      properties:
+        permissions: {$ref: '#/components/schemas/PermissionList'}
+    AssignRoleRequest:
+      type: object
+      additionalProperties: false
+      required: [role_id, subject_user_id]
+      properties:
+        role_id: {type: string, format: uuid}
+        subject_user_id: {type: string, format: uuid}
+    Role:
+      type: object
+      additionalProperties: false
+      required: [id, name, current_revision, permissions, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        current_revision: {type: integer, format: int64, minimum: 1}
+        permissions: {$ref: '#/components/schemas/PermissionList'}
+        deactivated_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    Permission:
+      type: object
+      additionalProperties: false
+      required: [name, step_up_required]
+      properties:
+        name: {$ref: '#/components/schemas/PermissionName'}
+        step_up_required: {type: boolean}
+    Grant:
+      type: object
+      additionalProperties: false
+      required: [id, role_id, role_revision, subject_user_id, granted_by_user_id, granted_at]
+      properties:
+        id: {type: string, format: uuid}
+        role_id: {type: string, format: uuid}
+        role_revision: {type: integer, format: int64, minimum: 1}
+        subject_user_id: {type: string, format: uuid}
+        granted_by_user_id: {type: string, format: uuid}
+        granted_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    Revocation:
+      type: object
+      additionalProperties: false
+      required: [id, grant_id, revoked_by_user_id, revoked_at]
+      properties:
+        id: {type: string, format: uuid}
+        grant_id: {type: string, format: uuid}
+        revoked_by_user_id: {type: string, format: uuid}
+        revoked_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    Page:
+      type: object
+      additionalProperties: false
+      properties:
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    RoleEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Role'}
+    RolePage:
+      type: object
+      additionalProperties: false
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Role'}}
+        page: {$ref: '#/components/schemas/Page'}
+    PermissionCatalog:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Permission'}}
+    GrantEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Grant'}
+    GrantPage:
+      type: object
+      additionalProperties: false
+      required: [data, page]
+      properties:
+        data: {type: array, items: {$ref: '#/components/schemas/Grant'}}
+        page: {$ref: '#/components/schemas/Page'}
+    RevocationEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Revocation'}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string, pattern: '^custom_rbac_[a-z0-9_]+$'}
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {type: string, minLength: 1, maxLength: 128}
+  responses:
+    PermissionCatalogOK:
+      description: Delegable permission catalog.
+      content: {application/json: {schema: {$ref: '#/components/schemas/PermissionCatalog'}}}
+    RolePageOK:
+      description: Stable page of custom roles.
+      content: {application/json: {schema: {$ref: '#/components/schemas/RolePage'}}}
+    RoleOK:
+      description: Custom role detail.
+      content: {application/json: {schema: {$ref: '#/components/schemas/RoleEnvelope'}}}
+    RoleCreated:
+      description: Custom role created, or the original response replayed.
+      content: {application/json: {schema: {$ref: '#/components/schemas/RoleEnvelope'}}}
+    GrantPageOK:
+      description: Stable page of custom-role grants.
+      content: {application/json: {schema: {$ref: '#/components/schemas/GrantPage'}}}
+    GrantCreated:
+      description: Grant created, or the original response replayed.
+      content: {application/json: {schema: {$ref: '#/components/schemas/GrantEnvelope'}}}
+    RevocationOK:
+      description: Revocation appended, or the original response replayed.
+      content: {application/json: {schema: {$ref: '#/components/schemas/RevocationEnvelope'}}}
+    BadRequest: {$ref: '#/components/x-error-responses/BadRequest'}
+    Unauthorized: {$ref: '#/components/x-error-responses/Unauthorized'}
+    Forbidden: {$ref: '#/components/x-error-responses/Forbidden'}
+    NotFound: {$ref: '#/components/x-error-responses/NotFound'}
+    Conflict: {$ref: '#/components/x-error-responses/Conflict'}
+    PayloadTooLarge: {$ref: '#/components/x-error-responses/PayloadTooLarge'}
+    Unprocessable: {$ref: '#/components/x-error-responses/Unprocessable'}
+    StepUpRequired: {$ref: '#/components/x-error-responses/StepUpRequired'}
+    RequestCancelled: {$ref: '#/components/x-error-responses/RequestCancelled'}
+    BadGateway: {$ref: '#/components/x-error-responses/BadGateway'}
+    ServiceUnavailable: {$ref: '#/components/x-error-responses/ServiceUnavailable'}
+    GatewayTimeout: {$ref: '#/components/x-error-responses/GatewayTimeout'}
+  x-responses:
+    RoleMutation:
+      '200': {$ref: '#/components/responses/RoleOK'}
+      '400': {$ref: '#/components/responses/BadRequest'}
+      '401': {$ref: '#/components/responses/Unauthorized'}
+      '403': {$ref: '#/components/responses/Forbidden'}
+      '404': {$ref: '#/components/responses/NotFound'}
+      '409': {$ref: '#/components/responses/Conflict'}
+      '413': {$ref: '#/components/responses/PayloadTooLarge'}
+      '422': {$ref: '#/components/responses/Unprocessable'}
+      '428': {$ref: '#/components/responses/StepUpRequired'}
+      '408': {$ref: '#/components/responses/RequestCancelled'}
+      '502': {$ref: '#/components/responses/BadGateway'}
+      '503': {$ref: '#/components/responses/ServiceUnavailable'}
+      '504': {$ref: '#/components/responses/GatewayTimeout'}
+  x-error-responses:
+    BadRequest: {description: 'Strict header, query, path, or JSON validation failed', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unauthorized: {description: Authentication is required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Tenant session or delegation permission was denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: Resource is absent or outside the authenticated tenant, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: 'Idempotency, revision, name, lifecycle, or immutability conflict', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    PayloadTooLarge: {description: Request body exceeded the configured limit, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unprocessable: {description: A requested permission is not tenant delegable, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    StepUpRequired: {description: A valid bound and unconsumed step-up proof is required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    RequestCancelled: {description: Caller cancelled the request, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    BadGateway: {description: Storage returned invalid facts or the response exceeded its bound, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    ServiceUnavailable: {description: Storage or a required dependency is unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    GatewayTimeout: {description: Server-side operation deadline elapsed, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}

@@ -1,0 +1,1608 @@
+{
+ "dropped": [
+  {
+   "source": "naxsi_core",
+   "item": "1002/SQL",
+   "reason": "score 2 needs 3+ hits (cross-value sums not converted)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "1009/SQL",
+   "reason": "score 2 needs 3+ hits (cross-value sums not converted)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "1207/TRAVERSAL",
+   "reason": "score 2 needs 3+ hits (cross-value sums not converted)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": 1315,
+   "reason": "double encoding: the node URL-decodes values up to 3 times, %xx is never seen"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "data://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "expect://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "file://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "ftp://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "glob://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "gopher://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "phar://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "php://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "sftp://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "zip://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "zlib://",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "&&",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "*/",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "/*",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "http://",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "https://",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "(?i)(?:%U|\\&\\#)[\\s\\S]*(?:%U|\\&\\#)",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "(?i)(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "(?i)(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)[\\s\\S]*(?:/%2e\\./|/\\",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "https://",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "(?i)(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "(?i)(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)[\\s\\S]*(?:/%2e\\./|/\\",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_core",
+   "item": "(?i)(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load",
+   "reason": "not a strong feature (single character, or >=0.5% of normal requests)"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "masscan",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "acunetix",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "havij",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "sucuri",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": 10000011,
+   "reason": "score 4 below 8 (only adds up with other rules)"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "whatweb",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "dirbuster",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "zgrab",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "nmap",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "sqlmap",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-scan",
+   "item": "wpscan",
+   "reason": "already in an official pack on user_agent"
+  },
+  {
+   "source": "naxsi_nx-web",
+   "item": 20000032,
+   "reason": "score 6 below 8 (only adds up with other rules)"
+  },
+  {
+   "source": "naxsi_nx-web",
+   "item": "/etc/passwd",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_nx-web",
+   "item": "/etc/shadow",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_nx-web",
+   "item": "/Windows/win.ini",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "naxsi_nx-web",
+   "item": "\\Windows\\win.ini",
+   "reason": "already in an official pack on args"
+  },
+  {
+   "source": "device_detector",
+   "item": "Cloudflare-Healthchecks",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Aboundex",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "AcoonBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "AhrefsBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "AhrefsSiteAudit",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "alexabot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Amazonbot-Video",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Amazonbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Amzn-SearchBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Amzn-User",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "NovaAct",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "AmazonBuyForMe",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "amazon-kendra",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Amazon[ -]Route ?53[ -]Health[ -]Check[ -]Service",
+   "reason": "matches a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "AmorankSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Applebot-Extended",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Applebot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "AspiegelBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Curious George",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "archive.org_bot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Backlink-Check.de",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "BacklinkCrawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Better Uptime Bot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "MSNBot|msrbot|bingbot|bingadsbot|BingPreview|msnbot-(UDiscovery|NewsBlogs)|adidx",
+   "reason": "matches a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Blekkobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "BLEXBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "BoardReader Blog Indexer",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "(?<!HTC)[ _]Butterfly/",
+   "reason": "lookaround / nested repetition / too long for the node regex budget"
+  },
+  {
+   "source": "device_detector",
+   "item": "CCBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Cliqzbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Cloudflare-SSLDetector",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Cloudflare Custom Hostname Verification",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Cloudflare-Traffic-Manager",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "https://developers.cloudflare.com/security-center/",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "CSS Certificate Spider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Dataprovider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Daum(?!(?:Apps|Device))",
+   "reason": "lookaround / nested repetition / too long for the node regex budget"
+  },
+  {
+   "source": "device_detector",
+   "item": "Dazoobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "discobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "DotBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "DuckDuck(?:Go-Favicons-)?Bot",
+   "reason": "matches a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "DuckAssistBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "EasouSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "eCairn-Grabber",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "evc-batch",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Exabot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Ezooms",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "facebook(?:catalog|externalhit|externalua|platform|scraper)",
+   "reason": "matches a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "meta-externalagent",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "meta-externalfetcher",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "meta-webindexer",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "FacebookBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Genieo",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Storebot-Google",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Google-CloudVertexBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Google-Firebase",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Seznam-Zbozi-robot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SentiBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Googlebot-News",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Google-Site-Verification",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Adwords-(?:DisplayAds|Express|Instant)|Google Web Preview|Google[ -]Publisher[ -",
+   "reason": "matches a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Google-Extended",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Gemini-Deep-Research",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "GoogleAgent-Mariner",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Google-Pinpoint",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Google-Safety",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "ICC-Crawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ips-agent",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "larbin",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "linkdexbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "LinkedInBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ltx71",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "magpie-crawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "masscan-ng",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "meanpathbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "MJ12bot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "MojeekBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "netEstate NE Crawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Netvibes",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Nmap Scripting Engine",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "webzio-extended",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "omgili",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "OpenindexSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "spbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "OpenWebSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "OrangeBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "VoilaBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "psbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "QuerySeekerSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "rogerbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Scrapy",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Screaming Frog SEO Spider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ScreenerBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SemrushBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "BacklinksExtendedBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SplitSignalBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SiteAuditBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "seoscanners.net",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SISTRIX Crawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SiteSucker",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Sosospider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Sosoimagespider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "StatusCake",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Spinn3r",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SputnikBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SputnikFaviconBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SurveyBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "TelegramBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "trendictionbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Twitterbot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "UptimeRobot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Vagabondo",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "VKRobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "WeSEE",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Wotbox",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "YandexAdditional",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "YoudaoBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "YRSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "YYSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "zgrab",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ZumBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "GrapeshotCrawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "gigabot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "NetLyzer FastProbe",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "^sentry",
+   "reason": "matches a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Siteimprove",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "CATExplorador",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Buck",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "tracemyfile",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "BoardReader Favicon Fetcher",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Bytespider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "TikTokSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "AwarioRssBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "oBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "SMTBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "LCC",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Nutch",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Seobility",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Domains Project",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "PetalBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "VelenPublicWebCrawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Barkrowler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "BDCbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Nimbostratus-Bot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Cocolyzebot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "LinkpadBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "PageThing.com",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "datagnionbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Mediatoolkitbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ZoominfoBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SEOkicks",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "proximic;",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "woobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "NetSystemsResearch",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "CensysInspect",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "WellKnownBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Adsbot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "MTRobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "serpstatbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "l9tcpid",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "l9explore",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "MegaIndex.ru",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Seekport",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "YaK/",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "DataForSeoBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Discordbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Linespider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "IonCrawl",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Abonti",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "webprosbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "InternetMeasurement",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "DomainAppender",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "DomainStatsBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "aiHitBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "DomainCrawler/",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "CriteoBot/",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "LinkWalker",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "panscient.com",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "PATHspider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "everyfeed-spider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Doximity-Diffbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ReqBin Curl Client",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "FemtosearchBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "OAI-SearchBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "GPTBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "ChatGPT-User",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "ClaudeBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Claude-SearchBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Claude-User",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Claude-Web",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Brightbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "GeedoBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "GeedoProductSearch",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "getodin.com",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "YouBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "anthropic-ai",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "cohere-ai",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "PerplexityBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Perplexity-User",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "MicrosoftPreview",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "adscanner",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "NetTrack",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Arquivo-web-crawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SenutoBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Quantcastbot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Monsidobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Detectify",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "DomCopBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ZoomBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "KadoBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Swiftbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "LAC_IAHarvester",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "bitdiscovery",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "BDFetch",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "GenomeCrawlerd",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "RedekenBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Timpibot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Validbot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "NPBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "domaincodex.com",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "heritrix",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SpiderLing",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Bravebot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Pandalytics",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "CloudServerMarketSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Cotoyogi",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SiteCheckerBotCrawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SBIder",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "LightspeedSystemsCrawler",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "AddSearchBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "TerraCotta",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "bigsur.ai",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "FirecrawlAgent",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "HaloBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "AliyunSecBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Webliobot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Kagibot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Ai2Bot-Dolma",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Ai2Bot-DeepResearchEval",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Ai2Bot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "WARDBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "DeepseekBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "MistralAI-Index",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "MistralAI-User",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Crawlspace",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Devin",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Andibot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "StatusNestBacklinkSpider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "img2dataset",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "iAskBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "LinerBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Poggio-Citations",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "QualifiedBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ZanistaBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ChatGLM-Spider",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "SBIntuitionsBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "ShapBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "PanguBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "Manus-User",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "blackboardally",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "KimiBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Kimi-SearchBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "Kimi-User",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "PriEcoBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "WRTNBot",
+   "reason": "already in an official UA pack"
+  },
+  {
+   "source": "device_detector",
+   "item": "IsonSearchBot",
+   "reason": "substring of a benign / known-good crawler User-Agent"
+  },
+  {
+   "source": "device_detector",
+   "item": "nuhk|grub-client|Download Demon|SearchExpress|Microsoft URL Control|borg|altavis",
+   "reason": "lookaround / nested repetition / too long for the node regex budget"
+  },
+  {
+   "source": "device_detector",
+   "item": "[a-z0-9_-]*(?:(?<!cu|Hu|power[ _]|m[ _])bot(?![ _]TAB|[ _]?5[0-9]|[ _]Senior|[ _",
+   "reason": "lookaround / nested repetition / too long for the node regex budget"
+  },
+  {
+   "source": "bunkerweb",
+   "item": "BLACKLIST_COMMUNITY_LISTS ua:mitchellkrogza-bad-user-agents",
+   "reason": "same list as system/bot-bad-ua"
+  },
+  {
+   "source": "bunkerweb",
+   "item": "BAD_BEHAVIOR 404",
+   "reason": "system/cc-404-burst (cc_v2 counts 404 only; 400/401/403/405/429/444 not countable)"
+  },
+  {
+   "source": "bunkerweb",
+   "item": "BLACKLIST_RDNS .shodan.io .censys.io",
+   "reason": "waf_v2 has no reverse DNS condition"
+  },
+  {
+   "source": "bunkerweb",
+   "item": "DNSBL / REVERSE_SCAN",
+   "reason": "need network lookups"
+  }
+ ],
+ "rewritten": [
+  {
+   "id": 20000038,
+   "from": "<!DOCTYPE(\\s+)(%*\\s*)([{}:.a-zA-Z0-9_-]*)(\\s+)SYSTEM",
+   "to": "<!DOCTYPE\\s+[%\\s]*[{}:.a-zA-Z0-9_-]*\\s+SYSTEM"
+  }
+ ],
+ "benign_uas": 178,
+ "bot-dd-scraper": {
+  "contains": 345,
+  "regex": 41
+ },
+ "bot-dd-service": {
+  "contains": 186,
+  "regex": 27
+ },
+ "system-naxsi-strong.json": 9,
+ "system-naxsi-scanner.json": 9,
+ "system-naxsi-websec.json": 18,
+ "system-naxsi-sqli.json": 10,
+ "system-bot-dd-scraper.json": {
+  "contains": 345,
+  "regex": 41
+ },
+ "system-bot-dd-service.json": {
+  "contains": 186,
+  "regex": 27
+ },
+ "system-bw-request-limits.json": 17
+}

@@ -1,0 +1,18 @@
+{
+  "schema": "cdnca.theme/v1",
+  "id": "market.acme.dev.shield-blue",
+  "version": "1.0.0",
+  "name": { "zh-CN": "盾蓝", "en-US": "Shield Blue" },
+  "description": { "zh-CN": "深蓝侧栏、亮蓝主色的用户端外观" },
+  "tokens": {
+    "colorPrimary": "#2563eb",
+    "colorLink": "#2563eb",
+    "colorLinkHover": "#38bdf8",
+    "colorBgLayout": "#f1f5fb",
+    "borderRadius": 6
+  },
+  "tokens_by_role": {
+    "user": { "colorSidebarDark": "#0b1b3f" }
+  },
+  "layout_slots": { "login_layout": "split", "sidebar": "dark", "look": "tech", "motion": "subtle" }
+}

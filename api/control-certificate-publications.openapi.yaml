@@ -1,0 +1,257 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Certificate Publication Status API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant-scoped read model for the durable publication, activation and retry
+    state created by certificate site binding changes. The opaque cursor is
+    signed and bound to the authenticated actor, target tenant and filters.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Certificate publications
+    description: Certificate binding publication status and immutable history.
+paths:
+  /v1/certificate-publications:
+    get:
+      tags: [Certificate publications]
+      operationId: listCertificatePublicationStatuses
+      summary: List current certificate publication statuses
+      x-required-permissions: [certificates.read]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/State'
+        - $ref: '#/components/parameters/Operation'
+        - $ref: '#/components/parameters/SiteFilterID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/PublicationStatusPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /v1/certificate-publications/{site_id}/revisions/{revision}:
+    parameters:
+      - $ref: '#/components/parameters/SiteID'
+      - $ref: '#/components/parameters/BindingRevision'
+    get:
+      tags: [Certificate publications]
+      operationId: getCertificatePublicationStatus
+      summary: Get one binding revision and its complete state history
+      x-required-permissions: [certificates.read]
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/PublicationStatusDetailOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '500': {$ref: '#/components/responses/InternalError'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    TargetScopeID:
+      name: target_scope_id
+      in: query
+      required: false
+      description: Required for platform actors; tenant actors may target only their own scope.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    State:
+      name: state
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/PublicationState'}
+    Operation:
+      name: operation
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/PublicationOperation'}
+    SiteFilterID:
+      name: site_id
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 200, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque signed snapshot cursor bound to actor, tenant and filters.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+        pattern: '^[A-Za-z0-9_-]+$'
+    OptionalRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/RequestMetadata'}
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    BindingRevision:
+      name: revision
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/PositiveRevision'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    RequestMetadata:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    PositiveRevision:
+      type: integer
+      format: int64
+      minimum: 1
+    PublicationOperation:
+      type: string
+      enum: [publish, unpublish]
+    PublicationState:
+      type: string
+      enum: [pending, leased, retry_wait, succeeded, permanent_failed]
+    PublicationStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - tenant_scope_id
+        - site_id
+        - asset_id
+        - version_id
+        - binding_revision
+        - operation
+        - default
+        - state_sequence
+        - state
+        - attempt
+        - occurred_at
+      properties:
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        asset_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        binding_revision: {$ref: '#/components/schemas/PositiveRevision'}
+        operation: {$ref: '#/components/schemas/PublicationOperation'}
+        default: {type: boolean}
+        state_sequence: {$ref: '#/components/schemas/PositiveRevision'}
+        state: {$ref: '#/components/schemas/PublicationState'}
+        attempt: {type: integer, minimum: 0}
+        next_attempt_at: {type: string, format: date-time}
+        occurred_at: {type: string, format: date-time}
+        failure_code: {type: string, minLength: 1, maxLength: 128}
+        publication_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        publication_revision: {$ref: '#/components/schemas/PositiveRevision'}
+        config_version_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        rollout_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        rollout_revision: {$ref: '#/components/schemas/PositiveRevision'}
+    PublicationStatusEvent:
+      type: object
+      additionalProperties: false
+      required: [sequence, state, attempt, occurred_at]
+      properties:
+        sequence: {$ref: '#/components/schemas/PositiveRevision'}
+        state: {$ref: '#/components/schemas/PublicationState'}
+        attempt: {type: integer, minimum: 0}
+        next_attempt_at: {type: string, format: date-time}
+        occurred_at: {type: string, format: date-time}
+        failure_code: {type: string, minLength: 1, maxLength: 128}
+    PublicationStatusPage:
+      type: object
+      additionalProperties: false
+      required: [items, snapshot_at]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/PublicationStatus'}
+        snapshot_at: {type: string, format: date-time}
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          pattern: '^[A-Za-z0-9_-]+$'
+    PublicationStatusDetail:
+      type: object
+      additionalProperties: false
+      required: [current, history]
+      properties:
+        current: {$ref: '#/components/schemas/PublicationStatus'}
+        history:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/PublicationStatusEvent'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - certificate_publication_invalid_request
+                - certificate_publication_invalid_cursor
+                - certificate_publication_permission_denied
+                - certificate_publication_not_found
+                - certificate_publication_method_not_allowed
+                - certificate_publication_internal_error
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {$ref: '#/components/schemas/RequestMetadata'}
+  responses:
+    PublicationStatusPageOK:
+      description: Current publication state page from one stable snapshot.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PublicationStatusPage'}
+    PublicationStatusDetailOK:
+      description: Current state and complete ordered history for one binding revision.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PublicationStatusDetail'}
+    BadRequest:
+      description: Invalid query, scope target, body or cursor.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Unauthorized:
+      description: Bearer session missing, malformed or invalid.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Forbidden:
+      description: Scope or certificates.read permission denied.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    NotFound:
+      description: Route or exact site binding revision is absent.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    MethodNotAllowed:
+      description: Only GET is supported.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    InternalError:
+      description: Sanitized publication status storage or cursor encoding failure.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}

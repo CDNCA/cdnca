@@ -1,0 +1,147 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "managed-waf",
+  "scenario_sha256": "2cdf11eb737c09b5b1b640457251ee8ed165da716bfb97e410fe7042b39b16d0",
+  "steps": [
+    {
+      "id": "clean",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "36",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 36,
+            "sha256": "20eba4dd4c92ebf3c740670660ad3fa2efeb8aadf05d548d9a692a48cdefc81b",
+            "text": "crs crs.example.test /search?q=hello"
+          },
+          "origin": [
+            {
+              "origin": "crs",
+              "method": "GET",
+              "uri": "/search?q=hello",
+              "host": "crs.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sqli-query",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "xss-query",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "sqli-form",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "allowed-cidr",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "58",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 58,
+            "sha256": "348ef23aaf02b0bdeb3dccd1f1dd765b4af976463784cfdcfe22e4b8103f852b",
+            "text": "crs crs.example.test /search?id=1%27%20OR%20%271%27%3D%271"
+          },
+          "origin": [
+            {
+              "origin": "crs",
+              "method": "GET",
+              "uri": "/search?id=1%27%20OR%20%271%27%3D%271",
+              "host": "crs.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.8",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.8"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

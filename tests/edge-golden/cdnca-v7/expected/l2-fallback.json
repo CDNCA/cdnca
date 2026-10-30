@@ -1,0 +1,115 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "l2-fallback",
+  "scenario_sha256": "1c9aeb3bab7289203b5468b65f969038b164e54683adf13b1fe6a27d369aa955",
+  "steps": [
+    {
+      "id": "via-l2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "23",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 23,
+            "sha256": "5ba949de03c861cefeb760fcb3838c88eef63f33edb72c14adbc5cd081055220",
+            "text": "l2 l2up.example.test /a"
+          },
+          "origin": [
+            {
+              "origin": "l2",
+              "method": "GET",
+              "uri": "/a",
+              "host": "l2up.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fallback",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "34",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 34,
+            "sha256": "11c402308ae71c3f47d83105c0a979a6b76209bf587c6ee38a202d84c7c1c144",
+            "text": "origin-down l2down.example.test /b"
+          },
+          "origin": [
+            {
+              "origin": "origin-down",
+              "method": "GET",
+              "uri": "/b",
+              "host": "l2down.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fallback-404",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "2",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 2,
+            "sha256": "4ce7bcf6e148d5048b8ebb6760ef1b0b11f67ac0a1d1aad41e31087a1b6a1db7",
+            "text": "nf"
+          },
+          "origin": [
+            {
+              "origin": "origin-down",
+              "method": "GET",
+              "uri": "/missing",
+              "host": "l2down.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

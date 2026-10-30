@@ -1,0 +1,14 @@
+{
+  "schema": "cdnca.theme/v1",
+  "id": "market.acme.dev.ocean",
+  "version": "1.0.0",
+  "name": {"zh-CN": "海蓝", "en-US": "Ocean"},
+  "description": {"zh-CN": "蓝色系主控外观"},
+  "tokens": {"colorPrimary": "#1769aa", "borderRadius": 6},
+  "layout_slots": {"login_layout": "centered", "sidebar": "dark"},
+  "templates": {
+    "styles": [{"selector": ".cf-page", "declarations": {"background-color": "token:colorBgContainer"}}],
+    "error_page": "<!doctype html><html><head><title>{{title}}</title></head><body><main class=\"cf-page\"><h1>{{status}} {{title}}</h1><p>{{message}}</p></main></body></html>",
+    "email": "<!doctype html><html><head><title>{{subject}}</title></head><body><main class=\"cf-page\">{{#lines}}<p>{{.}}</p>{{/lines}}</main></body></html>"
+  }
+}

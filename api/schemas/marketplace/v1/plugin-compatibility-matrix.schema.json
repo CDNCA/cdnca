@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.cdnca.example/marketplace/v1/plugin-compatibility-matrix.schema.json",
+  "title": "CDNCA 插件兼容矩阵 v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "rows", "deprecations"],
+  "properties": {
+    "schema": {"const": "cdnca.plugin-compatibility-matrix/v1"},
+    "rows": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {"$ref": "#/definitions/compatibilityRow"},
+      "allOf": [
+        {"contains": {"$ref": "#/definitions/manifestRow"}},
+        {"contains": {"$ref": "#/definitions/manifestSignatureRow"}},
+        {"contains": {"$ref": "#/definitions/controlAPIRow"}},
+        {"contains": {"$ref": "#/definitions/licenseOperatorAPIRow"}},
+        {"contains": {"$ref": "#/definitions/pluginWorkloadIdentityRow"}},
+        {"contains": {"$ref": "#/definitions/agentRow"}},
+        {"contains": {"$ref": "#/definitions/controlPluginInstallationAPIRow"}},
+        {"contains": {"$ref": "#/definitions/webhookSignatureRow"}}
+      ]
+    },
+    "deprecations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {"$ref": "#/definitions/deprecation"}
+    }
+  },
+  "definitions": {
+    "compatibilityRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["surface", "contract", "compatibility_source", "failure_mode"],
+      "properties": {
+        "surface": {
+          "enum": [
+            "manifest",
+            "manifest_signature",
+            "control_api",
+            "license_operator_api",
+            "plugin_workload_identity",
+            "agent",
+            "control_plugin_installation_api",
+            "webhook_signature"
+          ]
+        },
+        "contract": {"type": "string", "minLength": 1, "maxLength": 160},
+        "compatibility_source": {"type": "string", "minLength": 1, "maxLength": 256},
+        "failure_mode": {
+          "enum": [
+            "reject_manifest",
+            "deny_install_or_upgrade_preserve_lkg",
+            "reject_unknown_major",
+            "deny_runtime_request",
+            "do_not_activate_plugin_code",
+            "reject_webhook_without_side_effect"
+          ]
+        }
+      }
+    },
+    "manifestRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "manifest"}},
+      "required": ["surface"]
+    },
+    "manifestSignatureRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "manifest_signature"}},
+      "required": ["surface"]
+    },
+    "controlAPIRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "control_api"}},
+      "required": ["surface"]
+    },
+    "licenseOperatorAPIRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "license_operator_api"}},
+      "required": ["surface"]
+    },
+    "pluginWorkloadIdentityRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "plugin_workload_identity"}},
+      "required": ["surface"]
+    },
+    "agentRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "agent"}},
+      "required": ["surface"]
+    },
+    "controlPluginInstallationAPIRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "control_plugin_installation_api"}},
+      "required": ["surface"]
+    },
+    "webhookSignatureRow": {
+      "type": "object",
+      "properties": {"surface": {"const": "webhook_signature"}},
+      "required": ["surface"]
+    },
+    "deprecation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "status", "deprecated_since", "sunset_after", "replacement"],
+      "properties": {
+        "contract": {"type": "string", "minLength": 1, "maxLength": 160},
+        "status": {"enum": ["active", "deprecated", "sunset"]},
+        "deprecated_since": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "sunset_after": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "replacement": {"type": ["string", "null"], "minLength": 1, "maxLength": 256}
+      }
+    }
+  }
+}

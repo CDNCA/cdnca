@@ -1,0 +1,5 @@
+🛠️ Starting tests!
+🚀 Running go-ftw!
+➕ run 442 total tests in 56.663406036s
+⏭ skipped 0 tests
+🎉 All tests successful!

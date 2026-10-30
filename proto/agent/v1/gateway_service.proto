@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package agent.v1;
+
+import "agent/v1/types.proto";
+
+// AgentGatewayService is the only control-plane service exposed to edge Agents.
+// Deployments bind Enroll on a dedicated server-TLS listener and bind all other
+// methods on a separate listener that requires and verifies client certificates.
+service AgentGatewayService {
+  // Enroll uses server-authenticated TLS and a one-time enrollment token. Every
+  // other method requires a valid node mTLS certificate.
+  rpc Enroll(EnrollRequest) returns (EnrollResponse);
+
+  // RenewCertificate rotates a short-lived certificate. The Agent private key
+  // and the previous private key are never sent to the Gateway.
+  rpc RenewCertificate(RenewCertificateRequest) returns (RenewCertificateResponse);
+
+  // RecoverCertificate re-issues an expired certificate for the same key. Like
+  // Enroll it is bound on the server-TLS enrollment listener (no client
+  // certificate); the request is signed with the node's private key.
+  rpc RecoverCertificate(RecoverCertificateRequest) returns (RecoverCertificateResponse);
+
+  // Optional inventory discovery; only the mTLS listener exposes this method.
+  // Older Gateways return UNIMPLEMENTED without affecting Connect or enrollment.
+  rpc ReportNodeNetworkInventoryV1(ReportNodeNetworkInventoryV1Request) returns (ReportNodeNetworkInventoryV1Response);
+
+  // Connect is the long-lived command and status channel. AgentHello and
+  // GatewayHello ordering is mandatory as documented in protocol-contracts.md.
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+
+  // StreamTelemetry is an independent mTLS-authenticated transport for the
+  // durable edge event spool. It never carries commands or heartbeat state.
+  rpc StreamTelemetry(stream StreamTelemetryRequest) returns (stream StreamTelemetryResponse);
+
+  // FetchArtifact streams an immutable, deployment-authorized artifact and
+  // supports resume at a verified byte offset.
+  rpc FetchArtifact(FetchArtifactRequest) returns (stream FetchArtifactResponse);
+
+  // FetchSiteObjects streams encrypted, content-addressed site objects of the
+  // site_runtime 8 release a deployment's signed root names (ADR 0009
+  // section 8.3), so a node transfers only objects it does not hold.
+  rpc FetchSiteObjects(FetchSiteObjectsRequest) returns (stream FetchSiteObjectsResponse);
+}

@@ -1,0 +1,469 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "cert-rotation",
+  "scenario_sha256": "5b6a2344159f696167895b7a367e5dff29358b865cf116e7ed525865e538e9af",
+  "steps": [
+    {
+      "id": "hs-before",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "h2",
+        "subject": "rotate.example.test",
+        "names": [
+          "rotate.example.test"
+        ],
+        "serial": 701,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "keep-before",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "connection": "keep-alive",
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "9ed4352d4fe1671e0935aac353b5e27d4d85c6430be7c3d266d1f638f170ce66",
+            "text": "o1 rotate.example.test /k1"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "rotate.example.test",
+            "names": [
+              "rotate.example.test"
+            ],
+            "serial": 701,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o1",
+              "method": "GET",
+              "uri": "/k1",
+              "host": "rotate.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "steady-keep-before",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "connection": "keep-alive",
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "e6ed11eef9d02edc05c519c36f571c5a12eb890a327a68be967398a5c8a331b7",
+            "text": "o2 steady.example.test /s1"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "steady.example.test",
+            "names": [
+              "steady.example.test"
+            ],
+            "serial": 702,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o2",
+              "method": "GET",
+              "uri": "/s1",
+              "host": "steady.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rotate",
+      "kind": "publish"
+    },
+    {
+      "id": "keep-after",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "connection": "keep-alive",
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "f35d438d91686651df711e7c86bd45cdbb7b34d9432c82328d441bfb464a511c",
+            "text": "o1 rotate.example.test /k2"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "rotate.example.test",
+            "names": [
+              "rotate.example.test"
+            ],
+            "serial": 701,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o1",
+              "method": "GET",
+              "uri": "/k2",
+              "host": "rotate.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ],
+          "reused": true
+        }
+      ]
+    },
+    {
+      "id": "keep-after-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "connection": "keep-alive",
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "db936e0c401100f814fd2639e4d8e64328d86638f6b17502434c4e5d78e8bf38",
+            "text": "o1 rotate.example.test /k3"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "rotate.example.test",
+            "names": [
+              "rotate.example.test"
+            ],
+            "serial": 701,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o1",
+              "method": "GET",
+              "uri": "/k3",
+              "host": "rotate.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ],
+          "reused": true
+        }
+      ]
+    },
+    {
+      "id": "hs-after",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "h2",
+        "subject": "rotate.example.test",
+        "names": [
+          "rotate.example.test"
+        ],
+        "serial": 711,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "fresh-after",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/2.0",
+          "headers": {
+            "content-length": "25",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 25,
+            "sha256": "513614f6d943251664d727b470c48ee6a3bc73156c5408d6f056bbec0ee2ddfb",
+            "text": "o1 rotate.example.test /f"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "h2",
+            "subject": "rotate.example.test",
+            "names": [
+              "rotate.example.test"
+            ],
+            "serial": 711,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o1",
+              "method": "GET",
+              "uri": "/f",
+              "host": "rotate.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fresh-after-h1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "01a4eb124243c75f69583631eb1a01a894cbccde9ceb17895bf58c38b513384f",
+            "text": "o1 rotate.example.test /f1"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "rotate.example.test",
+            "names": [
+              "rotate.example.test"
+            ],
+            "serial": 711,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o1",
+              "method": "GET",
+              "uri": "/f1",
+              "host": "rotate.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "steady-keep-after",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "connection": "keep-alive",
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "f5a82ecb37ff7be33395c17fd0b8e6046a59864435954a427609a601b7ed1bc9",
+            "text": "o2 steady.example.test /s2"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "steady.example.test",
+            "names": [
+              "steady.example.test"
+            ],
+            "serial": 702,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o2",
+              "method": "GET",
+              "uri": "/s2",
+              "host": "steady.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ],
+          "reused": true
+        }
+      ]
+    },
+    {
+      "id": "steady-hs-after",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "h2",
+        "subject": "steady.example.test",
+        "names": [
+          "steady.example.test"
+        ],
+        "serial": 702,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "republish-same",
+      "kind": "publish"
+    },
+    {
+      "id": "hs-republished",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "h2",
+        "subject": "rotate.example.test",
+        "names": [
+          "rotate.example.test"
+        ],
+        "serial": 711,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "keep-after-republish",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "connection": "keep-alive",
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "00a0d0cc0e894a77cadc06088196b8ff932741bd048edec26707164855df59bd",
+            "text": "o1 rotate.example.test /k4"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "rotate.example.test",
+            "names": [
+              "rotate.example.test"
+            ],
+            "serial": 701,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "o1",
+              "method": "GET",
+              "uri": "/k4",
+              "host": "rotate.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ],
+          "reused": true
+        }
+      ]
+    }
+  ]
+}

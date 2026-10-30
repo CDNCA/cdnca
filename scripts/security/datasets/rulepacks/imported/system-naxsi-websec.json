@@ -1,0 +1,617 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/naxsi-websec",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "敏感路径与漏洞探测（naxsi）",
+ "description": "访问版本库/配置/备份/管理后台路径、已知漏洞入口、PHP 代码执行函数、XML-RPC 批量调用等即记录，可改为拦截或挑战。/robots.txt、/.well-known/security.txt、ACME 验证路径不命中。",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "nx-web-args-00",
+  "nx-web-args-r00",
+  "nx-web-body-00",
+  "nx-web-body-r00",
+  "nx-web-body-xmlrpc-php-00",
+  "nx-web-cookie-00",
+  "nx-web-cookie-r00",
+  "nx-web-path-00",
+  "nx-web-path-01",
+  "nx-web-path-r00",
+  "nx-web-query-00",
+  "nx-web-query-api-search-folderids-r00",
+  "nx-web-referer-00",
+  "nx-web-referer-r00",
+  "nx-web-request-uri-00",
+  "nx-web-upload-filename-00",
+  "nx-web-user-agent-00",
+  "nx-web-user-agent-r00"
+ ],
+ "rules": [
+  {
+   "id": "nx-web-args-00",
+   "name": "参数含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "contains",
+       "values": [
+        "${env:nan:-",
+        ".htaccess",
+        ".htpasswd",
+        "/bin/sh",
+        "/etc/hosts",
+        "/sslvpn_websession",
+        "/windows/system.ini",
+        "@eval",
+        "\\windows\\system.ini",
+        "androxgh0st",
+        "base64_decode(",
+        "burpcollaborator.net",
+        "gzinflate(",
+        "phpinfo",
+        "system(",
+        "web-inf",
+        "wp-config.php",
+        "xdebug_session"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-args-r00",
+   "name": "参数匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:eval\\((\\s+)?\\$_)|(?:PHP[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-body-00",
+   "name": "请求体含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "body",
+       "operator": "contains",
+       "values": [
+        "/sftp-config.json",
+        "class.module.classloader.resources."
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-body-xmlrpc-php-00",
+   "name": "请求体含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "path": {
+      "kind": "exact",
+      "value": "/xmlrpc.php"
+     },
+     "inspect": [
+      {
+       "target": "body",
+       "operator": "contains",
+       "values": [
+        "system.getcapabilities",
+        "system.listmethods",
+        "system.multicall"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-body-r00",
+   "name": "请求体匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "body",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:<!DOCTYPE\\s+[%\\s]*[{}:.a-zA-Z0-9_-]*\\s+SYSTEM))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-cookie-00",
+   "name": "Cookie含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "contains",
+       "values": [
+        "${env:nan:-",
+        "/bin/sh",
+        "/etc/hosts",
+        "/etc/passwd",
+        "/etc/shadow",
+        "/sslvpn_websession",
+        "/windows/system.ini",
+        "/windows/win.ini",
+        "\\windows\\system.ini",
+        "\\windows\\win.ini",
+        "androxgh0st",
+        "burpcollaborator.net",
+        "http://http://",
+        "http://https://",
+        "https://http://",
+        "https://https://",
+        "phpstorm",
+        "xdebug_session"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-cookie-r00",
+   "name": "Cookie匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:<%|%>))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-path-00",
+   "name": "路径含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "contains",
+       "values": [
+        "${env:nan:-",
+        ".bak",
+        ".conf",
+        ".ds_store",
+        ".htaccess",
+        ".htpasswd",
+        ".ini",
+        ".old",
+        ".save",
+        ".sql",
+        ".yaml",
+        ".yml",
+        "/.aws/",
+        "/.bzr",
+        "/.env",
+        "/.git",
+        "/.hg",
+        "/.svn",
+        "/__additional",
+        "/_ignition/execute-solution",
+        "/actuator/gateway/routes",
+        "/auth.owa",
+        "/bin/sh",
+        "/bzr/",
+        "/cgi-bin/luci",
+        "/console/login/loginform.jsp",
+        "/db-admin",
+        "/dbadmin",
+        "/descriptorbyname/org.jenkinsci.plugins.scriptsecurity.sandbox.groovy.securegroovyscript/checkscript/",
+        "/docs/cplugerror.html/",
+        "/ecp/current/exporttool/microsoft.exchange.ediscovery.exporttool.application",
+        "/etc/hosts",
+        "/etc/passwd",
+        "/etc/shadow",
+        "/git/",
+        "/hg/",
+        "/hnap1",
+        "/idx_config",
+        "/jenkins",
+        "/manager/html",
+        "/manager/text/list",
+        "/myadmin",
+        "/mysql-admin",
+        "/mysql/",
+        "/mysqladmin",
+        "/mysqldumper ",
+        "/mysqlmanager",
+        "/netsparker",
+        "/nmaplowercheck",
+        "/nuxeo/login.jsp",
+        "/p/m/a/",
+        "/php-my-admin",
+        "/php-myadmin",
+        "/phpmanager",
+        "/phpmy",
+        "/phpmy-admin",
+        "/phpmyadmin",
+        "/phppgadmin ",
+        "/pma",
+        "/portal/portal.mwsl",
+        "/scripts/wpnbr.dll",
+        "/securityrealm/user/admin/search/index",
+        "/sftp-config.json",
+        "/sql-admin"
+       ]
+      },
+      {
+       "target": "path",
+       "operator": "not_equals",
+       "values": [
+        "/.well-known/security.txt",
+        "/robots.txt"
+       ]
+      },
+      {
+       "target": "path",
+       "operator": "not_contains",
+       "values": [
+        "/.well-known/acme-challenge/"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-path-01",
+   "name": "路径含已知特征 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "contains",
+       "values": [
+        "/sqladmin",
+        "/sqlmanager",
+        "/sqlweb",
+        "/svn/",
+        "/sysadmin",
+        "/telescope/",
+        "/uploadify/uploadify.php",
+        "/w3tc/dbcache",
+        "/webadmin",
+        "/webdb",
+        "/websql",
+        "/windows/system.ini",
+        "/windows/win.ini",
+        "/wp-content/plugins/mm-forms-community/upload/temp/",
+        "/zabbix/index.php",
+        "@eval",
+        "\\n\\r",
+        "\\windows\\system.ini",
+        "\\windows\\win.ini",
+        "_nuxt/@",
+        "adminer",
+        "alfa_data",
+        "alfacgiapi",
+        "app_dev",
+        "autodiscover/autodiscover.json",
+        "autodiscover/autodiscover.xml",
+        "aws-config",
+        "aws-cred",
+        "awsconfig",
+        "awscred",
+        "base64_decode(",
+        "cgialfa",
+        "changelog",
+        "dockerrun.aws.json",
+        "eval-stdin.php",
+        "gzinflate(",
+        "index/\\think\\app/invokefunction",
+        "install.php",
+        "phpinfo",
+        "phpstorm",
+        "system(",
+        "vscode",
+        "web-inf",
+        "web.config",
+        "wp-config.php"
+       ]
+      },
+      {
+       "target": "path",
+       "operator": "not_equals",
+       "values": [
+        "/.well-known/security.txt",
+        "/robots.txt"
+       ]
+      },
+      {
+       "target": "path",
+       "operator": "not_contains",
+       "values": [
+        "/.well-known/acme-challenge/"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-path-r00",
+   "name": "路径匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:\\.txt$)|(?:^/core.\\d+$)|(?:\\.module$)|(?:release[-_]notes\\.)|(?:~$)|(?:^/cgi-bin/.+\\.cgi$)|(?:/\\.[^.])|(?:/default\\.(asp|aspx|cfm|cgi|jsa|jsp|php|pl)$)|(?:/start\\.(asp|aspx|cfm|cgi|jsa|jsp|php|pl)$)|(?:/localstart\\.(asp|aspx|cfm|cgi|jsa|jsp|php|pl)$)|(?:/admin\\.(asp|aspx|cfm|cgi|jsa|jsp|php|pl)$)|(?:\\.ctmpl$)|(?:\\.hcl$)|(?:\\.md$)|(?:read[-_]?me)|(?:\\.toml$)|(?:eval\\((\\s+)?\\$_)|(?:PHP[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$))"
+       ]
+      },
+      {
+       "target": "path",
+       "operator": "not_equals",
+       "values": [
+        "/.well-known/security.txt",
+        "/robots.txt"
+       ]
+      },
+      {
+       "target": "path",
+       "operator": "not_contains",
+       "values": [
+        "/.well-known/acme-challenge/"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-query-00",
+   "name": "查询参数含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "query",
+       "operator": "contains",
+       "values": [
+        "phpstorm"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-query-api-search-folderids-r00",
+   "name": "查询参数[folderIds]匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "path": {
+      "kind": "exact",
+      "value": "/api/search"
+     },
+     "inspect": [
+      {
+       "target": "query",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:^0$))"
+       ],
+       "key": "folderIds"
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-referer-00",
+   "name": "Referer含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "referer",
+       "operator": "contains",
+       "values": [
+        "${env:nan:-",
+        "/sslvpn_websession",
+        "androxgh0st",
+        "burpcollaborator.net",
+        "http://http://",
+        "http://https://",
+        "https://http://",
+        "https://https://",
+        "phpstorm",
+        "xdebug_session"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-referer-r00",
+   "name": "Referer匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "referer",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:<%|%>))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-request-uri-00",
+   "name": "URL含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "request_uri",
+       "operator": "contains",
+       "values": [
+        "androxgh0st",
+        "xdebug_session"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-upload-filename-00",
+   "name": "上传文件名含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "upload_filename",
+       "operator": "contains",
+       "values": [
+        ".htaccess",
+        ".htpasswd"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-user-agent-00",
+   "name": "UA含已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "${env:nan:-",
+        "/bin/sh",
+        "/etc/hosts",
+        "/etc/passwd",
+        "/etc/shadow",
+        "/sslvpn_websession",
+        "/windows/system.ini",
+        "/windows/win.ini",
+        "\\windows\\system.ini",
+        "\\windows\\win.ini",
+        "androxgh0st",
+        "burpcollaborator.net",
+        "http://http://",
+        "http://https://",
+        "https://http://",
+        "https://https://",
+        "phpstorm",
+        "xdebug_session"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-web-user-agent-r00",
+   "name": "UA匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:<%|%>))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

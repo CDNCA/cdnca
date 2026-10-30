@@ -1,0 +1,560 @@
+package gatewayclient
+
+import (
+	"bytes"
+	"context"
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"io"
+	"math/big"
+	"net"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/cdnca/cdnca/agents/edge-agent/internal/certstore"
+	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
+	commonv1 "github.com/cdnca/cdnca/proto/gen/go/common/v1"
+	controlv1 "github.com/cdnca/cdnca/proto/gen/go/controlinternal/v1"
+	gatewayserver "github.com/cdnca/cdnca/services/agent-gateway"
+	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+const publicationSmokeNodeSPIFFEPrefix = "spiffe://cdn-platform/node/"
+
+type publicationSmokeControl struct {
+	nodeID         string
+	recipientKeyID string
+	command        *agentv1.DeploymentCommand
+	wire           []byte
+
+	mu       sync.Mutex
+	requests []*controlv1.FetchArtifactRequest
+}
+
+func (*publicationSmokeControl) AuthorizeEnrollment(context.Context, *controlv1.AuthorizeEnrollmentRequest) (*controlv1.AuthorizeEnrollmentResponse, error) {
+	return nil, errors.New("enrollment is unavailable in the publication smoke")
+}
+
+func (*publicationSmokeControl) CompleteEnrollment(context.Context, *controlv1.CompleteEnrollmentRequest) (*controlv1.CompleteEnrollmentResponse, error) {
+	return nil, errors.New("enrollment is unavailable in the publication smoke")
+}
+
+func (*publicationSmokeControl) RenewNodeCertificate(context.Context, *controlv1.RenewNodeCertificateRequest) (*controlv1.RenewNodeCertificateResponse, error) {
+	return nil, errors.New("certificate renewal is unavailable in the publication smoke")
+}
+
+func (control *publicationSmokeControl) GetNodeAuthorization(_ context.Context, request *controlv1.GetNodeAuthorizationRequest) (*controlv1.GetNodeAuthorizationResponse, error) {
+	if request == nil || request.NodeId != control.nodeID || request.CertificateSerialNumber == "" {
+		return nil, errors.New("unexpected node authorization request")
+	}
+	return &controlv1.GetNodeAuthorizationResponse{
+		NodeId:              control.nodeID,
+		AdministrativeState: controlv1.NodeAdministrativeState_NODE_ADMINISTRATIVE_STATE_ACTIVE,
+		ConnectionAllowed:   true,
+		DeploymentsAllowed:  true,
+		AcceptedProtocolVersions: &commonv1.ProtocolVersionRange{
+			Minimum: &commonv1.ProtocolVersion{Major: 1},
+			Maximum: &commonv1.ProtocolVersion{Major: 1},
+		},
+		SnapshotExpirationTime:  timestamppb.New(time.Now().Add(time.Hour)),
+		ArtifactEncryptionKeyId: control.recipientKeyID,
+	}, nil
+}
+
+func (control *publicationSmokeControl) FetchArtifact(_ context.Context, request *controlv1.FetchArtifactRequest) (gatewayserver.ArtifactStream, error) {
+	if request == nil || request.Request == nil || request.NodeId != control.nodeID ||
+		request.EventId != control.command.Event.EventId || request.DeploymentId != control.command.DeploymentId ||
+		request.Attempt != control.command.Attempt || request.ArtifactId != control.command.Artifacts[0].ArtifactId ||
+		request.Offset >= uint64(len(control.wire)) {
+		return nil, errors.New("unexpected certificate artifact request")
+	}
+	control.mu.Lock()
+	control.requests = append(control.requests, proto.Clone(request).(*controlv1.FetchArtifactRequest))
+	control.mu.Unlock()
+
+	content := bytes.Clone(control.wire[request.Offset:])
+	digest := sha256.Sum256(content)
+	return &publicationSmokeArtifactStream{response: &controlv1.FetchArtifactResponse{Chunk: &agentv1.ArtifactChunk{
+		RequestId: request.Request.RequestId, ArtifactId: request.ArtifactId, Offset: request.Offset,
+		Data: content, ChunkSha256: digest[:], TotalSizeBytes: uint64(len(control.wire)), EndOfArtifact: true,
+	}}}, nil
+}
+
+func (control *publicationSmokeControl) fetchRequests() []*controlv1.FetchArtifactRequest {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	result := make([]*controlv1.FetchArtifactRequest, len(control.requests))
+	for index, request := range control.requests {
+		result[index] = proto.Clone(request).(*controlv1.FetchArtifactRequest)
+	}
+	return result
+}
+
+type publicationSmokeArtifactStream struct {
+	response *controlv1.FetchArtifactResponse
+}
+
+func (stream *publicationSmokeArtifactStream) Recv() (*controlv1.FetchArtifactResponse, error) {
+	if stream.response == nil {
+		return nil, io.EOF
+	}
+	response := stream.response
+	stream.response = nil
+	return response, nil
+}
+
+type publicationSmokeCommandBus struct {
+	nodeID   string
+	delivery *publicationSmokeCommandDelivery
+	statuses chan *agentv1.DeploymentStatus
+}
+
+func (bus *publicationSmokeCommandBus) Subscribe(_ context.Context, nodeID string) (gatewayserver.CommandSubscription, error) {
+	if nodeID != bus.nodeID {
+		return nil, errors.New("unexpected command subscription node")
+	}
+	return &publicationSmokeCommandSubscription{delivery: bus.delivery}, nil
+}
+
+func (bus *publicationSmokeCommandBus) PublishStatus(ctx context.Context, nodeID string, status *agentv1.DeploymentStatus) error {
+	if nodeID != bus.nodeID || status == nil {
+		return errors.New("unexpected publication status")
+	}
+	cloned := proto.Clone(status).(*agentv1.DeploymentStatus)
+	select {
+	case bus.statuses <- cloned:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+type publicationSmokeCommandSubscription struct {
+	mu        sync.Mutex
+	delivery  *publicationSmokeCommandDelivery
+	delivered bool
+}
+
+func (subscription *publicationSmokeCommandSubscription) Next(ctx context.Context) (gatewayserver.CommandDelivery, error) {
+	subscription.mu.Lock()
+	if !subscription.delivered && !subscription.delivery.acknowledged() {
+		subscription.delivered = true
+		delivery := subscription.delivery
+		subscription.mu.Unlock()
+		return delivery, nil
+	}
+	subscription.mu.Unlock()
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func (*publicationSmokeCommandSubscription) Close() error { return nil }
+
+type publicationSmokeCommandDelivery struct {
+	mu      sync.Mutex
+	command *agentv1.DeploymentCommand
+	acked   bool
+	naks    int
+}
+
+func (delivery *publicationSmokeCommandDelivery) Command() *agentv1.DeploymentCommand {
+	return proto.Clone(delivery.command).(*agentv1.DeploymentCommand)
+}
+
+func (delivery *publicationSmokeCommandDelivery) Ack(context.Context) error {
+	delivery.mu.Lock()
+	defer delivery.mu.Unlock()
+	delivery.acked = true
+	return nil
+}
+
+func (delivery *publicationSmokeCommandDelivery) Nak(context.Context) error {
+	delivery.mu.Lock()
+	defer delivery.mu.Unlock()
+	delivery.naks++
+	return nil
+}
+
+func (delivery *publicationSmokeCommandDelivery) acknowledged() bool {
+	delivery.mu.Lock()
+	defer delivery.mu.Unlock()
+	return delivery.acked
+}
+
+func TestCertificatePublicationConsumerSmoke(t *testing.T) {
+	fixtureDirectory := os.Getenv("CERTIFICATE_PUBLICATION_FIXTURE_DIR")
+	stateRoot := os.Getenv("CERTIFICATE_PUBLICATION_STATE_ROOT")
+	openrestyBinary := os.Getenv("CERTIFICATE_PUBLICATION_OPENRESTY_BIN")
+	listenAddress := os.Getenv("CERTIFICATE_PUBLICATION_LISTEN_ADDRESS")
+	portValue := os.Getenv("CERTIFICATE_PUBLICATION_LISTEN_PORT")
+	readyFile := os.Getenv("CERTIFICATE_PUBLICATION_READY_FILE")
+	releaseFile := os.Getenv("CERTIFICATE_PUBLICATION_RELEASE_FILE")
+	if !filepath.IsAbs(fixtureDirectory) || !filepath.IsAbs(stateRoot) || !filepath.IsAbs(openrestyBinary) ||
+		net.ParseIP(listenAddress) == nil ||
+		!filepath.IsAbs(readyFile) || !filepath.IsAbs(releaseFile) {
+		t.Fatal("smoke paths must be absolute")
+	}
+	port, err := strconv.ParseUint(portValue, 10, 16)
+	if err != nil || port == 0 {
+		t.Fatal("invalid smoke listen port")
+	}
+	commandBytes, err := os.ReadFile(filepath.Join(fixtureDirectory, "command.pb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire, err := os.ReadFile(filepath.Join(fixtureDirectory, "artifact.bin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipientPrivateKey, err := os.ReadFile(filepath.Join(fixtureDirectory, "recipient.key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clear(recipientPrivateKey)
+	signingPublicKey, err := os.ReadFile(filepath.Join(fixtureDirectory, "signing.pub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var command agentv1.DeploymentCommand
+	if err := proto.Unmarshal(commandBytes, &command); err != nil {
+		t.Fatal(err)
+	}
+	if len(command.Artifacts) != 1 || command.Event == nil || len(signingPublicKey) != ed25519.PublicKeySize {
+		t.Fatal("fixture trust or command is incomplete")
+	}
+	var evidence struct {
+		CertificateID        string `json:"certificate_id"`
+		CertificateVersionID string `json:"certificate_version_id"`
+		Domain               string `json:"domain"`
+		SiteID               string `json:"site_id"`
+		TenantScopeID        string `json:"tenant_scope_id"`
+	}
+	evidenceBytes, err := os.ReadFile(filepath.Join(fixtureDirectory, "evidence.json"))
+	if err != nil || json.Unmarshal(evidenceBytes, &evidence) != nil ||
+		!canonicalPublicationSmokeUUID(evidence.TenantScopeID) || !canonicalPublicationSmokeUUID(evidence.SiteID) ||
+		!canonicalPublicationSmokeUUID(evidence.CertificateID) || !canonicalPublicationSmokeUUID(evidence.CertificateVersionID) ||
+		evidence.Domain != "publication.example.test" {
+		t.Fatal("fixture certificate identity evidence is invalid")
+	}
+	descriptor := command.Artifacts[0]
+	digest := sha256.Sum256(wire)
+	if uint64(len(wire)) != descriptor.SizeBytes || !bytes.Equal(digest[:], descriptor.Sha256) {
+		t.Fatal("fixture artifact does not match its descriptor")
+	}
+
+	nodeID := uuid.NewString()
+	control := &publicationSmokeControl{
+		nodeID: nodeID, recipientKeyID: descriptor.GetRecipientKeyId(), command: &command, wire: bytes.Clone(wire),
+	}
+	delivery := &publicationSmokeCommandDelivery{command: &command}
+	bus := &publicationSmokeCommandBus{
+		nodeID: nodeID, delivery: delivery, statuses: make(chan *agentv1.DeploymentStatus, 32),
+	}
+	gatewayConfig := gatewayserver.DefaultConfig()
+	gatewayConfig.GatewayInstanceID = "certificate-publication-smoke"
+	gatewayConfig.GatewayVersion = "smoke"
+	gateway, err := gatewayserver.NewWithCommandBus(
+		gatewayConfig, control, gatewayserver.NewMemorySessionCoordinator(), bus,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mtlsDirectory := secureTempDir(t)
+	if err := os.Chmod(mtlsDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pki := newPublicationSmokePKI(t, nodeID, mtlsDirectory)
+	servers, err := gatewayserver.NewServers(gateway,
+		&tls.Config{Certificates: []tls.Certificate{pki.server}},
+		&tls.Config{Certificates: []tls.Certificate{pki.server}, ClientCAs: pki.roots},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serveDone := make(chan struct{})
+	go func() {
+		_ = servers.MTLS.Serve(listener)
+		close(serveDone)
+	}()
+
+	dialer, err := NewMTLSDialer(MTLSDialerConfig{
+		Address: listener.Addr().String(), ServerName: "localhost",
+		RootCAFile: pki.rootFile, ClientCertificateFile: pki.clientCertificateFile,
+		ClientPrivateKeyFile: pki.clientPrivateKeyFile,
+		MaximumReceiveBytes:  1 << 20, MaximumSendBytes: 1 << 20,
+	})
+	if err != nil {
+		servers.MTLS.Stop()
+		servers.Enrollment.Stop()
+		_ = listener.Close()
+		t.Fatal(err)
+	}
+
+	address := net.JoinHostPort(listenAddress, strconv.FormatUint(port, 10))
+	runtime, err := certstore.NewOpenRestyRuntime(
+		openrestyBinary, filepath.Join(stateRoot, "shared", "nginx.pid"), address,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager, err := certstore.NewManager(certstore.RuntimeConfig{
+		StateRoot: stateRoot, ListenAddress: listenAddress, ListenPort: uint16(port),
+	}, runtime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust, err := NewTrustStore(map[string]crypto.PublicKey{
+		descriptor.SigningKeyId: ed25519.PublicKey(signingPublicKey),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	smokeRoot := filepath.Dir(stateRoot)
+	config := testClientConfig(filepath.Join(smokeRoot, "journal"))
+	config.NodeID = nodeID
+	config.BootID = uuid.NewString()
+	config.ArtifactEncryptionKeyID = descriptor.GetRecipientKeyId()
+	config.ArtifactDecryptionPrivateKey = recipientPrivateKey
+	client, err := New(config, dialer, noOpManager{}, trust, WithCertificateConsumer(manager))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.jitter = func(time.Duration) time.Duration { return time.Millisecond }
+
+	runContext, cancelRun := context.WithTimeout(context.Background(), 30*time.Second)
+	runDone := make(chan error, 1)
+	go func() { runDone <- client.Run(runContext) }()
+	waitPublicationSmokeHealthy(t, runContext, bus.statuses)
+	cancelRun()
+	if err := <-runDone; !errors.Is(err, context.Canceled) {
+		t.Fatalf("Client.Run() error=%v, want context canceled", err)
+	}
+	if !delivery.acknowledged() {
+		t.Fatal("Gateway did not acknowledge the delivered certificate command")
+	}
+	requests := control.fetchRequests()
+	if len(requests) != 1 || requests[0].Offset != 0 || requests[0].NodeId != nodeID ||
+		requests[0].EventId != command.Event.EventId || requests[0].DeploymentId != command.DeploymentId ||
+		requests[0].Attempt != command.Attempt || requests[0].ArtifactId != descriptor.ArtifactId {
+		t.Fatalf("unexpected Gateway FetchArtifact requests: %+v", requests)
+	}
+	status, err := manager.Status(context.Background())
+	if err != nil || status.VersionID != command.ConfigVersionId || status.Activation == nil ||
+		len(status.Activation.Certificates) != 1 {
+		t.Fatalf("active certificate status=%+v error=%v", status, err)
+	}
+	revision := status.Activation.Certificates[0]
+	if revision.TenantScopeID != evidence.TenantScopeID || revision.SiteID != evidence.SiteID ||
+		revision.CertificateID != evidence.CertificateID || revision.CertificateVersionID != evidence.CertificateVersionID {
+		t.Fatalf("producer certificate identity did not survive Gateway and certstore: %+v", revision)
+	}
+	if err := manager.SetCertificateVersionReferences(context.Background(), certstore.CertificateVersionReferences{
+		Current: []string{evidence.CertificateVersionID},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := manager.ResolveCertificateVersion(context.Background(), certstore.CertificateResolveRequest{
+		TenantScopeID: evidence.TenantScopeID, SiteID: evidence.SiteID, CertificateID: evidence.CertificateID,
+		CertificateVersionID: evidence.CertificateVersionID, Domain: evidence.Domain,
+	})
+	if err != nil || resolved.TenantScopeID != evidence.TenantScopeID || resolved.SiteID != evidence.SiteID ||
+		resolved.CertificateID != evidence.CertificateID || resolved.CertificateVersionID != evidence.CertificateVersionID {
+		t.Fatalf("producer certificate identity did not survive resolver: %+v error=%v", resolved, err)
+	}
+	assertNoPrivateMaterial(t, smokeRoot)
+
+	servers.MTLS.Stop()
+	servers.Enrollment.Stop()
+	_ = listener.Close()
+	select {
+	case <-serveDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Gateway server did not stop")
+	}
+	if connection, dialErr := net.DialTimeout("tcp", listener.Addr().String(), 100*time.Millisecond); dialErr == nil {
+		_ = connection.Close()
+		t.Fatal("Gateway listener remained reachable after shutdown")
+	}
+	assertPublicationSmokeTLS(t, address, filepath.Join(fixtureDirectory, "ca.pem"))
+	if err := os.WriteFile(readyFile, []byte("ready\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	barrierDeadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := os.Stat(releaseFile); err == nil {
+			break
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		if time.Now().After(barrierDeadline) {
+			t.Fatal("host OpenSSL/curl verification did not release the smoke")
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Logf("installed config %s through real Gateway FetchArtifact; OpenResty remained healthy after Gateway shutdown", command.ConfigVersionId)
+}
+
+func canonicalPublicationSmokeUUID(value string) bool {
+	parsed, err := uuid.Parse(value)
+	return err == nil && parsed != uuid.Nil && parsed.String() == value
+}
+
+func waitPublicationSmokeHealthy(t *testing.T, ctx context.Context, statuses <-chan *agentv1.DeploymentStatus) {
+	t.Helper()
+	for {
+		select {
+		case status := <-statuses:
+			if status.State == agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_FAILED ||
+				status.State == agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_ROLLBACK_FAILED {
+				t.Fatalf("certificate publication failed: %+v", status.Error)
+			}
+			if status.State == agentv1.NodeDeploymentState_NODE_DEPLOYMENT_STATE_HEALTHY {
+				return
+			}
+		case <-ctx.Done():
+			t.Fatalf("certificate publication did not become healthy: %v", ctx.Err())
+		}
+	}
+}
+
+type publicationSmokePKI struct {
+	server                tls.Certificate
+	roots                 *x509.CertPool
+	rootFile              string
+	clientCertificateFile string
+	clientPrivateKeyFile  string
+}
+
+func newPublicationSmokePKI(t *testing.T, nodeID, directory string) publicationSmokePKI {
+	t.Helper()
+	now := time.Now().UTC()
+	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(101), Subject: pkix.Name{CommonName: "Publication smoke node root"},
+		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(24 * time.Hour), IsCA: true, BasicConstraintsValid: true,
+		KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign | x509.KeyUsageDigitalSignature,
+	}
+	rootDER, err := x509.CreateCertificate(rand.Reader, rootTemplate, rootTemplate, rootKey.Public(), rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := x509.ParseCertificate(rootDER)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootPEM := pemCertificate(rootDER)
+	roots := x509.NewCertPool()
+	roots.AddCert(root)
+
+	server, _, _ := issuePublicationSmokeIdentity(t, root, rootKey, &x509.Certificate{
+		SerialNumber: big.NewInt(102), Subject: pkix.Name{CommonName: "localhost"},
+		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(12 * time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames: []string{"localhost"}, IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+	})
+	nodeURI, err := url.Parse(publicationSmokeNodeSPIFFEPrefix + nodeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, clientPEM, clientKeyPEM := issuePublicationSmokeIdentity(t, root, rootKey, &x509.Certificate{
+		SerialNumber: big.NewInt(103), Subject: pkix.Name{CommonName: "publication smoke node"},
+		NotBefore: now.Add(-time.Hour), NotAfter: now.Add(12 * time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		URIs: []*url.URL{nodeURI},
+	})
+	_ = client
+	return publicationSmokePKI{
+		server: server, roots: roots,
+		rootFile:              writePublicationSmokePrivateFile(t, directory, "root.pem", rootPEM),
+		clientCertificateFile: writePublicationSmokePrivateFile(t, directory, "node.pem", clientPEM),
+		clientPrivateKeyFile:  writePublicationSmokePrivateFile(t, directory, "node-key.pem", clientKeyPEM),
+	}
+}
+
+func issuePublicationSmokeIdentity(t *testing.T, root *x509.Certificate, rootKey crypto.Signer, template *x509.Certificate) (tls.Certificate, []byte, []byte) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, root, key.Public(), rootKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certificatePEM := pemCertificate(der)
+	privateKeyPEM := pemPrivateKey(privateDER)
+	certificate, err := tls.X509KeyPair(certificatePEM, privateKeyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return certificate, certificatePEM, privateKeyPEM
+}
+
+func pemCertificate(der []byte) []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+}
+
+func pemPrivateKey(der []byte) []byte {
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+}
+
+func writePublicationSmokePrivateFile(t *testing.T, directory, name string, value []byte) string {
+	t.Helper()
+	path := filepath.Join(directory, name)
+	if err := os.WriteFile(path, value, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func assertPublicationSmokeTLS(t *testing.T, address, rootFile string) {
+	t.Helper()
+	rootPEM, err := os.ReadFile(rootFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(rootPEM) {
+		t.Fatal("publication smoke root certificate is invalid")
+	}
+	connection, err := tls.DialWithDialer(&net.Dialer{Timeout: 2 * time.Second}, "tcp", address, &tls.Config{
+		MinVersion: tls.VersionTLS12, ServerName: "publication.example.test", RootCAs: roots,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer connection.Close()
+	state := connection.ConnectionState()
+	if len(state.PeerCertificates) != 2 || len(state.VerifiedChains) != 1 || len(state.VerifiedChains[0]) != 2 ||
+		state.PeerCertificates[0].VerifyHostname("publication.example.test") != nil {
+		t.Fatalf("unexpected offline OpenResty certificate chain: peers=%d verified=%d", len(state.PeerCertificates), len(state.VerifiedChains))
+	}
+}

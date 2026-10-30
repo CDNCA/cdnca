@@ -1,0 +1,17 @@
+{
+  "name": "@cdnca/site-theme-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "官网主题插件（cdnca.site-theme/v2）开发工具：脚手架、本地沙箱预览、预检、打包。零依赖。",
+  "bin": {
+    "cdnca-site-theme": "./bin/cdnca-site-theme.mjs"
+  },
+  "files": ["bin", "lib", "README.md"],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  }
+}

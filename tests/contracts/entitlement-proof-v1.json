@@ -1,0 +1,14 @@
+{
+  "version": "cdnca-entitlement-proof-contract/v1",
+  "seed": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "public_key": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+  "installation_id": "01234567-89ab-cdef-0123-456789abcdef",
+  "name": "  Edge Control QA  ",
+  "activation_code": "oKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr8",
+  "activation_request_id": "control-activate-contract-v1",
+  "activation_message": "DI4guATORmTNti-_E9qAlkQJ_wshBpAyOGEHbXiJh90",
+  "activation_signature": "Nl1AV2WNmLY3Rx8NQUEK5lqnG1fEeualm1Ormv7KtsHlj3c3jIuM0Z4LFdKJcYtipqnVV1xh9J4eaNiSQerLDw",
+  "renewal_request_id": "control-renew-01234567-89ab-cdef-0123-456789abcdef-42",
+  "renewal_message": "Q5iJSD4Dc8XlTCStJZlsiuufqH2dYe2Kp7701e12PuA",
+  "renewal_signature": "Ru-uFY94vnn5KTiCctkqjRQFtnXIFeyoDJgGJx4ThLijyCzYe8YO9i-J_yTqUOVYDs4EfYMgoUiUY9qK_r8UAg"
+}

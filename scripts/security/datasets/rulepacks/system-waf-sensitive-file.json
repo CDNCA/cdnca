@@ -1,0 +1,170 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/waf-sensitive-file",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "备份/敏感文件探测",
+ "description": "路径以已知备份/配置/凭据文件名结尾即记录，可改为拦截或挑战。来源 payloadbox/directory-payload-list（MIT）Intruder/backup-sensitive.txt",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "sensitive-file-00",
+  "sensitive-file-01"
+ ],
+ "rules": [
+  {
+   "id": "sensitive-file-00",
+   "name": "敏感文件第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "suffix",
+       "values": [
+        "/.backup",
+        "/.bak",
+        "/.copy",
+        "/.env.backup",
+        "/.env.bak",
+        "/.env.old",
+        "/.env.save",
+        "/.htaccess.bak",
+        "/.htaccess.old",
+        "/.old",
+        "/.orig",
+        "/.original",
+        "/.save",
+        "/.saved",
+        "/.swo",
+        "/.swp",
+        "/.temp",
+        "/.tmp",
+        "/access.log",
+        "/api_keys.json",
+        "/api_keys.txt",
+        "/apikeys.json",
+        "/apikeys.txt",
+        "/app.log",
+        "/application.log",
+        "/backup.7z",
+        "/backup.db",
+        "/backup.mdb",
+        "/backup.rar",
+        "/backup.sql",
+        "/backup.sql.gz",
+        "/backup.tar",
+        "/backup.tar.gz",
+        "/backup.zip",
+        "/backups.sql",
+        "/backups.tar",
+        "/backups.tar.gz",
+        "/backups.zip",
+        "/config.bak",
+        "/config.inc.php.bak",
+        "/config.old",
+        "/config.php.bak",
+        "/configuration.php.bak",
+        "/credentials.json",
+        "/credentials.txt",
+        "/credentials.xml",
+        "/data.sql",
+        "/data.sql.gz",
+        "/database.sql",
+        "/database.sql.bz2",
+        "/database.sql.gz",
+        "/db.sql",
+        "/db.sql.bz2",
+        "/db.sql.gz",
+        "/debug.log",
+        "/dev.sql",
+        "/dev.sql.gz",
+        "/dump.sql",
+        "/dump.sql.gz",
+        "/error.log",
+        "/localhost.sql",
+        "/localhost.sql.gz",
+        "/mysql.sql",
+        "/mysql.sql.gz"
+       ],
+       "filters": [
+        "lowercase"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "sensitive-file-01",
+   "name": "敏感文件第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "suffix",
+       "values": [
+        "/pass.txt",
+        "/passwords.json",
+        "/passwords.txt",
+        "/passwords.xml",
+        "/prod.sql",
+        "/prod.sql.gz",
+        "/production.sql",
+        "/production.sql.gz",
+        "/pwd.txt",
+        "/secret.json",
+        "/secret.txt",
+        "/secrets.json",
+        "/secrets.txt",
+        "/secrets.xml",
+        "/server.log",
+        "/settings.php.bak",
+        "/site.sql",
+        "/site.sql.gz",
+        "/system.log",
+        "/test.sql",
+        "/test.sql.gz",
+        "/web.config.bak",
+        "/web.config.old",
+        "/website.sql",
+        "/website.sql.gz",
+        "/wp-config.php.bak",
+        "/wp-config.php.old",
+        "/wp-config.php.save",
+        "/www.sql",
+        "/www.sql.gz"
+       ],
+       "filters": [
+        "lowercase"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ },
+ "license_spdx": "MIT"
+}

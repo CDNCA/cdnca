@@ -1,0 +1,579 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Account Order Records API
+  version: 1.0.0
+paths:
+  /v1/account/orders:
+    get:
+      operationId: listAccountOrders
+      summary: List tenant consumption records
+      description: Requires billing.account.read. Callers with billing.order_records.read (tenant_owner) see all tenant users; other callers are restricted to their own user ID. Tenant rows are never editable.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/AccountOrderType'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AccountOrderStatus'
+        - name: search
+          in: query
+          description: Exact-page substring search over source-local display ID, UUID, user ID, username, email, or phone.
+          schema:
+            type: string
+            maxLength: 128
+        - name: created_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: created_to
+          in: query
+          description: Exclusive upper bound.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Consumption record page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountOrderPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/account/statement:
+    get:
+      operationId: listAccountStatement
+      summary: List the caller's merged consumption statement (orders, recharges and balance ledger entries)
+      description: |
+        Requires billing.account.read in the caller's own tenant scope. Merges manual order records, package and
+        traffic-package orders, recharge orders and balance ledger postings that have no order row (manual adjustments,
+        migration import credits, refund/void reversals, reseller sale/wholesale) into one newest-first page.
+        Order-like rows are restricted to the caller's own user unless the caller holds billing.order_records.read;
+        ledger rows belong to the tenant balance and follow the same visibility as GET /v1/account/ledger.
+        Ledger operations that already have an order row (checkout debit, provider payment, recharge payment) are not repeated.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: type
+          in: query
+          schema:
+            $ref: '#/components/schemas/AccountStatementType'
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/AccountOrderStatus'
+        - name: created_from
+          in: query
+          schema: {type: string, format: date-time}
+        - name: created_to
+          in: query
+          description: Exclusive upper bound.
+          schema: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Statement page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountStatementPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/admin/account/orders:
+    post:
+      operationId: createAccountOrder
+      summary: Enter an audited compatibility order record
+      description: Platform administrators only (live platform session with billing.adjustments.manage); tenants have no order-record write API. This does not mutate package, recharge, payment, or balance-ledger facts.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountOrderInput'
+      responses:
+        '201':
+          description: Created record
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/admin/account/orders/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: updateAccountOrder
+      summary: Edit an audited compatibility order record
+      description: Platform administrators only (billing.adjustments.manage). Only records whose source is manual are editable. Package and recharge facts remain immutable.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountOrderInput'
+      responses:
+        '200':
+          description: Updated record
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    delete:
+      operationId: deleteAccountOrder
+      summary: Archive an audited compatibility order record
+      description: Archives the editable head while retaining its append-only event, receipt, and audit facts.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: Archived record
+          headers:
+            ETag:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountOrder'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /v1/admin/account/order-users:
+    get:
+      operationId: listAccountOrderUsers
+      summary: Search active users for order entry
+      description: Platform administrators only (billing.adjustments.manage); searches active tenant users for order entry.
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 128
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Matching active users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AccountOrderUser'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{1,128}$'
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+  schemas:
+    AccountOrderType:
+      type: string
+      enum: [recharge, deduction, upgrade, purchase, renewal, package_change]
+    AccountOrderStatus:
+      type: string
+      enum: [paid, unpaid]
+    AccountOrderSource:
+      type: string
+      enum: [manual, package, addon, recharge]
+    AccountOrderInput:
+      type: object
+      additionalProperties: false
+      required:
+        - user_id
+        - type
+        - note
+        - original_amount_minor
+        - paid_amount_minor
+        - payment_method
+        - merchant_order_number
+        - transaction_number
+        - status
+        - created_at
+        - paid_at
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/AccountOrderType'
+        note:
+          type: string
+          maxLength: 500
+        original_amount_minor:
+          type: integer
+          minimum: 0
+          maximum: 9000000000000000
+        paid_amount_minor:
+          type: integer
+          minimum: 0
+          maximum: 9000000000000000
+        payment_method:
+          type: string
+          maxLength: 64
+        merchant_order_number:
+          type: string
+          maxLength: 128
+        transaction_number:
+          type: string
+          maxLength: 128
+        status:
+          $ref: '#/components/schemas/AccountOrderStatus'
+        created_at:
+          type: string
+          format: date-time
+        paid_at:
+          oneOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+    AccountOrder:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - display_id
+        - tenant_scope_id
+        - tenant_id
+        - user_id
+        - user_display_id
+        - username
+        - user_display_name
+        - source
+        - type
+        - note
+        - original_amount_minor
+        - paid_amount_minor
+        - details
+        - payment_method
+        - merchant_order_number
+        - transaction_number
+        - status
+        - created_at
+        - revision
+        - editable
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_id:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Positive tenant-scope identifier allocated independently for each source resource type. Use source plus display_id as the visible identity; UUID remains canonical for links and writes.
+        tenant_scope_id:
+          type: string
+          format: uuid
+        tenant_id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        user_display_id:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Stable short identifier of the order owner. UUID remains canonical for authorization and writes.
+        username:
+          type: string
+          maxLength: 128
+        user_display_name:
+          type: string
+          maxLength: 256
+        source:
+          $ref: '#/components/schemas/AccountOrderSource'
+        type:
+          $ref: '#/components/schemas/AccountOrderType'
+        note:
+          type: string
+          maxLength: 500
+        original_amount_minor:
+          type: integer
+          minimum: 0
+          maximum: 9000000000000000
+        paid_amount_minor:
+          type: integer
+          minimum: 0
+          maximum: 9000000000000000
+        details:
+          type: string
+          maxLength: 1024
+        payment_method:
+          type: string
+          maxLength: 64
+        merchant_order_number:
+          type: string
+          maxLength: 128
+        transaction_number:
+          type: string
+          maxLength: 128
+        status:
+          $ref: '#/components/schemas/AccountOrderStatus'
+        created_at:
+          type: string
+          format: date-time
+        paid_at:
+          type: string
+          format: date-time
+        revision:
+          type: integer
+          minimum: 1
+        editable:
+          type: boolean
+    AccountOrderPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit, can_manage]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountOrder'
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        can_manage:
+          type: boolean
+    AccountStatementType:
+      type: string
+      enum: [recharge, deduction, upgrade, purchase, renewal, package_change, traffic_package, refund, income]
+    AccountStatementEntry:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, source, display_id, type, note, original_amount_minor, paid_amount_minor,
+        details, payment_method, order_number, transaction_number, status, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        source: {type: string, enum: [manual, package, addon, recharge, ledger]}
+        display_id: {type: string, description: Source-local display ID; empty for ledger rows.}
+        type: {$ref: '#/components/schemas/AccountStatementType'}
+        note: {type: string, maxLength: 500}
+        original_amount_minor: {type: integer, format: int64, minimum: 0}
+        paid_amount_minor: {type: integer, format: int64, minimum: 0}
+        details: {type: string, description: Product name when known.}
+        payment_method: {type: string, description: 'balance, provider name, recharge channel, manual, migrate_import, or a manual record value.'}
+        order_number: {type: string, description: Merchant order number for manual records; the order, recharge or transaction UUID otherwise.}
+        transaction_number: {type: string}
+        status: {$ref: '#/components/schemas/AccountOrderStatus'}
+        created_at: {type: string, format: date-time}
+        paid_at: {type: string, format: date-time}
+    AccountStatementPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/AccountStatementEntry'}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    AccountOrderUser:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, username, display_name, email, phone]
+      properties:
+        id:
+          type: string
+          format: uuid
+        display_id:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: Stable user-facing user identifier. The UUID remains the canonical option value and write target.
+        username:
+          type: string
+        display_name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        details:
+          type: object
+          description: Present on validation_error. field is the refused request JSON name, reason a fielderr code (required, out_of_range, too_long, invalid).
+          additionalProperties: false
+          required: [field, reason]
+          properties:
+            field:
+              type: string
+            reason:
+              type: string
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+  responses:
+    BadRequest:
+      description: Invalid request fields
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unauthorized:
+      description: Authentication is required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Forbidden:
+      description: Required permission is absent
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Record not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Conflict:
+      description: Revision or idempotency conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    UnsupportedMediaType:
+      description: Content-Type must be application/json
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Unavailable:
+      description: Account order service unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'

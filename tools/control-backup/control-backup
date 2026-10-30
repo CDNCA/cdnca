@@ -1,0 +1,2194 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
+
+readonly MANIFEST_SCHEMA="cdnca.control-backup/v3"
+readonly REMOTE_COMMIT_SCHEMA="cdnca.control-backup.remote-commit/v1"
+readonly TOOL_VERSION="3.0.0"
+readonly PG_IMAGE="postgres:17.9-bookworm@sha256:47f917f7409eacd22fc5dfb1dee634e1b55cf0c01d1a7eb701be2227a03e0641"
+readonly CLICKHOUSE_IMAGE="clickhouse/clickhouse-server:25.3.6.56-alpine@sha256:157423fca52f596b62a1bf301b037b9f74bfca38089aa57d1bd36c9025f7ecef"
+readonly RESTORE_GUARD="__cdnca_control_restore_guard"
+readonly MIN_FREE_BYTES=$((16 * 1024 * 1024))
+readonly REMOTE_RETENTION_UPLOAD_SAFETY_SECONDS=300
+
+WORK_DIR=""
+BACKUP_TMP=""
+BACKUP_OUTPUT_DIR=""
+PUBLISHED_DIR=""
+PG_SNAPSHOT_PID=""
+PG_SNAPSHOT_FDS_OPEN="false"
+PG_SNAPSHOT_ID=""
+PG_SNAPSHOT_METRICS_FILE=""
+PARENT_FSYNC_INJECTED="false"
+CLIENT_MODE=""
+VERIFIED_DUMP=""
+MANIFEST_DATABASE=""
+MANIFEST_SERVER_VERSION_NUM=""
+MANIFEST_APP_VERSION=""
+MANIFEST_MIGRATION_VERSIONS=""
+MANIFEST_MIGRATION_FINGERPRINT=""
+MANIFEST_BACKUP_ID=""
+MANIFEST_SOURCE_CLUSTER_ID=""
+MANIFEST_SHA256=""
+MANIFEST_CLICKHOUSE_PRESENT="false"
+VERIFIED_BUNDLE=""
+CLICKHOUSE_CLIENT_MODE=""
+CLICKHOUSE_COMPONENT_FILE=""
+REMOTE_ENDPOINT=""
+REMOTE_REGION=""
+REMOTE_BUCKET=""
+REMOTE_PREFIX=""
+REMOTE_CREDENTIALS_FILE=""
+REMOTE_RETENTION_MODE=""
+REMOTE_RETENTION_DAYS=""
+REMOTE_ENABLED="false"
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  control-backup backup --output-dir ABSOLUTE_DIR --app-version VERSION \
+    --migrations-dir ABSOLUTE_DIR --source-cluster-id ID \
+    --age-recipient AGE_RECIPIENT --signing-private-key-file ABSOLUTE_FILE \
+    --signing-key-id ID [--clickhouse-database NAME] \
+    [--remote-endpoint URL --remote-region REGION --remote-bucket BUCKET \
+     --remote-prefix PREFIX --remote-credentials-file ABSOLUTE_FILE \
+     --remote-retention-mode COMPLIANCE --remote-retention-days DAYS]
+  control-backup remote-fetch --output-dir ABSOLUTE_DIR \
+    --remote-endpoint URL --remote-region REGION --remote-bucket BUCKET \
+    --remote-prefix PREFIX --remote-credentials-file ABSOLUTE_FILE \
+    --remote-retention-mode COMPLIANCE --remote-retention-days DAYS \
+    --expected-app-version VERSION --migrations-dir ABSOLUTE_DIR \
+    --expected-source-cluster-id ID --expected-backup-id ID \
+    --expected-manifest-sha256 SHA256 --age-identity-file ABSOLUTE_FILE \
+    --signing-public-key-file ABSOLUTE_FILE --expected-signing-key-id ID
+  control-backup verify --bundle ABSOLUTE_DIR --expected-app-version VERSION \
+    --migrations-dir ABSOLUTE_DIR --expected-source-cluster-id ID \
+    --expected-backup-id ID --expected-manifest-sha256 SHA256 \
+    --age-identity-file ABSOLUTE_FILE --signing-public-key-file ABSOLUTE_FILE \
+    --expected-signing-key-id ID
+  control-backup restore --bundle ABSOLUTE_DIR --target-database NAME \
+    --confirm-empty-target NAME --expected-app-version VERSION \
+    --migrations-dir ABSOLUTE_DIR --expected-source-cluster-id ID \
+    --expected-backup-id ID --expected-manifest-sha256 SHA256 \
+    --postgresql-target-free-bytes BYTES --age-identity-file ABSOLUTE_FILE \
+    --signing-public-key-file ABSOLUTE_FILE --expected-signing-key-id ID \
+    [--clickhouse-target-database NAME --confirm-empty-clickhouse-target NAME]
+
+Database commands read PGHOST, PGPORT, PGUSER, PGDATABASE and PGSSLMODE.
+Authentication must come from PGPASSFILE, PGPASSWORD_FILE, or PGPASSWORD.
+CONTROL_BACKUP_CLIENT_MODE may be auto (default), native, or docker.
+ClickHouse commands read CLICKHOUSE_HOST, CLICKHOUSE_PORT, CLICKHOUSE_USER,
+CLICKHOUSE_SECURE and CLICKHOUSE_PASSWORD or CLICKHOUSE_PASSWORD_FILE.
+CONTROL_BACKUP_CLICKHOUSE_CLIENT_MODE may be auto, native, or docker.
+EOF
+  exit 2
+}
+
+cleanup() {
+  local status=$?
+  trap - EXIT
+  close_pg_snapshot abort >/dev/null 2>&1 || true
+  if [[ -n "$PUBLISHED_DIR" && -d "$PUBLISHED_DIR" ]]; then
+    rm -rf -- "$PUBLISHED_DIR" || status=1
+    if [[ -n "$BACKUP_OUTPUT_DIR" && -d "$BACKUP_OUTPUT_DIR" ]]; then
+      fsync_path "$BACKUP_OUTPUT_DIR" >/dev/null 2>&1 || status=1
+    fi
+  fi
+  if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
+    rm -rf -- "$WORK_DIR"
+  fi
+  if [[ -n "$BACKUP_TMP" && -d "$BACKUP_TMP" ]]; then
+    rm -rf -- "$BACKUP_TMP" || status=1
+    if [[ -n "$BACKUP_OUTPUT_DIR" && -d "$BACKUP_OUTPUT_DIR" ]]; then
+      fsync_path "$BACKUP_OUTPUT_DIR" >/dev/null 2>&1 || status=1
+    fi
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+reject_symlink_components() {
+  local path=$1 current="/" part
+  local old_ifs=$IFS
+  local -a parts
+  IFS='/' read -r -a parts <<< "$path"
+  IFS=$old_ifs
+  for part in "${parts[@]}"; do
+    [[ -n "$part" ]] || continue
+    if [[ "$current" == "/" ]]; then
+      current="/$part"
+    else
+      current="$current/$part"
+    fi
+    [[ ! -L "$current" ]] || die "symlink path component is not allowed: $current"
+  done
+}
+
+validate_absolute_path() {
+  local path=$1 label=$2
+  [[ "$path" == /* ]] || die "$label must be an absolute path"
+  [[ "$path" != *:* ]] || die "$label must not contain a colon"
+  [[ "$path" != *$'\n'* && "$path" != *$'\r'* && "$path" != *$'\t'* ]] ||
+    die "$label contains control characters"
+  [[ "/$path/" != *"/../"* && "/$path/" != *"/./"* ]] ||
+    die "$label must not contain dot path components"
+  reject_symlink_components "$path"
+}
+
+validate_directory() {
+  local path=$1 label=$2
+  validate_absolute_path "$path" "$label"
+  [[ -d "$path" ]] || die "$label is not a directory: $path"
+}
+
+file_mode() {
+  if stat -f '%OLp' "$1" >/dev/null 2>&1; then
+    stat -f '%OLp' "$1"
+  else
+    stat -c '%a' "$1"
+  fi
+}
+
+file_owner_uid() {
+  if stat -f '%u' "$1" >/dev/null 2>&1; then
+    stat -f '%u' "$1"
+  else
+    stat -c '%u' "$1"
+  fi
+}
+
+validate_secret_file() {
+  local path=$1 label=$2 mode owner
+  validate_absolute_path "$path" "$label"
+  [[ -f "$path" && ! -L "$path" ]] || die "$label must be a regular non-symlink file"
+  owner=$(file_owner_uid "$path")
+  [[ "$owner" == "$(id -u)" || "$owner" == "0" ]] ||
+    die "$label must be owned by the current user or root"
+  mode=$(file_mode "$path")
+  (( (8#$mode & 0077) == 0 )) ||
+    die "$label must not be accessible by group/world (found mode $mode)"
+  [[ -r "$path" ]] || die "$label is not readable"
+}
+
+validate_remote_credentials_file() {
+  local path=$1 mode owner
+  validate_absolute_path "$path" "remote credentials file"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    die "remote credentials file must be a regular non-symlink file"
+  owner=$(file_owner_uid "$path")
+  [[ "$owner" == "$(id -u)" || "$owner" == "0" ]] ||
+    die "remote credentials file must be owned by the current user or root"
+  mode=$(file_mode "$path")
+  [[ "$mode" == "400" ]] || die "remote credentials file must have mode 0400 (found mode $mode)"
+  [[ -r "$path" ]] || die "remote credentials file is not readable"
+}
+
+validate_public_file() {
+  local path=$1 label=$2
+  validate_absolute_path "$path" "$label"
+  [[ -f "$path" && ! -L "$path" && -r "$path" ]] ||
+    die "$label must be a readable regular non-symlink file"
+}
+
+validate_version() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$ ]] || die "invalid app version"
+}
+
+validate_cluster_id() {
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$ ]] || die "invalid source cluster ID"
+}
+
+validate_backup_id() {
+  [[ "$1" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] ||
+    die "invalid backup ID"
+}
+
+validate_sha256() {
+  [[ "$1" =~ ^[0-9a-f]{64}$ ]] || die "invalid SHA256 digest"
+}
+
+validate_remote_config() {
+  local required=$1 count=0 value component old_ifs
+  local -a components
+  for value in "$REMOTE_ENDPOINT" "$REMOTE_REGION" "$REMOTE_BUCKET" "$REMOTE_PREFIX" \
+    "$REMOTE_CREDENTIALS_FILE" "$REMOTE_RETENTION_MODE" "$REMOTE_RETENTION_DAYS"; do
+    [[ -z "$value" ]] || count=$((count + 1))
+  done
+  if ((count == 0)) && [[ "$required" == "false" ]]; then
+    REMOTE_ENABLED="false"
+    return
+  fi
+  ((count == 7)) || die "remote options must be supplied together"
+  if [[ "$REMOTE_ENDPOINT" =~ ^http://[^/@?#[:space:]]+(:[0-9]{1,5})?$ ]]; then
+    [[ "${CONTROL_BACKUP_ENABLE_TEST_HOOKS:-}" == "1" ]] ||
+      die "remote endpoint must use HTTPS outside test hooks"
+  elif [[ ! "$REMOTE_ENDPOINT" =~ ^https://[^/@?#[:space:]]+(:[0-9]{1,5})?$ ]]; then
+    die "remote endpoint is invalid"
+  fi
+  [[ "$REMOTE_REGION" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,62}$ ]] || die "remote region is invalid"
+  [[ "$REMOTE_BUCKET" =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ &&
+    "$REMOTE_BUCKET" != *..* ]] || die "remote bucket is invalid"
+  [[ "$REMOTE_PREFIX" =~ ^[A-Za-z0-9]([A-Za-z0-9._/-]{0,254}[A-Za-z0-9_])?$ &&
+    "$REMOTE_PREFIX" != *//* ]] || die "remote prefix is invalid"
+  old_ifs=$IFS
+  IFS='/' read -r -a components <<< "$REMOTE_PREFIX"
+  IFS=$old_ifs
+  for component in "${components[@]}"; do
+    [[ "$component" != "." && "$component" != ".." ]] || die "remote prefix contains a dot component"
+  done
+  validate_remote_credentials_file "$REMOTE_CREDENTIALS_FILE"
+  [[ "$REMOTE_RETENTION_MODE" == "COMPLIANCE" ]] ||
+    die "remote retention mode must be COMPLIANCE"
+  [[ "$REMOTE_RETENTION_DAYS" =~ ^[1-9][0-9]{0,4}$ ]] || die "remote retention days is invalid"
+  require_command aws
+  REMOTE_ENABLED="true"
+}
+
+validate_database_name() {
+  [[ "$1" =~ ^[A-Za-z_][A-Za-z0-9_-]{0,62}$ ]] || die "invalid database name"
+}
+
+validate_clickhouse_identifier() {
+  [[ "$1" =~ ^[A-Za-z_][A-Za-z0-9_]{0,62}$ ]] || die "invalid ClickHouse identifier"
+}
+
+validate_clickhouse_data_database() {
+  validate_clickhouse_identifier "$1"
+  case "$1" in
+    system | information_schema | INFORMATION_SCHEMA | default)
+      die "reserved ClickHouse database is not allowed" ;;
+  esac
+}
+
+validate_age_recipient() {
+  [[ "$1" =~ ^age1[023456789acdefghjklmnpqrstuvwxyz]{20,90}$ ]] ||
+    die "only a standard age X25519 recipient is accepted"
+}
+
+validate_db_environment() {
+  PGPORT=${PGPORT:-5432}
+  PGSSLMODE=${PGSSLMODE:-prefer}
+  export PGPORT PGSSLMODE
+
+  [[ -n "${PGHOST:-}" && "$PGHOST" =~ ^[A-Za-z0-9._:/-]+$ ]] || die "PGHOST is missing or invalid"
+  if [[ ! "$PGPORT" =~ ^[0-9]{1,5}$ ]] || ((PGPORT < 1 || PGPORT > 65535)); then
+    die "PGPORT is invalid"
+  fi
+  [[ -n "${PGUSER:-}" && "$PGUSER" =~ ^[A-Za-z_][A-Za-z0-9_.-]{0,62}$ ]] || die "PGUSER is missing or invalid"
+  [[ -n "${PGDATABASE:-}" ]] || die "PGDATABASE is required"
+  validate_database_name "$PGDATABASE"
+  case "$PGSSLMODE" in
+    disable | allow | prefer | require | verify-ca | verify-full) ;;
+    *) die "PGSSLMODE is invalid" ;;
+  esac
+
+  if [[ -n "${PGPASSFILE:-}" ]]; then
+    validate_secret_file "$PGPASSFILE" "PGPASSFILE"
+  elif [[ -n "${PGPASSWORD_FILE:-}" ]]; then
+    validate_secret_file "$PGPASSWORD_FILE" "PGPASSWORD_FILE"
+    PGPASSWORD=$(< "$PGPASSWORD_FILE")
+    export PGPASSWORD
+  elif [[ -z "${PGPASSWORD:-}" ]]; then
+    die "set PGPASSFILE, PGPASSWORD_FILE, or PGPASSWORD for non-interactive authentication"
+  fi
+  [[ -z "${PGPASSWORD:-}" || (${#PGPASSWORD} -le 512 && "$PGPASSWORD" != *$'\n'* &&
+    "$PGPASSWORD" != *$'\r'*) ]] || die "PostgreSQL password is invalid"
+
+  unset PGOPTIONS PGSERVICE PGSERVICEFILE
+  export PGCONNECT_TIMEOUT=10 PGAPPNAME=cdnca-control-backup
+}
+
+select_client_mode() {
+  local need_dump=${1:-false}
+  local requested=${CONTROL_BACKUP_CLIENT_MODE:-auto}
+  case "$requested" in
+    auto)
+      if command -v psql >/dev/null 2>&1 && command -v pg_restore >/dev/null 2>&1 &&
+        { [[ "$need_dump" == "false" ]] || command -v pg_dump >/dev/null 2>&1; }; then
+        CLIENT_MODE=native
+      else
+        CLIENT_MODE=docker
+      fi
+      ;;
+    native | docker) CLIENT_MODE=$requested ;;
+    *) die "CONTROL_BACKUP_CLIENT_MODE must be auto, native, or docker" ;;
+  esac
+
+  if [[ "$CLIENT_MODE" == "native" ]]; then
+    require_command psql
+    require_command pg_restore
+    [[ "$need_dump" == "false" ]] || require_command pg_dump
+  else
+    require_command docker
+    docker image inspect "$PG_IMAGE" >/dev/null 2>&1 ||
+      die "pinned PostgreSQL client image is unavailable: $PG_IMAGE"
+  fi
+}
+
+docker_pg_args() {
+  DOCKER_PG_ARGS=(run --rm -i
+    -e PGHOST -e PGPORT -e PGUSER -e PGDATABASE -e PGSSLMODE
+    -e PGCONNECT_TIMEOUT -e PGAPPNAME)
+  if [[ -n "${CONTROL_BACKUP_DOCKER_NETWORK:-}" ]]; then
+    [[ "$CONTROL_BACKUP_DOCKER_NETWORK" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$ ]] ||
+      die "CONTROL_BACKUP_DOCKER_NETWORK is invalid"
+    DOCKER_PG_ARGS+=(--network "$CONTROL_BACKUP_DOCKER_NETWORK")
+  fi
+  if [[ "$PGHOST" == /* ]]; then
+    if [[ -n "${CONTROL_BACKUP_POSTGRES_SOCKET_VOLUME:-}" ]]; then
+      [[ "$CONTROL_BACKUP_POSTGRES_SOCKET_VOLUME" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$ ]] ||
+        die "CONTROL_BACKUP_POSTGRES_SOCKET_VOLUME is invalid"
+      DOCKER_PG_ARGS+=(-v "$CONTROL_BACKUP_POSTGRES_SOCKET_VOLUME:$PGHOST")
+    else
+      validate_directory "$PGHOST" "PostgreSQL socket directory"
+      DOCKER_PG_ARGS+=(-v "$PGHOST:$PGHOST")
+    fi
+  fi
+  if [[ -n "${PGPASSFILE:-}" ]]; then
+    DOCKER_PG_ARGS+=(-v "$PGPASSFILE:/run/secrets/pgpass:ro" -e PGPASSFILE=/run/secrets/pgpass)
+  else
+    DOCKER_PG_ARGS+=(-e PGPASSWORD)
+  fi
+}
+
+run_psql() {
+  if [[ "$CLIENT_MODE" == "native" ]]; then
+    psql -X -w -v ON_ERROR_STOP=1 "$@"
+  else
+    local -a DOCKER_PG_ARGS
+    docker_pg_args
+    docker "${DOCKER_PG_ARGS[@]}" "$PG_IMAGE" psql -X -w -v ON_ERROR_STOP=1 "$@"
+  fi
+}
+
+psql_value() {
+  run_psql -Atq -c "$1"
+}
+
+run_pg_dump() {
+  local output=$1 snapshot_id=$2 output_dir output_name
+  output_dir=$(dirname "$output")
+  output_name=$(basename "$output")
+  if [[ "$CLIENT_MODE" == "native" ]]; then
+    pg_dump -w --format=custom --compress=gzip:6 --snapshot="$snapshot_id" \
+      --no-owner --no-privileges --file="$output"
+  else
+    local -a DOCKER_PG_ARGS
+    docker_pg_args
+    docker "${DOCKER_PG_ARGS[@]}" -v "$output_dir:/backup-output" "$PG_IMAGE" \
+      pg_dump -w --format=custom --compress=gzip:6 --snapshot="$snapshot_id" \
+      --no-owner --no-privileges --file="/backup-output/$output_name"
+  fi
+}
+
+run_pg_restore_list() {
+  local input=$1 input_dir input_name
+  input_dir=$(dirname "$input")
+  input_name=$(basename "$input")
+  if [[ "$CLIENT_MODE" == "native" ]]; then
+    pg_restore --list "$input"
+  else
+    docker run --rm -i -v "$input_dir:/backup-input:ro" "$PG_IMAGE" \
+      pg_restore --list "/backup-input/$input_name"
+  fi
+}
+
+run_pg_restore_database() {
+  local input=$1 input_dir input_name
+  input_dir=$(dirname "$input")
+  input_name=$(basename "$input")
+  if [[ "$CLIENT_MODE" == "native" ]]; then
+    pg_restore -w --exit-on-error --single-transaction --no-owner --no-privileges \
+      --dbname="$PGDATABASE" "$input"
+  else
+    local -a DOCKER_PG_ARGS
+    docker_pg_args
+    docker "${DOCKER_PG_ARGS[@]}" -v "$input_dir:/backup-input:ro" "$PG_IMAGE" \
+      pg_restore -w --exit-on-error --single-transaction --no-owner --no-privileges \
+      --dbname="$PGDATABASE" \
+      "/backup-input/$input_name"
+  fi
+}
+
+client_major() {
+  local output
+  if [[ "$CLIENT_MODE" == "native" ]]; then
+    output=$(pg_restore --version)
+  else
+    output=$(docker run --rm "$PG_IMAGE" pg_restore --version)
+  fi
+  [[ "$output" =~ ([0-9]+)\.([0-9]+) ]] || die "cannot parse PostgreSQL client version"
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+validate_clickhouse_environment() {
+  CLICKHOUSE_PORT=${CLICKHOUSE_PORT:-9000}
+  CLICKHOUSE_SECURE=${CLICKHOUSE_SECURE:-false}
+  export CLICKHOUSE_PORT CLICKHOUSE_SECURE
+
+  [[ -n "${CLICKHOUSE_HOST:-}" && "$CLICKHOUSE_HOST" =~ ^[A-Za-z0-9._:-]+$ ]] ||
+    die "CLICKHOUSE_HOST is missing or invalid"
+  if [[ ! "$CLICKHOUSE_PORT" =~ ^[0-9]{1,5}$ ]] ||
+    ((CLICKHOUSE_PORT < 1 || CLICKHOUSE_PORT > 65535)); then
+    die "CLICKHOUSE_PORT is invalid"
+  fi
+  [[ -n "${CLICKHOUSE_USER:-}" && "$CLICKHOUSE_USER" =~ ^[A-Za-z_][A-Za-z0-9_.-]{0,62}$ ]] ||
+    die "CLICKHOUSE_USER is missing or invalid"
+  case "$CLICKHOUSE_SECURE" in
+    true | false) ;;
+    *) die "CLICKHOUSE_SECURE must be true or false" ;;
+  esac
+
+  if [[ -n "${CLICKHOUSE_PASSWORD_FILE:-}" ]]; then
+    validate_secret_file "$CLICKHOUSE_PASSWORD_FILE" "CLICKHOUSE_PASSWORD_FILE"
+    CLICKHOUSE_PASSWORD=$(< "$CLICKHOUSE_PASSWORD_FILE")
+    export CLICKHOUSE_PASSWORD
+  fi
+  [[ -n "${CLICKHOUSE_PASSWORD:-}" ]] || die "set CLICKHOUSE_PASSWORD or CLICKHOUSE_PASSWORD_FILE"
+  [[ ${#CLICKHOUSE_PASSWORD} -le 512 && "$CLICKHOUSE_PASSWORD" != *$'\n'* &&
+    "$CLICKHOUSE_PASSWORD" != *$'\r'* ]] || die "ClickHouse password is invalid"
+}
+
+select_clickhouse_client_mode() {
+  local requested=${CONTROL_BACKUP_CLICKHOUSE_CLIENT_MODE:-auto}
+  case "$requested" in
+    auto)
+      if command -v clickhouse-client >/dev/null 2>&1; then
+        CLICKHOUSE_CLIENT_MODE=native
+      else
+        CLICKHOUSE_CLIENT_MODE=docker
+      fi
+      ;;
+    native | docker) CLICKHOUSE_CLIENT_MODE=$requested ;;
+    *) die "CONTROL_BACKUP_CLICKHOUSE_CLIENT_MODE must be auto, native, or docker" ;;
+  esac
+
+  if [[ "$CLICKHOUSE_CLIENT_MODE" == "native" ]]; then
+    require_command clickhouse-client
+  else
+    require_command docker
+    docker image inspect "$CLICKHOUSE_IMAGE" >/dev/null 2>&1 ||
+      die "pinned ClickHouse client image is unavailable: $CLICKHOUSE_IMAGE"
+  fi
+}
+
+clickhouse_client_args() {
+  local database=$1
+  CLICKHOUSE_ARGS=(clickhouse-client --host "$CLICKHOUSE_HOST" --port "$CLICKHOUSE_PORT"
+    --user "$CLICKHOUSE_USER" --database "$database" --no-warnings)
+  [[ "$CLICKHOUSE_SECURE" == "false" ]] || CLICKHOUSE_ARGS+=(--secure)
+}
+
+docker_clickhouse_args() {
+  DOCKER_CLICKHOUSE_ARGS=(run --rm)
+  if [[ -n "${CONTROL_BACKUP_DOCKER_NETWORK:-}" ]]; then
+    [[ "$CONTROL_BACKUP_DOCKER_NETWORK" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$ ]] ||
+      die "CONTROL_BACKUP_DOCKER_NETWORK is invalid"
+    DOCKER_CLICKHOUSE_ARGS+=(--network "$CONTROL_BACKUP_DOCKER_NETWORK")
+  fi
+  DOCKER_CLICKHOUSE_ARGS+=(-e CLICKHOUSE_PASSWORD)
+}
+
+run_clickhouse_query() {
+  local database=$1 query=$2
+  local -a CLICKHOUSE_ARGS DOCKER_CLICKHOUSE_ARGS
+  clickhouse_client_args "$database"
+  if [[ "$CLICKHOUSE_CLIENT_MODE" == "native" ]]; then
+    "${CLICKHOUSE_ARGS[@]}" --query "$query"
+  else
+    docker_clickhouse_args
+    docker "${DOCKER_CLICKHOUSE_ARGS[@]}" "$CLICKHOUSE_IMAGE" \
+      "${CLICKHOUSE_ARGS[@]}" --query "$query"
+  fi
+}
+
+run_clickhouse_query_input() {
+  local database=$1 query=$2
+  local -a CLICKHOUSE_ARGS DOCKER_CLICKHOUSE_ARGS
+  clickhouse_client_args "$database"
+  if [[ "$CLICKHOUSE_CLIENT_MODE" == "native" ]]; then
+    "${CLICKHOUSE_ARGS[@]}" --query "$query"
+  else
+    docker_clickhouse_args
+    DOCKER_CLICKHOUSE_ARGS+=(-i)
+    docker "${DOCKER_CLICKHOUSE_ARGS[@]}" "$CLICKHOUSE_IMAGE" \
+      "${CLICKHOUSE_ARGS[@]}" --query "$query"
+  fi
+}
+
+run_clickhouse_input() {
+  local database=$1
+  local -a CLICKHOUSE_ARGS DOCKER_CLICKHOUSE_ARGS
+  clickhouse_client_args "$database"
+  if [[ "$CLICKHOUSE_CLIENT_MODE" == "native" ]]; then
+    "${CLICKHOUSE_ARGS[@]}" --multiquery
+  else
+    docker_clickhouse_args
+    DOCKER_CLICKHOUSE_ARGS+=(-i)
+    docker "${DOCKER_CLICKHOUSE_ARGS[@]}" "$CLICKHOUSE_IMAGE" \
+      "${CLICKHOUSE_ARGS[@]}" --multiquery
+  fi
+}
+
+clickhouse_value() {
+  run_clickhouse_query default "$1"
+}
+
+clickhouse_client_version() {
+  local output
+  if [[ "$CLICKHOUSE_CLIENT_MODE" == "native" ]]; then
+    output=$(clickhouse-client --version)
+  else
+    output=$(docker run --rm "$CLICKHOUSE_IMAGE" clickhouse-client --version)
+  fi
+  [[ "$output" =~ ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+) ]] ||
+    die "cannot parse ClickHouse client version"
+  printf '%s\n' "${BASH_REMATCH[1]}"
+}
+
+clickhouse_version_line() {
+  local value=$1
+  [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid ClickHouse version"
+  printf '%s.%s\n' "${value%%.*}" "$(cut -d. -f2 <<< "$value")"
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    require_command shasum
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+file_size() {
+  if stat -f '%z' "$1" >/dev/null 2>&1; then
+    stat -f '%z' "$1"
+  else
+    stat -c '%s' "$1"
+  fi
+}
+
+canonicalize_json() {
+  local input=$1 output=$2
+  jq -S -c '.' "$input" > "$output"
+  [[ -s "$output" ]] || die "canonical JSON output is empty"
+}
+
+public_key_fingerprint() {
+  local key=$1 mode=$2 output="$WORK_DIR/signing-public.der"
+  if [[ "$mode" == "private" ]]; then
+    openssl pkey -in "$key" -pubout -outform DER -out "$output" >/dev/null 2>&1 ||
+      die "manifest signing private key is invalid"
+  else
+    openssl pkey -pubin -in "$key" -pubout -outform DER -out "$output" >/dev/null 2>&1 ||
+      die "manifest signing public key is invalid"
+  fi
+  openssl pkey -pubin -inform DER -in "$output" -text_pub -noout 2>/dev/null |
+    grep -Fq 'ED25519' || die "manifest signing key must be Ed25519"
+  sha256_file "$output"
+}
+
+sign_manifest() {
+  local manifest=$1 private_key=$2 signature=$3
+  openssl pkeyutl -sign -rawin -inkey "$private_key" -in "$manifest" -out "$signature" \
+    >/dev/null 2>&1 || die "manifest signing failed"
+  [[ $(file_size "$signature") == "64" ]] || die "manifest signature has an invalid size"
+}
+
+verify_manifest_signature() {
+  local manifest=$1 public_key=$2 signature=$3
+  openssl pkeyutl -verify -rawin -pubin -inkey "$public_key" -in "$manifest" \
+    -sigfile "$signature" >/dev/null 2>&1 || die "manifest signature verification failed"
+}
+
+fsync_path() {
+  if [[ "${CONTROL_BACKUP_ENABLE_TEST_HOOKS:-}" == "1" &&
+    "${CONTROL_BACKUP_TEST_FAIL_PARENT_FSYNC_ONCE:-}" == "1" &&
+    -n "$BACKUP_OUTPUT_DIR" && "$1" == "$BACKUP_OUTPUT_DIR" &&
+    "$PARENT_FSYNC_INJECTED" == "false" ]]; then
+    PARENT_FSYNC_INJECTED="true"
+    return 70
+  fi
+  python3 - "$1" <<'PY'
+import os
+import sys
+
+fd = os.open(sys.argv[1], os.O_RDONLY)
+try:
+    os.fsync(fd)
+finally:
+    os.close(fd)
+PY
+}
+
+fsync_tree() {
+  local root=$1 path
+  while IFS= read -r -d '' path; do
+    fsync_path "$path"
+  done < <(find "$root" -type f -print0)
+  while IFS= read -r -d '' path; do
+    fsync_path "$path"
+  done < <(find "$root" -depth -type d -print0)
+}
+
+remote_retention_deadline() {
+  python3 - "$REMOTE_RETENTION_DAYS" "$REMOTE_RETENTION_UPLOAD_SAFETY_SECONDS" <<'PY'
+from datetime import datetime, timedelta, timezone
+import sys
+
+deadline = datetime.now(timezone.utc) + timedelta(days=int(sys.argv[1]), seconds=int(sys.argv[2]))
+print(deadline.strftime("%Y-%m-%dT%H:%M:%SZ"))
+PY
+}
+
+remote_retention_is_valid() {
+  local retain_until=$1 required_until=$2 last_modified=$3
+  python3 - "$retain_until" "$required_until" "$last_modified" "$REMOTE_RETENTION_DAYS" <<'PY'
+from datetime import datetime, timedelta, timezone
+import sys
+
+def parse(value):
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("timestamp is not timezone-aware")
+    return parsed.astimezone(timezone.utc)
+
+try:
+    retain_until = parse(sys.argv[1])
+    if sys.argv[2]:
+        valid = retain_until >= parse(sys.argv[2])
+    else:
+        last_modified = parse(sys.argv[3])
+        valid = (retain_until >= last_modified + timedelta(days=int(sys.argv[4])) and
+                 retain_until > datetime.now(timezone.utc))
+except (OverflowError, TypeError, ValueError):
+    valid = False
+
+raise SystemExit(0 if valid else 1)
+PY
+}
+
+remote_json_version_id() {
+  local document=$1 version_id
+  version_id=$(jq -er '.VersionId | select(type == "string" and length > 0 and length <= 1024)' \
+    <<< "$document" 2>/dev/null) || return 1
+  [[ "$version_id" != *$'\n'* && "$version_id" != *$'\r'* && "$version_id" != *$'\t'* ]] || return 1
+  printf '%s\n' "$version_id"
+}
+
+remote_head_metadata() {
+  local key=$1 expected_size=$2 required_until=$3 purpose=$4 expected_version=${5:-}
+  local head actual_size version_id retain_until last_modified
+  local -a args=(s3api head-object --bucket "$REMOTE_BUCKET" --key "$key")
+  [[ -z "$expected_version" ]] || args+=(--version-id "$expected_version")
+  if ! head=$(run_aws "${args[@]}" 2>/dev/null); then
+    return 1
+  fi
+  actual_size=$(jq -er '.ContentLength | select(type == "number" and . >= 0 and floor == .)' \
+    <<< "$head" 2>/dev/null) || return 1
+  [[ -z "$expected_size" || "$actual_size" == "$expected_size" ]] || return 1
+  [[ $(jq -r '.ObjectLockMode // ""' <<< "$head" 2>/dev/null) == "COMPLIANCE" ]] || return 1
+  version_id=$(remote_json_version_id "$head") || return 1
+  [[ -z "$expected_version" || "$version_id" == "$expected_version" ]] || return 1
+  retain_until=$(jq -er '.ObjectLockRetainUntilDate | select(type == "string" and length > 0)' \
+    <<< "$head" 2>/dev/null) || return 1
+  if [[ "$purpose" == "upload" ]]; then
+    remote_retention_is_valid "$retain_until" "$required_until" "" || return 1
+  elif [[ "$purpose" == "reconcile" || "$purpose" == "fetch" ]]; then
+    last_modified=$(jq -er '.LastModified | select(type == "string" and length > 0)' \
+      <<< "$head" 2>/dev/null) || return 1
+    remote_retention_is_valid "$retain_until" "" "$last_modified" || return 1
+  else
+    return 1
+  fi
+  printf '%s\t%s\n' "$version_id" "$actual_size"
+}
+
+run_aws() {
+  env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+    -u AWS_WEB_IDENTITY_TOKEN_FILE -u AWS_ROLE_ARN -u AWS_CONTAINER_CREDENTIALS_RELATIVE_URI \
+    -u AWS_CONTAINER_CREDENTIALS_FULL_URI \
+    AWS_SHARED_CREDENTIALS_FILE="$REMOTE_CREDENTIALS_FILE" AWS_PROFILE=default \
+    AWS_CONFIG_FILE=/dev/null AWS_EC2_METADATA_DISABLED=true \
+    aws --no-cli-pager --endpoint-url "$REMOTE_ENDPOINT" --region "$REMOTE_REGION" "$@"
+}
+
+remote_preflight() {
+  local versioning lock retention_days
+  if ! versioning=$(run_aws s3api get-bucket-versioning --bucket "$REMOTE_BUCKET" 2>/dev/null); then
+    die "remote bucket versioning preflight failed"
+  fi
+  jq -e '.Status == "Enabled"' <<< "$versioning" >/dev/null ||
+    die "remote bucket versioning must be Enabled"
+  if ! lock=$(run_aws s3api get-object-lock-configuration --bucket "$REMOTE_BUCKET" 2>/dev/null); then
+    die "remote Object Lock preflight failed"
+  fi
+  jq -e '.ObjectLockConfiguration.ObjectLockEnabled == "Enabled" and
+    .ObjectLockConfiguration.Rule.DefaultRetention.Mode == "COMPLIANCE"' <<< "$lock" >/dev/null ||
+    die "remote Object Lock with default COMPLIANCE retention must be Enabled"
+  retention_days=$(jq -r '
+    .ObjectLockConfiguration.Rule.DefaultRetention |
+    if (.Days | type) == "number" then .Days
+    elif (.Years | type) == "number" then (.Years * 365)
+    else 0 end' <<< "$lock")
+  [[ "$retention_days" =~ ^[0-9]+$ ]] || die "remote default retention is invalid"
+  ((retention_days >= REMOTE_RETENTION_DAYS)) ||
+    die "remote default COMPLIANCE retention is shorter than the configured minimum"
+}
+
+remote_object_matches() {
+  local file=$1 key=$2 required_until=$3 expected_version=${4:-}
+  local expected_size metadata purpose version_id actual_size readback get_result returned_version
+  expected_size=$(file_size "$file")
+  purpose=reconcile
+  [[ -z "$expected_version" ]] || purpose=upload
+  metadata=$(remote_head_metadata "$key" "$expected_size" "$required_until" "$purpose" \
+    "$expected_version") || return 1
+  IFS=$'\t' read -r version_id actual_size <<< "$metadata"
+  readback=$(mktemp "$WORK_DIR/remote-readback.XXXXXX")
+  if ! get_result=$(run_aws s3api get-object --bucket "$REMOTE_BUCKET" --key "$key" \
+    --version-id "$version_id" "$readback" 2>/dev/null); then
+    rm -f -- "$readback"
+    return 1
+  fi
+  returned_version=$(remote_json_version_id "$get_result") || {
+    rm -f -- "$readback"
+    return 1
+  }
+  [[ "$returned_version" == "$version_id" ]] || {
+    rm -f -- "$readback"
+    return 1
+  }
+  actual_size=$(file_size "$readback")
+  if [[ "$actual_size" != "$expected_size" ||
+    "$(sha256_file "$readback")" != "$(sha256_file "$file")" ]]; then
+    rm -f -- "$readback"
+    return 1
+  fi
+  rm -f -- "$readback"
+}
+
+remote_put_immutable() {
+  local file=$1 key=$2 retain_until put_result version_id
+  retain_until=$(remote_retention_deadline) || die "cannot compute remote retention deadline"
+  for _ in 1 2; do
+    if put_result=$(run_aws s3api put-object --bucket "$REMOTE_BUCKET" --key "$key" --body "$file" \
+      --if-none-match '*' --object-lock-mode COMPLIANCE \
+      --object-lock-retain-until-date "$retain_until" 2>/dev/null); then
+      version_id=$(remote_json_version_id "$put_result") ||
+        die "remote put-object success response did not contain a VersionId: $key"
+      remote_object_matches "$file" "$key" "$retain_until" "$version_id" ||
+        die "remote object readback verification failed: $key"
+      return
+    fi
+    if remote_object_matches "$file" "$key" "$retain_until"; then
+      return
+    fi
+  done
+  die "remote object conflict or uncertain upload outcome: $key"
+}
+
+validate_remote_filename() {
+  local filename=$1
+  case "$filename" in
+    manifest.json | manifest.sig | database.dump.age) ;;
+    clickhouse/*.schema.sql.age | clickhouse/*.native.age)
+      [[ "$filename" =~ ^clickhouse/[A-Za-z_][A-Za-z0-9_]{0,62}\.(schema\.sql|native)\.age$ ]] ||
+        die "remote bundle contains an invalid filename"
+      ;;
+    *) die "remote bundle contains an unexpected filename: $filename" ;;
+  esac
+}
+
+remote_build_object_list() {
+  local bundle=$1 output=$2 file filename
+  local entries="$WORK_DIR/remote-objects.jsonl"
+  : > "$entries"
+  while IFS= read -r file; do
+    [[ -f "$file" && ! -L "$file" ]] || die "remote bundle objects must be regular non-symlink files"
+    filename=${file#"$bundle/"}
+    validate_remote_filename "$filename"
+    jq -n -c --arg filename "$filename" --arg sha256 "$(sha256_file "$file")" \
+      --argjson size_bytes "$(file_size "$file")" \
+      '{filename: $filename, sha256: $sha256, size_bytes: $size_bytes}' >> "$entries"
+  done < <(find "$bundle" -type f | LC_ALL=C sort)
+  jq -S -c -s 'sort_by(.filename)' "$entries" > "$output"
+  jq -e 'length >= 3 and ([.[].filename] | unique | length) == length and
+    any(.[]; .filename == "manifest.json") and
+    any(.[]; .filename == "manifest.sig") and
+    any(.[]; .filename == "database.dump.age")' "$output" >/dev/null ||
+    die "remote bundle object list is incomplete or duplicated"
+}
+
+remote_publish_bundle() {
+  local bundle=$1 backup_id=$2 manifest_sha256=$3 filename commit object_list
+  local staging_root="$REMOTE_PREFIX/staging/$backup_id"
+  local canonical_root="$REMOTE_PREFIX/bundles/$backup_id"
+  object_list="$WORK_DIR/remote-objects.json"
+  remote_build_object_list "$bundle" "$object_list"
+  [[ $(jq -r '.[] | select(.filename == "manifest.json") | .sha256' "$object_list") == "$manifest_sha256" ]] ||
+    die "local manifest digest changed before remote publication"
+  commit="$WORK_DIR/commit.json"
+  jq -n --arg schema "$REMOTE_COMMIT_SCHEMA" --arg backup_id "$backup_id" \
+    --arg manifest_sha256 "$manifest_sha256" --arg mode "$REMOTE_RETENTION_MODE" \
+    --argjson days "$REMOTE_RETENTION_DAYS" --slurpfile objects "$object_list" \
+    '{schema: $schema, backup_id: $backup_id, manifest_sha256: $manifest_sha256,
+      objects: $objects[0],
+      storage: {layout: "staging-then-immutable-v1",
+        retention: {mode: $mode, minimum_days: $days}}}' > "$WORK_DIR/commit.unsorted.json"
+  canonicalize_json "$WORK_DIR/commit.unsorted.json" "$commit"
+
+  remote_preflight
+  while IFS= read -r filename; do
+    remote_put_immutable "$bundle/$filename" "$staging_root/$filename"
+  done < <(jq -r '.[].filename' "$object_list")
+  while IFS= read -r filename; do
+    remote_put_immutable "$bundle/$filename" "$canonical_root/$filename"
+  done < <(jq -r '.[] | select(.filename != "manifest.sig" and .filename != "manifest.json") | .filename' "$object_list")
+  remote_put_immutable "$bundle/manifest.sig" "$canonical_root/manifest.sig"
+  remote_put_immutable "$bundle/manifest.json" "$canonical_root/manifest.json"
+  remote_put_immutable "$commit" "$canonical_root/commit.json"
+  printf 'control_backup_remote_last_success_timestamp_seconds=%s\n' "$(date -u '+%s')"
+}
+
+remote_download() {
+  local key=$1 output=$2 expected_sha=${3:-} expected_size=${4:-}
+  local metadata version_id actual_size get_result returned_version
+  metadata=$(remote_head_metadata "$key" "$expected_size" "" fetch) || return 1
+  IFS=$'\t' read -r version_id actual_size <<< "$metadata"
+  if ! get_result=$(run_aws s3api get-object --bucket "$REMOTE_BUCKET" --key "$key" \
+    --version-id "$version_id" "$output" 2>/dev/null); then
+    return 1
+  fi
+  returned_version=$(remote_json_version_id "$get_result") || return 1
+  [[ "$returned_version" == "$version_id" ]] || return 1
+  [[ $(file_size "$output") == "$actual_size" ]] || return 1
+  [[ -z "$expected_sha" || "$(sha256_file "$output")" == "$expected_sha" ]] || return 1
+}
+
+validate_remote_commit() {
+  local commit=$1 expected_backup_id=$2 expected_manifest_sha256=$3
+  if ! jq -S -c '.' "$commit" > "$WORK_DIR/commit.canonical.json"; then
+    die "remote commit is invalid JSON"
+  fi
+  [[ -s "$WORK_DIR/commit.canonical.json" ]] || die "remote commit is empty"
+  cmp -s "$commit" "$WORK_DIR/commit.canonical.json" || die "remote commit is not canonical JSON"
+  jq -e --arg schema "$REMOTE_COMMIT_SCHEMA" --arg backup_id "$expected_backup_id" \
+    --arg manifest_sha256 "$expected_manifest_sha256" --arg mode "$REMOTE_RETENTION_MODE" \
+    --argjson days "$REMOTE_RETENTION_DAYS" '
+      (keys == ["backup_id", "manifest_sha256", "objects", "schema", "storage"]) and
+      .schema == $schema and .backup_id == $backup_id and
+      .manifest_sha256 == $manifest_sha256 and
+      .storage == {layout: "staging-then-immutable-v1",
+        retention: {mode: $mode, minimum_days: $days}} and
+      (.objects | type == "array" and length >= 3) and
+      ([.objects[].filename] == ([.objects[].filename] | sort)) and
+      ([.objects[].filename] | unique | length) == (.objects | length) and
+      (all(.objects[];
+        (.filename | type == "string" and
+          test("^(manifest[.](json|sig)|database[.]dump[.]age|clickhouse/[A-Za-z_][A-Za-z0-9_]{0,62}[.](schema[.]sql|native)[.]age)$")) and
+        (.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+        (.size_bytes | type == "number" and . >= 0 and floor == .))) and
+      (any(.objects[]; .filename == "manifest.json" and .sha256 == $manifest_sha256)) and
+      (any(.objects[]; .filename == "manifest.sig" and .size_bytes == 64)) and
+      (any(.objects[]; .filename == "database.dump.age" and .size_bytes > 0))
+    ' "$commit" >/dev/null || {
+      [[ $(jq -r '.manifest_sha256 // ""' "$commit" 2>/dev/null) != "$expected_manifest_sha256" ]] &&
+        die "remote commit manifest digest does not match expected digest"
+      die "remote commit contract validation failed"
+    }
+}
+
+validate_migration_versions() {
+  local csv=$1 expected=1 version
+  local old_ifs=$IFS
+  local -a versions
+  [[ -n "$csv" ]] || die "migration ledger is empty"
+  IFS=',' read -r -a versions <<< "$csv"
+  IFS=$old_ifs
+  for version in "${versions[@]}"; do
+    [[ "$version" =~ ^[0-9]+$ ]] || die "migration ledger contains an invalid version"
+    ((10#$version == expected)) || die "migration ledger is not contiguous at version $version"
+    expected=$((expected + 1))
+  done
+}
+
+migration_fingerprint() {
+  local migrations_dir=$1 csv=$2 version padded file hash
+  local old_ifs=$IFS
+  local -a versions matches
+  local fingerprint_input="$WORK_DIR/migration-fingerprint"
+  : > "$fingerprint_input"
+  IFS=',' read -r -a versions <<< "$csv"
+  IFS=$old_ifs
+  for version in "${versions[@]}"; do
+    printf -v padded '%03d' "$version"
+    matches=("$migrations_dir/$padded"_*.up.sql)
+    [[ ${#matches[@]} -eq 1 && -f "${matches[0]}" && ! -L "${matches[0]}" ]] ||
+      die "expected exactly one non-symlink up migration for version $version"
+    file=${matches[0]}
+    hash=$(sha256_file "$file")
+    printf '%s %s\n' "$(basename "$file")" "$hash" >> "$fingerprint_input"
+  done
+  sha256_file "$fingerprint_input"
+}
+
+new_work_dir() {
+  [[ -z "$WORK_DIR" ]] || return
+  WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/cdnca-control-backup.XXXXXX")
+  chmod 700 "$WORK_DIR"
+}
+
+test_stop_with_marker() {
+  local marker=${1:-}
+  [[ -n "$marker" ]] || return 0
+  [[ "${CONTROL_BACKUP_ENABLE_TEST_HOOKS:-}" == "1" ]] ||
+    die "test stop marker requires CONTROL_BACKUP_ENABLE_TEST_HOOKS=1"
+  validate_absolute_path "$marker" "test stop marker"
+  [[ ! -e "$marker" && ! -L "$marker" ]] || die "test stop marker already exists"
+  validate_directory "$(dirname "$marker")" "test stop marker directory"
+  printf 'ready\n' > "$marker"
+  kill -STOP "$$"
+}
+
+start_pg_snapshot() {
+  local input_fifo="$WORK_DIR/postgresql-snapshot.in"
+  local output_fifo="$WORK_DIR/postgresql-snapshot.out"
+  local error_file="$WORK_DIR/postgresql-snapshot.err"
+  local metrics
+  mkfifo "$input_fifo" "$output_fifo"
+  PGAPPNAME=cdnca-control-backup-snapshot run_psql -Atq \
+    < "$input_fifo" > "$output_fifo" 2> "$error_file" &
+  PG_SNAPSHOT_PID=$!
+  exec 8> "$input_fifo"
+  exec 9< "$output_fifo"
+  PG_SNAPSHOT_FDS_OPEN="true"
+  printf '%s\n' \
+    "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY;" \
+    "SELECT pg_export_snapshot();" \
+    "SELECT json_build_object(" \
+    "  'database', current_database()," \
+    "  'server_version_num', current_setting('server_version_num')," \
+    "  'server_version', current_setting('server_version')," \
+    "  'database_size', pg_database_size(current_database())," \
+    "  'missing_required', (SELECT count(*) FROM (VALUES ('schema_migrations'),('tenants'),('access_scopes'),('users'),('audit_events'),('billing_transactions'),('billing_postings')) AS required(name) WHERE to_regclass('public.' || name) IS NULL)," \
+    "  'migration_versions', (SELECT string_agg(version::text, ',' ORDER BY version) FROM schema_migrations)," \
+    "  'public_table_count', (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p'))," \
+    "  'migration_row_count', (SELECT count(*) FROM schema_migrations)," \
+    "  'tenant_count', (SELECT count(*) FROM tenants)," \
+    "  'user_count', (SELECT count(*) FROM users)," \
+    "  'audit_count', (SELECT count(*) FROM audit_events)," \
+    "  'audit_max_position', (SELECT COALESCE(max(stream_position),0) FROM audit_events)," \
+    "  'audit_max_occurred_at', (SELECT COALESCE(to_char(max(occurred_at) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),'') FROM audit_events)," \
+    "  'transaction_count', (SELECT count(*) FROM billing_transactions)," \
+    "  'transaction_amount', (SELECT COALESCE(sum(amount_minor),0) FROM billing_transactions)," \
+    "  'posting_count', (SELECT count(*) FROM billing_postings)," \
+    "  'posting_debit', (SELECT COALESCE(sum(amount_minor) FILTER (WHERE side='debit'),0) FROM billing_postings)," \
+    "  'posting_credit', (SELECT COALESCE(sum(amount_minor) FILTER (WHERE side='credit'),0) FROM billing_postings)" \
+    ")::text;" >&8
+  if ! IFS= read -r PG_SNAPSHOT_ID <&9; then
+    die "PostgreSQL snapshot session ended before exporting a snapshot"
+  fi
+  [[ "$PG_SNAPSHOT_ID" =~ ^[0-9A-Fa-f-]+$ ]] || die "invalid PostgreSQL exported snapshot ID"
+  if ! IFS= read -r metrics <&9; then
+    die "PostgreSQL snapshot session ended before collecting logical metrics"
+  fi
+  jq -e 'type == "object"' <<< "$metrics" >/dev/null ||
+    die "PostgreSQL snapshot metrics are invalid"
+  PG_SNAPSHOT_METRICS_FILE="$WORK_DIR/postgresql-snapshot-metrics.json"
+  printf '%s\n' "$metrics" > "$PG_SNAPSHOT_METRICS_FILE"
+}
+
+close_pg_snapshot() {
+  local mode=${1:-rollback} status=0 snapshot_pid=$PG_SNAPSHOT_PID
+  [[ -n "$snapshot_pid" ]] || return
+  if [[ "$PG_SNAPSHOT_FDS_OPEN" == "true" ]]; then
+    if [[ "$mode" == "rollback" ]] && kill -0 "$snapshot_pid" >/dev/null 2>&1; then
+      printf 'ROLLBACK;\n' >&8 || status=1
+    fi
+    exec 8>&-
+    cat <&9 >/dev/null || status=1
+    exec 9<&-
+    PG_SNAPSHOT_FDS_OPEN="false"
+  fi
+  if [[ "$mode" == "abort" ]] && kill -0 "$snapshot_pid" >/dev/null 2>&1; then
+    kill "$snapshot_pid" >/dev/null 2>&1 || status=1
+  fi
+  wait "$snapshot_pid" >/dev/null 2>&1 || {
+    [[ "$mode" == "abort" ]] || status=1
+  }
+  PG_SNAPSHOT_PID=""
+  ((status == 0))
+}
+
+new_backup_id() {
+  local hex variant
+  require_command openssl
+  hex=$(openssl rand -hex 16)
+  hex="${hex:0:12}4${hex:13}"
+  printf -v variant '%x' "$(( (16#${hex:16:1} & 3) | 8 ))"
+  hex="${hex:0:16}$variant${hex:17}"
+  printf '%s-%s-%s-%s-%s\n' "${hex:0:8}" "${hex:8:4}" "${hex:12:4}" "${hex:16:4}" "${hex:20:12}"
+}
+
+assert_dump_archive() {
+  local dump=$1 list_file="$WORK_DIR/dump.list"
+  run_pg_restore_list "$dump" > "$list_file"
+  [[ -s "$list_file" ]] || die "PostgreSQL archive has an empty table of contents"
+  if grep -Fq "$RESTORE_GUARD" "$list_file"; then
+    die "backup contains the reserved restore guard object"
+  fi
+}
+
+maybe_encrypt_file() {
+  local input=$1 recipient=$2 output=$3
+  age --encrypt --recipient "$recipient" --output "$output" "$input"
+  [[ -s "$output" ]] || die "age produced an empty encrypted artifact"
+  rm -f -- "$input"
+  printf '%s\n' "$output"
+}
+
+clickhouse_table_list() {
+  local database=$1
+  clickhouse_value "SELECT name, engine FROM system.tables WHERE database = '$database' AND is_temporary = 0 ORDER BY name FORMAT TSVRaw"
+}
+
+clickhouse_portable_schema() {
+  local database=$1 table=$2
+  clickhouse_value "SELECT replaceOne(create_table_query, concat('CREATE TABLE ', database, '.', name), concat('CREATE TABLE ', name)) FROM system.tables WHERE database = '$database' AND name = '$table' FORMAT TSVRaw"
+}
+
+clickhouse_watermark_column() {
+  local database=$1 table=$2
+  clickhouse_value "SELECT name FROM system.columns WHERE database = '$database' AND table = '$table' AND startsWith(type, 'DateTime') ORDER BY position LIMIT 1 FORMAT TSVRaw"
+}
+
+clickhouse_table_metrics() {
+  local database=$1 table=$2 watermark=$3
+  run_clickhouse_query "$database" "SELECT count(), if(count() = 0, '', toString(min($watermark), 'UTC')), if(count() = 0, '', toString(max($watermark), 'UTC')), toString(sum(cityHash64(tuple(*)))) FROM $table FORMAT TSVRaw"
+}
+
+clickhouse_partitions() {
+  local database=$1 table=$2
+  clickhouse_value "SELECT partition_id AS id, sum(rows) AS rows FROM system.parts WHERE active AND database = '$database' AND table = '$table' GROUP BY partition_id ORDER BY partition_id FORMAT JSONEachRow"
+}
+
+backup_clickhouse() {
+  local database=$1 output_dir=$2 age_recipient=$3 backup_id=$4
+  local exists server_line server_version server_revision client_version source_bytes source_uncompressed_bytes size_line
+  local available_kb scratch_available_kb required_kb snapshot_started snapshot_completed table engine watermark
+  local schema_file schema_hash data_file before_metrics final_schema final_metrics final_partitions
+  local schema_artifact data_artifact schema_relative data_relative data_hash data_size schema_artifact_hash schema_artifact_size
+  local rows before_rows watermark_min watermark_max aggregate_checksum partitions_json partition_count schema_fingerprint
+  local table_count=0
+  local table_list="$WORK_DIR/clickhouse-tables.tsv"
+  local final_table_list="$WORK_DIR/clickhouse-tables-final.tsv"
+  local table_jsonl="$WORK_DIR/clickhouse-tables.jsonl"
+  local schema_fingerprint_input="$WORK_DIR/clickhouse-schema-fingerprint"
+
+  validate_clickhouse_data_database "$database"
+  validate_clickhouse_environment
+  select_clickhouse_client_mode
+  require_command cmp
+  snapshot_started=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+  exists=$(clickhouse_value "SELECT count() FROM system.databases WHERE name = '$database' FORMAT TSVRaw")
+  [[ "$exists" == "1" ]] || die "ClickHouse source database does not exist"
+  server_line=$(clickhouse_value "SELECT version(), revision() FORMAT TSVRaw")
+  IFS=$'\t' read -r server_version server_revision <<< "$server_line"
+  [[ "$server_revision" =~ ^[0-9]+$ ]] || die "invalid ClickHouse server revision"
+  client_version=$(clickhouse_client_version)
+  [[ $(clickhouse_version_line "$server_version") == "$(clickhouse_version_line "$client_version")" ]] ||
+    die "ClickHouse client and server major.minor versions do not match"
+  size_line=$(clickhouse_value "SELECT toString(ifNull(sum(bytes_on_disk), 0)), toString(ifNull(sum(data_uncompressed_bytes), 0)) FROM system.parts WHERE active AND database = '$database' FORMAT TSVRaw")
+  IFS=$'\t' read -r source_bytes source_uncompressed_bytes <<< "$size_line"
+  [[ "$source_bytes" =~ ^[0-9]+$ && "$source_uncompressed_bytes" =~ ^[0-9]+$ ]] ||
+    die "invalid ClickHouse source size"
+  available_kb=$(df -Pk "$output_dir" | awk 'END {print $4}')
+  scratch_available_kb=$(df -Pk "$WORK_DIR" | awk 'END {print $4}')
+  [[ "$available_kb" =~ ^[0-9]+$ && "$scratch_available_kb" =~ ^[0-9]+$ ]] ||
+    die "cannot determine ClickHouse backup disk capacity"
+  required_kb=$(((source_uncompressed_bytes + MIN_FREE_BYTES + 1023) / 1024))
+  ((available_kb >= required_kb)) || die "insufficient output disk for ClickHouse snapshot"
+  ((scratch_available_kb >= required_kb)) || die "insufficient ephemeral scratch disk for ClickHouse snapshot"
+
+  clickhouse_table_list "$database" > "$table_list"
+  [[ -s "$table_list" ]] || die "ClickHouse source database has no tables"
+  mkdir "$BACKUP_TMP/clickhouse" "$WORK_DIR/clickhouse"
+  : > "$table_jsonl"
+  : > "$schema_fingerprint_input"
+
+  while IFS=$'\t' read -r table engine; do
+    validate_clickhouse_identifier "$table"
+    case "$engine" in
+      MergeTree | ReplacingMergeTree | SummingMergeTree | AggregatingMergeTree | CollapsingMergeTree | VersionedCollapsingMergeTree) ;;
+      *) die "unsupported ClickHouse table engine for $table: $engine" ;;
+    esac
+    watermark=$(clickhouse_watermark_column "$database" "$table")
+    validate_clickhouse_identifier "$watermark"
+
+    schema_file="$WORK_DIR/clickhouse/$table.schema.sql"
+    clickhouse_portable_schema "$database" "$table" > "$schema_file"
+    printf ';\n' >> "$schema_file"
+    [[ $(sed -n '1p' "$schema_file") == "CREATE TABLE $table "* ]] ||
+      die "ClickHouse schema is not portable for table $table"
+    schema_hash=$(sha256_file "$schema_file")
+    printf '%s %s\n' "$table" "$schema_hash" >> "$schema_fingerprint_input"
+    clickhouse_table_metrics "$database" "$table" "$watermark" > "$WORK_DIR/$table.before.tsv"
+    clickhouse_partitions "$database" "$table" | jq -s 'map({id: .id, rows: (.rows | tonumber)})' > "$WORK_DIR/$table.partitions.json"
+
+    data_file="$WORK_DIR/clickhouse/$table.native"
+    run_clickhouse_query "$database" "SELECT * FROM $table FORMAT Native" > "$data_file"
+    before_rows=$(cut -f1 "$WORK_DIR/$table.before.tsv")
+    [[ "$before_rows" == "0" || -s "$data_file" ]] ||
+      die "ClickHouse Native export is empty for non-empty table $table"
+    table_count=$((table_count + 1))
+  done < "$table_list"
+
+  clickhouse_table_list "$database" > "$final_table_list"
+  cmp -s "$table_list" "$final_table_list" || die "ClickHouse table set changed during snapshot"
+
+  while IFS=$'\t' read -r table engine; do
+    watermark=$(clickhouse_watermark_column "$database" "$table")
+    final_schema="$WORK_DIR/$table.final-schema.sql"
+    clickhouse_portable_schema "$database" "$table" > "$final_schema"
+    printf ';\n' >> "$final_schema"
+    cmp -s "$WORK_DIR/clickhouse/$table.schema.sql" "$final_schema" ||
+      die "ClickHouse schema changed during snapshot for table $table"
+    final_metrics=$(clickhouse_table_metrics "$database" "$table" "$watermark")
+    before_metrics=$(< "$WORK_DIR/$table.before.tsv")
+    [[ "$final_metrics" == "$before_metrics" ]] ||
+      die "ClickHouse rows or watermark changed during snapshot for table $table"
+    final_partitions="$WORK_DIR/$table.final-partitions.json"
+    clickhouse_partitions "$database" "$table" | jq -s 'map({id: .id, rows: (.rows | tonumber)})' > "$final_partitions"
+    cmp -s "$WORK_DIR/$table.partitions.json" "$final_partitions" ||
+      die "ClickHouse partitions changed during snapshot for table $table"
+
+    IFS=$'\t' read -r rows watermark_min watermark_max aggregate_checksum <<< "$before_metrics"
+    [[ "$rows" =~ ^[0-9]+$ && "$aggregate_checksum" =~ ^[0-9]+$ ]] ||
+      die "invalid ClickHouse aggregate metadata for table $table"
+    partitions_json=$(jq -c '.' "$WORK_DIR/$table.partitions.json")
+    partition_count=$(jq 'length' "$WORK_DIR/$table.partitions.json")
+    schema_hash=$(sha256_file "$WORK_DIR/clickhouse/$table.schema.sql")
+    schema_artifact=$(maybe_encrypt_file "$WORK_DIR/clickhouse/$table.schema.sql" "$age_recipient" \
+      "$BACKUP_TMP/clickhouse/$table.schema.sql.age")
+    data_artifact=$(maybe_encrypt_file "$WORK_DIR/clickhouse/$table.native" "$age_recipient" \
+      "$BACKUP_TMP/clickhouse/$table.native.age")
+    schema_relative=${schema_artifact#"$BACKUP_TMP/"}
+    data_relative=${data_artifact#"$BACKUP_TMP/"}
+    schema_artifact_hash=$(sha256_file "$schema_artifact")
+    schema_artifact_size=$(file_size "$schema_artifact")
+    data_hash=$(sha256_file "$data_artifact")
+    data_size=$(file_size "$data_artifact")
+
+    jq -n \
+      --arg name "$table" --arg engine "$engine" --arg schema_sha "$schema_hash" \
+      --arg schema_file "$schema_relative" --arg schema_artifact_sha "$schema_artifact_hash" \
+      --argjson schema_size "$schema_artifact_size" --arg data_file "$data_relative" \
+      --arg data_sha "$data_hash" --argjson data_size "$data_size" --argjson rows "$rows" \
+      --arg watermark_column "$watermark" --arg watermark_min "$watermark_min" \
+      --arg watermark_max "$watermark_max" --arg aggregate_checksum "$aggregate_checksum" \
+      --argjson partitions "$partitions_json" --argjson partition_count "$partition_count" \
+      '{name: $name, engine: $engine,
+        schema: {sha256: $schema_sha, artifact: {filename: $schema_file, sha256: $schema_artifact_sha, size_bytes: $schema_size}},
+        data: {format: "ClickHouse Native", filename: $data_file, sha256: $data_sha, size_bytes: $data_size},
+        row_count: $rows, partition_count: $partition_count, partitions: $partitions,
+        watermark: {column: $watermark_column, min: $watermark_min, max: $watermark_max},
+        aggregate_checksum: {algorithm: "sum-cityHash64-tuple", value: $aggregate_checksum}}' >> "$table_jsonl"
+  done < "$table_list"
+
+  schema_fingerprint=$(sha256_file "$schema_fingerprint_input")
+  snapshot_completed=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  jq -n \
+    --arg database "$database" --arg server_version "$server_version" \
+    --argjson server_revision "$server_revision" --arg client_version "$client_version" \
+    --arg schema_fingerprint "$schema_fingerprint" --arg backup_id "$backup_id" \
+    --arg started_at "$snapshot_started" --arg completed_at "$snapshot_completed" \
+    --argjson source_bytes "$source_bytes" --argjson source_uncompressed_bytes "$source_uncompressed_bytes" \
+    --argjson table_count "$table_count" \
+    --slurpfile tables "$table_jsonl" \
+    '{required: true,
+      database: {name: $database, server_version: $server_version, server_revision: $server_revision, client_version: $client_version},
+      schema_fingerprint_sha256: $schema_fingerprint,
+      source_bytes_on_disk: $source_bytes,
+      source_uncompressed_bytes: $source_uncompressed_bytes,
+      table_count: $table_count,
+      tables: $tables,
+      snapshot: {identifier: $backup_id, started_at: $started_at, completed_at: $completed_at,
+        method: "per-table-Native-export-with-stable-pre-post-watermarks"}}' > "$WORK_DIR/clickhouse-component.json"
+  CLICKHOUSE_COMPONENT_FILE="$WORK_DIR/clickhouse-component.json"
+}
+
+backup_command() {
+  local output_dir="" app_version="" migrations_dir="" age_recipient="" clickhouse_database=""
+  local source_cluster_id="" signing_private_key="" signing_key_id=""
+  local database server_version_num server_version db_size migration_versions migration_hash
+  local client_pg_major server_major available_kb scratch_available_kb required_kb backup_id created_at stamp
+  local plain_dump artifact artifact_name artifact_hash artifact_size final_dir manifest_sha256
+  local snapshot_id_hash snapshot_id_file
+  local signing_public_fingerprint public_table_count migration_row_count tenant_count user_count
+  local audit_count audit_max_position audit_max_occurred_at transaction_count transaction_amount
+  local posting_count posting_debit posting_credit
+  local clickhouse_component='null'
+
+  while (($#)); do
+    case "$1" in
+      --output-dir)
+        [[ -z "$output_dir" && $# -ge 2 ]] || usage
+        output_dir=$2; shift 2 ;;
+      --app-version)
+        [[ -z "$app_version" && $# -ge 2 ]] || usage
+        app_version=$2; shift 2 ;;
+      --migrations-dir)
+        [[ -z "$migrations_dir" && $# -ge 2 ]] || usage
+        migrations_dir=$2; shift 2 ;;
+      --age-recipient)
+        [[ -z "$age_recipient" && $# -ge 2 ]] || usage
+        age_recipient=$2; shift 2 ;;
+      --source-cluster-id)
+        [[ -z "$source_cluster_id" && $# -ge 2 ]] || usage
+        source_cluster_id=$2; shift 2 ;;
+      --signing-private-key-file)
+        [[ -z "$signing_private_key" && $# -ge 2 ]] || usage
+        signing_private_key=$2; shift 2 ;;
+      --signing-key-id)
+        [[ -z "$signing_key_id" && $# -ge 2 ]] || usage
+        signing_key_id=$2; shift 2 ;;
+      --clickhouse-database)
+        [[ -z "$clickhouse_database" && $# -ge 2 ]] || usage
+        clickhouse_database=$2; shift 2 ;;
+      --remote-endpoint)
+        [[ -z "$REMOTE_ENDPOINT" && $# -ge 2 ]] || usage
+        REMOTE_ENDPOINT=$2; shift 2 ;;
+      --remote-region)
+        [[ -z "$REMOTE_REGION" && $# -ge 2 ]] || usage
+        REMOTE_REGION=$2; shift 2 ;;
+      --remote-bucket)
+        [[ -z "$REMOTE_BUCKET" && $# -ge 2 ]] || usage
+        REMOTE_BUCKET=$2; shift 2 ;;
+      --remote-prefix)
+        [[ -z "$REMOTE_PREFIX" && $# -ge 2 ]] || usage
+        REMOTE_PREFIX=$2; shift 2 ;;
+      --remote-credentials-file)
+        [[ -z "$REMOTE_CREDENTIALS_FILE" && $# -ge 2 ]] || usage
+        REMOTE_CREDENTIALS_FILE=$2; shift 2 ;;
+      --remote-retention-mode)
+        [[ -z "$REMOTE_RETENTION_MODE" && $# -ge 2 ]] || usage
+        REMOTE_RETENTION_MODE=$2; shift 2 ;;
+      --remote-retention-days)
+        [[ -z "$REMOTE_RETENTION_DAYS" && $# -ge 2 ]] || usage
+        REMOTE_RETENTION_DAYS=$2; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+
+  [[ -n "$output_dir" && -n "$app_version" && -n "$migrations_dir" &&
+    -n "$source_cluster_id" && -n "$age_recipient" && -n "$signing_private_key" &&
+    -n "$signing_key_id" ]] || usage
+  validate_directory "$output_dir" "output directory"
+  validate_directory "$migrations_dir" "migrations directory"
+  validate_version "$app_version"
+  validate_cluster_id "$source_cluster_id"
+  validate_age_recipient "$age_recipient"
+  validate_secret_file "$signing_private_key" "manifest signing private key"
+  validate_version "$signing_key_id"
+  [[ -z "$clickhouse_database" ]] || validate_clickhouse_data_database "$clickhouse_database"
+  validate_remote_config false
+  validate_db_environment
+  select_client_mode true
+  require_command jq
+  require_command age
+  require_command openssl
+  require_command python3
+  age --encrypt --recipient "$age_recipient" </dev/null >/dev/null
+  new_work_dir
+  signing_public_fingerprint=$(public_key_fingerprint "$signing_private_key" private)
+  openssl pkey -in "$signing_private_key" -pubout -out "$WORK_DIR/signing-public.pem" \
+    >/dev/null 2>&1 || die "cannot derive manifest signing public key"
+
+  start_pg_snapshot
+  database=$(jq -r '.database' "$PG_SNAPSHOT_METRICS_FILE")
+  validate_database_name "$database"
+  [[ "$database" == "$PGDATABASE" ]] || die "connected database does not match PGDATABASE"
+  server_version_num=$(jq -r '.server_version_num' "$PG_SNAPSHOT_METRICS_FILE")
+  [[ "$server_version_num" =~ ^[0-9]{6}$ ]] || die "invalid PostgreSQL server version"
+  server_version=$(jq -r '.server_version' "$PG_SNAPSHOT_METRICS_FILE")
+  db_size=$(jq -r '.database_size' "$PG_SNAPSHOT_METRICS_FILE")
+  [[ "$db_size" =~ ^[0-9]+$ ]] || die "invalid PostgreSQL database size"
+  [[ $(jq -r '.missing_required' "$PG_SNAPSHOT_METRICS_FILE") == "0" ]] ||
+    die "source database is missing required control-plane tables"
+  migration_versions=$(jq -r '.migration_versions' "$PG_SNAPSHOT_METRICS_FILE")
+  validate_migration_versions "$migration_versions"
+  migration_hash=$(migration_fingerprint "$migrations_dir" "$migration_versions")
+  public_table_count=$(jq -r '.public_table_count' "$PG_SNAPSHOT_METRICS_FILE")
+  migration_row_count=$(jq -r '.migration_row_count' "$PG_SNAPSHOT_METRICS_FILE")
+  tenant_count=$(jq -r '.tenant_count' "$PG_SNAPSHOT_METRICS_FILE")
+  user_count=$(jq -r '.user_count' "$PG_SNAPSHOT_METRICS_FILE")
+  audit_count=$(jq -r '.audit_count' "$PG_SNAPSHOT_METRICS_FILE")
+  audit_max_position=$(jq -r '.audit_max_position' "$PG_SNAPSHOT_METRICS_FILE")
+  audit_max_occurred_at=$(jq -r '.audit_max_occurred_at' "$PG_SNAPSHOT_METRICS_FILE")
+  transaction_count=$(jq -r '.transaction_count' "$PG_SNAPSHOT_METRICS_FILE")
+  transaction_amount=$(jq -r '.transaction_amount' "$PG_SNAPSHOT_METRICS_FILE")
+  posting_count=$(jq -r '.posting_count' "$PG_SNAPSHOT_METRICS_FILE")
+  posting_debit=$(jq -r '.posting_debit' "$PG_SNAPSHOT_METRICS_FILE")
+  posting_credit=$(jq -r '.posting_credit' "$PG_SNAPSHOT_METRICS_FILE")
+
+  client_pg_major=$(client_major)
+  server_major=$((10#$server_version_num / 10000))
+  [[ "$client_pg_major" == "$server_major" ]] ||
+    die "PostgreSQL client major $client_pg_major does not match server major $server_major"
+
+  available_kb=$(df -Pk "$output_dir" | awk 'END {print $4}')
+  scratch_available_kb=$(df -Pk "$WORK_DIR" | awk 'END {print $4}')
+  [[ "$available_kb" =~ ^[0-9]+$ && "$scratch_available_kb" =~ ^[0-9]+$ ]] ||
+    die "cannot determine backup disk capacity"
+  required_kb=$(((db_size + MIN_FREE_BYTES + 1023) / 1024))
+  ((available_kb >= required_kb)) ||
+    die "insufficient output disk: need at least ${required_kb} KiB free"
+  ((scratch_available_kb >= required_kb)) ||
+    die "insufficient ephemeral scratch disk: need at least ${required_kb} KiB free"
+
+  backup_id=$(new_backup_id)
+  created_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+  stamp=$(date -u '+%Y%m%dT%H%M%SZ')
+  final_dir="$output_dir/control-backup-$stamp-$backup_id"
+  [[ ! -e "$final_dir" && ! -L "$final_dir" ]] || die "backup destination already exists"
+  BACKUP_OUTPUT_DIR="$output_dir"
+  BACKUP_TMP=$(mktemp -d "$output_dir/.control-backup.tmp.XXXXXX")
+  chmod 700 "$BACKUP_TMP"
+
+  test_stop_with_marker "${CONTROL_BACKUP_TEST_STOP_AFTER_SNAPSHOT_FILE:-}"
+  plain_dump="$WORK_DIR/database.dump"
+  run_pg_dump "$plain_dump" "$PG_SNAPSHOT_ID"
+  [[ -s "$plain_dump" ]] || die "pg_dump produced an empty archive"
+  assert_dump_archive "$plain_dump"
+  snapshot_id_file="$WORK_DIR/postgresql-snapshot-id"
+  printf '%s\n' "$PG_SNAPSHOT_ID" > "$snapshot_id_file"
+  snapshot_id_hash=$(sha256_file "$snapshot_id_file")
+  close_pg_snapshot rollback || die "PostgreSQL snapshot session did not close cleanly"
+  test_stop_with_marker "${CONTROL_BACKUP_TEST_STOP_AFTER_DUMP_FILE:-}"
+
+  artifact="$BACKUP_TMP/database.dump.age"
+  age --encrypt --recipient "$age_recipient" --output "$artifact" "$plain_dump"
+  [[ -s "$artifact" ]] || die "age produced an empty encrypted archive"
+  rm -f -- "$plain_dump"
+
+  artifact_name=$(basename "$artifact")
+  artifact_hash=$(sha256_file "$artifact")
+  artifact_size=$(file_size "$artifact")
+  if [[ -n "$clickhouse_database" ]]; then
+    backup_clickhouse "$clickhouse_database" "$output_dir" "$age_recipient" "$backup_id"
+    clickhouse_component=$(< "$CLICKHOUSE_COMPONENT_FILE")
+  fi
+  jq -n \
+    --arg database "$database" \
+    --arg server_version "$server_version" \
+    --arg server_version_num "$server_version_num" \
+    --arg migration_fingerprint "$migration_hash" \
+    --arg migration_versions "$migration_versions" \
+    --arg artifact_name "$artifact_name" \
+    --arg artifact_hash "$artifact_hash" \
+    --argjson artifact_size "$artifact_size" \
+    --argjson database_size "$db_size" \
+    --argjson public_table_count "$public_table_count" \
+    --argjson migration_row_count "$migration_row_count" \
+    --argjson tenant_count "$tenant_count" --argjson user_count "$user_count" \
+    --argjson audit_count "$audit_count" --argjson audit_max_position "$audit_max_position" \
+    --arg audit_max_occurred_at "$audit_max_occurred_at" \
+    --argjson transaction_count "$transaction_count" --argjson transaction_amount "$transaction_amount" \
+    --argjson posting_count "$posting_count" --argjson posting_debit "$posting_debit" \
+    --argjson posting_credit "$posting_credit" \
+    --arg snapshot_id_hash "$snapshot_id_hash" \
+    '{required: true,
+      database: {
+        name: $database,
+        server_version: $server_version,
+        server_version_num: ($server_version_num | tonumber),
+        source_size_bytes: $database_size
+      },
+      migration: {
+        schema_version: ($migration_versions | split(",") | map(tonumber) | max),
+        applied_versions: ($migration_versions | split(",") | map(tonumber)),
+        fingerprint_sha256: $migration_fingerprint
+      },
+      logical_contents: {
+        public_table_count: $public_table_count,
+        migration_ledger: {row_count: $migration_row_count},
+        tenants: {row_count: $tenant_count},
+        users: {row_count: $user_count},
+        audit_events: {row_count: $audit_count, max_stream_position: $audit_max_position,
+          max_occurred_at: $audit_max_occurred_at},
+        billing_ledger: {transaction_count: $transaction_count,
+          transaction_amount_minor: $transaction_amount, posting_count: $posting_count,
+          debit_amount_minor: $posting_debit, credit_amount_minor: $posting_credit}
+      },
+      artifact: {
+        filename: $artifact_name,
+        format: "pg_dump-custom",
+        sha256: $artifact_hash,
+        size_bytes: $artifact_size
+      },
+      consistency: {
+        method: "pg-exported-snapshot",
+        single_transaction_snapshot: true,
+        dump_snapshot_bound: true,
+        snapshot_identifier_sha256: $snapshot_id_hash
+      }
+    }' > "$WORK_DIR/postgresql-component.json"
+  jq -n \
+    --arg schema "$MANIFEST_SCHEMA" --arg backup_id "$backup_id" --arg created_at "$created_at" \
+    --arg app_version "$app_version" --arg source_cluster_id "$source_cluster_id" \
+    --arg age_recipient "$age_recipient" --arg signing_key_id "$signing_key_id" \
+    --arg signing_fingerprint "$signing_public_fingerprint" --arg tool_version "$TOOL_VERSION" \
+    --argjson clickhouse "$clickhouse_component" \
+    --slurpfile postgresql "$WORK_DIR/postgresql-component.json" \
+    '{schema: $schema, format_version: 3, backup_id: $backup_id, created_at: $created_at,
+      source: {cluster_id: $source_cluster_id}, app_version: $app_version,
+      tool: {name: "control-backup", version: $tool_version},
+      encryption: {state: "encrypted", method: "age", recipients: [$age_recipient]},
+      signing: {algorithm: "Ed25519", key_id: $signing_key_id,
+        public_key_sha256: $signing_fingerprint, signature_file: "manifest.sig"},
+      components: ({postgresql: $postgresql[0]} + (if $clickhouse == null then {} else {clickhouse: $clickhouse} end)),
+      consistency: {identifier: $backup_id, method: "component-bounded-snapshot",
+        required_components: (if $clickhouse == null then ["postgresql"] else ["postgresql", "clickhouse"] end)}}' \
+    > "$WORK_DIR/manifest.unsorted.json"
+  canonicalize_json "$WORK_DIR/manifest.unsorted.json" "$BACKUP_TMP/manifest.json"
+  sign_manifest "$BACKUP_TMP/manifest.json" "$signing_private_key" "$BACKUP_TMP/manifest.sig"
+  verify_manifest_signature "$BACKUP_TMP/manifest.json" "$WORK_DIR/signing-public.pem" \
+    "$BACKUP_TMP/manifest.sig"
+  manifest_sha256=$(sha256_file "$BACKUP_TMP/manifest.json")
+  [[ -z $(find "$BACKUP_TMP" -type f \( -name 'database.dump' -o -name '*.native' -o -name '*.schema.sql' \) -print -quit) ]] ||
+    die "plaintext artifact remained in final staging"
+  find "$BACKUP_TMP" -type f -exec chmod 600 {} +
+  fsync_tree "$BACKUP_TMP"
+
+  mv -- "$BACKUP_TMP" "$final_dir"
+  PUBLISHED_DIR="$final_dir"
+  BACKUP_TMP=""
+  if ! fsync_path "$output_dir"; then
+    rm -rf -- "$PUBLISHED_DIR" || die "backup parent fsync failed and final bundle removal failed"
+    PUBLISHED_DIR=""
+    fsync_path "$output_dir" || die "backup parent fsync failed and removal was not durably synchronized"
+    die "backup parent directory fsync failed; unpublished bundle was removed"
+  fi
+  PUBLISHED_DIR=""
+  if [[ "$REMOTE_ENABLED" == "true" ]]; then
+    remote_publish_bundle "$final_dir" "$backup_id" "$manifest_sha256"
+  fi
+  printf 'backup_bundle=%s\n' "$final_dir"
+  printf 'backup_id=%s\n' "$backup_id"
+  printf 'manifest_sha256=%s\n' "$manifest_sha256"
+  printf 'artifact_sha256=%s\n' "$artifact_hash"
+  printf 'encryption=age\n'
+  printf 'signing_key_id=%s\n' "$signing_key_id"
+}
+
+validate_manifest_shape() {
+  local manifest=$1
+  jq -e --arg schema "$MANIFEST_SCHEMA" --arg tool_version "$TOOL_VERSION" '
+    . as $root |
+    .components.postgresql as $pg |
+    .schema == $schema and
+    .format_version == 3 and
+    (.backup_id | type == "string" and test("^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")) and
+    (.created_at | type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+    (.source.cluster_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")) and
+    (.app_version | type == "string" and length > 0) and
+    .tool == {name: "control-backup", version: $tool_version} and
+    (.encryption.state == "encrypted" and .encryption.method == "age" and
+      (.encryption.recipients | type == "array" and length == 1 and
+        all(.[]; type == "string" and test("^age1[023456789acdefghjklmnpqrstuvwxyz]{20,90}$")))) and
+    (.signing.algorithm == "Ed25519" and
+      (.signing.key_id | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")) and
+      (.signing.public_key_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+      .signing.signature_file == "manifest.sig") and
+    $pg.required == true and
+    ($pg.database.name | type == "string" and length > 0) and
+    ($pg.database.server_version_num | type == "number" and . >= 100000) and
+    ($pg.database.source_size_bytes | type == "number" and . > 0 and floor == .) and
+    ($pg.migration.schema_version | type == "number" and . >= 1) and
+    ($pg.migration.applied_versions | type == "array" and length > 0 and all(.[]; type == "number" and . >= 1)) and
+    ($pg.migration.fingerprint_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+    ($pg.logical_contents.public_table_count | type == "number" and . > 0 and floor == .) and
+    ($pg.logical_contents.migration_ledger.row_count | type == "number" and . > 0 and floor == .) and
+    ($pg.logical_contents.tenants.row_count | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.users.row_count | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.audit_events.row_count | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.audit_events.max_stream_position | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.audit_events.max_occurred_at | type == "string") and
+    ($pg.logical_contents.billing_ledger.transaction_count | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.billing_ledger.transaction_amount_minor | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.billing_ledger.posting_count | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.billing_ledger.debit_amount_minor | type == "number" and . >= 0 and floor == .) and
+    ($pg.logical_contents.billing_ledger.credit_amount_minor | type == "number" and . >= 0 and floor == .) and
+    $pg.artifact.format == "pg_dump-custom" and
+    ($pg.artifact.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+    ($pg.artifact.size_bytes | type == "number" and . > 0 and floor == .) and
+    $pg.artifact.filename == "database.dump.age" and
+    $pg.consistency.method == "pg-exported-snapshot" and
+    $pg.consistency.single_transaction_snapshot == true and
+    $pg.consistency.dump_snapshot_bound == true and
+    ($pg.consistency.snapshot_identifier_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+    .consistency.identifier == .backup_id and
+    .consistency.method == "component-bounded-snapshot" and
+    (.consistency.required_components == ["postgresql"] or .consistency.required_components == ["postgresql", "clickhouse"]) and
+    ((.components | has("clickhouse")) == (.consistency.required_components | index("clickhouse") != null)) and
+    ((.components | has("clickhouse") | not) or
+      (.components.clickhouse as $ch |
+        $ch.required == true and
+        ($ch.database.name | type == "string" and length > 0) and
+        ($ch.database.server_version | type == "string" and test("^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$")) and
+        ($ch.database.server_revision | type == "number" and . > 0) and
+        ($ch.schema_fingerprint_sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+        ($ch.source_bytes_on_disk | type == "number" and . >= 0) and
+        ($ch.source_uncompressed_bytes | type == "number" and . >= 0) and
+        ($ch.table_count | type == "number" and . > 0 and . == ($ch.tables | length)) and
+        ([$ch.tables[].name] | unique | length) == $ch.table_count and
+        ($ch.tables | type == "array" and length > 0 and
+          all(.[];
+            (.name | type == "string" and test("^[A-Za-z_][A-Za-z0-9_]{0,62}$")) and
+            (.engine | IN("MergeTree", "ReplacingMergeTree", "SummingMergeTree", "AggregatingMergeTree", "CollapsingMergeTree", "VersionedCollapsingMergeTree")) and
+            (.schema.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+            (.schema.artifact.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+            (.schema.artifact.size_bytes | type == "number" and . > 0) and
+            (.data.format == "ClickHouse Native") and
+            (.data.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+            (.data.size_bytes | type == "number" and . >= 0) and
+            (.row_count | type == "number" and . >= 0) and
+            (.partition_count | type == "number") and .partition_count == (.partitions | length) and
+            (.partitions | type == "array" and all(.[]; (.id | type == "string") and (.rows | type == "number" and . >= 0))) and
+            ([.partitions[].rows] | add // 0) == .row_count and
+            (.watermark.column | type == "string" and test("^[A-Za-z_][A-Za-z0-9_]{0,62}$")) and
+            (.watermark.min | type == "string") and (.watermark.max | type == "string") and
+            (.row_count == 0 or (.watermark.min | length) > 0) and
+            (.row_count == 0 or (.watermark.max | length) > 0) and
+            .aggregate_checksum.algorithm == "sum-cityHash64-tuple" and
+            (.aggregate_checksum.value | type == "string" and test("^[0-9]+$")) and
+            .schema.artifact.filename == ("clickhouse/" + .name + ".schema.sql.age") and
+            .data.filename == ("clickhouse/" + .name + ".native.age"))) and
+        $ch.snapshot.identifier == $root.backup_id and
+        $ch.snapshot.method == "per-table-Native-export-with-stable-pre-post-watermarks"))
+  ' "$manifest" >/dev/null || die "manifest schema validation failed"
+}
+
+verify_clickhouse_component() {
+  local bundle=$1 manifest=$2 age_identity_file=$3 encryption_method=$4
+  local table_entry table schema_name data_name schema_artifact data_artifact expected_hash expected_size
+  local schema_plain data_plain schema_hash schema_fingerprint expected_schema_fingerprint
+  local fingerprint_input="$WORK_DIR/verified-clickhouse-schema-fingerprint"
+  mkdir -p "$WORK_DIR/clickhouse"
+  : > "$fingerprint_input"
+
+  while IFS= read -r table_entry; do
+    table=$(jq -r '.name' <<< "$table_entry")
+    validate_clickhouse_identifier "$table"
+    schema_name=$(jq -r '.schema.artifact.filename' <<< "$table_entry")
+    data_name=$(jq -r '.data.filename' <<< "$table_entry")
+    schema_artifact="$bundle/$schema_name"
+    data_artifact="$bundle/$data_name"
+    [[ -f "$schema_artifact" && ! -L "$schema_artifact" ]] ||
+      die "ClickHouse schema artifact is missing for table $table"
+    [[ -f "$data_artifact" && ! -L "$data_artifact" ]] ||
+      die "ClickHouse Native artifact is missing for table $table"
+
+    expected_hash=$(jq -r '.schema.artifact.sha256' <<< "$table_entry")
+    [[ $(sha256_file "$schema_artifact") == "$expected_hash" ]] ||
+      die "ClickHouse schema artifact hash mismatch for table $table"
+    expected_size=$(jq -r '.schema.artifact.size_bytes' <<< "$table_entry")
+    [[ $(file_size "$schema_artifact") == "$expected_size" ]] ||
+      die "ClickHouse schema artifact size mismatch for table $table"
+    expected_hash=$(jq -r '.data.sha256' <<< "$table_entry")
+    [[ $(sha256_file "$data_artifact") == "$expected_hash" ]] ||
+      die "ClickHouse data artifact hash mismatch for table $table"
+    expected_size=$(jq -r '.data.size_bytes' <<< "$table_entry")
+    [[ $(file_size "$data_artifact") == "$expected_size" ]] ||
+      die "ClickHouse data artifact size mismatch for table $table"
+
+    if [[ "$encryption_method" == "age" ]]; then
+      schema_plain="$WORK_DIR/clickhouse/$table.schema.sql"
+      data_plain="$WORK_DIR/clickhouse/$table.native"
+      age --decrypt --identity "$age_identity_file" --output "$schema_plain" "$schema_artifact"
+      age --decrypt --identity "$age_identity_file" --output "$data_plain" "$data_artifact"
+    else
+      schema_plain=$schema_artifact
+      data_plain=$data_artifact
+    fi
+    [[ -s "$schema_plain" ]] || die "ClickHouse decrypted schema artifact is empty"
+    [[ $(jq -r '.row_count' <<< "$table_entry") == "0" || -s "$data_plain" ]] ||
+      die "ClickHouse decrypted data artifact is empty for non-empty table $table"
+    [[ $(sed -n '1p' "$schema_plain") == "CREATE TABLE $table "* ]] ||
+      die "ClickHouse schema is not portable for table $table"
+    schema_hash=$(sha256_file "$schema_plain")
+    [[ "$schema_hash" == "$(jq -r '.schema.sha256' <<< "$table_entry")" ]] ||
+      die "ClickHouse plaintext schema hash mismatch for table $table"
+    printf '%s %s\n' "$table" "$schema_hash" >> "$fingerprint_input"
+  done < <(jq -c '.components.clickhouse.tables[]' "$manifest")
+
+  schema_fingerprint=$(sha256_file "$fingerprint_input")
+  expected_schema_fingerprint=$(jq -r '.components.clickhouse.schema_fingerprint_sha256' "$manifest")
+  [[ "$schema_fingerprint" == "$expected_schema_fingerprint" ]] ||
+    die "ClickHouse schema fingerprint mismatch"
+}
+
+verify_bundle() {
+  local bundle=$1 expected_app_version=$2 migrations_dir=$3 age_identity_file=$4
+  local expected_source_cluster_id=$5 expected_backup_id=$6 expected_manifest_sha256=$7
+  local signing_public_key=$8 expected_signing_key_id=$9
+  local manifest artifact_name artifact expected_hash actual_hash expected_size actual_size
+  local encryption_method actual_migration_hash signature actual_signing_fingerprint
+
+  validate_directory "$bundle" "backup bundle"
+  validate_directory "$migrations_dir" "migrations directory"
+  validate_version "$expected_app_version"
+  validate_cluster_id "$expected_source_cluster_id"
+  validate_backup_id "$expected_backup_id"
+  validate_sha256 "$expected_manifest_sha256"
+  validate_public_file "$signing_public_key" "manifest signing public key"
+  validate_version "$expected_signing_key_id"
+  validate_secret_file "$age_identity_file" "age identity file"
+  manifest="$bundle/manifest.json"
+  [[ -f "$manifest" && ! -L "$manifest" ]] || die "manifest.json must be a regular non-symlink file"
+  signature="$bundle/manifest.sig"
+  [[ -f "$signature" && ! -L "$signature" ]] || die "manifest.sig must be a regular non-symlink file"
+  [[ $(file_size "$signature") == "64" ]] || die "manifest signature has an invalid size"
+  require_command openssl
+  require_command age
+  new_work_dir
+  VERIFIED_BUNDLE=$bundle
+  MANIFEST_SHA256=$(sha256_file "$manifest")
+  [[ "$MANIFEST_SHA256" == "$expected_manifest_sha256" ]] || die "manifest digest does not match expected digest"
+  verify_manifest_signature "$manifest" "$signing_public_key" "$signature"
+  require_command jq
+  canonicalize_json "$manifest" "$WORK_DIR/manifest.canonical.json"
+  cmp -s "$manifest" "$WORK_DIR/manifest.canonical.json" || die "manifest is not canonical JSON"
+  validate_manifest_shape "$manifest"
+
+  MANIFEST_DATABASE=$(jq -r '.components.postgresql.database.name' "$manifest")
+  MANIFEST_SERVER_VERSION_NUM=$(jq -r '.components.postgresql.database.server_version_num' "$manifest")
+  MANIFEST_APP_VERSION=$(jq -r '.app_version' "$manifest")
+  MANIFEST_MIGRATION_VERSIONS=$(jq -r '.components.postgresql.migration.applied_versions | join(",")' "$manifest")
+  MANIFEST_MIGRATION_FINGERPRINT=$(jq -r '.components.postgresql.migration.fingerprint_sha256' "$manifest")
+  MANIFEST_BACKUP_ID=$(jq -r '.backup_id' "$manifest")
+  MANIFEST_SOURCE_CLUSTER_ID=$(jq -r '.source.cluster_id' "$manifest")
+  MANIFEST_CLICKHOUSE_PRESENT=$(jq -r '.components | has("clickhouse")' "$manifest")
+  validate_database_name "$MANIFEST_DATABASE"
+  validate_version "$MANIFEST_APP_VERSION"
+  if [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "true" ]]; then
+    validate_clickhouse_data_database "$(jq -r '.components.clickhouse.database.name' "$manifest")"
+  fi
+  [[ "$MANIFEST_APP_VERSION" == "$expected_app_version" ]] || die "backup app version does not match expected version"
+  [[ "$MANIFEST_SOURCE_CLUSTER_ID" == "$expected_source_cluster_id" ]] ||
+    die "backup source cluster does not match expected cluster"
+  [[ "$MANIFEST_BACKUP_ID" == "$expected_backup_id" ]] || die "backup ID does not match expected backup ID"
+  [[ $(jq -r '.signing.key_id' "$manifest") == "$expected_signing_key_id" ]] ||
+    die "manifest signing key ID does not match expected key ID"
+  actual_signing_fingerprint=$(public_key_fingerprint "$signing_public_key" public)
+  [[ "$actual_signing_fingerprint" == "$(jq -r '.signing.public_key_sha256' "$manifest")" ]] ||
+    die "manifest signing public key fingerprint mismatch"
+  validate_migration_versions "$MANIFEST_MIGRATION_VERSIONS"
+  [[ $(jq -r '.components.postgresql.migration.schema_version' "$manifest") == "${MANIFEST_MIGRATION_VERSIONS##*,}" ]] ||
+    die "manifest schema version does not match its migration ledger"
+  actual_migration_hash=$(migration_fingerprint "$migrations_dir" "$MANIFEST_MIGRATION_VERSIONS")
+  [[ "$actual_migration_hash" == "$MANIFEST_MIGRATION_FINGERPRINT" ]] ||
+    die "migration fingerprint mismatch"
+
+  artifact_name=$(jq -r '.components.postgresql.artifact.filename' "$manifest")
+  artifact="$bundle/$artifact_name"
+  [[ -f "$artifact" && ! -L "$artifact" ]] || die "backup artifact must be a regular non-symlink file"
+  expected_hash=$(jq -r '.components.postgresql.artifact.sha256' "$manifest")
+  actual_hash=$(sha256_file "$artifact")
+  [[ "$actual_hash" == "$expected_hash" ]] || die "backup artifact hash mismatch"
+  expected_size=$(jq -r '.components.postgresql.artifact.size_bytes' "$manifest")
+  actual_size=$(file_size "$artifact")
+  [[ "$actual_size" == "$expected_size" ]] || die "backup artifact size mismatch"
+
+  encryption_method=$(jq -r '.encryption.method' "$manifest")
+  [[ "$encryption_method" == "age" ]] || die "only age-encrypted bundles are accepted"
+  VERIFIED_DUMP="$WORK_DIR/database.dump"
+  age --decrypt --identity "$age_identity_file" --output "$VERIFIED_DUMP" "$artifact"
+  [[ -s "$VERIFIED_DUMP" ]] || die "decrypted PostgreSQL archive is empty"
+
+  select_client_mode false
+  assert_dump_archive "$VERIFIED_DUMP"
+  if [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "true" ]]; then
+    verify_clickhouse_component "$bundle" "$manifest" "$age_identity_file" "$encryption_method"
+  fi
+}
+
+parse_verify_options() {
+  VERIFY_BUNDLE=""
+  VERIFY_EXPECTED_APP_VERSION=""
+  VERIFY_MIGRATIONS_DIR=""
+  VERIFY_AGE_IDENTITY=""
+  VERIFY_EXPECTED_SOURCE_CLUSTER_ID=""
+  VERIFY_EXPECTED_BACKUP_ID=""
+  VERIFY_EXPECTED_MANIFEST_SHA256=""
+  VERIFY_SIGNING_PUBLIC_KEY=""
+  VERIFY_EXPECTED_SIGNING_KEY_ID=""
+  while (($#)); do
+    case "$1" in
+      --bundle)
+        [[ -z "$VERIFY_BUNDLE" && $# -ge 2 ]] || usage
+        VERIFY_BUNDLE=$2; shift 2 ;;
+      --expected-app-version)
+        [[ -z "$VERIFY_EXPECTED_APP_VERSION" && $# -ge 2 ]] || usage
+        VERIFY_EXPECTED_APP_VERSION=$2; shift 2 ;;
+      --migrations-dir)
+        [[ -z "$VERIFY_MIGRATIONS_DIR" && $# -ge 2 ]] || usage
+        VERIFY_MIGRATIONS_DIR=$2; shift 2 ;;
+      --age-identity-file)
+        [[ -z "$VERIFY_AGE_IDENTITY" && $# -ge 2 ]] || usage
+        VERIFY_AGE_IDENTITY=$2; shift 2 ;;
+      --expected-source-cluster-id)
+        [[ -z "$VERIFY_EXPECTED_SOURCE_CLUSTER_ID" && $# -ge 2 ]] || usage
+        VERIFY_EXPECTED_SOURCE_CLUSTER_ID=$2; shift 2 ;;
+      --expected-backup-id)
+        [[ -z "$VERIFY_EXPECTED_BACKUP_ID" && $# -ge 2 ]] || usage
+        VERIFY_EXPECTED_BACKUP_ID=$2; shift 2 ;;
+      --expected-manifest-sha256)
+        [[ -z "$VERIFY_EXPECTED_MANIFEST_SHA256" && $# -ge 2 ]] || usage
+        VERIFY_EXPECTED_MANIFEST_SHA256=$2; shift 2 ;;
+      --signing-public-key-file)
+        [[ -z "$VERIFY_SIGNING_PUBLIC_KEY" && $# -ge 2 ]] || usage
+        VERIFY_SIGNING_PUBLIC_KEY=$2; shift 2 ;;
+      --expected-signing-key-id)
+        [[ -z "$VERIFY_EXPECTED_SIGNING_KEY_ID" && $# -ge 2 ]] || usage
+        VERIFY_EXPECTED_SIGNING_KEY_ID=$2; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [[ -n "$VERIFY_BUNDLE" && -n "$VERIFY_EXPECTED_APP_VERSION" && -n "$VERIFY_MIGRATIONS_DIR" &&
+    -n "$VERIFY_AGE_IDENTITY" && -n "$VERIFY_EXPECTED_SOURCE_CLUSTER_ID" &&
+    -n "$VERIFY_EXPECTED_BACKUP_ID" && -n "$VERIFY_EXPECTED_MANIFEST_SHA256" &&
+    -n "$VERIFY_SIGNING_PUBLIC_KEY" && -n "$VERIFY_EXPECTED_SIGNING_KEY_ID" ]] || usage
+}
+
+verify_command() {
+  parse_verify_options "$@"
+  verify_bundle "$VERIFY_BUNDLE" "$VERIFY_EXPECTED_APP_VERSION" "$VERIFY_MIGRATIONS_DIR" \
+    "$VERIFY_AGE_IDENTITY" "$VERIFY_EXPECTED_SOURCE_CLUSTER_ID" "$VERIFY_EXPECTED_BACKUP_ID" \
+    "$VERIFY_EXPECTED_MANIFEST_SHA256" "$VERIFY_SIGNING_PUBLIC_KEY" "$VERIFY_EXPECTED_SIGNING_KEY_ID"
+  printf 'verified_backup_id=%s\n' "$MANIFEST_BACKUP_ID"
+  printf 'verified_database=%s\n' "$MANIFEST_DATABASE"
+  printf 'verified_manifest_sha256=%s\n' "$MANIFEST_SHA256"
+  printf 'verified_artifact_sha256=%s\n' "$(sha256_file "$VERIFY_BUNDLE/$(jq -r '.components.postgresql.artifact.filename' "$VERIFY_BUNDLE/manifest.json")")"
+}
+
+restore_checks() {
+  local migrations_dir=$1
+  local restored_versions migration_hash missing_core invalid_constraints broken_audit trigger_count
+  local manifest="$VERIFIED_BUNDLE/manifest.json" actual expected
+  restored_versions=$(psql_value "SELECT string_agg(version::text, ',' ORDER BY version) FROM schema_migrations")
+  [[ "$restored_versions" == "$MANIFEST_MIGRATION_VERSIONS" ]] || die "restored migration ledger mismatch"
+  migration_hash=$(migration_fingerprint "$migrations_dir" "$restored_versions")
+  [[ "$migration_hash" == "$MANIFEST_MIGRATION_FINGERPRINT" ]] || die "restored migration fingerprint mismatch"
+
+  missing_core=$(psql_value "SELECT count(*) FROM (VALUES ('schema_migrations'),('tenants'),('access_scopes'),('users'),('audit_events')) AS required(name) WHERE to_regclass('public.' || name) IS NULL")
+  [[ "$missing_core" == "0" ]] || die "restored database is missing core tables"
+  invalid_constraints=$(psql_value "SELECT count(*) FROM pg_constraint c JOIN pg_namespace n ON n.oid=c.connamespace WHERE n.nspname='public' AND NOT c.convalidated")
+  [[ "$invalid_constraints" == "0" ]] || die "restored database has unvalidated constraints"
+  trigger_count=$(psql_value "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname='audit_events' AND t.tgname='audit_events_append_only' AND NOT t.tgisinternal AND t.tgenabled <> 'D'")
+  [[ "$trigger_count" == "1" ]] || die "audit append-only trigger is missing or disabled"
+  broken_audit=$(psql_value "WITH ordered AS (SELECT scope_id, stream_position, previous_hash, event_hash, row_number() OVER (PARTITION BY scope_id ORDER BY stream_position) AS expected_position, lag(event_hash) OVER (PARTITION BY scope_id ORDER BY stream_position) AS expected_previous FROM audit_events) SELECT count(*) FROM ordered WHERE stream_position <> expected_position OR previous_hash IS DISTINCT FROM expected_previous")
+  [[ "$broken_audit" == "0" ]] || die "restored audit sequence or hash linkage is inconsistent"
+
+  while IFS=$'\t' read -r actual expected; do
+    [[ "$actual" == "$expected" ]] || die "restored PostgreSQL logical contents mismatch"
+  done <<EOF
+$(psql_value "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind IN ('r','p')")	$(jq -r '.components.postgresql.logical_contents.public_table_count' "$manifest")
+$(psql_value 'SELECT count(*) FROM schema_migrations')	$(jq -r '.components.postgresql.logical_contents.migration_ledger.row_count' "$manifest")
+$(psql_value 'SELECT count(*) FROM tenants')	$(jq -r '.components.postgresql.logical_contents.tenants.row_count' "$manifest")
+$(psql_value 'SELECT count(*) FROM users')	$(jq -r '.components.postgresql.logical_contents.users.row_count' "$manifest")
+$(psql_value 'SELECT count(*) FROM audit_events')	$(jq -r '.components.postgresql.logical_contents.audit_events.row_count' "$manifest")
+$(psql_value 'SELECT COALESCE(max(stream_position),0) FROM audit_events')	$(jq -r '.components.postgresql.logical_contents.audit_events.max_stream_position' "$manifest")
+$(psql_value "SELECT COALESCE(to_char(max(occurred_at) AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"'),'') FROM audit_events")	$(jq -r '.components.postgresql.logical_contents.audit_events.max_occurred_at' "$manifest")
+$(psql_value 'SELECT count(*) FROM billing_transactions')	$(jq -r '.components.postgresql.logical_contents.billing_ledger.transaction_count' "$manifest")
+$(psql_value 'SELECT COALESCE(sum(amount_minor),0) FROM billing_transactions')	$(jq -r '.components.postgresql.logical_contents.billing_ledger.transaction_amount_minor' "$manifest")
+$(psql_value 'SELECT count(*) FROM billing_postings')	$(jq -r '.components.postgresql.logical_contents.billing_ledger.posting_count' "$manifest")
+$(psql_value "SELECT COALESCE(sum(amount_minor) FILTER (WHERE side='debit'),0) FROM billing_postings")	$(jq -r '.components.postgresql.logical_contents.billing_ledger.debit_amount_minor' "$manifest")
+$(psql_value "SELECT COALESCE(sum(amount_minor) FILTER (WHERE side='credit'),0) FROM billing_postings")	$(jq -r '.components.postgresql.logical_contents.billing_ledger.credit_amount_minor' "$manifest")
+EOF
+}
+
+clickhouse_verified_path() {
+  local table=$1 kind=$2 encryption_method
+  encryption_method=$(jq -r '.encryption.method' "$VERIFIED_BUNDLE/manifest.json")
+  if [[ "$encryption_method" == "age" ]]; then
+    printf '%s/clickhouse/%s.%s\n' "$WORK_DIR" "$table" "$kind"
+  else
+    printf '%s/clickhouse/%s.%s\n' "$VERIFIED_BUNDLE" "$table" "$kind"
+  fi
+}
+
+preflight_clickhouse_restore() {
+  local target=$1 confirmation=$2 manifest="$VERIFIED_BUNDLE/manifest.json"
+  local exists target_version manifest_version client_version table_count free_bytes required_bytes source_bytes
+  validate_clickhouse_data_database "$target"
+  [[ "$confirmation" == "$target" ]] ||
+    die "--confirm-empty-clickhouse-target must exactly match --clickhouse-target-database"
+  validate_clickhouse_environment
+  select_clickhouse_client_mode
+
+  exists=$(clickhouse_value "SELECT count() FROM system.databases WHERE name = '$target' FORMAT TSVRaw")
+  [[ "$exists" == "1" ]] || die "ClickHouse target database does not exist"
+  table_count=$(clickhouse_value "SELECT count() FROM system.tables WHERE database = '$target' FORMAT TSVRaw")
+  [[ "$table_count" == "0" ]] || die "ClickHouse target database is not empty; refusing restore"
+  target_version=$(clickhouse_value "SELECT version() FORMAT TSVRaw")
+  manifest_version=$(jq -r '.components.clickhouse.database.server_version' "$manifest")
+  client_version=$(clickhouse_client_version)
+  [[ $(clickhouse_version_line "$target_version") == "$(clickhouse_version_line "$manifest_version")" ]] ||
+    die "ClickHouse target and backup major.minor versions do not match"
+  [[ $(clickhouse_version_line "$target_version") == "$(clickhouse_version_line "$client_version")" ]] ||
+    die "ClickHouse restore client and target major.minor versions do not match"
+  free_bytes=$(clickhouse_value "SELECT toString(free_space) FROM system.disks WHERE name = 'default' FORMAT TSVRaw")
+  [[ "$free_bytes" =~ ^[0-9]+$ ]] || die "cannot determine ClickHouse target capacity"
+  source_bytes=$(jq -r '.components.clickhouse.source_uncompressed_bytes' "$manifest")
+  required_bytes=$((source_bytes + MIN_FREE_BYTES))
+  ((free_bytes >= required_bytes)) || die "insufficient ClickHouse target capacity"
+}
+
+restore_clickhouse() {
+  local target=$1 manifest="$VERIFIED_BUNDLE/manifest.json"
+  local table_entry table engine schema_file data_file expected_metrics actual_metrics expected_partitions actual_partitions
+  local schema_file_actual schema_hash schema_fingerprint expected_schema_fingerprint table_count
+  local fingerprint_input="$WORK_DIR/restored-clickhouse-schema-fingerprint"
+  : > "$fingerprint_input"
+
+  run_clickhouse_query "$target" "CREATE TABLE $RESTORE_GUARD (backup_id String) ENGINE = TinyLog"
+  run_clickhouse_query "$target" "INSERT INTO $RESTORE_GUARD VALUES ('$MANIFEST_BACKUP_ID')"
+  while IFS= read -r table_entry; do
+    table=$(jq -r '.name' <<< "$table_entry")
+    schema_file=$(clickhouse_verified_path "$table" 'schema.sql')
+    data_file=$(clickhouse_verified_path "$table" 'native')
+    run_clickhouse_input "$target" < "$schema_file"
+    run_clickhouse_query_input "$target" "INSERT INTO $table FORMAT Native" < "$data_file"
+  done < <(jq -c '.components.clickhouse.tables[]' "$manifest")
+
+  while IFS= read -r table_entry; do
+    table=$(jq -r '.name' <<< "$table_entry")
+    engine=$(jq -r '.engine' <<< "$table_entry")
+    [[ $(clickhouse_value "SELECT engine FROM system.tables WHERE database = '$target' AND name = '$table' FORMAT TSVRaw") == "$engine" ]] ||
+      die "restored ClickHouse engine mismatch for table $table"
+    schema_file_actual="$WORK_DIR/$table.restored-schema.sql"
+    clickhouse_portable_schema "$target" "$table" > "$schema_file_actual"
+    printf ';\n' >> "$schema_file_actual"
+    schema_hash=$(sha256_file "$schema_file_actual")
+    [[ "$schema_hash" == "$(jq -r '.schema.sha256' <<< "$table_entry")" ]] ||
+      die "restored ClickHouse schema mismatch for table $table"
+    printf '%s %s\n' "$table" "$schema_hash" >> "$fingerprint_input"
+
+    expected_metrics=$(jq -r '[.row_count, .watermark.min, .watermark.max, .aggregate_checksum.value] | @tsv' <<< "$table_entry")
+    actual_metrics=$(clickhouse_table_metrics "$target" "$table" "$(jq -r '.watermark.column' <<< "$table_entry")")
+    [[ "$actual_metrics" == "$expected_metrics" ]] ||
+      die "restored ClickHouse aggregate mismatch for table $table"
+    expected_partitions=$(jq -Sc '.partitions' <<< "$table_entry")
+    actual_partitions=$(clickhouse_partitions "$target" "$table" | jq -Sc -s 'map({id: .id, rows: (.rows | tonumber)})')
+    [[ "$actual_partitions" == "$expected_partitions" ]] ||
+      die "restored ClickHouse partition mismatch for table $table"
+  done < <(jq -c '.components.clickhouse.tables[]' "$manifest")
+
+  schema_fingerprint=$(sha256_file "$fingerprint_input")
+  expected_schema_fingerprint=$(jq -r '.components.clickhouse.schema_fingerprint_sha256' "$manifest")
+  [[ "$schema_fingerprint" == "$expected_schema_fingerprint" ]] ||
+    die "restored ClickHouse schema fingerprint mismatch"
+  table_count=$(clickhouse_value "SELECT count() FROM system.tables WHERE database = '$target' FORMAT TSVRaw")
+  [[ "$table_count" == "$(( $(jq -r '.components.clickhouse.table_count' "$manifest") + 1 ))" ]] ||
+    die "restored ClickHouse table count mismatch"
+}
+
+finalize_clickhouse_restore() {
+  run_clickhouse_query "$1" "DROP TABLE $RESTORE_GUARD SYNC"
+}
+
+cleanup_clickhouse_restore() {
+  local target=$1 table
+  while IFS= read -r table; do
+    validate_clickhouse_identifier "$table"
+    run_clickhouse_query "$target" "DROP TABLE IF EXISTS $table SYNC" || return 1
+  done < <(jq -r '.components.clickhouse.tables[].name' "$VERIFIED_BUNDLE/manifest.json")
+  run_clickhouse_query "$target" "DROP TABLE IF EXISTS $RESTORE_GUARD SYNC" || return 1
+  [[ $(clickhouse_value "SELECT count() FROM system.tables WHERE database = '$target' FORMAT TSVRaw") == "0" ]]
+}
+
+cleanup_postgresql_restore() {
+  run_psql -q --single-transaction -c \
+    'DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION pg_database_owner;' || return 1
+  [[ $(psql_value "SELECT (SELECT count(*) FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','public') AND nspname !~ '^pg_toast') + (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public') + (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public') + (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public')") == "0" ]]
+}
+
+restore_command() {
+  local target_database="" confirmation="" expected_app_version="" migrations_dir="" bundle="" age_identity=""
+  local clickhouse_target="" clickhouse_confirmation=""
+  local expected_source_cluster_id="" expected_backup_id="" expected_manifest_sha256=""
+  local signing_public_key="" expected_signing_key_id="" postgresql_target_free_bytes=""
+  local target_server_version target_major manifest_major object_count restore_check_label required_bytes
+  while (($#)); do
+    case "$1" in
+      --bundle)
+        [[ -z "$bundle" && $# -ge 2 ]] || usage
+        bundle=$2; shift 2 ;;
+      --target-database)
+        [[ -z "$target_database" && $# -ge 2 ]] || usage
+        target_database=$2; shift 2 ;;
+      --confirm-empty-target)
+        [[ -z "$confirmation" && $# -ge 2 ]] || usage
+        confirmation=$2; shift 2 ;;
+      --expected-app-version)
+        [[ -z "$expected_app_version" && $# -ge 2 ]] || usage
+        expected_app_version=$2; shift 2 ;;
+      --migrations-dir)
+        [[ -z "$migrations_dir" && $# -ge 2 ]] || usage
+        migrations_dir=$2; shift 2 ;;
+      --age-identity-file)
+        [[ -z "$age_identity" && $# -ge 2 ]] || usage
+        age_identity=$2; shift 2 ;;
+      --expected-source-cluster-id)
+        [[ -z "$expected_source_cluster_id" && $# -ge 2 ]] || usage
+        expected_source_cluster_id=$2; shift 2 ;;
+      --expected-backup-id)
+        [[ -z "$expected_backup_id" && $# -ge 2 ]] || usage
+        expected_backup_id=$2; shift 2 ;;
+      --expected-manifest-sha256)
+        [[ -z "$expected_manifest_sha256" && $# -ge 2 ]] || usage
+        expected_manifest_sha256=$2; shift 2 ;;
+      --signing-public-key-file)
+        [[ -z "$signing_public_key" && $# -ge 2 ]] || usage
+        signing_public_key=$2; shift 2 ;;
+      --expected-signing-key-id)
+        [[ -z "$expected_signing_key_id" && $# -ge 2 ]] || usage
+        expected_signing_key_id=$2; shift 2 ;;
+      --postgresql-target-free-bytes)
+        [[ -z "$postgresql_target_free_bytes" && $# -ge 2 ]] || usage
+        postgresql_target_free_bytes=$2; shift 2 ;;
+      --clickhouse-target-database)
+        [[ -z "$clickhouse_target" && $# -ge 2 ]] || usage
+        clickhouse_target=$2; shift 2 ;;
+      --confirm-empty-clickhouse-target)
+        [[ -z "$clickhouse_confirmation" && $# -ge 2 ]] || usage
+        clickhouse_confirmation=$2; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [[ -n "$bundle" && -n "$target_database" && -n "$confirmation" && -n "$expected_app_version" &&
+    -n "$migrations_dir" && -n "$age_identity" && -n "$expected_source_cluster_id" &&
+    -n "$expected_backup_id" && -n "$expected_manifest_sha256" && -n "$signing_public_key" &&
+    -n "$expected_signing_key_id" && -n "$postgresql_target_free_bytes" ]] || usage
+  validate_database_name "$target_database"
+  [[ "$confirmation" == "$target_database" ]] || die "--confirm-empty-target must exactly match --target-database"
+  [[ "$postgresql_target_free_bytes" =~ ^[0-9]+$ ]] || die "PostgreSQL target free bytes is invalid"
+  verify_bundle "$bundle" "$expected_app_version" "$migrations_dir" "$age_identity" \
+    "$expected_source_cluster_id" "$expected_backup_id" "$expected_manifest_sha256" \
+    "$signing_public_key" "$expected_signing_key_id"
+
+  validate_db_environment
+  [[ "$PGDATABASE" == "$target_database" ]] || die "PGDATABASE must exactly match --target-database"
+  target_server_version=$(psql_value "SELECT current_setting('server_version_num')")
+  [[ "$target_server_version" =~ ^[0-9]{6}$ ]] || die "invalid target PostgreSQL server version"
+  target_major=$((10#$target_server_version / 10000))
+  manifest_major=$((10#$MANIFEST_SERVER_VERSION_NUM / 10000))
+  [[ "$target_major" == "$manifest_major" ]] ||
+    die "target PostgreSQL major $target_major does not match backup major $manifest_major"
+  [[ $(client_major) == "$target_major" ]] || die "PostgreSQL restore client major does not match target"
+  required_bytes=$(($(jq -r '.components.postgresql.database.source_size_bytes' "$VERIFIED_BUNDLE/manifest.json") + MIN_FREE_BYTES))
+  ((postgresql_target_free_bytes >= required_bytes)) || die "insufficient PostgreSQL target capacity"
+
+  object_count=$(psql_value "SELECT (SELECT count(*) FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','public') AND nspname !~ '^pg_toast') + (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public') + (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public') + (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public')")
+  [[ "$object_count" == "0" ]] || die "target database is not empty; refusing restore"
+  if [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "true" ]]; then
+    [[ -n "$clickhouse_target" && -n "$clickhouse_confirmation" ]] ||
+      die "ClickHouse backup requires an explicit empty ClickHouse target"
+    preflight_clickhouse_restore "$clickhouse_target" "$clickhouse_confirmation"
+  elif [[ -n "$clickhouse_target" || -n "$clickhouse_confirmation" ]]; then
+    die "ClickHouse target was supplied for a PostgreSQL-only backup"
+  fi
+
+  if [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "true" ]]; then
+    if ! (restore_clickhouse "$clickhouse_target"); then
+      cleanup_clickhouse_restore "$clickhouse_target" ||
+        die "ClickHouse restore failed and compensation failed; target remains quarantined"
+      die "ClickHouse restore failed; created ClickHouse objects were removed"
+    fi
+  fi
+  if ! run_pg_restore_database "$VERIFIED_DUMP"; then
+    if [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "true" ]]; then
+      cleanup_clickhouse_restore "$clickhouse_target" ||
+        die "PostgreSQL restore rolled back but ClickHouse compensation failed; target remains quarantined"
+    fi
+    die "PostgreSQL restore failed and its single transaction was rolled back"
+  fi
+  if ! (restore_checks "$migrations_dir"); then
+    cleanup_postgresql_restore ||
+      die "PostgreSQL restore verification failed and compensation failed; target remains quarantined"
+    if [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "true" ]]; then
+      cleanup_clickhouse_restore "$clickhouse_target" ||
+        die "restore verification failed and ClickHouse compensation failed; target remains quarantined"
+    fi
+    die "restore verification failed; restored objects were removed"
+  fi
+  restore_check_label="migrations,core-tables,constraints,audit-linkage"
+  if [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "true" ]]; then
+    if ! finalize_clickhouse_restore "$clickhouse_target"; then
+      cleanup_postgresql_restore ||
+        die "ClickHouse finalization failed and PostgreSQL compensation failed; targets remain quarantined"
+      cleanup_clickhouse_restore "$clickhouse_target" ||
+        die "ClickHouse finalization and compensation failed; target remains quarantined"
+      die "ClickHouse finalization failed; restored objects were removed"
+    fi
+    restore_check_label+=",clickhouse-schema,clickhouse-partitions,clickhouse-watermarks,clickhouse-aggregates"
+  fi
+  printf 'restored_backup_id=%s\n' "$MANIFEST_BACKUP_ID"
+  printf 'restored_target_database=%s\n' "$target_database"
+  [[ "$MANIFEST_CLICKHOUSE_PRESENT" == "false" ]] ||
+    printf 'restored_clickhouse_target_database=%s\n' "$clickhouse_target"
+  printf 'restore_checks=%s\n' "$restore_check_label"
+}
+
+remote_fetch_command() {
+  local output_dir="" expected_app_version="" migrations_dir="" age_identity=""
+  local expected_source_cluster_id="" expected_backup_id="" expected_manifest_sha256=""
+  local signing_public_key="" expected_signing_key_id="" commit filename sha256 size_bytes destination
+  local commit_objects actual_objects created_at stamp
+  while (($#)); do
+    case "$1" in
+      --output-dir)
+        [[ -z "$output_dir" && $# -ge 2 ]] || usage
+        output_dir=$2; shift 2 ;;
+      --expected-app-version)
+        [[ -z "$expected_app_version" && $# -ge 2 ]] || usage
+        expected_app_version=$2; shift 2 ;;
+      --migrations-dir)
+        [[ -z "$migrations_dir" && $# -ge 2 ]] || usage
+        migrations_dir=$2; shift 2 ;;
+      --age-identity-file)
+        [[ -z "$age_identity" && $# -ge 2 ]] || usage
+        age_identity=$2; shift 2 ;;
+      --expected-source-cluster-id)
+        [[ -z "$expected_source_cluster_id" && $# -ge 2 ]] || usage
+        expected_source_cluster_id=$2; shift 2 ;;
+      --expected-backup-id)
+        [[ -z "$expected_backup_id" && $# -ge 2 ]] || usage
+        expected_backup_id=$2; shift 2 ;;
+      --expected-manifest-sha256)
+        [[ -z "$expected_manifest_sha256" && $# -ge 2 ]] || usage
+        expected_manifest_sha256=$2; shift 2 ;;
+      --signing-public-key-file)
+        [[ -z "$signing_public_key" && $# -ge 2 ]] || usage
+        signing_public_key=$2; shift 2 ;;
+      --expected-signing-key-id)
+        [[ -z "$expected_signing_key_id" && $# -ge 2 ]] || usage
+        expected_signing_key_id=$2; shift 2 ;;
+      --remote-endpoint)
+        [[ -z "$REMOTE_ENDPOINT" && $# -ge 2 ]] || usage
+        REMOTE_ENDPOINT=$2; shift 2 ;;
+      --remote-region)
+        [[ -z "$REMOTE_REGION" && $# -ge 2 ]] || usage
+        REMOTE_REGION=$2; shift 2 ;;
+      --remote-bucket)
+        [[ -z "$REMOTE_BUCKET" && $# -ge 2 ]] || usage
+        REMOTE_BUCKET=$2; shift 2 ;;
+      --remote-prefix)
+        [[ -z "$REMOTE_PREFIX" && $# -ge 2 ]] || usage
+        REMOTE_PREFIX=$2; shift 2 ;;
+      --remote-credentials-file)
+        [[ -z "$REMOTE_CREDENTIALS_FILE" && $# -ge 2 ]] || usage
+        REMOTE_CREDENTIALS_FILE=$2; shift 2 ;;
+      --remote-retention-mode)
+        [[ -z "$REMOTE_RETENTION_MODE" && $# -ge 2 ]] || usage
+        REMOTE_RETENTION_MODE=$2; shift 2 ;;
+      --remote-retention-days)
+        [[ -z "$REMOTE_RETENTION_DAYS" && $# -ge 2 ]] || usage
+        REMOTE_RETENTION_DAYS=$2; shift 2 ;;
+      *) usage ;;
+    esac
+  done
+  [[ -n "$output_dir" && -n "$expected_app_version" && -n "$migrations_dir" &&
+    -n "$age_identity" && -n "$expected_source_cluster_id" && -n "$expected_backup_id" &&
+    -n "$expected_manifest_sha256" && -n "$signing_public_key" &&
+    -n "$expected_signing_key_id" ]] || usage
+  validate_directory "$output_dir" "output directory"
+  validate_remote_config true
+  validate_backup_id "$expected_backup_id"
+  validate_sha256 "$expected_manifest_sha256"
+  require_command jq
+  require_command python3
+  new_work_dir
+  remote_preflight
+
+  BACKUP_OUTPUT_DIR="$output_dir"
+  BACKUP_TMP=$(mktemp -d "$output_dir/.control-backup.remote-fetch.tmp.XXXXXX")
+  chmod 700 "$BACKUP_TMP"
+  commit="$BACKUP_TMP/.remote-commit.json"
+  if ! remote_download "$REMOTE_PREFIX/bundles/$expected_backup_id/commit.json" "$commit"; then
+    die "remote commit marker is unavailable or not immutable"
+  fi
+  validate_remote_commit "$commit" "$expected_backup_id" "$expected_manifest_sha256"
+  while IFS=$'\t' read -r filename sha256 size_bytes; do
+    validate_remote_filename "$filename"
+    mkdir -p "$(dirname "$BACKUP_TMP/$filename")"
+    if ! remote_download "$REMOTE_PREFIX/bundles/$expected_backup_id/$filename" \
+      "$BACKUP_TMP/$filename" "$sha256" "$size_bytes"; then
+      die "remote object download failed digest/size/immutability verification: $filename"
+    fi
+  done < <(jq -r '.objects[] | [.filename, .sha256, .size_bytes] | @tsv' "$commit")
+  commit_objects="$WORK_DIR/commit-objects.json"
+  jq -S -c '.objects' "$commit" > "$commit_objects"
+  rm -f -- "$commit"
+  actual_objects="$WORK_DIR/fetched-objects.json"
+  remote_build_object_list "$BACKUP_TMP" "$actual_objects"
+  cmp -s "$actual_objects" "$commit_objects" || die "downloaded remote bundle does not match its exact commit"
+
+  rm -rf -- "$WORK_DIR" || die "remote fetch scratch cleanup failed before offline verification"
+  WORK_DIR=""
+  verify_bundle "$BACKUP_TMP" "$expected_app_version" "$migrations_dir" "$age_identity" \
+    "$expected_source_cluster_id" "$expected_backup_id" "$expected_manifest_sha256" \
+    "$signing_public_key" "$expected_signing_key_id"
+  find "$BACKUP_TMP" -type f -exec chmod 600 {} +
+  fsync_tree "$BACKUP_TMP"
+  created_at=$(jq -r '.created_at' "$BACKUP_TMP/manifest.json")
+  stamp=${created_at//[-:]/}
+  destination="$output_dir/control-backup-$stamp-$expected_backup_id"
+  [[ ! -e "$destination" && ! -L "$destination" ]] || die "remote fetch destination already exists"
+  mv -- "$BACKUP_TMP" "$destination"
+  PUBLISHED_DIR="$destination"
+  BACKUP_TMP=""
+  if ! fsync_path "$output_dir"; then
+    rm -rf -- "$PUBLISHED_DIR" || die "remote fetch parent fsync failed and bundle removal failed"
+    PUBLISHED_DIR=""
+    fsync_path "$output_dir" || die "remote fetch parent fsync failed and removal was not durably synchronized"
+    die "remote fetch parent directory fsync failed; unpublished bundle was removed"
+  fi
+  PUBLISHED_DIR=""
+  printf 'bundle_path=%s\n' "$destination"
+  printf 'fetched_backup_id=%s\n' "$expected_backup_id"
+  printf 'fetched_manifest_sha256=%s\n' "$expected_manifest_sha256"
+}
+
+main() {
+  (($# >= 1)) || usage
+  local command=$1
+  shift
+  case "$command" in
+    backup) backup_command "$@" ;;
+    remote-fetch) remote_fetch_command "$@" ;;
+    verify) verify_command "$@" ;;
+    restore) restore_command "$@" ;;
+    -h | --help | help) usage ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"

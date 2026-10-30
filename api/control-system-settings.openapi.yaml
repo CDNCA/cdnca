@@ -1,0 +1,172 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Platform System Settings API
+  version: 0.1.0
+  description: Platform-scoped administrator system settings. These values do not enter the edge request path.
+  license: {name: Internal API contract, identifier: internal}
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/system-settings:
+    get:
+      summary: Read platform system settings
+      operationId: getPlatformSystemSettings
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': {description: Current settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+    put:
+      summary: Update platform system settings
+      operationId: updatePlatformSystemSettings
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/WriteRequest'}}}
+      responses:
+        '200': {description: Saved document, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '400': {description: Validation error}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '409': {description: Revision or idempotency conflict}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+  /v1/system-settings/public:
+    get:
+      summary: Read the display subset of platform settings
+      description: >-
+        Without an Authorization header (the sign-in page) it returns only the system name and the two console
+        titles (PublicBranding). Any valid administrator or tenant session additionally gets the package purchase
+        notice (HTML, sanitized by the client before rendering) and the global JavaScript loaded by the tenant user
+        console. An Authorization header that is present but invalid is refused with 401.
+      operationId: getPublicPlatformSystemSettings
+      security: [{}, {bearerAuth: []}]
+      responses:
+        '200':
+          description: Branding only when anonymous; the full public subset for a valid session.
+          content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/PublicBranding'}, {$ref: '#/components/schemas/PublicSettings'}]}}}
+        '401': {description: Authorization header present but invalid, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '405': {description: Method not allowed, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {description: Settings storage is unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+  /v1/system-settings/csp-hosts:
+    get:
+      summary: Read the global JavaScript report hosts for the web container CSP
+      description: >-
+        Unauthenticated. The web container's nginx calls it (auth_request) before serving index.html and adds the
+        returned https sources to the page CSP connect-src and img-src. The external path is not routed by the
+        container; only its internal subrequest reaches it. When it fails the page keeps the strict default CSP.
+      operationId: getGlobalJavaScriptCSPHosts
+      security: []
+      responses:
+        '204':
+          description: Space-separated CSP sources (https://host ...), possibly empty.
+          headers:
+            X-Cdnca-Global-Js-Hosts: {schema: {type: string, maxLength: 5200}}
+            X-Cdnca-Plugin-Ui-Origins:
+              description: >-
+                PA-19. Page origins (https://host ...) of the ui_page plugins enabled on this installation, for the
+                CSP frame-src only. Absent when the lookup fails (no plugin frame source is allowed then).
+              schema: {type: string, maxLength: 17000}
+            Cache-Control: {schema: {type: string, const: no-store}}
+        '404': {description: Query parameters are not accepted, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '405': {description: Method not allowed, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+        '503': {description: Settings storage is unavailable, content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+    RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+  schemas:
+    Document:
+      type: object
+      required: [schema, revision, value]
+      properties:
+        schema: {const: cdnca.platform-system-settings/v1}
+        revision: {type: integer, minimum: 0}
+        updated_at: {type: string, format: date-time}
+        value: {$ref: '#/components/schemas/Settings'}
+    WriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties: {value: {$ref: '#/components/schemas/Settings'}}
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [system_name, user_title, admin_title, footer_links, footer_text, global_js, bound_domains, expiry_close, traffic_close, allow_upgrade, allow_downgrade, maintenance, maintenance_message, auto_upgrade_node]
+      properties:
+        system_name: {type: string, minLength: 1, maxLength: 128}
+        user_title: {type: string, maxLength: 256}
+        admin_title: {type: string, maxLength: 256}
+        footer_links: {type: string, maxLength: 16384}
+        footer_text: {type: string, maxLength: 1024}
+        global_js: {type: string, maxLength: 262144}
+        global_js_report_hosts:
+          type: array
+          maxItems: 20
+          uniqueItems: true
+          description: https hosts the global JavaScript may report to or load images from (CSP connect-src/img-src in the web container). Plain lowercase hostnames only.
+          items: {type: string, maxLength: 253, pattern: '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$'}
+        bound_domains: {type: string, maxLength: 8192}
+        favicon: {type: string, maxLength: 2048, description: Controlled favicon asset reference}
+        logo: {type: string, maxLength: 2048, description: Controlled logo asset reference}
+        login_ad: {type: string, maxLength: 2048, description: Controlled login advertisement asset reference}
+        expiry_close: {type: boolean}
+        traffic_close: {type: boolean}
+        allow_upgrade: {type: boolean}
+        allow_downgrade: {type: boolean}
+        purchase_notice: {type: string, maxLength: 65536, description: Trusted HTML shown before package purchase}
+        maintenance: {type: boolean}
+        maintenance_message: {type: string, maxLength: 1024}
+        auto_upgrade_node: {type: boolean}
+        certificate: {type: string, maxLength: 1024, pattern: '^(|vault://.+|kms-envelope://.+)$', description: Secure certificate reference}
+        private_key: {type: string, maxLength: 1024, pattern: '^(|vault://.+|kms-envelope://.+)$', description: Secure private-key reference}
+    PublicBranding:
+      type: object
+      additionalProperties: false
+      required: [system_name, user_title, admin_title]
+      properties:
+        system_name: {type: string, maxLength: 128}
+        user_title: {type: string, maxLength: 256}
+        admin_title: {type: string, maxLength: 256}
+    PublicSettings:
+      type: object
+      additionalProperties: false
+      required: [system_name, user_title, admin_title, purchase_notice, global_js]
+      properties:
+        system_name: {type: string, maxLength: 128}
+        user_title: {type: string, maxLength: 256}
+        admin_title: {type: string, maxLength: 256}
+        purchase_notice: {type: string, maxLength: 65536}
+        global_js: {type: string, maxLength: 262144}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: On a 400 system_settings_validation_error that names the refused field of the save body (value.<field>) and a machine reason.
+              x-description-zh: 能定位字段的 400 system_settings_validation_error 附带 field（保存请求体路径 value.<字段>）与 reason 机器码。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string}
+                reason: {type: string}
+              example: {field: value.system_name, reason: required}

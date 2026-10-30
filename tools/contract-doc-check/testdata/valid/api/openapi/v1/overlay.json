@@ -1,0 +1,30 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Fixture overlay", "version": "1.0.0"},
+  "security": [{"bearerAuth": []}],
+  "paths": {
+    "/v1/widgets/{id}": {
+      "get": {
+        "operationId": "getWidget",
+        "summary": "Get a widget from the same modular endpoint",
+        "responses": {
+          "200": {"description": "Found"},
+          "403": {
+            "description": "Permission denied",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer"}},
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["code", "request_id"],
+        "properties": {"code": {"type": "string"}, "request_id": {"type": "string"}}
+      }
+    }
+  }
+}

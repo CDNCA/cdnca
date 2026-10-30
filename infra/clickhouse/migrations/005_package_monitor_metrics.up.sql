@@ -1,0 +1,158 @@
+ALTER TABLE access_events
+    ADD COLUMN IF NOT EXISTS package_subscription_id UUID AFTER tenant_id;
+ALTER TABLE security_events
+    ADD COLUMN IF NOT EXISTS package_subscription_id UUID AFTER tenant_id;
+
+DROP VIEW IF EXISTS access_version_evidence_mv_v1;
+DROP VIEW IF EXISTS security_version_evidence_mv_v1;
+
+CREATE MATERIALIZED VIEW access_version_evidence_mv_v1
+TO access_version_evidence_v1 AS
+SELECT
+    metric_version,
+    tenant_id,
+    event_id,
+    ingested_at,
+    hex(SHA256(toJSONString(tuple(
+        package_subscription_id, occurred_at, site_id, node_id, request_id, trace_id, config_version_id,
+        task_id, installation_id, request_headers, response_headers, request_body,
+        response_body, ja4, host, path, client_ip, country_code, carrier, method,
+        protocol, cache_status, upstream_result, status_code, request_bytes,
+        response_bytes, duration_us, origin_connect_us, origin_first_byte_us,
+        origin_total_us
+    )))) AS payload_digest,
+    toJSONString(tuple(
+        package_subscription_id, occurred_at, site_id, node_id, request_id, trace_id, config_version_id,
+        task_id, installation_id, request_headers, response_headers, request_body,
+        response_body, ja4, host, path, client_ip, country_code, carrier, method,
+        protocol, cache_status, upstream_result, status_code, request_bytes,
+        response_bytes, duration_us, origin_connect_us, origin_first_byte_us,
+        origin_total_us
+    )) AS payload_snapshot
+FROM access_events;
+
+CREATE MATERIALIZED VIEW security_version_evidence_mv_v1
+TO security_version_evidence_v1 AS
+SELECT
+    metric_version,
+    tenant_id,
+    event_id,
+    ingested_at,
+    hex(SHA256(toJSONString(tuple(
+        package_subscription_id, occurred_at, site_id, node_id, request_id, trace_id, config_version_id,
+        task_id, installation_id, request_headers, response_headers, request_body,
+        response_body, ja4, host, path, client_ip, country_code, carrier, event_type,
+        action, severity, rule_id, status_code, request_bytes, response_bytes,
+        origin_connect_us, origin_first_byte_us, origin_total_us
+    )))) AS payload_digest,
+    toJSONString(tuple(
+        package_subscription_id, occurred_at, site_id, node_id, request_id, trace_id, config_version_id,
+        task_id, installation_id, request_headers, response_headers, request_body,
+        response_body, ja4, host, path, client_ip, country_code, carrier, event_type,
+        action, severity, rule_id, status_code, request_bytes, response_bytes,
+        origin_connect_us, origin_first_byte_us, origin_total_us
+    )) AS payload_snapshot
+FROM security_events;
+
+CREATE TABLE IF NOT EXISTS package_metric_access_facts_v1
+(
+    metric_version UInt16,
+    tenant_id UUID,
+    package_subscription_id UUID,
+    installation_id String,
+    event_id String,
+    occurred_at DateTime64(3, 'UTC'),
+    period_start DateTime('UTC'),
+    period_end DateTime('UTC'),
+    request_bytes UInt64,
+    response_bytes UInt64,
+    ingested_at DateTime64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(period_start)
+ORDER BY (tenant_id, package_subscription_id, period_start, installation_id, event_id)
+TTL period_end + INTERVAL 400 DAY DELETE;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS package_metric_access_facts_mv_v1
+TO package_metric_access_facts_v1 AS
+SELECT
+    metric_version,
+    tenant_id,
+    package_subscription_id,
+    installation_id,
+    event_id,
+    occurred_at,
+    toStartOfHour(occurred_at, 'UTC') AS period_start,
+    toStartOfHour(occurred_at, 'UTC') + INTERVAL 1 HOUR AS period_end,
+    request_bytes,
+    response_bytes,
+    ingested_at
+FROM access_events
+WHERE package_subscription_id != toUUID('00000000-0000-0000-0000-000000000000');
+
+CREATE TABLE IF NOT EXISTS package_metric_connection_facts_v1
+(
+    metric_version UInt16,
+    tenant_id UUID,
+    package_subscription_id UUID,
+    installation_id String,
+    sample_id String,
+    sampled_at DateTime64(3, 'UTC'),
+    window_start DateTime64(3, 'UTC'),
+    window_end DateTime64(3, 'UTC'),
+    active_connections UInt64,
+    ingested_at DateTime64(3, 'UTC') DEFAULT now64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(ingested_at)
+PARTITION BY toYYYYMM(window_start)
+ORDER BY (tenant_id, package_subscription_id, window_start, installation_id, sample_id)
+TTL toDateTime(window_end, 'UTC') + INTERVAL 400 DAY DELETE;
+
+CREATE VIEW IF NOT EXISTS package_metric_finalized_v1 AS
+SELECT
+    tenant_id,
+    package_subscription_id,
+    'traffic_bytes' AS metric,
+    period_start,
+    period_end,
+    sum(request_bytes + response_bytes) AS value,
+    max(occurred_at) AS observed_at,
+    period_end AS finalized_through,
+    hex(SHA256(toJSONString(tuple(
+        tenant_id, package_subscription_id, 'traffic_bytes', period_start, period_end,
+        uniqExact(event_id), sum(request_bytes), sum(response_bytes), max(ingested_at)
+    )))) AS source_evidence_digest
+FROM package_metric_access_facts_v1 FINAL
+GROUP BY tenant_id, package_subscription_id, period_start, period_end
+UNION ALL
+SELECT
+    tenant_id,
+    package_subscription_id,
+    'bandwidth_bps' AS metric,
+    period_start,
+    period_end,
+    toUInt64(ceil(sum(response_bytes) * 8.0 / 3600.0)) AS value,
+    max(occurred_at) AS observed_at,
+    period_end AS finalized_through,
+    hex(SHA256(toJSONString(tuple(
+        tenant_id, package_subscription_id, 'bandwidth_bps', period_start, period_end,
+        uniqExact(event_id), sum(response_bytes), max(ingested_at)
+    )))) AS source_evidence_digest
+FROM package_metric_access_facts_v1 FINAL
+GROUP BY tenant_id, package_subscription_id, period_start, period_end
+UNION ALL
+SELECT
+    tenant_id,
+    package_subscription_id,
+    'connections' AS metric,
+    toStartOfHour(window_start, 'UTC') AS period_start,
+    toStartOfHour(window_start, 'UTC') + INTERVAL 1 HOUR AS period_end,
+    max(active_connections) AS value,
+    max(sampled_at) AS observed_at,
+    period_end AS finalized_through,
+    hex(SHA256(toJSONString(tuple(
+        tenant_id, package_subscription_id, 'connections', period_start, period_end,
+        uniqExact(sample_id), max(active_connections), max(ingested_at)
+    )))) AS source_evidence_digest
+FROM package_metric_connection_facts_v1 FINAL
+GROUP BY tenant_id, package_subscription_id, period_start, period_end;

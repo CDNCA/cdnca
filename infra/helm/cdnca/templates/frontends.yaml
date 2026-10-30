@@ -1,0 +1,125 @@
+{{- $root := . -}}
+{{- $frontends := list
+  (dict "component" "web" "values" .Values.web)
+-}}
+{{- range $frontend := $frontends }}
+{{- if $frontend.values.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" $root "component" $frontend.component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" $root "component" $frontend.component) | nindent 4 }}
+spec:
+  {{- if not $frontend.values.autoscaling.enabled }}
+  replicas: {{ $frontend.values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" $root "component" $frontend.component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" $root "component" $frontend.component) | nindent 8 }}
+      annotations:
+        cdnca.io/secret-rollout: {{ $frontend.values.rolloutNonce | quote }}
+    spec:
+      serviceAccountName: {{ include "cdnca.componentFullname" (dict "root" $root "component" $frontend.component) }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ $frontend.values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "cdnca.podSecurityContext" $root | nindent 8 }}
+      topologySpreadConstraints:
+        {{- include "cdnca.topologySpreadConstraints" (dict "root" $root "component" $frontend.component) | nindent 8 }}
+      {{- include "cdnca.imagePullSecrets" $root | nindent 6 }}
+      containers:
+        - name: {{ $frontend.component }}
+          image: {{ include "cdnca.image" $frontend.values.image | quote }}
+          imagePullPolicy: {{ $frontend.values.image.pullPolicy }}
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" $root | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ $frontend.values.service.httpPort }}
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml $frontend.values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: web-cache
+              mountPath: /var/cache/nginx
+            - name: web-run
+              mountPath: /var/run
+            {{- if eq $frontend.component "web" }}
+            - name: gateway-ca
+              mountPath: /run/cdnca-gateway
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: web-cache
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: web-run
+          emptyDir:
+            sizeLimit: 16Mi
+        {{- if eq $frontend.component "web" }}
+        - name: gateway-ca
+          secret:
+            secretName: {{ $root.Values.agentGateway.runtimeSecret.existingSecret }}
+            defaultMode: 0444
+            items:
+              - key: {{ $root.Values.agentGateway.runtimeSecret.keys.controlServerCA }}
+                path: root-ca-cert.pem
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" $root "component" $frontend.component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" $root "component" $frontend.component) | nindent 4 }}
+spec:
+  type: {{ $frontend.values.service.type }}
+  selector:
+    {{- include "cdnca.selectorLabels" (dict "root" $root "component" $frontend.component) | nindent 4 }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+{{- end }}
+{{- end }}

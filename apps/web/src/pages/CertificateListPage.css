@@ -1,0 +1,779 @@
+.certificate-page {
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: var(--cdnca-shadow-card, 0 1px 3px rgb(15 23 42 / 4%), 0 12px 28px rgb(15 23 42 / 6%));
+}
+
+.certificate-page-inner {
+  min-width: 0;
+}
+
+.certificate-platform-target {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 18px;
+  padding-top: 16px;
+  border-bottom: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+}
+
+.certificate-platform-target > label {
+  flex: 0 0 auto;
+  color: var(--cdnca-color-text);
+  font-weight: 500;
+}
+
+.certificate-platform-target > .ant-select {
+  width: min(360px, 100%);
+}
+
+.certificate-platform-target > span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.certificate-target-alert {
+  margin: 14px 18px 18px;
+}
+
+.certificate-section-tabs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  margin: 0 18px 16px;
+  padding-top: 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.certificate-section-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.certificate-section-tabs > button {
+  height: 32px;
+  min-width: 88px;
+  flex: 0 0 auto;
+  padding: 0 16px;
+  color: var(--cdnca-color-text);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  line-height: 32px;
+}
+
+.certificate-section-tabs > button.is-active {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 12%, transparent);
+}
+
+.certificate-section-tabs > button:disabled {
+  color: var(--cdnca-color-text-tertiary, #a2a8b3);
+  cursor: not-allowed;
+}
+
+.certificate-section-content {
+  min-width: 0;
+  padding: 0 18px 20px;
+}
+
+.certificate-toolbar.identity-toolbar {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.certificate-toolbar .ant-btn,
+.certificate-toolbar .ant-input,
+.certificate-toolbar .ant-select-selector {
+  height: 32px !important;
+}
+
+.certificate-toolbar .cdnca-adv-filters-primary > .ant-btn,
+.certificate-toolbar .cdnca-adv-filters-primary > .ant-dropdown-trigger,
+.certificate-toolbar .cdnca-adv-filters-extra > .ant-btn {
+  flex: 0 0 auto;
+  padding-inline: 15px;
+  box-shadow: none;
+}
+
+.certificate-toolbar .cdnca-adv-filters-primary > .ant-btn {
+  min-width: 88px;
+}
+
+.certificate-toolbar .cdnca-adv-filters-primary > .ant-dropdown-trigger {
+  min-width: 106px;
+}
+
+/* fix-advfilter2：工具栏整行放进共享 AdvancedFilters（操作+搜索 | 查询/重置/高级筛选 | 导出/刷新）。 */
+.certificate-toolbar > .certificate-advanced-filters {
+  margin-bottom: 0;
+}
+
+.certificate-toolbar .cdnca-adv-filters-extra > .ant-btn-icon-only {
+  padding-inline: 0;
+}
+
+.certificate-page > #certificate-list-title,
+.certificate-toolbar h1 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.certificate-toolbar .identity-search {
+  display: flex;
+  width: min(360px, 32vw);
+  min-width: 240px;
+  flex: 0 1 360px;
+  margin-left: 16px;
+  order: initial;
+}
+
+.certificate-toolbar .identity-search > .ant-select {
+  width: 61px;
+  flex: 0 0 61px;
+}
+
+.certificate-toolbar .identity-search .ant-select-selector,
+.certificate-toolbar .identity-search .ant-input {
+  border-radius: 0;
+}
+
+.certificate-toolbar .identity-search .ant-select-selector {
+  border-start-start-radius: 4px !important;
+  border-end-start-radius: 4px !important;
+}
+
+.certificate-toolbar .identity-search .ant-input {
+  min-width: 0;
+  border-inline-start: 0;
+}
+
+.certificate-toolbar .identity-search .ant-input-affix-wrapper {
+  min-width: 0;
+  border-inline-start: 0;
+}
+
+.certificate-toolbar .identity-search .ant-input-affix-wrapper {
+  height: 32px;
+  padding-block: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+/* 带清除按钮的输入框：高度由外框给 32px，里面的 input 不再另设 32px（否则外框被撑到 43px）。 */
+.certificate-toolbar .identity-search .ant-input-affix-wrapper .ant-input {
+  height: 30px !important;
+}
+
+.certificate-status-bar {
+  display: flex;
+  min-width: 0;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 12px;
+  color: var(--cdnca-color-text-tertiary, #a2a8b3);
+  font-size: 12px;
+}
+
+.certificate-orders-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0 0 12px;
+  color: var(--cdnca-color-neutral66, #657180);
+  font-size: 12px;
+}
+
+.certificate-orders-heading > strong {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+}
+
+.certificate-status-pills {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.certificate-status-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.certificate-status-pills > button {
+  display: inline-flex;
+  height: 28px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  padding: 0 13px;
+  color: var(--cdnca-color-neutral66, #657180);
+  background: var(--cdnca-color-neutral3, #f6f8fb);
+  border: 1px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.certificate-status-pills > button.is-active {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-blue10, #f1f8ff);
+  border-color: var(--cdnca-color-blue33, #91caff);
+}
+
+.certificate-status-pills > button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.certificate-status-pills strong {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+}
+
+.certificate-status-pills > button:nth-child(2) strong,
+.certificate-status-pills > button:nth-child(5) strong {
+  color: var(--cdnca-color-success);
+}
+
+.certificate-status-pills > button:nth-child(3) strong {
+  color: var(--cdnca-color-warning);
+}
+
+.certificate-status-pills > button:nth-child(4) strong {
+  color: var(--cdnca-color-error);
+}
+
+.certificate-page .identity-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.certificate-page .identity-table-scroll .ant-table-thead > tr > th {
+  height: 39px;
+  padding: 8px 10px;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-slate, #f8fafc);
+  border-bottom-color: var(--cdnca-color-border-panel, #edf1f7);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.certificate-page .identity-table-scroll .ant-table-tbody > tr > td {
+  height: 49px;
+  padding: 0 10px;
+  color: var(--cdnca-color-text);
+  border-bottom-color: var(--cdnca-color-border-panel, #edf1f7);
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.certificate-page .identity-table-scroll .ant-table-tbody > tr:hover > td {
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+}
+
+.certificate-page .identity-table-scroll .ant-table-selection-column {
+  width: 60px;
+  min-width: 60px;
+}
+
+.certificate-page .identity-table-scroll .ant-table-cell-fix-right {
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.certificate-page .identity-table-scroll .ant-table-placeholder > td {
+  height: 49px;
+}
+
+.certificate-user-cell,
+.certificate-info-cell {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.certificate-user-cell > span,
+.certificate-info-cell > strong,
+.certificate-info-cell > small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.certificate-user-cell small,
+.certificate-info-cell small {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.certificate-info-cell strong {
+  color: var(--cdnca-color-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.certificate-info-cell small > span {
+  margin-right: 5px;
+  color: var(--cdnca-color-text-tertiary, #a2a8b3);
+}
+
+/* fix-ui1026 补充 5：用户/证书信息单元格限制在列宽内，每行各自省略，不再溢出叠到相邻列。 */
+.certificate-page .identity-table-scroll .certificate-user-cell,
+.certificate-page .identity-table-scroll .certificate-info-cell {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  padding-block: 4px;
+}
+
+.certificate-page .identity-table-scroll .certificate-user-cell small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.certificate-renew-tag.ant-tag {
+  margin-inline-end: 0;
+  border-radius: 12px;
+}
+
+.certificate-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.certificate-row-actions .ant-btn {
+  height: auto;
+  padding: 0;
+}
+
+/* fix-certcols：列宽固定后，操作按钮在列内换行排两行；日期时间分两行；失败原因最多两行，超出省略并悬浮看全文。 */
+.certificate-page .identity-table-scroll .certificate-row-actions {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  padding-block: 4px;
+}
+
+.certificate-page .identity-table-scroll .certificate-stacked-cell {
+  display: grid;
+  line-height: 20px;
+}
+
+.certificate-page .identity-table-scroll .certificate-wrap-cell {
+  display: block;
+  white-space: normal;
+}
+
+.certificate-page .identity-table-scroll .certificate-failure-cell {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.certificate-row-actions .ant-btn > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.certificate-page .identity-pagination {
+  display: flex;
+  min-height: 32px;
+  justify-content: flex-start;
+  margin-top: 20px;
+  font-size: 14px;
+}
+
+.certificate-page .identity-pagination .ant-pagination-total-text {
+  color: var(--cdnca-color-text);
+}
+
+.certificate-list-hidden {
+  display: none;
+}
+
+.certificate-placeholder-panel,
+.certificate-dns-panel {
+  padding-top: 0;
+}
+
+.certificate-default-panel {
+  padding: 12px 42px 34px;
+}
+
+.certificate-default-field {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 648px);
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+}
+
+.certificate-default-field > label {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.certificate-default-field > .ant-select,
+.certificate-default-field > .ant-input {
+  width: 100%;
+  max-width: 648px;
+}
+
+.certificate-default-field .ant-select-selector,
+.certificate-default-field .ant-input {
+  min-height: 38px;
+  border-color: var(--cdnca-color-blue27, #d8dee9);
+  border-radius: 8px;
+}
+
+.certificate-default-field .ant-input[disabled],
+.certificate-default-hint {
+  color: var(--cdnca-color-neutral54, #9aa3b2);
+  background: var(--cdnca-color-neutral4, #f7f8fa);
+}
+
+/* fix-fielderr-be4: a refused default field, under its select (column 2). */
+.certificate-default-error {
+  grid-column: 2;
+  margin-top: -12px;
+  color: var(--cdnca-color-error);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.certificate-default-hint {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 38px;
+  align-items: center;
+  padding: 0 18px;
+  border-radius: 20px;
+  font-size: 14px;
+}
+
+.certificate-dns-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 42px;
+  margin: 0 0 12px;
+}
+
+.certificate-dns-toolbar .ant-btn {
+  min-width: 94px;
+  height: 34px;
+}
+
+.certificate-dns-toolbar .certificate-dns-total {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.certificate-dns-pagination {
+  justify-content: flex-end !important;
+  margin-top: 18px !important;
+}
+
+.certificate-placeholder-panel h2,
+.certificate-panel-heading h2 {
+  margin: 0 0 6px;
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.certificate-panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.certificate-panel-heading p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.certificate-dns-total {
+  display: inline-block;
+  margin-top: 4px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.certificate-orders-page {
+  min-height: 310px;
+  padding: 18px 20px 20px;
+}
+
+@media (max-width: 767px) {
+  .app-main > .certificate-page {
+    margin: 12px;
+  }
+
+  .certificate-platform-target {
+    min-height: 0;
+    align-items: stretch;
+    flex-direction: column;
+    padding-bottom: 14px;
+  }
+
+  .certificate-platform-target > .ant-select {
+    width: 100%;
+  }
+
+  .certificate-platform-target > span {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .certificate-section-tabs {
+    margin-inline: 14px;
+  }
+
+  .certificate-section-content {
+    padding-inline: 14px;
+  }
+
+  .certificate-toolbar.identity-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .certificate-toolbar .cdnca-adv-filters-primary > .ant-btn,
+  .certificate-toolbar .cdnca-adv-filters-primary > .ant-dropdown-trigger {
+    flex: 1 1 calc(33.333% - 6px);
+    min-width: 0 !important;
+  }
+
+  /* 搜索框（order 2）在操作按钮之后、查询组之前。 */
+  .certificate-toolbar .cdnca-adv-filters-actions,
+  .certificate-toolbar .cdnca-adv-filters-extra {
+    order: 3;
+  }
+
+  .certificate-toolbar .identity-search {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+    margin-left: 0;
+    order: 2;
+  }
+
+
+  .certificate-status-bar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .certificate-status-pills {
+    width: 100%;
+    padding-bottom: 2px;
+  }
+
+  .certificate-page .identity-pagination {
+    overflow-x: auto;
+  }
+
+  .certificate-panel-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .certificate-panel-heading .ant-btn {
+    align-self: flex-start;
+  }
+
+  .certificate-default-panel {
+    padding-inline: 14px;
+  }
+
+  .certificate-default-field {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px 0;
+  }
+
+  .certificate-default-field > label {
+    text-align: left;
+  }
+
+  .certificate-default-error {
+    grid-column: 1;
+    margin-top: 0;
+  }
+
+  .certificate-dns-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .certificate-dns-toolbar .certificate-dns-total {
+    align-self: flex-end;
+  }
+}
+
+/* CERT-04 统一添加证书弹窗：单个/批量申请 + 证书类型卡片 */
+.certificate-add-modal .certificate-add-tabs {
+  margin: 0 0 16px;
+  padding-top: 0;
+}
+
+.certificate-add-owner {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.certificate-type-section {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--cdnca-color-border, #dcdee2);
+}
+
+.certificate-type-section > h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.certificate-type-section > h3 > small {
+  margin-left: 8px;
+  color: var(--cdnca-color-text-secondary, #808695);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.certificate-type-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.certificate-type-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  color: var(--cdnca-color-text);
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--cdnca-color-border, #dcdee2);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.certificate-type-card > span {
+  color: var(--cdnca-color-text-secondary, #808695);
+  font-size: 12px;
+}
+
+.certificate-type-card.is-active {
+  color: var(--cdnca-color-primary);
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 8%, transparent);
+  border-color: var(--cdnca-color-primary);
+}
+
+.certificate-type-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* fix-certops：ZeroSSL 未配置 EAB 时的说明（平台管理员可直达配置）。 */
+.certificate-type-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+/* fix-certops：证书 > 默认设置 里的 ACME 签发机构凭据。 */
+.certificate-default-eab {
+  display: grid;
+  gap: 8px;
+  max-width: 740px;
+  margin: 8px 0 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--cdnca-color-border);
+}
+
+.certificate-default-eab h3 {
+  margin: 0;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.certificate-default-eab p {
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.certificate-batch-results {
+  margin-top: 4px;
+}
+
+/* fix-certui：禁用的操作按钮外包一层，悬浮才能显示原因。 */
+.certificate-blocked-action {
+  display: inline-flex;
+  cursor: not-allowed;
+}

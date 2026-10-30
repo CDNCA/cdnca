@@ -1,0 +1,30 @@
+openapi: 3.1.0
+info: { title: Nested canonical fixture aggregate, version: 1.0.0 }
+x-reviewer-only:
+  $ref: '../../control-extensionref.openapi.yaml'
+components:
+  pathItems:
+    Unused:
+      $ref: '../../control-componentonly.openapi.yaml#/paths/~1v1~1component-only'
+  callbacks:
+    HiddenInbound:
+      '{$request.body#/callbackUrl}':
+        $ref: '../../control-callbackonly.openapi.yaml#/paths/~1v1~1callback-only'
+paths:
+  /v1/same-a:
+    $ref: '../../control-root.openapi.yaml#/paths/~1v1~1same-a'
+  /v1/fragment-visible:
+    $ref: './shared.yaml#/paths/~1v1~1fragment-visible'
+  /v1/callback-source:
+    post:
+      operationId: createCallbackSource
+      callbacks:
+        completed:
+          $ref: '#/components/callbacks/HiddenInbound'
+      responses:
+        '202': { description: accepted }
+        '400':
+          description: invalid
+          content:
+            application/json:
+              schema: { type: object }

@@ -1,0 +1,38 @@
+{{- if .Values.customerIngress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "cdnca.fullname" . }}-customer
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" "customer-ingress") | nindent 4 }}
+  {{- with .Values.customerIngress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.customerIngress.className }}
+  {{- if .Values.customerIngress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.customerIngress.host | quote }}
+      secretName: {{ .Values.customerIngress.tls.existingSecret }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.customerIngress.host | quote }}
+      http:
+        paths:
+          - path: /v1
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "cdnca.componentFullname" (dict "root" . "component" "control-api") }}
+                port:
+                  number: {{ .Values.controlApi.service.httpPort }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "cdnca.componentFullname" (dict "root" . "component" "web") }}
+                port:
+                  number: 80
+{{- end }}

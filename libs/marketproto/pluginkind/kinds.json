@@ -1,0 +1,4 @@
+{
+  "kinds": ["module", "rule_pack", "dataset", "engine_module", "theme", "provider", "external_service", "ui_page"],
+  "official_only": ["module", "dataset", "engine_module"]
+}

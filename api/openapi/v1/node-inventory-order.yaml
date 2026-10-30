@@ -1,0 +1,67 @@
+components:
+  parameters:
+    NodeInventoryOrder:
+      name: order
+      in: query
+      required: false
+      description: >-
+        Omit for the unchanged UUID-ascending NodeListResponse. Explicit
+        management_sort_desc requests persisted management_settings.sort DESC,
+        numeric display_id DESC, internal UUID DESC and requires an order echo.
+        nodes.read and the current platform scope are checked on every request.
+        In this mode only order, status, presence, search, limit and cursor are
+        accepted; unknown or repeated parameters return validation_error (400).
+        Explicit empty/unknown order or cursor is invalid. Limit is 1..300,
+        default 20. There is no ascending management-sort mode.
+      schema:
+        type: string
+        enum: [management_sort_desc]
+    NodeInventoryCursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        With no order, the existing last-node UUID. With management_sort_desc,
+        the exact next_cursor returned for the same scope, status, presence and
+        normalized search. Page size can change. Changing sort/filter/scope
+        requires restarting at the first page. This is live keyset pagination,
+        not a snapshot across concurrent writes. Cursors are untrusted bookmarks,
+        not authorization; changing scope/filter/order returns validation_error.
+      schema:
+        oneOf:
+          - {type: string, format: uuid}
+          - {$ref: '#/components/schemas/NodeInventoryOrderCursor'}
+  schemas:
+    NodeInventoryOrderCursor:
+      type: string
+      minLength: 6
+      maxLength: 2048
+      pattern: '^nso1\.[A-Za-z0-9_-]+$'
+      description: >-
+        Versioned unpadded canonical base64url of UTF-8 JSON. Exactly version=1,
+        scope_id, order=management_sort_desc, status, presence, search, last_sort,
+        last_display_id and last_id in that order; no duplicate/unknown fields.
+        last_sort is 0..999999. last_display_id is a positive canonical decimal
+        string no greater than 9223372036854775807, never a JavaScript number.
+        last_id is the last row UUID; all three boundary values are frozen from
+        the returned row and are not looked up again on the next page.
+        display_id is immutable through the public application write contract;
+        this does not claim immutability against database-superuser writes.
+    NodeInventoryOrderedListResponse:
+      type: object
+      additionalProperties: false
+      required: [order, items]
+      properties:
+        order:
+          type: string
+          enum: [management_sort_desc]
+        items:
+          type: array
+          maxItems: 300
+          description: >-
+            Scope-filtered rows in strict sort DESC, numeric display_id DESC,
+            UUID DESC order. No fabricated sort defaults or duplicate IDs.
+          items:
+            $ref: './control.yaml#/components/schemas/NodeInventory'
+        next_cursor:
+          $ref: '#/components/schemas/NodeInventoryOrderCursor'

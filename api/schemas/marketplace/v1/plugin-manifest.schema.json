@@ -1,0 +1,282 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://schemas.cdnca.example/marketplace/v1/plugin-manifest.schema.json",
+  "title": "CDNCA 插件清单 v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["api_version", "kind", "metadata", "spec", "integrity"],
+  "properties": {
+    "api_version": {
+      "const": "marketplace.cdnca.io/v1"
+    },
+    "kind": {
+      "const": "Plugin"
+    },
+    "metadata": {
+      "$ref": "#/definitions/metadata"
+    },
+    "spec": {
+      "$ref": "#/definitions/spec"
+    },
+    "integrity": {
+      "$ref": "#/definitions/integrity"
+    }
+  },
+  "definitions": {
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zh-CN"],
+      "properties": {
+        "zh-CN": {"type": "string", "minLength": 1, "maxLength": 256},
+        "en-US": {"type": "string", "minLength": 1, "maxLength": 256}
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "name", "description", "publisher"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$"
+        },
+        "version": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "name": {"$ref": "#/definitions/localizedText"},
+        "description": {"$ref": "#/definitions/localizedText"},
+        "publisher": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "name", "support_url"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128,
+              "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)+$"
+            },
+            "name": {"type": "string", "minLength": 1, "maxLength": 128},
+            "website": {"type": "string", "format": "uri", "maxLength": 2048},
+            "support_url": {"type": "string", "format": "uri", "maxLength": 2048}
+          }
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["categories", "compatibility", "entrypoint", "permissions", "configuration_schema"],
+      "properties": {
+        "categories": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "dns_provider",
+              "notification_provider",
+              "payment_provider",
+              "analytics_exporter",
+              "automation_connector",
+              "security_rules",
+              "theme",
+              "ui_page"
+            ]
+          }
+        },
+        "compatibility": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["control_api"],
+          "properties": {
+            "control_api": {
+              "type": "string",
+              "description": "A semver range evaluated by the control plane.",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        },
+        "entrypoint": {
+          "description": "external_https: the plugin is the publisher's own HTTPS service. rule_pack / theme: the plugin is a declarative data package (rule pack / theme package format) served next to the manifest at path; its sha256 is covered by the publisher signature (at most 8 MiB). Data packages never run code.",
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "base_url", "health_path"],
+              "properties": {
+                "type": {"const": "external_https"},
+                "base_url": {"type": "string", "format": "uri", "pattern": "^https://", "maxLength": 2048},
+                "provider_response_key": {
+                  "description": "PA-22: Ed25519 public key (unpadded base64url) the plugin signs cdnca.provider/v1 responses with. Required when spec.provides names dns, sms or icp.",
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{43}$"
+                },
+                "health_path": {
+                  "type": "string",
+                  "pattern": "^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*$",
+                  "maxLength": 512
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "path", "sha256"],
+              "properties": {
+                "type": {"enum": ["rule_pack", "theme"]},
+                "path": {
+                  "type": "string",
+                  "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$",
+                  "maxLength": 512
+                },
+                "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+              }
+            },
+            {
+              "description": "ui_page (C3, ADR 0007 §8.3): pages served from the publisher's own https origin and mounted in a sandboxed iframe of the control plane web app (no allow-same-origin). origin must be a publisher origin verified on the market; it enters the control plane CSP frame-src only while the plugin is enabled. api_base_url is the plugin backend the control plane proxies the page's restricted API calls to (also a verified publisher origin). The manifest permissions must include platform.ui_pages.provide.",
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "origin", "pages"],
+              "properties": {
+                "type": {"const": "ui_page"},
+                "origin": {"type": "string", "pattern": "^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+/?$", "maxLength": 270},
+                "api_base_url": {"type": "string", "pattern": "^https://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(/[A-Za-z0-9._~!$&'()*+,;=:@%/-]*)?$", "maxLength": 2048},
+                "pages": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 16,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "path", "mount", "role", "title"],
+                    "properties": {
+                      "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{0,31}$"},
+                      "path": {"type": "string", "pattern": "^/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,255}$"},
+                      "mount": {"enum": ["menu", "site_tab"]},
+                      "menu_parent": {"enum": ["monitor", "node", "site", "stream", "config", "package", "finance", "system", "user-package", "account"]},
+                      "role": {"enum": ["admin", "user"]},
+                      "title": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["zh-CN"],
+                        "properties": {
+                          "zh-CN": {"type": "string", "minLength": 1, "maxLength": 32},
+                          "en-US": {"type": "string", "minLength": 1, "maxLength": 32}
+                        }
+                      },
+                      "required_permission": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*){1,7}$", "maxLength": 128},
+                      "required_module": {"type": "string", "pattern": "^(module|pack|theme)\\.[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*$", "maxLength": 128}
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "provides": {
+          "description": "Provider protocols an external_https plugin implements. kind cdn is reserved for official publishers.",
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "protocol_version"],
+            "properties": {
+              "kind": {"enum": ["payment", "dns", "sms", "notify", "cdn", "icp", "mail"]},
+              "protocol_version": {"type": "string", "pattern": "^[1-9][0-9]{0,2}$"}
+            }
+          }
+        },
+        "permissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*){1,7}$",
+            "maxLength": 128
+          }
+        },
+        "subscriptions": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^io\\.cdnca\\.[a-z][a-z0-9_]*\\.v[1-9][0-9]*\\.[a-z][a-z0-9_]*$",
+            "maxLength": 160
+          }
+        },
+        "webhooks": {
+          "description": "Webhook capability codes the plugin may receive; each must be approved per installation.",
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 64,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*){1,7}$",
+            "maxLength": 128
+          }
+        },
+        "supply_chain": {
+          "description": "SBOM and provenance digests bound into the signed manifest. The platform license service rejects a manifest without them.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["sbom_sha256", "provenance_sha256"],
+          "properties": {
+            "sbom_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+            "provenance_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+          }
+        },
+        "configuration_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$",
+              "maxLength": 512
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "payload_sha256", "signature"],
+      "properties": {
+        "algorithm": {"const": "Ed25519"},
+        "key_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "payload_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "signature": {
+          "type": "string",
+          "minLength": 86,
+          "maxLength": 86,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      }
+    }
+  }
+}

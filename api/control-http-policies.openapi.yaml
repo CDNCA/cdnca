@@ -1,0 +1,832 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild HTTP Policy Control API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable tenant-scoped control-plane API for request and
+    response header actions, upload limits, internal rewrites, fixed external
+    redirects, and CORS. Writes use revision CAS, durable idempotency,
+    entitlement checks, and transactional audit. Publication preview is a
+    deterministic cdnca.edge.http-policy/v1 source snapshot only; this
+    fragment does not claim signed bundle generation, Agent delivery, or Edge
+    activation and is not mounted by control-api main yet.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: HTTP policies
+    description: Tenant site HTTP policy facts and lifecycle.
+  - name: HTTP policy publication
+    description: Deterministic unsigned source previews for downstream publication.
+paths:
+  /v1/tenant-scopes/{tenant_scope_id}/http-policies:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [HTTP policies]
+      operationId: listHTTPPolicies
+      security: [{bearerAuth: []}]
+      summary: List non-deleted HTTP policies in one tenant scope
+      description: >-
+        Requires http_policies.read. Results use stable keyset ordering. The
+        server may emit fewer items than limit so the complete ListResult JSON
+        envelope, including next_cursor and the trailing response newline,
+        stays within the 2 MiB byte budget. A single maximum schema-legal policy
+        is always returned. When more rows remain, the opaque next_cursor is
+        anchored to the last item emitted. Pagination resumes strictly after it
+        without gaps or duplicates. Tenant principals see only sites they own.
+        Platform principals must provide this explicit tenant scope and pass the live
+        database permission check.
+      x-required-permissions: [http_policies.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/SiteFilter'
+        - $ref: '#/components/parameters/EnabledFilter'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyPageOK'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+    post:
+      tags: [HTTP policies]
+      operationId: createHTTPPolicy
+      security: [{bearerAuth: []}]
+      summary: Create revision one for a tenant-owned site
+      description: >-
+        Requires http_policies.manage and a currently valid, non-grace
+        sites.manage entitlement. Same-key same-payload retries return the
+        stored result; a key reused with another payload returns 409. JSON is
+        limited to 1 MiB and duplicate keys, unknown fields, and trailing
+        values are rejected. A platform principal whose role holds
+        http_policies.manage (or platform.admin) writes any site of this tenant
+        scope, as do the update, enable, disable, and delete operations; the
+        revision records the platform actor and the audit event's scope is this
+        tenant scope.
+      x-required-permissions: [http_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePolicyRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/PolicyCreated'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/tenant-scopes/{tenant_scope_id}/http-policies/publication-preview:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [HTTP policy publication]
+      operationId: previewHTTPPolicyPublication
+      security: [{bearerAuth: []}]
+      summary: Read a deterministic unsigned Edge v1 source snapshot
+      description: >-
+        Requires http_policies.read. The result contains only enabled,
+        non-deleted policies visible in the target tenant and is sorted by
+        site_id. state is always preview. The SHA-256 covers canonical snapshot
+        JSON with a trailing newline. It is not a signature or delivery receipt.
+      x-required-permissions: [http_policies.read]
+      responses:
+        '200': {$ref: '#/components/responses/PublicationPreviewOK'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+    get:
+      tags: [HTTP policies]
+      operationId: getHTTPPolicy
+      security: [{bearerAuth: []}]
+      summary: Read one HTTP policy
+      description: >-
+        Requires http_policies.read. Unknown, deleted, out-of-tenant, and
+        tenant actor non-owned policy IDs share the same 404 response.
+      x-required-permissions: [http_policies.read]
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+    patch:
+      tags: [HTTP policies]
+      operationId: updateHTTPPolicy
+      security: [{bearerAuth: []}]
+      summary: Append a configuration revision
+      description: >-
+        Requires http_policies.manage and a currently valid, non-grace
+        sites.manage entitlement. If-Match is compared under a row lock. Site
+        identity and enabled state cannot be changed by this operation.
+      x-required-permissions: [http_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdatePolicyRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '412': {$ref: '#/components/responses/ErrorResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+    delete:
+      tags: [HTTP policies]
+      operationId: deleteHTTPPolicy
+      security: [{bearerAuth: []}]
+      summary: Soft-delete a policy by appending a tombstone revision
+      description: >-
+        Requires http_policies.manage, Idempotency-Key, and revision CAS. The
+        body must be empty. Delete remains available during entitlement grace
+        and preserves all historical revisions.
+      x-required-permissions: [http_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '412': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [HTTP policies]
+      operationId: enableHTTPPolicy
+      security: [{bearerAuth: []}]
+      summary: Enable a policy with revision CAS
+      description: >-
+        Requires http_policies.manage and a currently valid, non-grace
+        sites.manage entitlement. The body must be exactly an empty JSON object.
+      x-required-permissions: [http_policies.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '412': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/PolicyID'
+      - $ref: '#/components/parameters/RequestID'
+      - $ref: '#/components/parameters/TraceID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatchRevision'
+    post:
+      tags: [HTTP policies]
+      operationId: disableHTTPPolicy
+      security: [{bearerAuth: []}]
+      summary: Disable a policy with revision CAS
+      description: >-
+        Requires http_policies.manage. The body must be exactly an empty JSON
+        object. Disable remains available during entitlement grace.
+      x-required-permissions: [http_policies.manage]
+      requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '404': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '412': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api-session
+      description: >-
+        Exactly one Authorization header carrying a Bearer control-api access
+        session is accepted. The package calls identity.AuthenticateSession
+        before opening the business transaction, then iamlock.AuthorizeSession
+        rechecks the raw session, identity, target tenant, and permission before
+        any business, idempotency, publication, or audit database access. API
+        keys and caller-supplied identity or permission claims are not accepted.
+  parameters:
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      description: Explicit target tenant access-scope UUID.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    PolicyID:
+      name: policy_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      description: Stable request correlation ID.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    TraceID:
+      name: X-Trace-ID
+      in: header
+      required: true
+      description: Stable trace correlation ID.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Operation-scoped durable key. Retry an unknown result with this key and
+        the unchanged business payload.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IfMatchRevision:
+      name: If-Match
+      in: header
+      required: true
+      description: Current positive revision as a quoted decimal ETag, for example "3".
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+        maxLength: 21
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque URL-safe keyset cursor returned by the preceding page.
+      schema: {type: string, maxLength: 1024}
+    SiteFilter:
+      name: site_id
+      in: query
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    EnabledFilter:
+      name: enabled
+      in: query
+      schema: {type: boolean}
+  requestBodies:
+    EmptyObject:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            maxProperties: 0
+  headers:
+    RequestID:
+      description: Validated request correlation ID.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    TraceID:
+      description: Validated trace correlation ID.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    RevisionETag:
+      description: Current positive policy revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    PreviewETag:
+      description: Canonical snapshot SHA-256 ETag.
+      schema: {type: string, pattern: '^"sha256:[0-9a-f]{64}"$'}
+    Location:
+      description: Canonical path of the created policy.
+      schema: {type: string, maxLength: 512}
+    IdempotentReplay:
+      description: Present as true only for a stored identical result.
+      schema: {type: string, const: 'true'}
+  responses:
+    PolicyCreated:
+      description: Created policy or stored identical retry result.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+        ETag: {$ref: '#/components/headers/RevisionETag'}
+        Location: {$ref: '#/components/headers/Location'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPPolicy'}
+    PolicyOK:
+      description: HTTP policy.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+        ETag: {$ref: '#/components/headers/RevisionETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPPolicy'}
+    PolicyWriteOK:
+      description: Updated policy or stored identical retry result.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+        ETag: {$ref: '#/components/headers/RevisionETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPPolicy'}
+    PolicyPageOK:
+      description: Stable page of non-deleted policies.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/HTTPPolicyPage'}
+    PublicationPreviewOK:
+      description: Deterministic unsigned Edge v1 source preview.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        X-Trace-ID: {$ref: '#/components/headers/TraceID'}
+        ETag: {$ref: '#/components/headers/PreviewETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PublicationPreview'}
+    ErrorResponse:
+      description: >-
+        Stable error envelope. Dependency failures, including PostgreSQL
+        serialization, deadlock, lock-not-available, and unknown failures, use
+        HTTP 503 with service_unavailable and never expose SQLSTATE, SQL,
+        internal errors, hidden policy facts, entitlement payloads, or signing
+        and delivery state.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    MetadataID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    RuleID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9._:-]+$'
+    MatchKind:
+      type: string
+      enum: [exact, prefix, regex]
+      description: >-
+        regex matches the decoded request path against an RE2 pattern anchored
+        at "^/" (at most 512 bytes, at most 9 capture groups, no
+        backreferences or lookaround); the rule's target path may name its
+        capture groups $1..$9. A regex rule overlaps every rule of the same
+        priority.
+    PolicyPath:
+      type: string
+      minLength: 1
+      maxLength: 2048
+      pattern: '^[\x20-\x7E]+$'
+      description: >-
+        exact/prefix: an unencoded normalized absolute ASCII path without
+        controls, backslash, query, fragment, repeated slash, or dot segments;
+        prefix paths end with slash unless they are root. regex: the pattern
+        (match_path) or a path template naming $1..$9 (target_path).
+    HeaderAction:
+      type: object
+      additionalProperties: false
+      required: [kind, name, values]
+      properties:
+        kind: {type: string, enum: [add, set, delete]}
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+          description: >-
+            Case-insensitive and canonicalized to lowercase. Framing,
+            hop-by-hop, identity, X-CDNCA-*, redirect-owned, and CORS-owned
+            names are rejected.
+        values:
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            minLength: 1
+            maxLength: 1024
+            pattern: '^[\x20-\x7E]+$'
+          description: >-
+            Order and repeated values are preserved. A value may reference
+            $remote_addr, $host, $scheme, $request_uri, $uri, $args,
+            $request_method, $server_port, $http_user_agent, $http_referer,
+            $tls_fp (JA4, empty without it), $country, $province, $city,
+            $areacode (province code), $isp (telecom, unicom, mobile; empty
+            otherwise), expanded per request by the node; "$$" is a literal
+            "$", any other "$" is rejected. An expanded value keeps printable
+            ASCII only (CR/LF and other control bytes are dropped), at most
+            1024 bytes; an empty expansion adds nothing.
+        allow_duplicate:
+          type: boolean
+          description: >-
+            add only (允许重复). true appends the values to an existing header
+            of that name; false or absent adds them only when the header is
+            absent (不存在时添加).
+      allOf:
+        - if:
+            properties: {kind: {const: delete}}
+            required: [kind]
+          then:
+            properties: {values: {maxItems: 0}}
+          else:
+            properties: {values: {minItems: 1, maxItems: 16}}
+    RewriteRule:
+      type: object
+      additionalProperties: false
+      required:
+        - rule_id
+        - priority
+        - match_kind
+        - match_path
+        - target_path
+        - preserve_query
+        - preserve_cookie
+      properties:
+        rule_id: {$ref: '#/components/schemas/RuleID'}
+        priority: {type: integer, minimum: 0, maximum: 4294967295}
+        match_kind: {$ref: '#/components/schemas/MatchKind'}
+        match_path: {$ref: '#/components/schemas/PolicyPath'}
+        target_path: {$ref: '#/components/schemas/PolicyPath'}
+        preserve_query: {type: boolean}
+        preserve_cookie: {type: boolean}
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: >-
+            高级条件: the rule applies only when every condition matches; absent
+            = always. A rule with conditions never conflicts with another of
+            its priority (the first by priority, rule_id that matches wins).
+          items: {$ref: '#/components/schemas/RuleCondition'}
+      description: >-
+        内部重写 (the browser's address is unchanged). Self rewrites, cycles,
+        chains over 16 hops, and same-priority overlapping matches without
+        conditions are rejected.
+    RuleCondition:
+      type: object
+      additionalProperties: false
+      required: [source, pattern]
+      properties:
+        source:
+          type: string
+          enum: [host, user_agent, referer, country, accept_language, province, city, isp, asn, header]
+          description: >-
+            host 域名:端口 (the Host header), user_agent, referer,
+            accept_language, header (the request header name names), and the
+            IP library's country (CN), province (440000), city (440300), isp
+            (telecom/unicom/mobile) and asn (decimal); an absent value is "".
+        name:
+          type: string
+          pattern: '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$'
+          description: Required with source header only; stored lower case.
+        pattern:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[\x20-\x7E]+$'
+          description: >-
+            Unanchored regular expression (PCRE/RE2 common subset, no nested
+            unbounded repetition, no repetition count above 100), for example
+            "Safari|Chrome".
+    RedirectAuthority:
+      type: string
+      minLength: 1
+      maxLength: 512
+      pattern: '^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[0-9]{1,5})?$'
+      description: Canonical hostname or IP authority with optional non-zero port.
+    RedirectRule:
+      type: object
+      additionalProperties: false
+      required:
+        - rule_id
+        - priority
+        - match_kind
+        - match_path
+        - status
+        - target_url
+        - preserve_query
+        - preserve_path
+      properties:
+        rule_id: {$ref: '#/components/schemas/RuleID'}
+        priority: {type: integer, minimum: 0, maximum: 4294967295}
+        match_kind: {$ref: '#/components/schemas/MatchKind'}
+        match_path: {$ref: '#/components/schemas/PolicyPath'}
+        status: {type: integer, enum: [301, 302, 307, 308]}
+        target_url:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          format: uri
+          description: >-
+            Fixed absolute HTTP(S) URL. Userinfo, query, fragment, percent
+            encoding, controls, backslash, and dynamic authority are rejected;
+            its canonical authority must appear in redirect_allowed_hosts. A
+            regex rule's path may name its capture groups $1..$9; with
+            preserve_path the path is a directory ending with "/".
+        preserve_query: {type: boolean}
+        preserve_path:
+          type: boolean
+          description: >-
+            Prefix rules only: append the request path after match_path to
+            target_url (/old/a/b -> https://host/new/a/b).
+        conditions:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: >-
+            高级条件: the rule applies only when every condition matches; absent
+            = always. A rule with conditions never conflicts with another of
+            its priority (the first by priority, rule_id that matches wins).
+          items: {$ref: '#/components/schemas/RuleCondition'}
+    CORSPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - allowed_origins
+        - allowed_methods
+        - allowed_headers
+        - exposed_headers
+        - allow_credentials
+        - max_age_seconds
+      properties:
+        allowed_origins:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 512}
+          description: Exact HTTP(S) origins or a sole wildcard.
+        allowed_methods:
+          type: array
+          minItems: 1
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 128}
+        allowed_headers:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 128}
+        exposed_headers:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 128}
+        allow_credentials: {type: boolean}
+        max_age_seconds: {type: integer, minimum: 0, maximum: 86400}
+      description: >-
+        Methods are canonicalized uppercase and header tokens lowercase.
+        Credentials cannot be combined with wildcard origins or headers.
+    RefererDomain:
+      type: string
+      minLength: 1
+      maxLength: 255
+      pattern: '^(\*\.)?[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$'
+      description: A host name, or "*.example.com" for any subdomain (not example.com itself).
+    RefererCheckPolicy:
+      type: object
+      additionalProperties: false
+      required: [allow_empty, allow_same_domain, allowed_domains, denied_domains, check_origin, extensions]
+      properties:
+        allow_empty: {type: boolean, description: Allow requests without Referer (and without Origin when check_origin).}
+        allow_same_domain: {type: boolean, description: Allow a Referer whose host is the request host.}
+        allowed_domains:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/RefererDomain'}
+        denied_domains:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/RefererDomain'}
+        check_origin: {type: boolean, description: Read Origin when Referer is absent.}
+        extensions:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z0-9]{1,16}$'}
+          description: Only request paths with these extensions are checked; empty checks every path.
+      description: >-
+        Hotlink protection. A denied domain is rejected first; then the request
+        host (allow_same_domain) or an allowed domain passes; any other source is
+        rejected unless only denied_domains is set. Allowed and denied lists are
+        disjoint, and the check restricts something.
+    HTTPPolicyConfigFields:
+      type: object
+      required:
+        - max_upload_bytes
+        - request_headers
+        - response_headers
+        - rewrites
+        - redirect_allowed_hosts
+        - redirects
+        - cors
+        - referer_check
+      properties:
+        max_upload_bytes: {type: integer, format: int64, minimum: 1, maximum: 1073741824}
+        request_headers:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/HeaderAction'}
+          description: Header names must be unique case-insensitively.
+        response_headers:
+          type: array
+          maxItems: 64
+          items: {$ref: '#/components/schemas/HeaderAction'}
+          description: Header names must be unique case-insensitively.
+        rewrites:
+          type: array
+          maxItems: 128
+          items: {$ref: '#/components/schemas/RewriteRule'}
+        redirect_allowed_hosts:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/RedirectAuthority'}
+        redirects:
+          type: array
+          maxItems: 128
+          items: {$ref: '#/components/schemas/RedirectRule'}
+        cors:
+          anyOf:
+            - $ref: '#/components/schemas/CORSPolicy'
+            - type: 'null'
+        referer_check:
+          anyOf:
+            - $ref: '#/components/schemas/RefererCheckPolicy'
+            - type: 'null'
+      description: >-
+        Arrays are required even when empty. Rewrite and redirect rule IDs are
+        unique across both arrays; same-priority overlapping matches conflict.
+    HTTPPolicyConfig:
+      allOf:
+        - $ref: '#/components/schemas/HTTPPolicyConfigFields'
+      unevaluatedProperties: false
+    CreatePolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [site_id, enabled, config]
+      properties:
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        enabled: {type: boolean}
+        config: {$ref: '#/components/schemas/HTTPPolicyConfig'}
+    UpdatePolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [config]
+      properties:
+        config: {$ref: '#/components/schemas/HTTPPolicyConfig'}
+    HTTPPolicy:
+      allOf:
+        - $ref: '#/components/schemas/HTTPPolicyConfigFields'
+        - type: object
+          required:
+            - id
+            - tenant_scope_id
+            - site_id
+            - site_owner_user_id
+            - enabled
+            - deleted
+            - revision
+            - publication_revision
+            - created_at
+            - updated_at
+          properties:
+            id: {$ref: '#/components/schemas/CanonicalUUID'}
+            tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            site_owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            enabled: {type: boolean}
+            deleted: {type: boolean}
+            revision: {type: integer, format: int64, minimum: 1}
+            publication_revision: {type: integer, format: int64, minimum: 1, maximum: 9007199254740991}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+      unevaluatedProperties: false
+      description: Current projection. Historical revisions are not deleted by lifecycle operations.
+    HTTPPolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/HTTPPolicy'}
+        next_cursor: {type: string, maxLength: 1024}
+    EdgeSitePolicy:
+      allOf:
+        - $ref: '#/components/schemas/HTTPPolicyConfigFields'
+        - type: object
+          required: [site_id]
+          properties:
+            site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+      unevaluatedProperties: false
+    EdgeSnapshot:
+      type: object
+      additionalProperties: false
+      required: [schema_version, policy_version, sites]
+      properties:
+        schema_version: {type: string, const: cdnca.edge.http-policy/v1}
+        policy_version: {type: integer, format: int64, minimum: 1, maximum: 9007199254740991}
+        sites:
+          type: array
+          minItems: 1
+          maxItems: 128
+          items: {$ref: '#/components/schemas/EdgeSitePolicy'}
+          description: Enabled site policies sorted by canonical site_id.
+    PublicationPreview:
+      type: object
+      additionalProperties: false
+      required: [state, sha256, snapshot]
+      properties:
+        state: {type: string, const: preview}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        snapshot: {$ref: '#/components/schemas/EdgeSnapshot'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id, trace_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - invalid_request
+                - validation_error
+                - permission_denied
+                - entitlement_denied
+                - not_found
+                - resource_conflict
+                - idempotency_conflict
+                - precondition_required
+                - revision_conflict
+                - entitlement_unavailable
+                - request_canceled
+                - service_unavailable
+                - method_not_allowed
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id:
+              $ref: '#/components/schemas/MetadataID'
+            trace_id:
+              $ref: '#/components/schemas/MetadataID'

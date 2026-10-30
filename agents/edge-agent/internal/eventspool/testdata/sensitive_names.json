@@ -1,0 +1,5 @@
+{
+  "comment": "TF-E01/TF-E02 敏感名共用向量：eventspool.sensitiveName（Go）、cdnca_telemetry.sensitive_name 与 cdnca_waf evidence.sensitive（Lua）必须给出相同结果。",
+  "sensitive": ["password", "Password", "passwd", "token", "access_token", "accessToken", "refreshToken", "refreshSecret", "client_secret", "clientSecret", "api_key", "apiKey", "apikey", "X-API-Key", "Authorization", "proxy-authorization", "cookie", "Set-Cookie", "setcookie", "private_key", "privateKey", "cert", "certificate", "user[password]", "session_token", "secret"],
+  "plain": ["keyword", "keyboard", "monkey", "username", "email", "q", "page", "id", "tokenize", "secretary", "certify", "passage", "code", "sign", "session"]
+}

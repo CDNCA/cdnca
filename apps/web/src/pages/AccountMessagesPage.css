@@ -1,0 +1,215 @@
+/* Compact message inbox surface; fields and states remain the catalog baseline. */
+.account-messages-page {
+  min-width: 0;
+  color: var(--cdnca-color-text);
+}
+
+.account-messages-toolbar {
+  min-height: 32px;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.account-messages-toolbar > .ant-select {
+  width: 190px;
+}
+
+/* 筛选在左，刷新按钮靠右。 */
+.account-messages-toolbar > .account-messages-refresh {
+  margin-left: auto;
+}
+
+.account-messages-toolbar .ant-select-selector,
+.account-messages-toolbar .ant-btn {
+  height: 32px !important;
+}
+
+.account-messages-toolbar .ant-btn {
+  padding-inline: 14px;
+  font-size: 14px;
+}
+
+/* SEC-ACCOUNT-07：公告 / 事件提醒分类。 */
+.account-messages-category {
+  margin-bottom: 12px;
+}
+
+/* fix-feedbackui：筛选框格式错误就地提示（不弹窗）。 */
+.account-messages-filter-error {
+  margin: -4px 0 8px;
+  color: var(--cdnca-color-error);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.account-messages-hint {
+  margin: 0 0 12px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.account-event-message-body {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.account-messages-page .identity-alert {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.account-messages-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.account-messages-table-scroll .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-messages-table-scroll .ant-table-thead > tr > th {
+  height: 40px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 40px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border-bottom-color: var(--cdnca-color-border-secondary);
+  white-space: nowrap;
+}
+
+.account-messages-table-scroll .ant-table-tbody > tr > td {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px !important;
+  line-height: 40px;
+  border-bottom-color: var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+.account-messages-table-scroll .ant-table-tbody > tr:hover > td {
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+}
+
+.account-messages-table-scroll .ant-table-placeholder > td {
+  height: 40px;
+  padding: 0 !important;
+}
+
+.account-messages-table-scroll .ant-table-placeholder .ant-empty {
+  margin: 0;
+  line-height: 40px;
+}
+
+.account-messages-table-scroll .ant-table-placeholder .ant-empty-image {
+  display: none;
+}
+
+.account-messages-table-scroll .ant-table-placeholder .ant-empty-description {
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 40px;
+}
+
+.account-message-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.account-message-unread-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cdnca-color-primary);
+}
+
+.account-messages-table-scroll .ant-btn-link {
+  height: 24px;
+  padding-inline: 4px;
+  font-size: 14px;
+}
+
+.account-messages-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 8px;
+  margin-top: 16px;
+}
+
+.account-messages-page .announcement-markdown {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.account-messages-page .announcement-markdown p,
+.account-messages-page .announcement-markdown ul {
+  margin-bottom: 12px;
+}
+
+.account-messages-page .announcement-markdown code {
+  font-size: 13px;
+}
+
+.account-messages-page .announcement-detail-meta {
+  margin-bottom: 12px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.account-messages-detail-modal .ant-modal-body {
+  max-height: min(560px, calc(100vh - 200px));
+  overflow-y: auto;
+}
+
+.account-messages-detail-modal .ant-modal-title {
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.account-messages-detail-modal .ant-modal-content {
+  padding: 16px;
+}
+
+.account-messages-detail-modal .ant-modal-footer {
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+@media (max-width: 767px) {
+  .app-main > .identity-page.account-messages-page {
+    margin: 24px;
+  }
+
+  .account-messages-toolbar {
+    align-items: stretch;
+  }
+
+  .account-messages-toolbar > .ant-select,
+  .account-messages-toolbar > .ant-btn {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .account-messages-pagination {
+    justify-content: flex-start;
+  }
+
+  .account-messages-detail-modal {
+    max-width: calc(100vw - 48px);
+    margin: 24px auto;
+  }
+}

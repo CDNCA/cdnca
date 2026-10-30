@@ -1,0 +1,208 @@
+.account-subscriptions-page {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-subscriptions-page > .identity-page {
+  min-width: 0;
+  max-width: 100%;
+  padding: 16px;
+  overflow: hidden;
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 10px;
+  box-shadow: var(--cdnca-shadow-card, 0 1px 3px rgb(15 23 42 / 4%), 0 12px 28px rgb(15 23 42 / 6%));
+}
+
+.account-subscriptions-page .ant-space {
+  min-width: 0;
+}
+
+/* tp-b7：左侧蓝条标题 + 副标题，右侧"提醒项 / 手机开启 / 邮件开启"计数胶囊。 */
+.account-subscriptions-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.account-subscriptions-heading {
+  min-width: 0;
+  padding-left: 10px;
+  border-left: 4px solid var(--cdnca-color-primary);
+}
+
+.account-subscriptions-heading h1 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.account-subscriptions-heading p {
+  margin: 2px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.account-subscriptions-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.account-subscriptions-stats > span {
+  padding: 2px 10px;
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+  line-height: 20px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 999px;
+}
+
+.account-subscription-item {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-block: 12px;
+}
+
+.account-subscription-item-label {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+.account-subscription-item-hint {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.account-subscriptions-page .ant-alert {
+  margin-bottom: 12px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.account-subscriptions-page .ant-alert-action {
+  min-width: 0;
+}
+
+.account-subscriptions-page .ant-alert-action .ant-btn,
+.account-subscriptions-page .ant-btn {
+  min-height: 32px;
+  height: 32px;
+  padding-inline: 12px;
+  font-size: 14px;
+  line-height: 30px;
+}
+
+.account-subscriptions-page .identity-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.account-subscriptions-page .identity-table-scroll .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th {
+  height: 40px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 40px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border-bottom-color: var(--cdnca-color-border-secondary);
+  white-space: nowrap;
+}
+
+.account-subscriptions-page .identity-table-scroll .ant-table-tbody > tr > td {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+  vertical-align: middle;
+  border-bottom-color: var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+.account-subscriptions-page .identity-table-scroll .ant-table-tbody > tr:hover > td {
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+}
+
+/* 提醒项列自适应，开关列定宽；窄屏横向滚动而不是压缩文字。 */
+.account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th:nth-child(1),
+.account-subscriptions-page .identity-table-scroll .ant-table-tbody > tr > td:nth-child(1) {
+  min-width: 280px;
+}
+
+/* fix-notifsub：表下方"更多消息类型"折叠区，默认收起。 */
+.account-subscriptions-more {
+  margin-top: 12px;
+}
+
+.account-subscriptions-page .account-subscriptions-more-toggle.ant-btn {
+  padding-inline: 0;
+  color: var(--cdnca-color-primary);
+}
+
+.account-subscriptions-more > [id='account-subscriptions-more'] {
+  margin-top: 8px;
+}
+
+.account-subscriptions-page .identity-table-scroll .ant-empty {
+  margin: 16px 0;
+}
+
+.account-subscriptions-page > .ant-result {
+  padding: 32px 16px;
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+}
+
+.account-subscriptions-page > .route-loading {
+  min-height: 160px;
+  background: transparent;
+}
+
+@media (max-width: 767px) {
+  .app-main > .account-subscriptions-page {
+    margin: 24px;
+  }
+
+  .account-subscriptions-page > .identity-page {
+    padding: 12px;
+  }
+
+  .account-subscriptions-page .identity-table-scroll .ant-table-thead > tr > th:nth-child(1),
+  .account-subscriptions-page .identity-table-scroll .ant-table-tbody > tr > td:nth-child(1) {
+    min-width: 240px;
+  }
+
+  .account-subscriptions-page .ant-alert-action {
+    width: 100%;
+  }
+
+  .account-subscriptions-page .ant-alert-action .ant-space {
+    width: 100%;
+  }
+
+  .account-subscriptions-page .ant-alert-action .ant-btn {
+    flex: 1 1 auto;
+  }
+}

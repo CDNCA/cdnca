@@ -1,0 +1,323 @@
+{
+ "id": "recharge-payments",
+ "prefix": "/v1/recharge-payments",
+ "operations": [
+  {
+   "operation_id": "createRechargePaymentCheckout",
+   "method": "POST",
+   "path": "/v1/recharge-payments/checkouts",
+   "summary": "为已认证租户充值订单创建签名收银台",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.recharges.create"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "order_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "provider",
+      "type": "string: alipay / wechat",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "新建或精确幂等重放；不返回原始签名载荷",
+     "fields": [
+      {
+       "name": "provider",
+       "type": "string: alipay / wechat",
+       "required": true
+      },
+      {
+       "name": "provider_account_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "verification_key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "payload_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "signature_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "checkout_url",
+       "type": "string(uri)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "409",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "503",
+     "description": "渠道不可用或结果不确定；调用方不得自行推断支付结果"
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelRechargePayment",
+   "method": "POST",
+   "path": "/v1/recharge-payments/orders/{order_id}/cancellation",
+   "summary": "取消当前租户自己的待支付充值订单",
+   "auth": [
+    "bearer"
+   ],
+   "description": "在调用支付渠道前先持久化不可变请求身份。渠道超时或响应丢失返回 unknown，调用方必须使用 相同 Idempotency-Key 和 X-Request-ID 重试；服务端复用相同 provider_request_id。",
+   "permissions": [
+    "billing.recharges.cancel"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "渠道已确定关闭或已确定拒绝",
+     "fields": [
+      {
+       "name": "cancellation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / succeeded / failed / unknown",
+       "required": true
+      },
+      {
+       "name": "order_state",
+       "type": "string: pending / paid / failed / canceled",
+       "required": true
+      },
+      {
+       "name": "order_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "provider_request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "retryable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "202",
+     "description": "已持久化请求，但渠道结果仍为 pending 或 unknown",
+     "fields": [
+      {
+       "name": "cancellation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / succeeded / failed / unknown",
+       "required": true
+      },
+      {
+       "name": "order_state",
+       "type": "string: pending / paid / failed / canceled",
+       "required": true
+      },
+      {
+       "name": "order_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "provider_request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "retryable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "409",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "503",
+     "description": "渠道不可用或结果不确定；调用方不得自行推断支付结果"
+    }
+   ]
+  }
+ ]
+}

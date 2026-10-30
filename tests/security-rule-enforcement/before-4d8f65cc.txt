@@ -1,0 +1,87 @@
+PASS WAF-OK-1 expected=200 actual=200 正常查询
+PASS WAF-OK-2 expected=200 actual=200 姓名含单引号
+PASS WAF-OK-3 expected=200 actual=200 自然语言含 select/union/or
+PASS WAF-OK-4 expected=200 actual=200 撇号文本
+PASS WAF-OK-5 expected=200 actual=200 技术文章搜索
+PASS WAF-OK-6 expected=200 actual=200 JSON 正常评论
+PASS WAF-OK-7 expected=200 actual=200 表单正常提交
+PASS WAF-OK-8 expected=200 actual=200 参数里是普通 URL
+PASS WAF-PATH expected=403 actual=403 路径前缀规则 /admin（现有能力）
+FAIL SQLI-1 expected=403 actual=200 1' OR '1'='1
+FAIL SQLI-2 expected=403 actual=200 1' OR 1=1-- -
+FAIL SQLI-3 expected=403 actual=200 UNION SELECT
+FAIL SQLI-4 expected=403 actual=200 双重 URL 编码
+FAIL SQLI-5 expected=403 actual=200 大小写混写 + 注释分隔
+FAIL SQLI-6 expected=403 actual=200 堆叠查询
+FAIL SQLI-7 expected=403 actual=200 时间盲注
+FAIL SQLI-8 expected=403 actual=200 admin'# 注释截断
+FAIL SQLI-9 expected=403 actual=200 POST 表单体
+FAIL SQLI-10 expected=403 actual=200 JSON 体
+FAIL XSS-1 expected=403 actual=200 <script>
+FAIL XSS-2 expected=403 actual=200 onerror 事件
+FAIL XSS-3 expected=403 actual=200 javascript: 伪协议
+FAIL XSS-4 expected=403 actual=200 双重编码 svg onload
+FAIL XSS-5 expected=403 actual=200 POST 表单 iframe
+PASS ALL-OK-1 expected=200 actual=200 正常查询
+PASS ALL-OK-2 expected=200 actual=200 含 system 单词的正常页面
+PASS ALL-OK-3 expected=200 actual=200 含 & 与 $ 的正常参数
+PASS ALL-OK-4 expected=200 actual=200 嵌套 JSON
+FAIL CMD-1 expected=403 actual=200 命令注入 ;cat
+FAIL CMD-2 expected=403 actual=200 命令注入 $()
+FAIL LFI-1 expected=403 actual=200 文件包含 /etc/passwd
+PASS LFI-2 expected=blocked actual=blocked URI 目录穿越（编码；nginx 先回 400 或 WAF 回 403）
+FAIL RFI-1 expected=403 actual=200 php:// 包装协议
+FAIL UPLOAD-1 expected=403 actual=200 URI 带可执行扩展名（注意：PHP 站点会误报，见文档）
+FAIL JAVA-1 expected=403 actual=200 JNDI 注入
+FAIL JAVA-2 expected=403 actual=200 Runtime.exec
+FAIL JSER-1 expected=403 actual=200 Java 序列化魔数
+FAIL PHP-1 expected=403 actual=200 PHP 危险函数
+FAIL PSER-1 expected=403 actual=200 PHP 序列化对象
+FAIL SSTI-1 expected=403 actual=200 {{7*7}}
+FAIL SSTI-2 expected=403 actual=200 Python 反射链
+PASS LOG-1 expected=200 actual=200 仅记录模式放行 SQL 注入
+FAIL LOG-2 expected=1 actual=0 仅记录模式写入安全日志 action=log
+FAIL CC-1 expected=503 actual=200 首个未验证请求弹出验证页
+FAIL CC-2 expected=delay actual=none 验证页类型为 5 秒等待
+FAIL CC-3 expected=403 actual=200 未等满 5 秒提交被拒绝
+FAIL CC-4 expected=303 /article?id=7 actual=200  等满 5 秒提交通过并跳回原页面
+PASS CC-5 expected=200 actual=200 通过后携带白名单 Cookie 放行
+PASS CC-6 expected=20 actual=20 白名单内 20 次连续请求全部放行
+FAIL CC-7 expected=503 actual=200 伪造 Cookie 重新验证
+FAIL CC-8 expected=503 actual=200 Cookie 换 UA 无效
+FAIL CC-9 expected=403 actual=200 60 秒内验证失败超过 5 次拉黑
+FAIL CC-10 expected=403 actual=200 拉黑期间带 Cookie 也拒绝
+PASS RATE-1 expected=pass(200) actual=pass(200) 5 秒内第 300 次（不同 URL）未超限放行
+PASS RATE-2 expected=blocked actual=blocked 第 301 次超过 300 次阈值被拦截
+FAIL RATE-3 expected=blocked actual=pass(200) 同一 URL 5 秒内第 51 次超过单 URL 50 次阈值被拦截
+SUMMARY section=main failures=37
+FAIL G1-page expected=js(503) actual=none(200) 首次访问弹出对应验证
+/tmp/probe.sh: line 143: answer: parameter not set
+FAIL G1-verify expected=303 actual= 按页面要求作答后通过
+PASS G1-pass expected=200 actual=200 通过后放行
+FAIL G10000-page expected=click(503) actual=none(200) 首次访问弹出对应验证
+/tmp/probe.sh: line 143: answer: parameter not set
+FAIL G10000-verify expected=303 actual= 按页面要求作答后通过
+PASS G10000-pass expected=200 actual=200 通过后放行
+FAIL G10003-page expected=rotate(503) actual=none(200) 首次访问弹出对应验证
+/tmp/probe.sh: line 143: answer: parameter not set
+FAIL G10003-verify expected=303 actual= 按页面要求作答后通过
+PASS G10003-pass expected=200 actual=200 通过后放行
+FAIL G10004-page expected=easy_click(503) actual=none(200) 首次访问弹出对应验证
+/tmp/probe.sh: line 143: answer: parameter not set
+FAIL G10004-verify expected=303 actual= 按页面要求作答后通过
+PASS G10004-pass expected=200 actual=200 通过后放行
+SUMMARY section=modes1 failures=8
+FAIL G10005-page expected=easy_slider(503) actual=none(200) 首次访问弹出对应验证
+/tmp/probe.sh: line 143: answer: parameter not set
+FAIL G10005-verify expected=303 actual= 按页面要求作答后通过
+PASS G10005-pass expected=200 actual=200 通过后放行
+FAIL G2-page expected=slider(503) actual=none(200) 首次访问弹出对应验证
+/tmp/probe.sh: line 143: answer: parameter not set
+FAIL G2-verify expected=303 actual= 按页面要求作答后通过
+PASS G2-pass expected=200 actual=200 通过后放行
+FAIL G4-page expected=captcha(503) actual=none(200) 首次访问弹出对应验证
+/tmp/probe.sh: line 143: answer: parameter not set
+FAIL G4-verify expected=303 actual= 按页面要求作答后通过
+PASS G4-pass expected=200 actual=200 通过后放行
+SUMMARY section=modes2 failures=6

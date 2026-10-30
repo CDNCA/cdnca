@@ -1,0 +1,5 @@
+openapi: 3.1.0
+info: { title: Non-canonical decoy aggregate, version: 1.0.0 }
+paths:
+  /v1/openapi-only:
+    $ref: './control-openapionly.openapi.yaml#/paths/~1v1~1openapi-only'

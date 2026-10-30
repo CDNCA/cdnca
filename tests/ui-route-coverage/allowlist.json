@@ -1,0 +1,523 @@
+{
+  "table1": {
+    "control-api * /v1/admin/analytics/connections/dead-letters": {
+      "reason": "连接日志死信/保留期：运维诊断接口，当前无页面；建议并入「系统任务」页诊断区",
+      "owner": "待派",
+      "evidence": "services/control-api/internal/analyticsconnectionshttp/dlq_handler.go:61"
+    },
+    "control-api * /v1/admin/analytics/connections/dead-letters/{dead_letter_id}": {
+      "reason": "连接日志死信/保留期：运维诊断接口，当前无页面；建议并入「系统任务」页诊断区",
+      "owner": "待派",
+      "evidence": "services/control-api/internal/analyticsconnectionshttp/dlq_handler.go:64"
+    },
+    "control-api * /v1/admin/analytics/connections/retention": {
+      "reason": "连接日志死信/保留期：运维诊断接口，当前无页面；建议并入「系统任务」页诊断区",
+      "owner": "待派",
+      "evidence": "services/control-api/internal/analyticsconnectionshttp/handler.go:69"
+    },
+    "control-api * /v1/admin/analytics/quality-diagnostics": {
+      "reason": "旧诊断/实时监控挂载：前端已改用 site-quality-diagnostics 与 site-realtime，旧路由无调用方",
+      "owner": "待派 control 清理（确认后删路由）",
+      "evidence": "services/control-api/internal/qualitydiagnosticshttp/handler.go:125"
+    },
+    "control-api * /v1/admin/analytics/site-monitoring": {
+      "reason": "旧诊断/实时监控挂载：前端已改用 site-quality-diagnostics 与 site-realtime，旧路由无调用方",
+      "owner": "待派 control 清理（确认后删路由）",
+      "evidence": "services/control-api/internal/analyticsrealtimehttp/handler.go:157"
+    },
+    "control-api * /v1/admin/cache-policies/{site_id}": {
+      "reason": "平台管理员按站点查看/改缓存策略：前端只调租户侧 /v1/cache-policies，管理端代管无入口",
+      "owner": "待派 web 缓存策略（管理端 scope 切换）",
+      "evidence": "services/control-api/internal/httpapi/server.go:1267"
+    },
+    "control-api * /v1/admin/cache-policies/{site_id}/revisions": {
+      "reason": "平台管理员按站点查看/改缓存策略：前端只调租户侧 /v1/cache-policies，管理端代管无入口",
+      "owner": "待派 web 缓存策略（管理端 scope 切换）",
+      "evidence": "services/control-api/internal/httpapi/server.go:1268"
+    },
+    "control-api * /v1/admin/cache-policies/{site_id}/revisions/{revision}": {
+      "reason": "平台管理员按站点查看/改缓存策略：前端只调租户侧 /v1/cache-policies，管理端代管无入口",
+      "owner": "待派 web 缓存策略（管理端 scope 切换）",
+      "evidence": "services/control-api/internal/httpapi/server.go:1269"
+    },
+    "control-api * /v1/admin/cname-allocations/{allocation_id}": {
+      "reason": "CNAME 分配诊断/详情无按钮（CnameAllocationsPage 只用列表与诊断 POST 体）",
+      "owner": "待派 web CNAME 页",
+      "evidence": "services/control-api/internal/httpapi/server.go:1667"
+    },
+    "control-api * /v1/admin/cname-allocations/diagnose": {
+      "reason": "CNAME 分配诊断/详情无按钮（CnameAllocationsPage 只用列表与诊断 POST 体）",
+      "owner": "待派 web CNAME 页",
+      "evidence": "services/control-api/internal/httpapi/server.go:1667"
+    },
+    "control-api * /v1/admin/package-commerce/traffic-purchases/": {
+      "reason": "管理端流量包购买单详情子树：无调用",
+      "owner": "待派 web 套餐",
+      "evidence": "services/control-api/internal/packagecommercehttp/handler.go:685"
+    },
+    "control-api * /v1/admin/promotion-policies/{policy_id}/history": {
+      "reason": "促销策略历史/预留详情无页面",
+      "owner": "待派 web 促销",
+      "evidence": "services/control-api/internal/httpapi/server.go:1432"
+    },
+    "control-api * /v1/analytics/connections/dead-letters": {
+      "reason": "连接日志死信/保留期：运维诊断接口，当前无页面；建议并入「系统任务」页诊断区",
+      "owner": "待派",
+      "evidence": "services/control-api/internal/analyticsconnectionshttp/dlq_handler.go:55"
+    },
+    "control-api * /v1/analytics/connections/dead-letters/{dead_letter_id}": {
+      "reason": "连接日志死信/保留期：运维诊断接口，当前无页面；建议并入「系统任务」页诊断区",
+      "owner": "待派",
+      "evidence": "services/control-api/internal/analyticsconnectionshttp/dlq_handler.go:58"
+    },
+    "control-api * /v1/analytics/connections/retention": {
+      "reason": "连接日志死信/保留期：运维诊断接口，当前无页面；建议并入「系统任务」页诊断区",
+      "owner": "待派",
+      "evidence": "services/control-api/internal/analyticsconnectionshttp/handler.go:66"
+    },
+    "control-api * /v1/analytics/quality-diagnostics": {
+      "reason": "旧诊断/实时监控挂载：前端已改用 site-quality-diagnostics 与 site-realtime，旧路由无调用方",
+      "owner": "待派 control 清理（确认后删路由）",
+      "evidence": "services/control-api/internal/qualitydiagnosticshttp/handler.go:123"
+    },
+    "control-api * /v1/analytics/site-monitoring": {
+      "reason": "旧诊断/实时监控挂载：前端已改用 site-quality-diagnostics 与 site-realtime，旧路由无调用方",
+      "owner": "待派 control 清理（确认后删路由）",
+      "evidence": "services/control-api/internal/analyticsrealtimehttp/handler.go:155"
+    },
+    "control-api * /v1/cname-allocations/{allocation_id}": {
+      "reason": "CNAME 分配诊断/详情无按钮（CnameAllocationsPage 只用列表与诊断 POST 体）",
+      "owner": "待派 web CNAME 页",
+      "evidence": "services/control-api/internal/httpapi/server.go:1666"
+    },
+    "control-api * /v1/cname-allocations/diagnose": {
+      "reason": "CNAME 分配诊断/详情无按钮（CnameAllocationsPage 只用列表与诊断 POST 体）",
+      "owner": "待派 web CNAME 页",
+      "evidence": "services/control-api/internal/httpapi/server.go:1666"
+    },
+    "control-api * /v1/openresty-security/effective": {
+      "reason": "OpenResty 安全生效配置查看：无页面",
+      "owner": "待派 web 安全",
+      "evidence": "services/control-api/internal/openrestysecurityhttp/handler.go:212"
+    },
+    "control-api * /v1/system-settings/csp-hosts": {
+      "reason": "前端运行时读取 CSP 白名单（index.html/服务端注入），非按钮",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1674"
+    },
+    "control-api * /v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote": {
+      "reason": "挑战策略发布\"推进\"按钮缺失（只有创建与查看）",
+      "owner": "待派 web 挑战策略",
+      "evidence": "services/control-api/internal/challengepolicy/publication_handler.go:66"
+    },
+    "control-api * /v1/tenant-scopes/{tenant_scope_id}/promotion-reservations/{reservation_id}": {
+      "reason": "促销策略历史/预留详情无页面",
+      "owner": "待派 web 促销",
+      "evidence": "services/control-api/internal/httpapi/server.go:1437"
+    },
+    "control-api * /v1/tenant/package-period-reset/authority-bindings": {
+      "reason": "套餐周期重置授权绑定：工作负载/运维接口（package_period_reset_authority_runtime.go），无租户页面需求",
+      "owner": "-",
+      "evidence": "services/control-api/cmd/control-api/package_period_reset_authority_runtime.go:127"
+    },
+    "control-api * /v1/tenant/package-period-reset/authority-bindings/": {
+      "reason": "套餐周期重置授权绑定：工作负载/运维接口（package_period_reset_authority_runtime.go），无租户页面需求",
+      "owner": "-",
+      "evidence": "services/control-api/cmd/control-api/package_period_reset_authority_runtime.go:128"
+    },
+    "control-api * /v1/traffic-packages/purchases": {
+      "reason": "用户端旧流量包购买接口：已由 /v1/package-commerce/traffic-purchases 替代",
+      "owner": "待派 control 清理",
+      "evidence": "services/control-api/internal/trafficpackagehttp/handler.go:493"
+    },
+    "control-api DELETE /v1/admin/market/supply-groups/{id}": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/supply.go:24"
+    },
+    "control-api DELETE /v1/sites/{id}": {
+      "reason": "单站删除：前端统一走 /v1/sites/batch-action delete，单条 DELETE 无调用；可接受",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:942"
+    },
+    "control-api GET /v1/admin/aggregated-edge/accounts/{id}": {
+      "reason": "聚合边缘：账号详情/编辑、供给详情无页面入口（列表与新建已有）",
+      "owner": "待派 web 聚合边缘（AggregatedEdge*Page 补详情抽屉与编辑）",
+      "evidence": "services/control-api/internal/aggregatededge/http.go:36"
+    },
+    "control-api GET /v1/admin/aggregated-edge/supplies/{id}": {
+      "reason": "聚合边缘：账号详情/编辑、供给详情无页面入口（列表与新建已有）",
+      "owner": "待派 web 聚合边缘（AggregatedEdge*Page 补详情抽屉与编辑）",
+      "evidence": "services/control-api/internal/aggregatededge/http.go:42"
+    },
+    "control-api GET /v1/admin/analytics/logs/access/exports/{export_id}": {
+      "reason": "后端已实现、四端无调用：缺页面入口或按钮",
+      "owner": "待分配",
+      "evidence": "services/control-api/internal/httpapi/server.go:1211"
+    },
+    "control-api GET /v1/admin/analytics/top/": {
+      "reason": "TOP 排行子树挂载：前端调用 /analytics/top-*（具体路径），此前缀行无独立调用",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1144"
+    },
+    "control-api GET /v1/admin/market/commission/statements": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:79"
+    },
+    "control-api GET /v1/admin/market/disputes/{id}": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:132"
+    },
+    "control-api GET /v1/admin/market/offers/{id}/quality": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:74"
+    },
+    "control-api GET /v1/admin/market/supply-groups/{id}": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/supply.go:22"
+    },
+    "control-api GET /v1/admin/market/supply-targets": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:76"
+    },
+    "control-api GET /v1/admin/nodes/ssh-installs/{id}": {
+      "reason": "SSH 安装任务详情：节点列表只轮询创建结果，无详情查看",
+      "owner": "待派 web 节点安装",
+      "evidence": "services/control-api/internal/httpapi/server.go:1570"
+    },
+    "control-api GET /v1/admin/package-addons/assignments": {
+      "reason": "附加包分配/绑定/订阅明细查询无页面（PackageAddonsPage 只有产品与命令）",
+      "owner": "待派 web 附加包页",
+      "evidence": "services/control-api/internal/httpapi/server.go:1232"
+    },
+    "control-api GET /v1/admin/package-addons/bindings": {
+      "reason": "附加包分配/绑定/订阅明细查询无页面（PackageAddonsPage 只有产品与命令）",
+      "owner": "待派 web 附加包页",
+      "evidence": "services/control-api/internal/httpapi/server.go:1232"
+    },
+    "control-api GET /v1/admin/package-addons/subscriptions": {
+      "reason": "附加包分配/绑定/订阅明细查询无页面（PackageAddonsPage 只有产品与命令）",
+      "owner": "待派 web 附加包页",
+      "evidence": "services/control-api/internal/httpapi/server.go:1232"
+    },
+    "control-api GET /v1/admin/payment-channels/{id}": {
+      "reason": "支付通道单条详情：列表内联编辑，可接受",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1470"
+    },
+    "control-api GET /v1/admin/security/coordination/metrics": {
+      "reason": "安全协同指标：无页面（可并入 CC 协同页）",
+      "owner": "待派 web 监控",
+      "evidence": "services/control-api/internal/httpapi/server.go:1603"
+    },
+    "control-api GET /v1/admin/users/{user_id}/api-keys": {
+      "reason": "管理员代管用户 API 密钥（列表/签发/吊销）：用户管理页无入口",
+      "owner": "待派 web 用户管理",
+      "evidence": "services/control-api/internal/httpapi/server.go:904"
+    },
+    "control-api GET /v1/analytics/logs/access/exports/{export_id}": {
+      "reason": "后端已实现、四端无调用：缺页面入口或按钮",
+      "owner": "待分配",
+      "evidence": "services/control-api/internal/httpapi/server.go:1211"
+    },
+    "control-api GET /v1/analytics/top/": {
+      "reason": "TOP 排行子树挂载：前端调用 /analytics/top-*（具体路径），此前缀行无独立调用",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1151"
+    },
+    "control-api GET /v1/security-policies/{id}": {
+      "reason": "安全策略/匹配器/过滤器单条详情：列表页内联展示，未单独调用；可接受",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1101"
+    },
+    "control-api GET /v1/security-policies/filters/{id}": {
+      "reason": "安全策略/匹配器/过滤器单条详情：列表页内联展示，未单独调用；可接受",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1086"
+    },
+    "control-api GET /v1/security-policies/matchers/{id}": {
+      "reason": "安全策略/匹配器/过滤器单条详情：列表页内联展示，未单独调用；可接受",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1067"
+    },
+    "control-api GET /v1/site-publications/security-activations/{candidate_id}": {
+      "reason": "租户侧手工发布/安全激活候选详情：前端只走管理端 /v1/admin/site-publications 与列表",
+      "owner": "待派 web 发布页（确认租户是否需要）",
+      "evidence": "services/control-api/internal/edgepublishhttp/security_activation_handler.go:75"
+    },
+    "control-api GET /v1/url-auth-policies/{id}": {
+      "reason": "URL 鉴权策略单条详情：列表内联，可接受",
+      "owner": "-",
+      "evidence": "services/control-api/internal/httpapi/server.go:1123"
+    },
+    "control-api POST /v1/admin/aggregated-edge/accounts/rewrap": {
+      "reason": "凭据重新加密：密钥轮换运维接口（install 脚本调用）",
+      "owner": "-",
+      "evidence": "services/control-api/internal/aggregatededge/http.go:35"
+    },
+    "control-api POST /v1/admin/market/disputes/{id}/escalate": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:134"
+    },
+    "control-api POST /v1/admin/market/offers/plugin-options": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:72"
+    },
+    "control-api POST /v1/admin/market/sla-breaches/{id}/dispute": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:131"
+    },
+    "control-api POST /v1/admin/site-rollouts/reconciliations": {
+      "reason": "发布对账：运维/定时任务触发",
+      "owner": "-",
+      "evidence": "services/control-api/internal/edgepublishhttp/handler.go:89"
+    },
+    "control-api POST /v1/admin/users/{user_id}/api-keys": {
+      "reason": "管理员代管用户 API 密钥（列表/签发/吊销）：用户管理页无入口",
+      "owner": "待派 web 用户管理",
+      "evidence": "services/control-api/internal/httpapi/server.go:905"
+    },
+    "control-api POST /v1/admin/users/{user_id}/api-keys/{key_id}/revoke": {
+      "reason": "管理员代管用户 API 密钥（列表/签发/吊销）：用户管理页无入口",
+      "owner": "待派 web 用户管理",
+      "evidence": "services/control-api/internal/httpapi/server.go:906"
+    },
+    "control-api POST /v1/auth/login-challenge-verifications": {
+      "reason": "登录二次校验由登录页内嵌流程按服务端 challenge 类型触发；待核实前端是否改走 /v1/auth/login 合并步骤",
+      "owner": "ui-audit 待核",
+      "evidence": "services/control-api/internal/httpapi/server.go:1590"
+    },
+    "control-api POST /v1/site-publications": {
+      "reason": "租户侧手工发布/安全激活候选详情：前端只走管理端 /v1/admin/site-publications 与列表",
+      "owner": "待派 web 发布页（确认租户是否需要）",
+      "evidence": "services/control-api/internal/edgepublishhttp/handler.go:97"
+    },
+    "control-api PUT /v1/admin/market/ledger/credit-terms": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/member.go:78"
+    },
+    "control-api PUT /v1/admin/market/supply-groups/{id}": {
+      "reason": "主控节点/插件市场买卖方页面未覆盖该操作",
+      "owner": "ml-* 系列（ML-29/ML-11b/ML-direct-pay 在跑），合入后复跑",
+      "evidence": "services/control-api/internal/marketsubscribehttp/supply.go:23"
+    },
+    "license-service GET /operator/v1/customers/{customer_id}/installations/{installation_id}/waf-rule-reports": {
+      "reason": "客户安装的 WAF 自定义规则上报：运营后台无查看入口（自定义规则报表页只看 security）",
+      "owner": "待派 operator 规则上报",
+      "evidence": "services/license-service/internal/httpapi/handler.go:397"
+    },
+    "license-service GET /operator/v1/customers/{customer_id}/installations/{installation_id}/waf-rule-reports/{report_id}": {
+      "reason": "客户安装的 WAF 自定义规则上报：运营后台无查看入口（自定义规则报表页只看 security）",
+      "owner": "待派 operator 规则上报",
+      "evidence": "services/license-service/internal/httpapi/handler.go:398"
+    },
+    "license-service GET /operator/v1/market/": {
+      "reason": "代理前缀挂载（market_admin_proxy.go），实际路由按白名单逐条对账",
+      "owner": "-",
+      "evidence": "services/license-service/internal/httpapi/market_admin_proxy.go:59"
+    },
+    "license-service GET /operator/v1/payment-channels/{id}": {
+      "reason": "收款通道详情/USDT 地址池补充/支付异常处理：运营后台支付通道页未覆盖",
+      "owner": "待派 operator 支付",
+      "evidence": "services/license-service/internal/httpapi/payments.go:28"
+    },
+    "license-service GET /operator/v1/payment-exceptions": {
+      "reason": "收款通道详情/USDT 地址池补充/支付异常处理：运营后台支付通道页未覆盖",
+      "owner": "待派 operator 支付",
+      "evidence": "services/license-service/internal/httpapi/payments.go:32"
+    },
+    "license-service GET /operator/v1/plugin-market/rebind-policy": {
+      "reason": "插件许可改绑频率策略：运营后台无设置页（mu-license 后端已合）",
+      "owner": "待派 operator 市场设置",
+      "evidence": "services/license-service/internal/httpapi/plugin_market_policy.go:12"
+    },
+    "license-service GET /operator/v1/rule-intel/merges/{merge_id}": {
+      "reason": "规则情报并入单条详情无入口",
+      "owner": "待派 operator 规则情报",
+      "evidence": "services/license-service/internal/httpapi/rule_intel_merge.go:17"
+    },
+    "license-service GET /operator/v1/signer-revocations/current": {
+      "reason": "当前生效吊销清单查看：页面只列历史",
+      "owner": "待派 operator 签名者吊销",
+      "evidence": "services/license-service/internal/signerrevocationhttp/handler.go:131"
+    },
+    "license-service GET /portal/v1/identity-proofs/callback": {
+      "reason": "人脸核身服务商回跳地址（浏览器整页跳转），不是按钮",
+      "owner": "-",
+      "evidence": "services/license-service/internal/portalhttp/seller_identity.go:37"
+    },
+    "license-service GET /portal/v1/plugin-licenses": {
+      "reason": "门户插件许可/改绑页面未做（market-unify.md S5 未勾）",
+      "owner": "market-unify S5（未完成）",
+      "evidence": "services/license-service/internal/portalhttp/plugin_licenses.go:13"
+    },
+    "license-service POST /operator/v1/password-reset-requests": {
+      "reason": "旧运营登录/找回入口：统一登录后浏览器走 /auth/v1/*（unilogin），此路由保留给脚本/兼容，不设按钮",
+      "owner": "-",
+      "evidence": "services/license-service/internal/httpapi/handler.go:309"
+    },
+    "license-service POST /operator/v1/payment-channels/{id}/crypto-pool": {
+      "reason": "收款通道详情/USDT 地址池补充/支付异常处理：运营后台支付通道页未覆盖",
+      "owner": "待派 operator 支付",
+      "evidence": "services/license-service/internal/httpapi/payments.go:31"
+    },
+    "license-service POST /operator/v1/payment-exceptions/{id}/resolution": {
+      "reason": "收款通道详情/USDT 地址池补充/支付异常处理：运营后台支付通道页未覆盖",
+      "owner": "待派 operator 支付",
+      "evidence": "services/license-service/internal/httpapi/payments.go:33"
+    },
+    "license-service POST /operator/v1/plugin-catalogs/{catalog_id}/resync-latest": {
+      "reason": "插件目录\"重新同步最新\"按钮缺失",
+      "owner": "待派 operator 插件目录",
+      "evidence": "services/license-service/internal/httpapi/handler.go:370"
+    },
+    "license-service POST /operator/v1/rule-packs": {
+      "reason": "官方规则包发布与泄露追溯：无页面（目前只有离线脚本）",
+      "owner": "待派 operator 规则包",
+      "evidence": "services/license-service/internal/httpapi/artifact_catalog.go:22"
+    },
+    "license-service POST /operator/v1/rule-packs/traces": {
+      "reason": "官方规则包发布与泄露追溯：无页面（目前只有离线脚本）",
+      "owner": "待派 operator 规则包",
+      "evidence": "services/license-service/internal/httpapi/artifact_catalog.go:23"
+    },
+    "license-service POST /operator/v1/sessions": {
+      "reason": "旧运营登录/找回入口：统一登录后浏览器走 /auth/v1/*（unilogin），此路由保留给脚本/兼容，不设按钮",
+      "owner": "-",
+      "evidence": "services/license-service/internal/httpapi/handler.go:307"
+    },
+    "license-service POST /portal/v1/plugin-licenses/{market_license_id}/bind": {
+      "reason": "门户插件许可/改绑页面未做（market-unify.md S5 未勾）",
+      "owner": "market-unify S5（未完成）",
+      "evidence": "services/license-service/internal/portalhttp/plugin_licenses.go:14"
+    },
+    "license-service POST /portal/v1/plugin-licenses/{market_license_id}/unbind": {
+      "reason": "门户插件许可/改绑页面未做（market-unify.md S5 未勾）",
+      "owner": "market-unify S5（未完成）",
+      "evidence": "services/license-service/internal/portalhttp/plugin_licenses.go:16"
+    },
+    "license-service POST /portal/v1/pow-challenges": {
+      "reason": "与 POST /auth/v1/pow-challenges 同一挑战（portal.IssuePoWChallenge），门户页面走 /auth/v1；/portal/v1 前缀这条无调用方（既有重复路由，已登记 OpenAPI，是否删除待定）",
+      "owner": "-",
+      "evidence": "services/license-service/internal/portalhttp/auth.go:14"
+    },
+    "license-service POST /portal/v1/sessions": {
+      "reason": "旧门户登录入口：统一登录后门户走 /auth/v1/sessions，保留兼容，不设按钮",
+      "owner": "-",
+      "evidence": "services/license-service/internal/portalhttp/auth.go:16"
+    },
+    "license-service POST /portal/v1/topups": {
+      "reason": "门户余额充值下单无按钮（余额页只读）",
+      "owner": "待派 portal-topup",
+      "evidence": "services/license-service/internal/portalhttp/checkout.go:19"
+    },
+    "license-service PUT /operator/v1/plugin-market/rebind-policy": {
+      "reason": "插件许可改绑频率策略：运营后台无设置页（mu-license 后端已合）",
+      "owner": "待派 operator 市场设置",
+      "evidence": "services/license-service/internal/httpapi/plugin_market_policy.go:14"
+    },
+    "control-api GET /v1/admin/migrate-import-templates/{section}": {
+      "reason": "迁移导入模板下载：前端以 <a href> 拼 `${section}.csv` 下载（apps/web/src/api/migrateImports.ts:134），对账工具不识别 .csv 后缀拼接",
+      "owner": "对账工具小项（非缺口）",
+      "evidence": "apps/web/src/api/migrateImports.ts:134"
+    },
+    "control-api * /v1/control-site/content": {
+      "reason": "官网主题页面包的公开接口：由已安装的官方页面包在官网同源 fetch（examples/site-themes/*/site/assets/site.js；libs/sitetheme/bundle.go:51 只放行这两条），不是控制台页面调用",
+      "owner": "-",
+      "evidence": "services/control-api/internal/controlsite/install_v2.go:181"
+    },
+    "control-api * /v1/control-site/assets/": {
+      "reason": "官网主题页面包的公开接口：由已安装的官方页面包在官网同源 fetch（examples/site-themes/*/site/assets/site.js；libs/sitetheme/bundle.go:51 只放行这两条），不是控制台页面调用",
+      "owner": "-",
+      "evidence": "services/control-api/internal/controlsite/install_v2.go:181"
+    },
+    "license-service PUT /operator/v1/market/official-publisher-keys": {
+      "reason": "io.cdnca 官方发布者公钥登记：定为运营一次性操作，走 docs/runbooks/release-1.0.35.md「上线一次性操作」curl，不做页面",
+      "owner": "-",
+      "evidence": "services/license-service/internal/marketadminproxy/routes.go:156"
+    }
+  },
+  "table2": {},
+  "table3": {
+    "permission_never_gated web control.upgrades.check": {
+      "reason": "接口权限码在前端从未作为显示条件：只持有该码的子账号/运营者看不到入口，持有其它码者按钮可见但 403",
+      "owner": "待派 权限对齐",
+      "evidence": "services/control-api/internal/httpapi/server.go:987"
+    },
+    "permission_never_gated web sites.export": {
+      "reason": "接口权限码在前端从未作为显示条件：只持有该码的子账号/运营者看不到入口，持有其它码者按钮可见但 403",
+      "owner": "待派 权限对齐",
+      "evidence": "services/control-api/internal/httpapi/server.go:934"
+    },
+    "unknown_permission web errors.forbidden": {
+      "reason": "前端判断的权限码不在后端迁移权限目录中：任何角色都不满足",
+      "owner": "待派 权限对齐",
+      "evidence": "apps/web/src/pages/tickets/TicketsPage.tsx:42"
+    },
+    "unknown_permission web market.resell": {
+      "reason": "market.resell 是授权租约功能码（libs/entitlement/lease.go:22），页面按 member.features 判断，不是主控权限码；对账工具把它当权限码",
+      "owner": "对账工具小项（非缺口）",
+      "evidence": "apps/web/src/pages/node-market/supplier/ResalePanel.tsx:35"
+    }
+  },
+  "table4": {},
+  "table5": {},
+  "proxyGaps": {
+    "主控代理/直调 DELETE /v1/acme/challenges": {
+      "reason": "市场成员接口（黑名单订阅/ICP 举报/供给域名 ACME）主控侧未接：member.go 无映射且 marketclient 无调用",
+      "owner": "待派 market 主控接线",
+      "evidence": "services/market-service/internal/httpapi/compliance.go:26"
+    },
+    "主控代理/直调 GET /v1/acme/target": {
+      "reason": "市场成员接口（黑名单订阅/ICP 举报/供给域名 ACME）主控侧未接：member.go 无映射且 marketclient 无调用",
+      "owner": "待派 market 主控接线",
+      "evidence": "services/market-service/internal/httpapi/compliance.go:24"
+    },
+    "主控代理/直调 GET /v1/blacklist": {
+      "reason": "市场成员接口（黑名单订阅/ICP 举报/供给域名 ACME）主控侧未接：member.go 无映射且 marketclient 无调用",
+      "owner": "待派 market 主控接线",
+      "evidence": "services/market-service/internal/httpapi/compliance.go:20"
+    },
+    "主控代理/直调 GET /v1/relay/cursor": {
+      "reason": "中继游标查询：marketruntime 用 inbox?after= 自管游标，此接口仅调试",
+      "owner": "-",
+      "evidence": "services/market-service/internal/httpapi/relay.go:28"
+    },
+    "主控代理/直调 POST /v1/acme/challenges": {
+      "reason": "市场成员接口（黑名单订阅/ICP 举报/供给域名 ACME）主控侧未接：member.go 无映射且 marketclient 无调用",
+      "owner": "待派 market 主控接线",
+      "evidence": "services/market-service/internal/httpapi/compliance.go:25"
+    },
+    "主控代理/直调 POST /v1/icp/reports": {
+      "reason": "市场成员接口（黑名单订阅/ICP 举报/供给域名 ACME）主控侧未接：member.go 无映射且 marketclient 无调用",
+      "owner": "待派 market 主控接线",
+      "evidence": "services/market-service/internal/httpapi/compliance.go:21"
+    },
+    "主控代理/直调 GET /v1/": {
+      "reason": "工具无法展开 market-service feedback.go 里按角色拼接的路径（\"/v1/\" + role + \"/feedback\"）；主控 member_u4d.go 已逐条映射 /v1/buyer/feedback* 与 /v1/seller/feedback*，非真实缺口",
+      "owner": "-",
+      "evidence": "services/market-service/internal/httpapi/feedback.go:50"
+    }
+  },
+  "openapiNotServed": {
+    "POST /installation/v1/rule-intel-reports": {
+      "reason": "OpenAPI 登记了主控上报规则情报，代码在 RI-11 分支未合入",
+      "owner": "ri-11（未合入，release-prep.md 阻塞项）",
+      "evidence": "api/openapi/v1/license.yaml:5443"
+    },
+    "GET /installation/v2/installation-state/current": {
+      "reason": "已实现：路由以常量拼接注册（\"GET \"+installationban.StatePath，httpapi/installation_ban.go:23），对账工具不识别",
+      "owner": "对账工具小项（非缺口）",
+      "evidence": "services/license-service/internal/httpapi/installation_ban.go:23"
+    }
+  }
+}

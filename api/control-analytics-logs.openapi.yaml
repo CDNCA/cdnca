@@ -1,0 +1,1743 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Control Analytics Logs API
+  version: 0.5.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Runtime-mounted access and security event APIs. Access and block-event
+    results use snapshot-bounded keyset pagination over the current ClickHouse
+    projection. Current blocks derive from the active PostgreSQL ACL policy;
+    unlock history derives from append-only activation audit facts and reports
+    real edge rollout progress. Unlock removes one exact CIDR through a new
+    policy revision and version-fenced security activation. Equal-version event
+    replacement ambiguity fails closed rather than returning an arbitrary row.
+servers:
+  - url: /
+paths:
+  /v1/admin/analytics/logs/access:
+    get:
+      operationId: listPlatformAccessLogs
+      summary: List access logs for one explicitly selected tenant
+      description: >-
+        Requires a platform-scoped identity. tenant_id is mandatory; this API
+        never performs an all-tenant log query. URI output contains only an
+        origin-form path and omits query and fragment content.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/SecurityHost'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/URIPath'
+        - $ref: '#/components/parameters/URIPathMatch'
+        - $ref: '#/components/parameters/StatusCode'
+        - $ref: '#/components/parameters/Method'
+        - $ref: '#/components/parameters/Protocol'
+        - $ref: '#/components/parameters/CacheStatus'
+        - $ref: '#/components/parameters/UpstreamResult'
+        - $ref: '#/components/parameters/ContentType'
+        - $ref: '#/components/parameters/UserAgent'
+        - $ref: '#/components/parameters/RequestBytesMin'
+        - $ref: '#/components/parameters/RequestBytesMax'
+        - $ref: '#/components/parameters/ResponseBytesMin'
+        - $ref: '#/components/parameters/ResponseBytesMax'
+        - $ref: '#/components/parameters/CountryCode'
+        - $ref: '#/components/parameters/Carrier'
+        - $ref: '#/components/parameters/JA4'
+        - $ref: '#/components/parameters/OriginConnectUSMin'
+        - $ref: '#/components/parameters/OriginConnectUSMax'
+        - $ref: '#/components/parameters/OriginFirstByteUSMin'
+        - $ref: '#/components/parameters/OriginFirstByteUSMax'
+        - $ref: '#/components/parameters/OriginTotalUSMin'
+        - $ref: '#/components/parameters/OriginTotalUSMax'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AccessResultOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/CapabilityUnsupported'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/access:
+    get:
+      operationId: listTenantAccessLogs
+      summary: List access logs for the authenticated tenant
+      description: >-
+        Scope comes only from the authenticated tenant identity. Supplying
+        tenant_id, even with the same value, returns 403.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/SecurityHost'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/URIPath'
+        - $ref: '#/components/parameters/URIPathMatch'
+        - $ref: '#/components/parameters/StatusCode'
+        - $ref: '#/components/parameters/Method'
+        - $ref: '#/components/parameters/Protocol'
+        - $ref: '#/components/parameters/CacheStatus'
+        - $ref: '#/components/parameters/UpstreamResult'
+        - $ref: '#/components/parameters/ContentType'
+        - $ref: '#/components/parameters/UserAgent'
+        - $ref: '#/components/parameters/RequestBytesMin'
+        - $ref: '#/components/parameters/RequestBytesMax'
+        - $ref: '#/components/parameters/ResponseBytesMin'
+        - $ref: '#/components/parameters/ResponseBytesMax'
+        - $ref: '#/components/parameters/CountryCode'
+        - $ref: '#/components/parameters/Carrier'
+        - $ref: '#/components/parameters/JA4'
+        - $ref: '#/components/parameters/OriginConnectUSMin'
+        - $ref: '#/components/parameters/OriginConnectUSMax'
+        - $ref: '#/components/parameters/OriginFirstByteUSMin'
+        - $ref: '#/components/parameters/OriginFirstByteUSMax'
+        - $ref: '#/components/parameters/OriginTotalUSMin'
+        - $ref: '#/components/parameters/OriginTotalUSMax'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AccessResultOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/CapabilityUnsupported'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/access/exports:
+    get:
+      operationId: listPlatformAccessLogExports
+      summary: List durable access-log exports owned by the calling account for the target tenant
+      description: >-
+        Without query filters, lists up to 50 exports owned by the calling account
+        (user + access scope), regardless of the login session that created them.
+        With from/to (and the same filters as the access-log list, without
+        limit/cursor), returns at most one export: the latest generation for that
+        account and normalized query scope, so the log view can recover it after
+        re-login.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequiredTenantID'
+        - $ref: '#/components/parameters/ExportScopeFrom'
+        - $ref: '#/components/parameters/ExportScopeTo'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/SecurityHost'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/URIPath'
+        - $ref: '#/components/parameters/URIPathMatch'
+        - $ref: '#/components/parameters/StatusCode'
+        - $ref: '#/components/parameters/Method'
+        - $ref: '#/components/parameters/Protocol'
+        - $ref: '#/components/parameters/CacheStatus'
+        - $ref: '#/components/parameters/UpstreamResult'
+        - $ref: '#/components/parameters/ContentType'
+        - $ref: '#/components/parameters/UserAgent'
+        - $ref: '#/components/parameters/RequestBytesMin'
+        - $ref: '#/components/parameters/RequestBytesMax'
+        - $ref: '#/components/parameters/ResponseBytesMin'
+        - $ref: '#/components/parameters/ResponseBytesMax'
+        - $ref: '#/components/parameters/CountryCode'
+        - $ref: '#/components/parameters/Carrier'
+        - $ref: '#/components/parameters/JA4'
+        - $ref: '#/components/parameters/OriginConnectUSMin'
+        - $ref: '#/components/parameters/OriginConnectUSMax'
+        - $ref: '#/components/parameters/OriginFirstByteUSMin'
+        - $ref: '#/components/parameters/OriginFirstByteUSMax'
+        - $ref: '#/components/parameters/OriginTotalUSMin'
+        - $ref: '#/components/parameters/OriginTotalUSMax'
+      responses:
+        '200': {$ref: '#/components/responses/AccessExportListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+    post:
+      operationId: createPlatformAccessLogExport
+      summary: Create a snapshot-bound access-log export for one target tenant
+      description: >-
+        Idempotent per account (user + access scope) and normalized query scope,
+        independent of the login session. The same Idempotency-Key replays its
+        export (409 if the key was used for another scope). For the same scope,
+        a pending, running or unexpired completed export is reused
+        (Idempotency-Replayed: true); a failed export with attempts left is
+        retried in place under the same export id; otherwise a new generation is
+        created.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequiredTenantID'
+        - $ref: '#/components/parameters/ExportIdempotencyKey'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AccessExportCreate'}}}
+      responses:
+        '202': {$ref: '#/components/responses/AccessExportAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/ExportConflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/access/exports:
+    get:
+      operationId: listTenantAccessLogExports
+      summary: List durable access-log exports owned by the calling tenant account
+      description: >-
+        Without query filters, lists up to 50 exports owned by the calling account
+        (user + access scope), regardless of the login session that created them.
+        With from/to (and the same filters as the access-log list, without
+        limit/cursor), returns at most one export: the latest generation for that
+        account and normalized query scope, so the log view can recover it after
+        re-login.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/ExportScopeFrom'
+        - $ref: '#/components/parameters/ExportScopeTo'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/SecurityHost'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/URIPath'
+        - $ref: '#/components/parameters/URIPathMatch'
+        - $ref: '#/components/parameters/StatusCode'
+        - $ref: '#/components/parameters/Method'
+        - $ref: '#/components/parameters/Protocol'
+        - $ref: '#/components/parameters/CacheStatus'
+        - $ref: '#/components/parameters/UpstreamResult'
+        - $ref: '#/components/parameters/ContentType'
+        - $ref: '#/components/parameters/UserAgent'
+        - $ref: '#/components/parameters/RequestBytesMin'
+        - $ref: '#/components/parameters/RequestBytesMax'
+        - $ref: '#/components/parameters/ResponseBytesMin'
+        - $ref: '#/components/parameters/ResponseBytesMax'
+        - $ref: '#/components/parameters/CountryCode'
+        - $ref: '#/components/parameters/Carrier'
+        - $ref: '#/components/parameters/JA4'
+        - $ref: '#/components/parameters/OriginConnectUSMin'
+        - $ref: '#/components/parameters/OriginConnectUSMax'
+        - $ref: '#/components/parameters/OriginFirstByteUSMin'
+        - $ref: '#/components/parameters/OriginFirstByteUSMax'
+        - $ref: '#/components/parameters/OriginTotalUSMin'
+        - $ref: '#/components/parameters/OriginTotalUSMax'
+      responses:
+        '200': {$ref: '#/components/responses/AccessExportListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+    post:
+      operationId: createTenantAccessLogExport
+      summary: Create a snapshot-bound access-log export for the current tenant
+      description: >-
+        Idempotent per account (user + access scope) and normalized query scope,
+        independent of the login session. The same Idempotency-Key replays its
+        export (409 if the key was used for another scope). For the same scope,
+        a pending, running or unexpired completed export is reused
+        (Idempotency-Replayed: true); a failed export with attempts left is
+        retried in place under the same export id; otherwise a new generation is
+        created.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters: [{$ref: '#/components/parameters/ExportIdempotencyKey'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/AccessExportCreate'}}}
+      responses:
+        '202': {$ref: '#/components/responses/AccessExportAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/ExportConflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/access/exports/{export_id}:
+    get:
+      operationId: getPlatformAccessLogExport
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters: [{$ref: '#/components/parameters/RequiredTenantID'}, {$ref: '#/components/parameters/ExportID'}]
+      responses:
+        '200': {$ref: '#/components/responses/AccessExportOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/access/exports/{export_id}:
+    get:
+      operationId: getTenantAccessLogExport
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters: [{$ref: '#/components/parameters/ExportID'}]
+      responses:
+        '200': {$ref: '#/components/responses/AccessExportOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/access/exports/{export_id}/download-grants:
+    post:
+      operationId: grantPlatformAccessLogExportDownload
+      description: Returns a short-lived one-time token bound to the current platform session, target tenant and export. Any session of the owning account may request a grant; a token from another session is rejected. Only its SHA-256 digest is stored.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters: [{$ref: '#/components/parameters/RequiredTenantID'}, {$ref: '#/components/parameters/ExportID'}]
+      responses:
+        '201': {$ref: '#/components/responses/AccessExportGrantCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/access/exports/{export_id}/download-grants:
+    post:
+      operationId: grantTenantAccessLogExportDownload
+      description: Returns a short-lived one-time token bound to the current tenant session and export. Any session of the owning account may request a grant; a token from another session is rejected. API keys are rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters: [{$ref: '#/components/parameters/ExportID'}]
+      responses:
+        '201': {$ref: '#/components/responses/AccessExportGrantCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/access/exports/{export_id}/download:
+    get:
+      operationId: downloadPlatformAccessLogExport
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters: [{$ref: '#/components/parameters/RequiredTenantID'}, {$ref: '#/components/parameters/ExportID'}, {$ref: '#/components/parameters/ExportDownloadToken'}]
+      responses:
+        '200': {$ref: '#/components/responses/AccessExportDownloadOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '410': {$ref: '#/components/responses/ExportGrantRejected'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/access/exports/{export_id}/download:
+    get:
+      operationId: downloadTenantAccessLogExport
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters: [{$ref: '#/components/parameters/ExportID'}, {$ref: '#/components/parameters/ExportDownloadToken'}]
+      responses:
+        '200': {$ref: '#/components/responses/AccessExportDownloadOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '410': {$ref: '#/components/responses/ExportGrantRejected'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/block-events:
+    get:
+      operationId: listPlatformBlockEvents
+      summary: List security block events for one explicitly selected tenant
+      description: >-
+        Requires a platform-scoped identity and an explicit tenant_id. Returns
+        the current security-event projection with the same snapshot-bounded
+        opaque cursor contract as access logs. This is raw event retrieval, not
+        an immutable block-state transition history.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/URIPath'
+        - $ref: '#/components/parameters/URIPathMatch'
+        - $ref: '#/components/parameters/BlockStatusCode'
+        - $ref: '#/components/parameters/SecurityAction'
+        - $ref: '#/components/parameters/SecurityEventType'
+        - $ref: '#/components/parameters/SecurityHost'
+        - $ref: '#/components/parameters/CountryCode'
+        - $ref: '#/components/parameters/Carrier'
+        - $ref: '#/components/parameters/JA4'
+        - $ref: '#/components/parameters/OriginConnectUSMin'
+        - $ref: '#/components/parameters/OriginConnectUSMax'
+        - $ref: '#/components/parameters/OriginFirstByteUSMin'
+        - $ref: '#/components/parameters/OriginFirstByteUSMax'
+        - $ref: '#/components/parameters/OriginTotalUSMin'
+        - $ref: '#/components/parameters/OriginTotalUSMax'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/BlockEventResultOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/CapabilityUnsupported'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/cc-bans:
+    get:
+      operationId: listPlatformCCBans
+      summary: List IPs auto-banned by CC rules
+      description: >-
+        Requires a platform identity and an explicit tenant_id. Aggregates cc/temporary_ban security events (one per ban
+        activation) per site, client IP and CC rule in the window, newest
+        first, at most limit rows; truncated reports more rows exist.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': {$ref: '#/components/responses/CCBanResultOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/CapabilityUnsupported'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/cc-bans:
+    get:
+      operationId: listTenantCCBans
+      summary: List IPs auto-banned by CC rules
+      description: >-
+        Scope comes only from the authenticated tenant identity. Aggregates cc/temporary_ban security events (one per ban
+        activation) per site, client IP and CC rule in the window, newest
+        first, at most limit rows; truncated reports more rows exist.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': {$ref: '#/components/responses/CCBanResultOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/CapabilityUnsupported'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/block-events:
+    get:
+      operationId: listTenantBlockEvents
+      summary: List security block events for the authenticated tenant
+      description: >-
+        Scope comes only from the authenticated tenant identity. Returns the
+        current security-event projection with snapshot-bounded keyset
+        pagination. This route does not claim immutable block-state history.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/ClientIP'
+        - $ref: '#/components/parameters/URIPath'
+        - $ref: '#/components/parameters/URIPathMatch'
+        - $ref: '#/components/parameters/BlockStatusCode'
+        - $ref: '#/components/parameters/SecurityAction'
+        - $ref: '#/components/parameters/SecurityEventType'
+        - $ref: '#/components/parameters/SecurityHost'
+        - $ref: '#/components/parameters/CountryCode'
+        - $ref: '#/components/parameters/Carrier'
+        - $ref: '#/components/parameters/JA4'
+        - $ref: '#/components/parameters/OriginConnectUSMin'
+        - $ref: '#/components/parameters/OriginConnectUSMax'
+        - $ref: '#/components/parameters/OriginFirstByteUSMin'
+        - $ref: '#/components/parameters/OriginFirstByteUSMax'
+        - $ref: '#/components/parameters/OriginTotalUSMin'
+        - $ref: '#/components/parameters/OriginTotalUSMax'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/BlockEventResultOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/CapabilityUnsupported'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/blocks/current:
+    get:
+      operationId: listPlatformCurrentBlocks
+      summary: List current ACL blocks across the customer control plane
+      description: >-
+        Returns only CIDRs present in the active site ACL policy. A newer
+        unpublished policy revision or open activation makes the item
+        non-unlockable. tenant_id optionally narrows the platform-wide read;
+        every row carries its tenant_id so write actions stay explicitly scoped.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/BlockStateLimit'
+        - $ref: '#/components/parameters/BlockStateOffset'
+      responses:
+        '200': {$ref: '#/components/responses/CurrentBlocksOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/blocks/current:
+    get:
+      operationId: listTenantCurrentBlocks
+      summary: List current ACL blocks for the authenticated tenant
+      description: >-
+        Scope comes only from the authenticated tenant identity. Supplying a
+        tenant_id is rejected rather than re-scoping the request.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/BlockStateLimit'
+        - $ref: '#/components/parameters/BlockStateOffset'
+      responses:
+        '200': {$ref: '#/components/responses/CurrentBlocksOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/blocks/history:
+    get:
+      operationId: listPlatformBlockHistory
+      summary: List audited unlock history across the customer control plane
+      description: >-
+        Returns append-only cidr_unlock activation audit facts and their latest
+        durable edge rollout progress. tenant_id optionally narrows the
+        platform-wide read.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/BlockStateLimit'
+        - $ref: '#/components/parameters/BlockStateOffset'
+      responses:
+        '200': {$ref: '#/components/responses/BlockHistoryOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/blocks/history:
+    get:
+      operationId: listTenantBlockHistory
+      summary: List audited unlock history for the authenticated tenant
+      description: >-
+        Scope comes only from the authenticated tenant identity. Raw security
+        events remain available from the separate block-events route.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/BlockStateLimit'
+        - $ref: '#/components/parameters/BlockStateOffset'
+      responses:
+        '200': {$ref: '#/components/responses/BlockHistoryOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/blocks/current-count:
+    get:
+      operationId: countPlatformCurrentBlocksBySite
+      summary: Count current ACL blocks by site across the customer control plane
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+      responses:
+        '200': {$ref: '#/components/responses/SiteBlacklistCountsOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/blocks/current-count:
+    get:
+      operationId: countTenantCurrentBlocksBySite
+      summary: Count current ACL blocks by site for the authenticated tenant
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      responses:
+        '200': {$ref: '#/components/responses/SiteBlacklistCountsOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/blocks/current/{block_id}/unlock:
+    post:
+      operationId: unlockPlatformCurrentBlock
+      summary: Unlock one current ACL block for an explicitly selected tenant
+      description: >-
+        Removes exactly one CIDR from a new ACL policy revision, then starts a
+        version-fenced edge activation. A stale active revision, open
+        activation, missing target CIDR, or missing target-node snapshot fails
+        closed with 409. Reusing the same key and body returns the same durable
+        result; a conflicting body is rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/BlockID'
+        - $ref: '#/components/parameters/RequiredTenantID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BlockUnlockRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/BlockUnlockAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/BlockNotFound'}
+        '409': {$ref: '#/components/responses/BlockConflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/blocks/current/{block_id}/unlock:
+    post:
+      operationId: unlockTenantCurrentBlock
+      summary: Unlock one current ACL block for the authenticated tenant
+      description: >-
+        Uses only the authenticated tenant scope and the same policy revision,
+        idempotency, activation and conflict contract as the platform route.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/BlockID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BlockUnlockRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/BlockUnlockAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/BlockNotFound'}
+        '409': {$ref: '#/components/responses/BlockConflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/cc-coordination:
+    get:
+      operationId: listPlatformCCCoordinationStates
+      summary: List cross-node CC coordination states of every tenant, optionally narrowed to one tenant or site
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/BlockStateLimit'
+      responses:
+        '200': {$ref: '#/components/responses/CCCoordinationStatesOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/cc-coordination:
+    get:
+      operationId: listTenantCCCoordinationStates
+      summary: List cross-node CC coordination states of the authenticated tenant, optionally narrowed to one site
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/BlockStateLimit'
+      responses:
+        '200': {$ref: '#/components/responses/CCCoordinationStatesOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/logs/cc-coordination/{state_id}/release:
+    post:
+      operationId: releasePlatformCCCoordinationState
+      summary: Release one exact cross-node CC state after a false-positive decision
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/CCCoordinationStateID'
+        - $ref: '#/components/parameters/RequiredTenantID'
+        - $ref: '#/components/parameters/RequiredSiteID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestIDHeader'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CCCoordinationReleaseRequest'}}}
+      responses:
+        '202': {$ref: '#/components/responses/CCCoordinationReleaseAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/BlockConflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/analytics/logs/cc-coordination/{state_id}/release:
+    post:
+      operationId: releaseTenantCCCoordinationState
+      summary: Release one exact cross-node CC state for the authenticated tenant
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - $ref: '#/components/parameters/CCCoordinationStateID'
+        - $ref: '#/components/parameters/RequiredSiteID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestIDHeader'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CCCoordinationReleaseRequest'}}}
+      responses:
+        '202': {$ref: '#/components/responses/CCCoordinationReleaseAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/BlockConflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Send `CdncaKey <key_id>.<secret>`.
+  parameters:
+    SecurityAction:
+      name: action
+      in: query
+      required: false
+      description: >-
+        Block events only: narrow to block, challenge, log (observed) or temporary_ban (auto block);
+        default all four, the hits the WAF overview counts. A CC challenge page / 429 is
+        one event per site, client IP, rule, action and minute with its request count.
+      schema: {type: string, enum: [block, challenge, log, temporary_ban]}
+    SecurityEventType:
+      name: event_type
+      in: query
+      required: false
+      description: 'Block events only: narrow to one event type (waf, cc, acl, ...).'
+      schema: {type: string, maxLength: 64}
+    SecurityHost:
+      name: host
+      in: query
+      required: false
+      description: 'Access logs and block events: one host or up to 64 distinct space-separated hosts.'
+      schema: {type: string, maxLength: 16192}
+    TenantID:
+      name: tenant_id
+      in: query
+      required: false
+      description: Platform route only; omit for all tenants or provide one tenant UUID to narrow the read.
+      schema: {type: string, format: uuid}
+    RequiredTenantID:
+      name: tenant_id
+      in: query
+      required: true
+      description: Platform route only; all-tenant log queries are forbidden.
+      schema: {type: string, format: uuid}
+    From:
+      name: from
+      in: query
+      required: true
+      description: >-
+        Inclusive RFC3339 instant with at most millisecond precision. It is
+        normalized to UTC and must be earlier than to.
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      required: true
+      description: >-
+        Exclusive RFC3339 instant with at most millisecond precision. The
+        window may not exceed 31 days.
+      schema: {type: string, format: date-time}
+    SiteID:
+      name: site_id
+      in: query
+      schema: {type: string, format: uuid}
+    RequiredSiteID:
+      name: site_id
+      in: query
+      required: true
+      schema: {type: string, format: uuid}
+    NodeID:
+      name: node_id
+      in: query
+      schema: {type: string, format: uuid}
+    ClientIP:
+      name: client_ip
+      in: query
+      description: Exact IPv4 or IPv6 address without a zone identifier.
+      schema: {type: string, format: ip}
+    URIPath:
+      name: uri_path
+      in: query
+      description: Exact origin-form path after query and fragment removal.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 4096
+        pattern: '^/[^?#]*$'
+    URIPathMatch:
+      name: uri_path_match
+      in: query
+      description: How uri_path matches; prefix uses a startsWith match on the origin-form path. Requires uri_path.
+      schema: {type: string, enum: [exact, prefix], default: exact}
+    StatusCode:
+      name: status_code
+      in: query
+      schema: {type: integer, minimum: 100, maximum: 599}
+    BlockStatusCode:
+      name: status_code
+      in: query
+      description: Exact stored status; 0 means no HTTP status was recorded.
+      schema:
+        anyOf:
+          - const: 0
+          - type: integer
+            minimum: 100
+            maximum: 599
+    Method:
+      name: method
+      in: query
+      description: Exact HTTP method; access-log routes only.
+      schema: {type: string, minLength: 1, maxLength: 32}
+    Protocol:
+      name: protocol
+      in: query
+      description: Exact stored protocol; access-log routes only.
+      schema: {type: string, minLength: 1, maxLength: 32}
+    CacheStatus:
+      name: cache_status
+      in: query
+      description: Exact stored cache status; access-log routes only.
+      schema: {type: string, minLength: 1, maxLength: 32}
+    UpstreamResult:
+      name: upstream_result
+      in: query
+      schema: {type: string, minLength: 1, maxLength: 64}
+    ContentType:
+      name: content_type
+      in: query
+      schema: {type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+$'}
+    UserAgent:
+      name: user_agent
+      in: query
+      schema: {type: string, minLength: 1, maxLength: 512}
+    RequestBytesMin:
+      name: request_bytes_min
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    RequestBytesMax:
+      name: request_bytes_max
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    ResponseBytesMin:
+      name: response_bytes_min
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    ResponseBytesMax:
+      name: response_bytes_max
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    CountryCode:
+      name: country_code
+      in: query
+      description: Exact stored country or region code.
+      schema: {type: string, minLength: 1, maxLength: 8}
+    Carrier:
+      name: carrier
+      in: query
+      description: Exact stored carrier value.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    JA4:
+      name: ja4
+      in: query
+      description: Exact stored JA4 fingerprint. Rows without a source JA4 do not match.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    OriginConnectUSMin:
+      name: origin_connect_us_min
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    OriginConnectUSMax:
+      name: origin_connect_us_max
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    OriginFirstByteUSMin:
+      name: origin_first_byte_us_min
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    OriginFirstByteUSMax:
+      name: origin_first_byte_us_max
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    OriginTotalUSMin:
+      name: origin_total_us_min
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    OriginTotalUSMax:
+      name: origin_total_us_max
+      in: query
+      schema: {type: integer, format: uint64, minimum: 0}
+    Limit:
+      name: limit
+      in: query
+      description: >-
+        Page size. When more rows exist at the fixed snapshot, the response
+        includes an opaque next_cursor.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    BlockStateLimit:
+      name: limit
+      in: query
+      description: Maximum current or historical block facts returned.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    BlockStateOffset:
+      name: offset
+      in: query
+      description: Number of matching current or historical block facts to skip.
+      schema: {type: integer, minimum: 0, maximum: 1000000, default: 0}
+    BlockID:
+      name: block_id
+      in: path
+      required: true
+      description: Stable identity derived from site, active ACL policy and canonical CIDR.
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9._-]+$'}
+    ExportScopeFrom:
+      name: from
+      in: query
+      required: false
+      description: Export scope lookup; when present, to is required and the filters follow the access-log list.
+      schema: {type: string, format: date-time}
+    ExportScopeTo:
+      name: to
+      in: query
+      required: false
+      description: Export scope lookup; exclusive end of the window.
+      schema: {type: string, format: date-time}
+    ExportIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$'}
+    ExportID:
+      name: export_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ExportDownloadToken:
+      name: X-Analytics-Download-Token
+      in: header
+      required: true
+      description: Short-lived one-time token. The server stores only its SHA-256 digest.
+      schema: {type: string, minLength: 43, maxLength: 43, pattern: '^[A-Za-z0-9_-]{43}$'}
+    RequestIDHeader:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$'}
+    CCCoordinationStateID:
+      name: state_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Cursor:
+      name: cursor
+      in: query
+      description: >-
+        Opaque keyset cursor returned by the preceding page. It is bound to the
+        tenant, route kind, complete filter, descending direction, snapshot,
+        and last (occurred_at,event_id) key. Malformed, overlong, or mismatched
+        cursors are rejected and never re-scoped.
+      schema: {type: string, minLength: 1, maxLength: 2048}
+  schemas:
+    QueryMetadata:
+      type: object
+      additionalProperties: false
+      required:
+        - from
+        - to
+        - timezone
+        - consistency
+        - replacement_consistency
+        - pagination
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        timezone: {type: string, const: UTC}
+        snapshot_at:
+          type: string
+          format: date-time
+          description: ClickHouse snapshot bound shared by every page in this cursor chain.
+        next_cursor:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        consistency:
+          type: string
+          const: snapshot
+        replacement_consistency:
+          type: string
+          const: latest_event_id_at_snapshot
+          description: >-
+            The latest visible version for each event ID at the declared
+            snapshot is returned. Observable equal-version ambiguity fails
+            closed.
+        pagination:
+          type: string
+          const: keyset
+    AccessLog:
+      type: object
+      additionalProperties: false
+      required:
+        - event_id
+        - occurred_at
+        - site_id
+        - node_id
+        - request_id
+        - trace_id
+        - config_version_id
+        - host
+        - listen_port
+        - uri_path
+        - client_ip
+        - country_code
+        - carrier
+        - method
+        - protocol
+        - cache_status
+        - upstream_result
+        - upstream_addr
+        - status_code
+        - request_bytes
+        - response_bytes
+        - duration_us
+        - task_id
+        - installation_id
+        - request_headers
+        - response_headers
+        - request_body
+        - response_body
+        - ja4
+        - origin_connect_us
+        - origin_first_byte_us
+        - origin_total_us
+      properties:
+        event_id: {type: string, minLength: 1, maxLength: 128}
+        occurred_at: {type: string, format: date-time}
+        site_id: {type: string, format: uuid}
+        node_id: {type: string, format: uuid}
+        request_id: {type: string, maxLength: 128}
+        trace_id: {type: string, maxLength: 128}
+        config_version_id:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        host: {type: string, maxLength: 253}
+        listen_port: {type: integer, minimum: 0, maximum: 65535}
+        uri_path:
+          type: string
+          maxLength: 4096
+          description: Origin-form path only; query and fragment are omitted.
+        client_ip: {type: string, format: ip}
+        country_code: {type: string, maxLength: 8}
+        carrier: {type: string, maxLength: 128}
+        method: {type: string, maxLength: 32}
+        protocol: {type: string, maxLength: 32}
+        cache_status: {type: string, maxLength: 32}
+        upstream_result:
+          type: string
+          maxLength: 64
+          description: Origin diagnostic code (no_host, config_mismatch, timeout ...); not the address.
+        upstream_addr:
+          type: string
+          maxLength: 64
+          description: >-
+            Origin address(es) the node sent the request to (nginx $upstream_addr, cut to 64 bytes);
+            empty when not sent to origin, when the platform does not record it (access_log_fields
+            upstream_addr) or for events logged before CH migration 028.
+        status_code: {type: integer, minimum: 100, maximum: 599}
+        request_bytes: {type: integer, format: uint64, minimum: 0}
+        response_bytes: {type: integer, format: uint64, minimum: 0}
+        duration_us: {type: integer, format: uint64, minimum: 0}
+        task_id:
+          type: [string, 'null']
+          maxLength: 128
+        installation_id: {type: string, maxLength: 128}
+        request_headers: {$ref: '#/components/schemas/CapturedHeaders'}
+        response_headers: {$ref: '#/components/schemas/CapturedHeaders'}
+        request_body: {$ref: '#/components/schemas/CapturedBody'}
+        response_body: {$ref: '#/components/schemas/CapturedBody'}
+        ja4:
+          type: [string, 'null']
+          maxLength: 128
+        origin_connect_us: {$ref: '#/components/schemas/NullableUInt64'}
+        origin_first_byte_us: {$ref: '#/components/schemas/NullableUInt64'}
+        origin_total_us: {$ref: '#/components/schemas/NullableUInt64'}
+        ip_intel: {$ref: '#/components/schemas/ClientIPIntel'}
+        node_name:
+          type: string
+          maxLength: 255
+          description: 平台视角的节点名称（节点已删除时为空串）；租户视角不返回。
+    AccessResult:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/AccessLog'}
+        meta: {$ref: '#/components/schemas/QueryMetadata'}
+    AccessExportFilter:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        site_id: {type: string, format: uuid}
+        host: {type: string, maxLength: 16192, description: 'One host or up to 64 distinct space-separated hosts, as the access log host query.'}
+        node_id: {type: string, format: uuid}
+        client_ip: {type: string, format: ip}
+        uri_path: {type: string, minLength: 1, maxLength: 4096, pattern: '^/[^?#]*$'}
+        uri_path_match: {type: string, enum: [exact, prefix]}
+        status_code: {type: integer, minimum: 100, maximum: 599}
+        country_code: {type: string, minLength: 1, maxLength: 8}
+        carrier: {type: string, minLength: 1, maxLength: 128}
+        method: {type: string, minLength: 1, maxLength: 32}
+        protocol: {type: string, minLength: 1, maxLength: 32}
+        cache_status: {type: string, minLength: 1, maxLength: 32}
+        upstream_result: {type: string, minLength: 1, maxLength: 64}
+        content_type: {type: string, minLength: 3, maxLength: 128}
+        user_agent: {type: string, minLength: 1, maxLength: 512}
+        request_bytes_min: {type: integer, format: uint64, minimum: 0}
+        request_bytes_max: {type: integer, format: uint64, minimum: 0}
+        response_bytes_min: {type: integer, format: uint64, minimum: 0}
+        response_bytes_max: {type: integer, format: uint64, minimum: 0}
+        ja4: {type: string, minLength: 1, maxLength: 128}
+        origin_connect_us_min: {type: integer, format: uint64, minimum: 0}
+        origin_connect_us_max: {type: integer, format: uint64, minimum: 0}
+        origin_first_byte_us_min: {type: integer, format: uint64, minimum: 0}
+        origin_first_byte_us_max: {type: integer, format: uint64, minimum: 0}
+        origin_total_us_min: {type: integer, format: uint64, minimum: 0}
+        origin_total_us_max: {type: integer, format: uint64, minimum: 0}
+    AccessExportCreate:
+      type: object
+      additionalProperties: false
+      required: [filter]
+      properties:
+        filter: {$ref: '#/components/schemas/AccessExportFilter'}
+    AccessExport:
+      type: object
+      additionalProperties: false
+      required: [id, status, reason, snapshot_at, row_count, byte_count, created_at, expires_at, downloadable, filter]
+      properties:
+        id: {type: string, format: uuid}
+        status: {type: string, enum: [pending, running, completed, failed]}
+        reason: {type: string, minLength: 1, maxLength: 64}
+        snapshot_at: {type: [string, 'null'], format: date-time}
+        row_count: {type: [integer, 'null'], minimum: 0, maximum: 100000}
+        byte_count: {type: [integer, 'null'], minimum: 0, maximum: 8388608}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: [string, 'null'], format: date-time}
+        downloadable: {type: boolean}
+        filter:
+          description: 申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。
+          oneOf:
+            - {$ref: '#/components/schemas/AccessExportFilter'}
+            - {type: 'null'}
+    AccessExportList:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/AccessExport'}}
+    AccessExportGrant:
+      type: object
+      additionalProperties: false
+      required: [export_id, token, expires_at]
+      properties:
+        export_id: {type: string, format: uuid}
+        token: {type: string, minLength: 43, maxLength: 43, pattern: '^[A-Za-z0-9_-]{43}$'}
+        expires_at: {type: string, format: date-time}
+    BlockEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - event_id
+        - occurred_at
+        - site_id
+        - node_id
+        - request_id
+        - trace_id
+        - config_version_id
+        - host
+        - uri_path
+        - client_ip
+        - country_code
+        - carrier
+        - event_type
+        - action
+        - severity
+        - rule_id
+        - status_code
+        - request_bytes
+        - response_bytes
+        - task_id
+        - installation_id
+        - request_headers
+        - response_headers
+        - request_body
+        - response_body
+        - ja4
+        - origin_connect_us
+        - origin_first_byte_us
+        - origin_total_us
+        - policy_id
+        - detector
+        - matched
+        - user_agent
+        - request_body_excerpt
+        - count
+        - uri_query
+        - site_domain
+        - rule_name
+      properties:
+        event_id: {type: string, minLength: 1, maxLength: 128}
+        occurred_at: {type: string, format: date-time}
+        site_id: {type: string, format: uuid}
+        node_id: {type: string, format: uuid}
+        request_id: {type: string, maxLength: 128}
+        trace_id: {type: string, maxLength: 128}
+        config_version_id:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        host: {type: string, maxLength: 253}
+        uri_path:
+          type: string
+          maxLength: 4096
+          description: Origin-form path only; query and fragment are omitted (the query is uri_query).
+        uri_query:
+          type: string
+          maxLength: 512
+          pattern: '^[!-"$-~]*$'
+          description: >-
+            The request query as the node logged it, without the leading "?" ("" for none or an event logged
+            before P14). Values of sensitive parameters (password, passwd, pwd, token, access_token, secret, key,
+            sign, signature, auth, session, cookie, code; any case) are "***"; bytes outside printable ASCII are
+            percent-encoded; at most 512 bytes.
+        client_ip: {type: string, format: ip}
+        country_code: {type: string, maxLength: 8}
+        carrier: {type: string, maxLength: 128}
+        event_type: {type: string, maxLength: 64}
+        action: {type: string, maxLength: 64}
+        severity: {type: string, maxLength: 32}
+        rule_id: {type: string, maxLength: 128}
+        site_domain:
+          type: string
+          maxLength: 253
+          description: The domain of site_id in the tenant ("" when the site is gone).
+        rule_name:
+          type: string
+          maxLength: 128
+          description: >-
+            The name of rule_id in the deciding policy's stored versions (newest first; a CC event, which has no
+            policy_id, by the rule ID among the tenant's policies). "" for a policy default, a managed WAF / CRS
+            rule, auto defense, or a deleted policy.
+        status_code:
+          anyOf:
+            - const: 0
+            - type: integer
+              minimum: 100
+              maximum: 599
+        request_bytes: {type: integer, format: uint64, minimum: 0}
+        response_bytes: {type: integer, format: uint64, minimum: 0}
+        task_id:
+          type: [string, 'null']
+          maxLength: 128
+        installation_id: {type: string, maxLength: 128}
+        request_headers: {$ref: '#/components/schemas/CapturedHeaders'}
+        response_headers: {$ref: '#/components/schemas/CapturedHeaders'}
+        request_body: {$ref: '#/components/schemas/CapturedBody'}
+        response_body: {$ref: '#/components/schemas/CapturedBody'}
+        ja4:
+          type: [string, 'null']
+          maxLength: 128
+        origin_connect_us: {$ref: '#/components/schemas/NullableUInt64'}
+        origin_first_byte_us: {$ref: '#/components/schemas/NullableUInt64'}
+        origin_total_us: {$ref: '#/components/schemas/NullableUInt64'}
+        ip_intel: {$ref: '#/components/schemas/ClientIPIntel'}
+        policy_id:
+          type: string
+          maxLength: 36
+          description: The WAF / ACL policy that decided ("" when not recorded).
+        detector: {type: string, maxLength: 16, description: 'Built-in detector that matched (sqli, xss) or "".'}
+        matched: {type: string, maxLength: 256, description: The matched request fragment (key=value for named values).}
+        user_agent: {type: string, maxLength: 512}
+        request_body_excerpt: {type: string, maxLength: 1024, description: First bytes of an inspected request body.}
+        count:
+          type: integer
+          minimum: 1
+          maximum: 1000000000
+          description: >-
+            Requests the event stands for. A CC challenge page or 429 is logged once per site, client IP,
+            rule, action and minute with the number of requests; every other event is 1.
+
+    ClientIPIntel:
+      type: object
+      additionalProperties: false
+      required: [revision]
+      description: >-
+        What the control plane's verified IP intelligence library says about
+        client_ip, looked up when the page is served (G3-d), so it
+        reflects the library revision then, not when the request was logged.
+        Absent when the control plane has no library or the address is not in
+        it; absent fields are unknown.
+      properties:
+        carrier:
+          type: string
+          description: The lowest carrier tag of the address (carrier:cn-telecom, carrier:cn-unicom, ...).
+        idc: {type: string, enum: ['idc:cn', 'idc:global']}
+        asn: {type: integer, format: uint32, minimum: 1}
+        country: {type: string, pattern: '^[A-Z]{2}$'}
+        province: {type: string, pattern: '^[0-9]{2}0000$', description: GB/T 2260 code.}
+        province_name: {type: string}
+        city: {type: string, pattern: '^[0-9]{6}$', description: GB/T 2260 code.}
+        city_name: {type: string}
+        revision: {type: integer, minimum: 1, description: Library revision of the answer.}
+    CapturedHeaders:
+      type: object
+      additionalProperties: {type: string, maxLength: 16384}
+      description: Allowlisted headers; sensitive names contain only the fixed redaction marker.
+    CapturedBody:
+      description: Allowlisted JSON object, or null when body capture was not performed.
+      anyOf:
+        - type: object
+          additionalProperties: true
+        - type: 'null'
+    NullableUInt64:
+      anyOf:
+        - type: integer
+          format: uint64
+          minimum: 0
+        - type: 'null'
+
+    BlockEventResult:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/BlockEvent'}
+        meta: {$ref: '#/components/schemas/QueryMetadata'}
+    EdgeProgress:
+      type: object
+      additionalProperties: false
+      required: [candidate_id, state, total_nodes, ready_nodes, failed_nodes, superseded_nodes]
+      properties:
+        candidate_id: {type: string, format: uuid}
+        state:
+          type: string
+          enum: [claimed, canary, expanding, healthy, failed, cancelled, expired, promoted]
+        total_nodes: {type: integer, minimum: 0}
+        ready_nodes: {type: integer, minimum: 0}
+        failed_nodes: {type: integer, minimum: 0}
+        superseded_nodes:
+          type: integer
+          minimum: 0
+          description: Nodes that ignored the unlock as an old release (they already run a newer revision); not failed.
+    CurrentBlock:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_id, site_id, site_display_id, domain, position, policy_id, policy_version, cidr, reason_code, blocked_at, unlockable]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        site_display_id: {type: integer, format: int64, minimum: 1}
+        domain: {type: string}
+        position: {type: string}
+        policy_id: {type: string, format: uuid}
+        policy_version: {type: integer, format: int64, minimum: 1}
+        cidr: {type: string, format: cidr}
+        reason_code: {type: string, const: acl_policy_block}
+        blocked_at: {type: string, format: date-time}
+        unlockable: {type: boolean}
+        edge_progress: {$ref: '#/components/schemas/EdgeProgress'}
+    CurrentBlockPage:
+      type: object
+      additionalProperties: false
+      required: [data, total_count, snapshot_at]
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/CurrentBlock'}
+        total_count: {type: integer, format: uint64, minimum: 0}
+        snapshot_at: {type: string, format: date-time}
+    BlockHistory:
+      type: object
+      additionalProperties: false
+      required: [id, block_id, tenant_id, site_id, site_display_id, domain, position, policy_id, cidr, reason_code, result_code, auto_unlock, requested_at, unlocked_at, edge_progress]
+      properties:
+        id: {type: string, format: uuid}
+        block_id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        site_display_id: {type: integer, format: int64, minimum: 1}
+        domain: {type: string}
+        position: {type: string}
+        policy_id: {type: string, format: uuid}
+        cidr: {type: string, format: cidr}
+        reason_code: {type: string, const: false_positive_confirmed}
+        result_code: {type: string, enum: [recovery_claimed, recovery_replayed]}
+        auto_unlock: {type: boolean}
+        requested_at: {type: string, format: date-time}
+        unlocked_at: {type: [string, 'null'], format: date-time}
+        edge_progress: {$ref: '#/components/schemas/EdgeProgress'}
+    BlockHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [data, total_count, snapshot_at]
+      properties:
+        data:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/BlockHistory'}
+        total_count: {type: integer, format: uint64, minimum: 0}
+        snapshot_at: {type: string, format: date-time}
+    SiteBlacklistCount:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, site_id, site_display_id, domain, count]
+      properties:
+        tenant_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        site_display_id: {type: integer, format: int64, minimum: 1}
+        domain: {type: string}
+        count: {type: integer, format: uint64, minimum: 0}
+    SiteBlacklistCountPage:
+      type: object
+      additionalProperties: false
+      required: [data, total_count, snapshot_at]
+      properties:
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/SiteBlacklistCount'}
+        total_count: {type: integer, format: uint64, minimum: 0}
+        snapshot_at: {type: string, format: date-time}
+    BlockUnlockRequest:
+      type: object
+      additionalProperties: false
+      required: [reason_code]
+      properties:
+        reason_code: {type: string, const: false_positive_confirmed}
+    BlockUnlockResult:
+      type: object
+      additionalProperties: false
+      required: [block_id, candidate_id, progress, reason_code, replayed]
+      properties:
+        block_id: {type: string, format: uuid}
+        candidate_id: {type: string, format: uuid}
+        progress:
+          type: string
+          enum: [claimed, canary, expanding, healthy, failed, cancelled, expired, promoted]
+        reason_code: {type: string, enum: [recovery_claimed, recovery_replayed]}
+        replayed: {type: boolean}
+    CCCoordinationState:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, site_id, source_cc_policy_id, rule_id, client_cidr, host, path,
+        method, listen_port, protocol, request_class, generation, state, reason_code, hit_count, node_count,
+        current_policy_version, lkg_policy_version, expires_at, release_hold_until, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        source_cc_policy_id: {type: string, format: uuid}
+        rule_id: {type: string, format: uuid}
+        client_cidr: {type: string, format: cidr}
+        host: {type: string, maxLength: 253}
+        path: {type: string, maxLength: 4096}
+        method: {type: string, maxLength: 32}
+        listen_port: {type: integer, minimum: 1, maximum: 65535}
+        protocol: {type: string, enum: [http, https]}
+        request_class: {type: string, const: standard}
+        generation: {type: integer, format: int64, minimum: 1}
+        state: {type: string, enum: [block_pending, blocked, release_pending, failed]}
+        reason_code:
+          type: string
+          enum: [cc_cross_node_threshold_reached, cc_coordination_dependency_unavailable, false_positive_confirmed]
+        hit_count: {type: integer, format: uint64, minimum: 0}
+        node_count: {type: integer, format: uint32, minimum: 0}
+        current_policy_version: {type: integer, format: int64, minimum: 0}
+        lkg_policy_version: {type: integer, format: int64, minimum: 0}
+        expires_at: {type: string, format: date-time}
+        release_hold_until: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    CCCoordinationStatePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/CCCoordinationState'}}
+    CCCoordinationReleaseRequest:
+      type: object
+      additionalProperties: false
+      required: [reason_code, expected_generation]
+      properties:
+        reason_code: {type: string, const: false_positive_confirmed}
+        expected_generation: {type: integer, format: int64, minimum: 1}
+    CCCoordinationReleaseResult:
+      type: object
+      additionalProperties: false
+      required: [state, replayed]
+      properties:
+        state: {$ref: '#/components/schemas/CCCoordinationState'}
+        replayed: {type: boolean}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        request_id: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {$ref: '#/components/schemas/Error'}
+  responses:
+    AccessExportAccepted:
+      description: Durable export request accepted; an identical idempotency replay returns the same job.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        Idempotency-Replayed: {schema: {type: string, enum: ['true', 'false']}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AccessExport'}}}
+    AccessExportOK:
+      description: Session-bound durable export status.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AccessExport'}}}
+    AccessExportListOK:
+      description: At most 50 exports for the exact actor, session, scope and tenant.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AccessExportList'}}}
+    AccessExportGrantCreated:
+      description: One-time grant. Only the SHA-256 token digest is persisted.
+      headers: {Cache-Control: {schema: {type: string, const: no-store}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AccessExportGrant'}}}
+    AccessExportDownloadOK:
+      description: RFC4180 UTF-8 CSV consumed atomically by the one-time grant.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        Content-Disposition: {schema: {type: string}}
+        Digest: {schema: {type: string, pattern: '^sha-256=[0-9a-f]{64}$'}}
+      content: {text/csv: {schema: {type: string, format: binary}}}
+    ExportConflict:
+      description: Idempotency key is already bound to another normalized export request.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    ExportGrantRejected:
+      description: Grant is malformed, expired, consumed, or belongs to another session or scope.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    AccessResultOK:
+      description: Snapshot-bounded access-log page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AccessResult'}
+    CCBanResultOK:
+      description: Aggregated CC auto-bans in the window.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [data, truncated, meta]
+            properties:
+              data:
+                type: array
+                maxItems: 100
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [site_id, host, client_ip, rule_id, ban_count, first_banned_at, last_banned_at]
+                  properties:
+                    site_id: {type: string, format: uuid}
+                    host: {type: string, maxLength: 253}
+                    client_ip: {type: string, format: ip}
+                    rule_id: {type: string, maxLength: 128}
+                    ban_count: {type: integer, format: uint64, minimum: 1}
+                    first_banned_at: {type: string, format: date-time}
+                    last_banned_at: {type: string, format: date-time}
+              truncated: {type: boolean}
+              meta: {$ref: '#/components/schemas/QueryMetadata'}
+    BlockEventResultOK:
+      description: Snapshot-bounded security block-event page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BlockEventResult'}
+    CurrentBlocksOK:
+      description: Current active ACL block facts.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CurrentBlockPage'}
+    BlockHistoryOK:
+      description: Append-only CIDR unlock history with durable edge progress.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BlockHistoryPage'}
+    SiteBlacklistCountsOK:
+      description: Current active ACL block totals grouped by site.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SiteBlacklistCountPage'}
+    BlockUnlockAccepted:
+      description: The successor policy and activation were durably accepted.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed:
+          description: Present with value true when the durable result was replayed.
+          schema: {type: string, const: 'true'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BlockUnlockResult'}
+    CCCoordinationStatesOK:
+      description: Durable tenant/site-scoped cross-node CC state.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CCCoordinationStatePage'}
+    CCCoordinationReleaseAccepted:
+      description: The exact generation was accepted for audited release.
+      headers:
+        Idempotency-Replayed:
+          description: Present with value true when the durable result was replayed.
+          schema: {type: string, const: 'true'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CCCoordinationReleaseResult'}
+    BadRequest:
+      description: >-
+        Invalid GET body, time range, filter, limit, cursor, or required
+        platform tenant scope. GET bodies are never read.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Unauthorized:
+      description: Authentication is required.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Forbidden:
+      description: Permission or identity scope is forbidden.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    NotFound:
+      description: Analytics log route was not found.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    BlockNotFound:
+      description: The scoped active block no longer exists.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    BlockConflict:
+      description: >-
+        Returns analytics_block_unlock_conflict when the policy, active edge
+        revision, open activation or target-node snapshot changed.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    CapabilityUnsupported:
+      description: >-
+        Returns analytics_logs_capability_unsupported for malformed cursor
+        shapes rejected before storage or physically observable equal-version
+        replacement ambiguity.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    ServiceUnavailable:
+      description: Storage transport, rejection, invalid response, or response limit failure.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    GatewayTimeout:
+      description: Query deadline or caller cancellation was observed.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  headers:
+    RequestID:
+      description: Stable request correlation ID.
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}

@@ -1,0 +1,242 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Public Account Recovery API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Public, sessionless account recovery contract for a customer control plane.
+    The request route obtains tenant and scope only from trusted server routing.
+    The confirmation route obtains them only from the signed opaque
+    recovery_context delivered with the token. Client-supplied tenant, scope,
+    email, phone, Bearer credentials, and API keys never select or authorize a
+    recovery principal. Control-api main mounts both public routes when the
+    fail-closed account recovery and notification runtimes are enabled and
+    ready. SMTP delivery is at-least-once: stable message identifiers do not
+    guarantee provider deduplication, and external SMTP plus full browser E2E
+    remain deployment acceptance boundaries.
+servers:
+  - url: /
+security: []
+tags:
+  - name: Account recovery
+    description: Enumeration-resistant password recovery operations.
+paths:
+  /v1/account-recovery/requests:
+    post:
+      tags: [Account recovery]
+      operationId: requestAccountRecovery
+      security: []
+      summary: Request a password recovery link
+      description: >-
+        Always returns the same 202 representation for an existing active
+        account, an unknown username, a disabled account, or a suspended
+        membership. No response field reports account existence, identity,
+        challenge, token, expiry, channel, or delivery state. Authorization and
+        API-key headers are ignored. JSON is limited to the configured 8 KiB
+        default; duplicate or unknown fields, media type parameters, and
+        trailing values are rejected.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecoveryRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/RequestAccepted'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '408': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        '504': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/account-recovery/confirmations:
+    post:
+      tags: [Account recovery]
+      operationId: confirmAccountRecovery
+      security: []
+      summary: Replace a password with a delivered recovery link
+      description: >-
+        recovery_context is an opaque server-signed value bound to the token,
+        tenant, scope, challenge, and expiry. The server verifies it before
+        invoking the password reset CAS. Tampered, cross-token, expired,
+        revoked, consumed, and unknown links fail closed. Authorization and
+        API-key headers are ignored.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecoveryConfirmation'}
+      responses:
+        '204':
+          description: Password replaced and all refresh sessions revoked, or an exact idempotent replay.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Idempotency-Replayed:
+              description: Present with value true only for an exact completed replay.
+              schema:
+                type: string
+                const: 'true'
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '408': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+        '504': {$ref: '#/components/responses/ErrorResponse'}
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Stable key for this operation and payload. Reusing a key with different
+        input returns account_recovery_idempotency_conflict.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+  headers:
+    RequestID:
+      description: Trusted request identifier used for support and audit correlation.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    RetryAfter:
+      description: >-
+        Bounded worst-case seconds until the configured recovery rate window
+        has elapsed. The default is 900 seconds and the maximum is 86400.
+      schema:
+        type: string
+        pattern: '^[0-9]+$'
+  responses:
+    RequestAccepted:
+      description: Uniform recovery request acceptance response.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RecoveryRequestResponse'}
+    ErrorResponse:
+      description: Stable public error without a raw service message or sensitive input.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    RateLimited:
+      description: Stable recovery rate-limit response without identifying the limiting dimension.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Retry-After: {$ref: '#/components/headers/RetryAfter'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    RecoveryRequest:
+      type: object
+      additionalProperties: false
+      required: [username]
+      properties:
+        username:
+          type: string
+          x-minUtf8Bytes: 1
+          x-maxUtf8Bytes: 1024
+          description: >-
+            Username only. The handler trims surrounding whitespace and
+            enforces 1 to 1024 UTF-8 bytes. Email and phone lookup are not part
+            of this contract.
+    RecoveryConfirmation:
+      type: object
+      additionalProperties: false
+      required: [token, recovery_context, new_password, confirm_password]
+      properties:
+        token:
+          type: string
+          minLength: 43
+          maxLength: 43
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: Opaque 32-byte URL-safe unpadded recovery token.
+        recovery_context:
+          type: string
+          minLength: 162
+          maxLength: 162
+          pattern: '^[A-Za-z0-9_-]{162}$'
+          description: Opaque signed v1 recovery context. Clients must not parse or generate it.
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 1024
+          pattern: '^[!-~]{8,1024}$'
+          writeOnly: true
+          description: New password; 8 to 1024 printable ASCII characters (no space) with at least two of upper case, lower case, digits and symbols (libs/passwordpolicy); otherwise password_policy_unmet.
+        confirm_password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 1024
+          pattern: '^[!-~]{8,1024}$'
+          writeOnly: true
+          description: Must exactly match new_password and is subject to the same password policy.
+    RecoveryRequestResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [code, accepted_at]
+          properties:
+            code:
+              type: string
+              const: account_recovery_request_accepted
+            accepted_at:
+              type: string
+              format: date-time
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - account_recovery_invalid_request
+                - account_recovery_rate_limited
+                - account_recovery_invalid_token
+                - password_policy_unmet
+                - account_recovery_password_reused
+                - account_recovery_principal_changed
+                - account_recovery_idempotency_conflict
+                - account_recovery_request_cancelled
+                - account_recovery_timeout
+                - account_recovery_unavailable
+                - account_recovery_route_not_found
+                - account_recovery_method_not_allowed
+            details:
+              type: object
+              additionalProperties: false
+              required: [unmet]
+              description: Present with password_policy_unmet only.
+              properties:
+                unmet:
+                  type: array
+                  minItems: 1
+                  items: {type: string, enum: [length, character_classes, invalid_character]}
+            request_id:
+              type: string
+              minLength: 1
+              maxLength: 128

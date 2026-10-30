@@ -1,0 +1,90 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Fixture API", "version": "1.0.0"},
+  "security": [{"bearerAuth": []}],
+  "paths": {
+    "/v1/widgets": {
+      "post": {
+        "operationId": "createWidget",
+        "summary": "Create a widget",
+        "x-required-permissions": ["widgets.manage"],
+        "parameters": [{"$ref": "#/components/parameters/IdempotencyKey"}],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/CreateWidget"},
+              "example": {"name": "edge-a"}
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Widget"}}}
+          },
+          "403": {"$ref": "#/components/responses/Forbidden"},
+          "409": {"$ref": "#/components/responses/Conflict"}
+        }
+      }
+    },
+    "/v1/widgets/{id}": {
+      "get": {
+        "operationId": "getWidget",
+        "summary": "Get a widget",
+        "responses": {
+          "200": {
+            "description": "Found",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Widget"},
+                "example": {"id": "widget-1", "name": "edge-a"}
+              }
+            }
+          },
+          "403": {"$ref": "#/components/responses/Forbidden"}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {"bearerAuth": {"type": "http", "scheme": "bearer"}},
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "schema": {"type": "string", "minLength": 1, "maxLength": 128}
+      }
+    },
+    "schemas": {
+      "CreateWidget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {"name": {"type": "string", "minLength": 1}}
+      },
+      "Widget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name"],
+        "properties": {"id": {"type": "string"}, "name": {"type": "string"}}
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "request_id"],
+        "properties": {"code": {"type": "string"}, "request_id": {"type": "string"}}
+      }
+    },
+    "responses": {
+      "Forbidden": {
+        "description": "Permission denied",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      },
+      "Conflict": {
+        "description": "Idempotency conflict",
+        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
+      }
+    }
+  }
+}

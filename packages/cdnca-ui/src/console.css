@@ -1,0 +1,807 @@
+/*
+ * Built-in look of the licensing ends (operator console, customer portal,
+ * seller site): <CdncaProvider look="console"> plus this file, imported
+ * after styles.css. Everything is scoped to :root:has(.cdnca-console) or
+ * .cdnca-console, so the web end (classic) never sees it. The antd half of
+ * the look is consoleTheme() in index.tsx; keep the two in step.
+ */
+:root:has(.cdnca-console) {
+  --cdnca-color-primary: #2563eb;
+  --cdnca-color-link: #2563eb;
+  --cdnca-color-link-hover: #3b82f6;
+  --cdnca-color-text: #334155;
+  --cdnca-color-text-secondary: #64748b;
+  --cdnca-color-border: #cbd5e1;
+  --cdnca-color-border-secondary: #e2e8f0;
+  --cdnca-color-bg-layout: #f3f5f9;
+  --cdnca-color-bg-login: #f3f5f9;
+  --cdnca-color-sidebar-dark: #0b1220;
+  --cdnca-border-radius: 6px;
+  --cdnca-color-title: #0f172a;
+  --cdnca-color-placeholder: #94a3b8;
+  --cdnca-color-success: #16a34a;
+  --cdnca-color-warning: #d97706;
+  --cdnca-color-error: #dc2626;
+  --cdnca-color-table-header: #f8fafc;
+  --cdnca-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+
+  /* Console-only tokens. */
+  --cdnca-radius-lg: 10px;
+  --cdnca-shadow-card: 0 1px 2px rgb(15 23 42 / 4%), 0 1px 3px rgb(15 23 42 / 6%);
+  --cdnca-shadow-raised: 0 10px 30px -12px rgb(15 23 42 / 18%), 0 4px 10px -6px rgb(15 23 42 / 8%);
+  --cdnca-color-primary-soft: #eff4ff;
+  --cdnca-color-sidebar-line: rgb(148 163 184 / 14%);
+  --cdnca-color-sidebar-text: rgb(203 213 225 / 82%);
+  --cdnca-header-height: 56px;
+  --cdnca-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  font-family: var(--cdnca-font-family);
+  background: var(--cdnca-color-bg-layout);
+}
+
+:root:has(.cdnca-console) body {
+  background: var(--cdnca-color-bg-layout);
+}
+
+.cdnca-console {
+  color: var(--cdnca-color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focus: one visible ring for every control reached by keyboard. */
+.cdnca-console :focus-visible {
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: 2px;
+}
+
+.cdnca-console .ant-btn:focus-visible,
+.cdnca-console .ant-menu-item:focus-visible {
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: 2px;
+}
+
+/* Buttons: clear hierarchy (primary filled, default outlined, link quiet). */
+.cdnca-console .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 160ms var(--cdnca-ease), border-color 160ms var(--cdnca-ease), color 160ms var(--cdnca-ease), box-shadow 160ms var(--cdnca-ease);
+}
+
+.cdnca-console .ant-btn-primary:not(:disabled):not(.ant-btn-dangerous) {
+  box-shadow: 0 1px 2px rgb(37 99 235 / 24%), inset 0 1px 0 rgb(255 255 255 / 12%);
+}
+
+.cdnca-console .ant-btn-default:not(:disabled):not(.ant-btn-dangerous):hover {
+  background: var(--cdnca-color-primary-soft);
+}
+
+.cdnca-console .ant-btn-link,
+.cdnca-console .ant-btn-text {
+  box-shadow: none;
+}
+
+.cdnca-console .ant-btn-sm {
+  border-radius: 5px;
+}
+
+/* Inputs: a soft ring on focus instead of a hard glow. */
+.cdnca-console .ant-input-affix-wrapper,
+.cdnca-console .ant-input,
+.cdnca-console .ant-select-selector,
+.cdnca-console .ant-picker,
+.cdnca-console .ant-input-number {
+  transition: border-color 160ms var(--cdnca-ease), box-shadow 160ms var(--cdnca-ease);
+}
+
+.cdnca-console .ant-form-item .ant-form-item-label > label {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+}
+
+/* Tables: quiet header, hairline rows, hover tint. */
+.cdnca-console .ant-table-wrapper .ant-table-thead > tr > th {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: var(--cdnca-color-table-header);
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.cdnca-console .ant-table-wrapper .ant-table-tbody > tr > td {
+  border-bottom-color: #eef2f6;
+}
+
+.cdnca-console .ant-table-wrapper .ant-table-thead > tr > th:first-child,
+.cdnca-console .ant-table-wrapper .ant-table-tbody > tr > td:first-child {
+  padding-inline-start: 20px;
+}
+
+/* Fixed columns: a hairline instead of antd's heavy drop shadow. */
+.cdnca-console .ant-table-wrapper .ant-table-cell-fix-right-first::after,
+.cdnca-console .ant-table-wrapper .ant-table-cell-fix-left-last::after {
+  box-shadow: none !important;
+}
+
+.cdnca-console .ant-table-wrapper .ant-table-ping-right .ant-table-cell-fix-right-first {
+  box-shadow: -1px 0 0 var(--cdnca-color-border-secondary), -8px 0 12px -10px rgb(15 23 42 / 18%);
+}
+
+.cdnca-console .ant-table-wrapper .ant-table-ping-left .ant-table-cell-fix-left-last {
+  box-shadow: 1px 0 0 var(--cdnca-color-border-secondary), 8px 0 12px -10px rgb(15 23 42 / 18%);
+}
+
+/* Thin, quiet scrollbars inside tables. */
+.cdnca-console .ant-table-content,
+.cdnca-console .ant-table-body {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+.cdnca-console .ant-pagination .ant-pagination-item-active {
+  font-weight: 600;
+}
+
+/* Tags: pill shape, no harsh borders. */
+.cdnca-console .ant-tag {
+  padding-inline: 8px;
+  font-weight: 500;
+  border-color: transparent;
+  border-radius: 999px;
+}
+
+.cdnca-console .ant-tag:not([class*="ant-tag-"]),
+.cdnca-console .ant-tag.ant-tag-default {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.cdnca-console .ant-tag.ant-tag-success { color: #15803d; background: #dcfce7; }
+.cdnca-console .ant-tag.ant-tag-processing { color: #1d4ed8; background: #dbeafe; }
+.cdnca-console .ant-tag.ant-tag-warning { color: #b45309; background: #fef3c7; }
+.cdnca-console .ant-tag.ant-tag-error { color: #b91c1c; background: #fee2e2; }
+
+/* Alerts: a coloured stripe on the start edge, rounded card. */
+.cdnca-console .ant-alert {
+  border-radius: 8px;
+  border-width: 1px;
+}
+
+.cdnca-console .ant-alert-info { background: #f0f6ff; border-color: #d6e4ff; }
+.cdnca-console .ant-alert-success { background: #f0fdf4; border-color: #c9f0d6; }
+.cdnca-console .ant-alert-warning { background: #fffaeb; border-color: #fde7b0; }
+.cdnca-console .ant-alert-error { background: #fef3f2; border-color: #fbd3cf; }
+
+/* Feedback toasts: raised card. */
+.cdnca-console .ant-message .ant-message-notice-content,
+.ant-message .ant-message-notice-content {
+  border-radius: 8px;
+}
+
+:root:has(.cdnca-console) .ant-message .ant-message-notice-content {
+  box-shadow: var(--cdnca-shadow-raised);
+  border: 1px solid var(--cdnca-color-border-secondary);
+}
+
+:root:has(.cdnca-console) .ant-notification .ant-notification-notice {
+  border-radius: 10px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  box-shadow: var(--cdnca-shadow-raised);
+}
+
+/* Modals and drawers. */
+:root:has(.cdnca-console) .ant-modal .ant-modal-content {
+  padding: 22px 24px 20px;
+  box-shadow: var(--cdnca-shadow-raised);
+}
+
+:root:has(.cdnca-console) .ant-modal .ant-modal-header {
+  margin-bottom: 16px;
+}
+
+:root:has(.cdnca-console) .ant-modal .ant-modal-footer {
+  margin-top: 20px;
+}
+
+:root:has(.cdnca-console) .ant-drawer .ant-drawer-header {
+  padding: 16px 22px;
+  border-bottom-color: var(--cdnca-color-border-secondary);
+}
+
+:root:has(.cdnca-console) .ant-drawer .ant-drawer-title {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+:root:has(.cdnca-console) .ant-popover .ant-popover-inner,
+:root:has(.cdnca-console) .ant-dropdown .ant-dropdown-menu {
+  border-radius: 10px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  box-shadow: var(--cdnca-shadow-raised);
+}
+
+:root:has(.cdnca-console) .ant-dropdown .ant-dropdown-menu {
+  padding: 6px;
+}
+
+:root:has(.cdnca-console) .ant-dropdown .ant-dropdown-menu .ant-dropdown-menu-item {
+  border-radius: 6px;
+}
+
+/* Descriptions, tabs, empty states. */
+.cdnca-console .ant-descriptions-bordered .ant-descriptions-item-label {
+  color: #475569;
+  background: var(--cdnca-color-table-header);
+}
+
+.cdnca-console .ant-tabs-tab {
+  font-weight: 500;
+}
+
+.cdnca-console .ant-empty-normal {
+  margin-block: 36px;
+}
+
+/* Forms in modals, drawers and settings panels (operator console FormGrid /
+   FormSection / SwitchRow): aligned columns, consistent spacing. */
+:root:has(.cdnca-console) .form-grid-2,
+:root:has(.cdnca-console) .form-grid-3,
+:root:has(.cdnca-console) .form-grid-4 {
+  display: grid;
+  align-items: start;
+  gap: 0 16px;
+}
+
+:root:has(.cdnca-console) .form-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+:root:has(.cdnca-console) .form-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+:root:has(.cdnca-console) .form-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+:root:has(.cdnca-console) .form-grid-full { grid-column: 1 / -1; }
+
+:root:has(.cdnca-console) :is(.form-grid-2, .form-grid-3, .form-grid-4) .ant-input-number,
+:root:has(.cdnca-console) :is(.form-grid-2, .form-grid-3, .form-grid-4) .ant-select,
+:root:has(.cdnca-console) :is(.form-grid-2, .form-grid-3, .form-grid-4) .ant-picker {
+  width: 100%;
+}
+
+:root:has(.cdnca-console) .form-section + .form-section {
+  margin-top: 4px;
+  padding-top: 18px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+:root:has(.cdnca-console) .form-section-head {
+  margin-bottom: 14px;
+}
+
+:root:has(.cdnca-console) .form-section-head h3 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+:root:has(.cdnca-console) .form-section-head p {
+  margin: 2px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12.5px;
+  line-height: 19px;
+}
+
+:root:has(.cdnca-console) .switch-row {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: var(--cdnca-color-table-header);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+:root:has(.cdnca-console) .switch-row-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+:root:has(.cdnca-console) .switch-row-title {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+}
+
+:root:has(.cdnca-console) .switch-row-description {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+:root:has(.cdnca-console) .switch-row .ant-switch {
+  flex: none;
+}
+
+:root:has(.cdnca-console) :is(.form-grid-2, .form-grid-3, .form-grid-4) > .switch-row {
+  height: calc(100% - 12px);
+}
+
+:root:has(.cdnca-console) :is(.form-grid-2, .form-grid-3, .form-grid-4):has(> .switch-row) {
+  align-items: stretch;
+}
+
+/* Every form in a modal or drawer: labels and help read the same. */
+:root:has(.cdnca-console) :is(.ant-modal, .ant-drawer) .ant-form-vertical .ant-form-item {
+  margin-bottom: 16px;
+}
+
+:root:has(.cdnca-console) :is(.ant-modal, .ant-drawer) .ant-form-vertical .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+:root:has(.cdnca-console) :is(.ant-modal, .ant-drawer) .ant-form-item-extra {
+  margin-top: 4px;
+  line-height: 18px;
+}
+
+:root:has(.cdnca-console) :is(.ant-modal, .ant-drawer) textarea.ant-input {
+  font-family: var(--cdnca-font-family-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+}
+
+:root:has(.cdnca-console) .ant-modal .ant-modal-body {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  margin-inline: -24px;
+  padding-inline: 24px;
+}
+
+:root:has(.cdnca-console) .ant-modal .ant-modal-footer {
+  padding-top: 14px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+@media (max-width: 767px) {
+  :root:has(.cdnca-console) .form-grid-2,
+  :root:has(.cdnca-console) .form-grid-3,
+  :root:has(.cdnca-console) .form-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Result states: a compact icon instead of antd's large illustrations. */
+.cdnca-console .ant-result {
+  padding: 48px 24px;
+}
+
+.cdnca-console .ant-result .ant-result-image {
+  width: 132px;
+  height: auto;
+  margin-bottom: 16px;
+  opacity: 0.9;
+}
+
+.cdnca-console .ant-result .ant-result-icon {
+  margin-bottom: 16px;
+}
+
+.cdnca-console .ant-result .ant-result-title {
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.cdnca-console .ant-result .ant-result-subtitle {
+  max-width: 460px;
+  margin: 6px auto 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13.5px;
+}
+
+.cdnca-console .ant-result .ant-result-extra {
+  margin-top: 20px;
+}
+
+.cdnca-console .page-result-icon {
+  display: inline-grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  color: var(--cdnca-color-error);
+  background: #fef2f2;
+  border: 1px solid #fde2e2;
+  border-radius: 16px;
+}
+
+.cdnca-console .page-result.is-forbidden .page-result-icon {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde9b8;
+}
+
+/* Code-ish values. */
+.cdnca-console code {
+  font-size: 0.92em;
+}
+
+/* Sidebar menu (antd Menu theme="dark" inside .cdnca-sidebar). */
+.cdnca-sidebar {
+  display: flex;
+  flex-direction: column;
+  color: var(--cdnca-color-sidebar-text);
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgb(37 99 235 / 14%), transparent 60%),
+    var(--cdnca-color-sidebar-dark);
+  border-inline-end: 1px solid var(--cdnca-color-sidebar-line);
+}
+
+.cdnca-sidebar .ant-menu-dark,
+.cdnca-sidebar .ant-menu-dark .ant-menu-sub.ant-menu-inline {
+  background: transparent !important;
+}
+
+.cdnca-sidebar .ant-menu-dark .ant-menu-item-selected {
+  box-shadow: 0 6px 16px -8px rgb(37 99 235 / 80%);
+}
+
+.cdnca-sidebar .ant-menu-dark .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  color: #ffffff;
+}
+
+.cdnca-brand {
+  display: flex;
+  height: var(--cdnca-header-height);
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px;
+  overflow: hidden;
+  color: #ffffff;
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--cdnca-color-sidebar-line);
+  cursor: pointer;
+  text-align: start;
+}
+
+.cdnca-brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px -4px rgb(59 130 246 / 70%), inset 0 1px 0 rgb(255 255 255 / 25%);
+}
+
+.cdnca-brand-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.cdnca-brand-text strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+}
+
+.cdnca-brand-text small {
+  overflow: hidden;
+  color: rgb(148 163 184 / 85%);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+}
+
+/* Top bar. */
+.cdnca-topbar {
+  display: flex;
+  height: var(--cdnca-header-height);
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 0 10px;
+  background: rgb(255 255 255 / 86%);
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+  backdrop-filter: saturate(160%) blur(10px);
+}
+
+.cdnca-icon-button {
+  display: inline-grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  padding: 0;
+  color: #475569;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 160ms var(--cdnca-ease), color 160ms var(--cdnca-ease);
+}
+
+.cdnca-icon-button:hover {
+  color: var(--cdnca-color-title);
+  background: #f1f5f9;
+}
+
+.cdnca-user-button {
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 4px;
+  color: var(--cdnca-color-title);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 160ms var(--cdnca-ease);
+}
+
+.cdnca-user-button:hover {
+  background: #f1f5f9;
+}
+
+.cdnca-avatar {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, #60a5fa, #2563eb);
+  border-radius: 50%;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.cdnca-crumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.cdnca-crumbs > span {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.cdnca-crumbs > span:last-child {
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+
+.cdnca-crumbs a {
+  color: inherit;
+}
+
+.cdnca-crumbs a:hover {
+  color: var(--cdnca-color-primary);
+}
+
+.cdnca-crumbs svg {
+  flex: none;
+  color: #cbd5e1;
+}
+
+/* Auth screens: brand panel + form card. */
+.cdnca-auth {
+  display: grid;
+  min-height: 100vh;
+  grid-template-columns: minmax(380px, 44%) minmax(0, 1fr);
+  background: #ffffff;
+}
+
+.cdnca-auth-aside {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px 48px;
+  overflow: hidden;
+  color: #e2e8f0;
+  background:
+    radial-gradient(80% 60% at 100% 0%, rgb(59 130 246 / 35%), transparent 60%),
+    radial-gradient(70% 50% at 0% 100%, rgb(14 165 233 / 22%), transparent 60%),
+    #0b1220;
+}
+
+.cdnca-auth-aside::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image:
+    linear-gradient(rgb(148 163 184 / 8%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 8%) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(90% 80% at 50% 40%, #000 30%, transparent 80%);
+  pointer-events: none;
+}
+
+.cdnca-auth-aside > * {
+  position: relative;
+}
+
+.cdnca-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.cdnca-auth-brand .cdnca-brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.cdnca-auth-pitch h2 {
+  max-width: 420px;
+  margin: 0 0 14px;
+  color: #ffffff;
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.cdnca-auth-pitch p {
+  max-width: 420px;
+  margin: 0 0 28px;
+  color: rgb(203 213 225 / 85%);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.cdnca-auth-points {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cdnca-auth-points li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.cdnca-auth-points svg {
+  flex: none;
+  padding: 7px;
+  box-sizing: content-box;
+  color: #93c5fd;
+  background: rgb(59 130 246 / 14%);
+  border: 1px solid rgb(147 197 253 / 18%);
+  border-radius: 8px;
+}
+
+.cdnca-auth-foot {
+  color: rgb(148 163 184 / 80%);
+  font-size: 12.5px;
+}
+
+.cdnca-auth-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  background:
+    radial-gradient(60% 40% at 50% 0%, rgb(37 99 235 / 5%), transparent 70%),
+    #ffffff;
+}
+
+.cdnca-auth-card {
+  width: 100%;
+  max-width: 400px;
+}
+
+.cdnca-auth-card.is-wide {
+  max-width: 720px;
+}
+
+.cdnca-auth-title {
+  margin: 0 0 6px;
+  color: var(--cdnca-color-title);
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.cdnca-auth-subtitle {
+  margin: 0 0 28px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cdnca-auth-card .ant-form-item {
+  margin-bottom: 18px;
+}
+
+.cdnca-auth-card .ant-input-affix-wrapper-lg,
+.cdnca-auth-card .ant-input-lg {
+  height: 44px;
+  padding-block: 0;
+  font-size: 15px;
+}
+
+.cdnca-auth-card .ant-input-affix-wrapper-lg > input.ant-input {
+  height: 100%;
+}
+
+.cdnca-auth-card .ant-btn-lg {
+  height: 44px;
+}
+
+.cdnca-auth-card .ant-input-prefix {
+  margin-inline-end: 10px;
+  color: #94a3b8;
+}
+
+@media (max-width: 900px) {
+  .cdnca-auth {
+    grid-template-columns: 1fr;
+  }
+
+  .cdnca-auth-aside {
+    display: none;
+  }
+
+  .cdnca-auth-main {
+    justify-content: flex-start;
+    padding: 56px 20px 40px;
+  }
+
+  .cdnca-auth-mobile-brand {
+    display: flex !important;
+  }
+}
+
+.cdnca-auth-mobile-brand {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 32px;
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cdnca-console *,
+  .cdnca-console *::before,
+  .cdnca-console *::after {
+    transition-duration: 0ms !important;
+  }
+}

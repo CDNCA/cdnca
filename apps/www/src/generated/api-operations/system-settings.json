@@ -1,0 +1,63 @@
+{
+ "id": "system-settings",
+ "prefix": "/v1/system-settings",
+ "operations": [
+  {
+   "operation_id": "getGlobalJavaScriptCSPHosts",
+   "method": "GET",
+   "path": "/v1/system-settings/csp-hosts",
+   "summary": "Read the global JavaScript report hosts for the web container CSP",
+   "auth": [
+    "none"
+   ],
+   "description": "Unauthenticated. The web container's nginx calls it (auth_request) before serving index.html and adds the returned https sources to the page CSP connect-src and img-src. The external path is not routed by the container; only its internal subrequest reaches it. When it fails the page keeps the strict default CSP.",
+   "responses": [
+    {
+     "status": "204",
+     "description": "Space-separated CSP sources (https://host ...), possibly empty."
+    },
+    {
+     "status": "404",
+     "description": "Query parameters are not accepted"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "503",
+     "description": "Settings storage is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPublicPlatformSystemSettings",
+   "method": "GET",
+   "path": "/v1/system-settings/public",
+   "summary": "Read the display subset of platform settings",
+   "auth": [
+    "bearer",
+    "none"
+   ],
+   "description": "Without an Authorization header (the sign-in page) it returns only the system name and the two console titles (PublicBranding). Any valid administrator or tenant session additionally gets the package purchase notice (HTML, sanitized by the client before rendering) and the global JavaScript loaded by the tenant user console. An Authorization header that is present but invalid is refused with 401.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Branding only when anonymous; the full public subset for a valid session."
+    },
+    {
+     "status": "401",
+     "description": "Authorization header present but invalid"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "503",
+     "description": "Settings storage is unavailable"
+    }
+   ]
+  }
+ ]
+}

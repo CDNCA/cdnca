@@ -1,0 +1,13 @@
+DROP TRIGGER IF EXISTS platform_policy_application_events_truncate_immutable ON platform_policy_application_events;
+DROP TRIGGER IF EXISTS platform_policy_application_events_immutable ON platform_policy_application_events;
+DROP TRIGGER IF EXISTS platform_policy_ack_events_truncate_immutable ON platform_policy_ack_events;
+DROP TRIGGER IF EXISTS platform_policy_ack_events_immutable ON platform_policy_ack_events;
+DROP TRIGGER IF EXISTS platform_policy_deliveries_truncate_immutable ON platform_policy_deliveries;
+DROP TRIGGER IF EXISTS platform_policy_deliveries_immutable ON platform_policy_deliveries;
+DROP FUNCTION IF EXISTS reject_platform_policy_history_mutation();
+DROP TABLE IF EXISTS platform_policy_application_events;
+DROP TABLE IF EXISTS platform_policy_sync_state;
+DROP TABLE IF EXISTS platform_policy_scope_state;
+DROP TABLE IF EXISTS platform_policy_ack_outbox;
+DROP TABLE IF EXISTS platform_policy_ack_events;
+DROP TABLE IF EXISTS platform_policy_deliveries;

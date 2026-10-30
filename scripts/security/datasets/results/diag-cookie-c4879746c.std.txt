@@ -1,0 +1,8 @@
+STD dataset=diag-nocookie/benign tier=仅记录 shard=0/1 counted=3000 blocked=0 rate=0.0000 ci95=0.0000-0.0013 excluded=0 codes=map[]
+STD dataset=diag-nocookie/benign tier=标准防护 shard=0/1 counted=3000 blocked=0 rate=0.0000 ci95=0.0000-0.0013 excluded=0 codes=map[]
+STD dataset=diag-nocookie/benign tier=严格防护 shard=0/1 counted=3000 blocked=508 rate=0.1693 ci95=0.1563-0.1832 excluded=0 codes=map[]
+STD dataset=diag-nocookie/benign tier=极严格防护 shard=0/1 counted=3000 blocked=623 rate=0.2077 ci95=0.1935-0.2226 excluded=0 codes=map[]
+STD dataset=diag-orig/benign tier=仅记录 shard=0/1 counted=3000 blocked=0 rate=0.0000 ci95=0.0000-0.0013 excluded=0 codes=map[]
+STD dataset=diag-orig/benign tier=标准防护 shard=0/1 counted=3000 blocked=0 rate=0.0000 ci95=0.0000-0.0013 excluded=0 codes=map[]
+STD dataset=diag-orig/benign tier=严格防护 shard=0/1 counted=3000 blocked=3000 rate=1.0000 ci95=0.9987-1.0000 excluded=0 codes=map[]
+STD dataset=diag-orig/benign tier=极严格防护 shard=0/1 counted=3000 blocked=3000 rate=1.0000 ci95=0.9987-1.0000 excluded=0 codes=map[]

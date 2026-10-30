@@ -1,0 +1,310 @@
+/* 网站编辑「自动防御」标签（fix-siteautodef）：分区沿用 SiteProtectionTabs.css 的
+   site-protection-section / setting-row（标题 14px，说明 12px，正文 13px）。 */
+
+.site-autodefense-page {
+  padding-bottom: 16px;
+}
+
+.site-autodefense-section .site-protection-section-head {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.site-autodefense-section .site-protection-section-head > div:first-child {
+  min-width: 0;
+  flex: 1 1 280px;
+}
+
+.site-autodefense-section > .ant-alert {
+  margin-top: 12px;
+}
+
+.site-autodefense-section .site-cc-settings > .site-protection-setting-row:first-child {
+  margin-top: 16px;
+}
+
+.site-autodefense-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 16px 0 0;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+}
+
+.site-autodefense-status > div {
+  min-width: 0;
+  padding: 10px 14px;
+  border-left: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.site-autodefense-status > div:first-child {
+  border-left: 0;
+}
+
+.site-autodefense-status dt {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.site-autodefense-status dd {
+  margin: 2px 0 0;
+  color: var(--cdnca-color-text);
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.site-autodefense-modules {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+/* The module tables scroll inside their card instead of widening the section. */
+.site-autodefense-modules > * {
+  min-width: 0;
+}
+
+.site-protection-moved-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 16px 20px 0;
+}
+
+.site-protection-moved-note .ant-btn {
+  padding-inline: 0;
+}
+
+/* ⑥ 保底链（fix-fallbackchain）：链是有顺序的级，用竖排步骤表达“往下一级切”。 */
+.site-fallback-chain-difference {
+  margin: 12px 0 0;
+  max-width: 72ch;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.site-fallback-chain-notes {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-fallback-chain-notes li {
+  padding: 6px 10px;
+  border-left: 3px solid var(--cdnca-color-primary);
+  background: var(--cdnca-color-primary-bg-soft);
+  color: var(--cdnca-color-text);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.site-fallback-chain-notes li.is-warning {
+  border-left-color: var(--cdnca-color-warning);
+  background: var(--cdnca-color-warning-bg);
+}
+
+.site-fallback-chain-notes li.is-error {
+  border-left-color: var(--cdnca-color-error);
+  background: var(--cdnca-color-warning-bg);
+}
+
+.site-fallback-chain-levels {
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-fallback-chain-level {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 10px 0 10px;
+}
+
+/* The connector between steps: the chain goes down. */
+.site-fallback-chain-level:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 34px;
+  bottom: -10px;
+  left: 11px;
+  width: 2px;
+  background: var(--cdnca-color-border-secondary);
+}
+
+.site-fallback-chain-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--cdnca-color-border);
+  border-radius: 50%;
+  background: var(--cdnca-color-bg-container);
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.site-fallback-chain-level.is-healthy .site-fallback-chain-step {
+  border-color: var(--cdnca-color-success);
+  color: var(--cdnca-color-success);
+}
+
+.site-fallback-chain-level.is-unhealthy .site-fallback-chain-step {
+  border-color: var(--cdnca-color-error);
+  color: var(--cdnca-color-error);
+}
+
+.site-fallback-chain-level.is-current .site-fallback-chain-step {
+  border-color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-primary);
+  color: var(--cdnca-color-text-inverse);
+}
+
+.site-fallback-chain-level-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.site-fallback-chain-level-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.site-fallback-chain-level-name .ant-tag {
+  margin: 0;
+}
+
+.site-fallback-chain-level-hint {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.site-fallback-chain-level-status {
+  color: var(--cdnca-color-text);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.site-fallback-chain-level.is-unhealthy .site-fallback-chain-level-status {
+  color: var(--cdnca-color-error);
+}
+
+.site-fallback-chain-level.is-absent {
+  opacity: 0.72;
+}
+
+.site-fallback-chain-origin {
+  margin: 0 0 0 36px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.site-fallback-chain-order {
+  display: grid;
+  gap: 6px;
+  max-width: 520px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: chain;
+}
+
+.site-fallback-chain-order li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+  counter-increment: chain;
+}
+
+.site-fallback-chain-order-name::before {
+  content: counter(chain) '. ';
+  color: var(--cdnca-color-text-secondary);
+}
+
+.site-fallback-chain-order-tools {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.site-fallback-chain-events {
+  margin-top: 20px;
+}
+
+.site-fallback-chain-events h3 {
+  margin: 0 0 8px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sys-fallback-chain-card .site-fallback-chain-order {
+  max-width: 640px;
+}
+
+@media (max-width: 767px) {
+  .site-fallback-chain-level {
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  /* 窄屏标题区纵向排列时，标题块的 flex-basis 280px 会变成高度：本分区改回内容高度。 */
+  .site-fallback-chain .site-protection-section-head > div:first-child {
+    flex-basis: auto;
+  }
+
+  .site-fallback-chain-level > .ant-btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .site-autodefense-status {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .site-autodefense-status > div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .site-autodefense-status > div:nth-child(n + 3) {
+    border-top: 1px solid var(--cdnca-color-border-secondary);
+  }
+}
+
+/* 本站最后一级（fix-fallbackchain2） */
+.site-fallback-chain-last-resort {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.site-fallback-chain-last-resort p {
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+}

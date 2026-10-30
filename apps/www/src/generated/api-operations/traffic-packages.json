@@ -1,0 +1,626 @@
+{
+ "id": "traffic-packages",
+ "prefix": "/v1/traffic-packages",
+ "operations": [
+  {
+   "operation_id": "listMyTrafficPackageBalances",
+   "method": "GET",
+   "path": "/v1/traffic-packages/balances",
+   "summary": "List current-user balances grouped by metering bucket",
+   "auth": [
+    "bearer"
+   ],
+   "description": "All quantities are integer bytes. Only migration-051 grants purchased by the current user participate in the aggregation.",
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current-user byte balances grouped by metering bucket.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Balance>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "listMyTrafficPackageGrants",
+   "method": "GET",
+   "path": "/v1/traffic-packages/grants",
+   "summary": "List grants purchased by the authenticated tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Both tenant and owner user are derived from the current principal. tenant_id is rejected.",
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer",
+     "description": "Page-jump mode (1-based, max 10000, mutually exclusive with cursor). Uses OFFSET within the same frozen snapshot and returns total."
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / exhausted / expired / reversed",
+     "description": "Only grants whose current status matches; filtered before paging, and total follows the filter. A cursor is bound to the status it was issued for."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Grants visible under the derived or explicit tenant scope.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Grant>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "description": "Present only in page-jump mode."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "getMyTrafficPackageGrant",
+   "method": "GET",
+   "path": "/v1/traffic-packages/grants/{grant_id}",
+   "summary": "Read one grant purchased by the authenticated tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Same tenant and owner scope as the grant list; a grant of another tenant or user is 404. No query parameters are accepted.",
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "grant_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One traffic package grant.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_user_id",
+       "type": "object"
+      },
+      {
+       "name": "product_snapshot_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_name",
+       "type": "string",
+       "required": true,
+       "description": "Product snapshot name at grant time."
+      },
+      {
+       "name": "allowed_package_names",
+       "type": "array<string>",
+       "required": true,
+       "description": "Names of the base packages the product snapshot is restricted to; empty means every package."
+      },
+      {
+       "name": "price_minor",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Product snapshot price in minor units of currency."
+      },
+      {
+       "name": "granted_bytes",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "remaining_bytes",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "starts_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expiry_timezone",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "priority",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "metering_scope",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "metering_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / exhausted / expired / reversed",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAvailableTrafficPackageProducts",
+   "method": "GET",
+   "path": "/v1/traffic-packages/products",
+   "summary": "List current products visible to the authenticated tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant scope is derived from the current principal. The result includes global products and products targeted to that tenant whose latest lifecycle fact is enabled. Disabled products remain in admin and history.",
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current products or immutable revision history.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Product>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "purchaseTrafficPackageThroughCommerce",
+   "method": "POST",
+   "path": "/v1/traffic-packages/purchases",
+   "summary": "Traffic package purchase boundary",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant and buyer are derived from the current principal. This route never calls trafficpackage.Grant directly. Until a reviewed adapter can invoke packagecommercehttp.Service.PurchaseTraffic unchanged, it always returns traffic_package_purchase_unavailable (503) and performs no write.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_snapshot_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "promotion",
+      "type": "PromotionReference"
+     },
+     {
+      "name": "payment",
+      "type": "BalancePayment | ProviderPayment",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "503",
+     "description": "Reviewed package-commerce purchase wiring is absent; no write occurred."
+    }
+   ]
+  },
+  {
+   "operation_id": "listMyTrafficPackageUsageEvents",
+   "method": "GET",
+   "path": "/v1/traffic-packages/usage-events",
+   "summary": "List current-user consumption and refund results",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only consume and refund operations are visible. Internal source event keys, request/trace IDs, product snapshots, ledger IDs, billing IDs, and provider payloads are omitted.",
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    },
+    {
+     "name": "operation",
+     "in": "query",
+     "type": "string: consume / refund"
+    },
+    {
+     "name": "grant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "只看该流量包（授予）的分录，amount_bytes 只计该包承担的部分。"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized current-user usage and refund results.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<UsageEvent>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "listMyTrafficPackageUsageAllocations",
+   "method": "GET",
+   "path": "/v1/traffic-packages/usage-events/{event_id}/allocations",
+   "summary": "List bounded allocation details for one visible usage event",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant and owner user are derived from the authenticated principal. The command receipt never embeds allocations; clients page this immutable projection explicitly.",
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "event_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Bounded page of immutable allocation details for one visible usage event.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Allocation>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  }
+ ]
+}

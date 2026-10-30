@@ -1,0 +1,65 @@
+{
+  "body": "{\"schema\":\"cdnca.entitlement.usage-report/v2\",\"sequence\":1913200000,\"lease_serial\":3,\"observed_at\":1913200000,\"values\":[{\"code\":\"domains.count\",\"used\":0},{\"code\":\"error_pages.asset_bytes\",\"used\":7},{\"code\":\"error_pages.assets_count\",\"used\":14},{\"code\":\"error_pages.publication_bytes\",\"used\":21},{\"code\":\"error_pages.publication_sites\",\"used\":28},{\"code\":\"error_pages.rules_per_scope\",\"used\":35},{\"code\":\"error_pages.total_bytes\",\"used\":42},{\"code\":\"extensions.webhooks.count\",\"used\":49},{\"code\":\"monthly_traffic_bytes\",\"used\":56},{\"code\":\"nodes.count\",\"used\":63},{\"code\":\"packages.count\",\"used\":70},{\"code\":\"release_channels.count\",\"used\":77},{\"code\":\"sites.count\",\"used\":84}],\"proof\":\"KvJXuK9rNJ8HupKu3b7i1P71dX11ak5dYEf7HGlfR6oB5pwNrDjrm383pTO_n0ZgZ_iLMw8030Uo-l75q3GwCQ\"}",
+  "installation_id": "018f0f5c-7b3d-7f65-a3cb-3b04d3b4a333",
+  "lease_serial": 3,
+  "observed_at": 1913200000,
+  "path": "/control/v2/installations/018f0f5c-7b3d-7f65-a3cb-3b04d3b4a333/usage-reports",
+  "public_key": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+  "request_id": "control-usage-018f0f5c-7b3d-7f65-a3cb-3b04d3b4a333-1913200000",
+  "seed": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "values": [
+    {
+      "code": "domains.count",
+      "used": 0
+    },
+    {
+      "code": "error_pages.asset_bytes",
+      "used": 7
+    },
+    {
+      "code": "error_pages.assets_count",
+      "used": 14
+    },
+    {
+      "code": "error_pages.publication_bytes",
+      "used": 21
+    },
+    {
+      "code": "error_pages.publication_sites",
+      "used": 28
+    },
+    {
+      "code": "error_pages.rules_per_scope",
+      "used": 35
+    },
+    {
+      "code": "error_pages.total_bytes",
+      "used": 42
+    },
+    {
+      "code": "extensions.webhooks.count",
+      "used": 49
+    },
+    {
+      "code": "monthly_traffic_bytes",
+      "used": 56
+    },
+    {
+      "code": "nodes.count",
+      "used": 63
+    },
+    {
+      "code": "packages.count",
+      "used": 70
+    },
+    {
+      "code": "release_channels.count",
+      "used": 77
+    },
+    {
+      "code": "sites.count",
+      "used": 84
+    }
+  ],
+  "version": "cdnca-entitlement-usage-report-contract/v2"
+}

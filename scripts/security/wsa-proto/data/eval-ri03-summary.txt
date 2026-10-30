@@ -1,0 +1,4 @@
+EVALSUM tier=仅记录 attacks=3521 blocked=0 tpr=0.0000 challenged=0 tpr_with_challenge=0.0000 benign=251 fp=0 fpr=0.0000 benign_challenged=0 challenge_rate=0.0000
+EVALSUM tier=标准防护 attacks=3521 blocked=1350 tpr=0.3834 challenged=0 tpr_with_challenge=0.3834 benign=251 fp=29 fpr=0.1155 benign_challenged=0 challenge_rate=0.0000
+EVALSUM tier=严格防护 attacks=3521 blocked=2583 tpr=0.7336 challenged=368 tpr_with_challenge=0.8381 benign=251 fp=53 fpr=0.2112 benign_challenged=61 challenge_rate=0.2430
+EVALSUM tier=极严格防护 attacks=3521 blocked=2665 tpr=0.7569 challenged=707 tpr_with_challenge=0.9577 benign=251 fp=68 fpr=0.2709 benign_challenged=82 challenge_rate=0.3267

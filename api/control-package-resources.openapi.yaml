@@ -1,0 +1,86 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Package Catalog Resource Options
+  version: 0.1.0
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+servers: [{url: /}]
+paths:
+  /v1/admin/package-resource-options:
+    get:
+      operationId: listPackageResourceOptions
+      summary: List named resources available to the current platform package catalog
+      description: >-
+        Requires packages.manage in the authenticated platform scope. No query parameters
+        are accepted, including target_scope_id. Returns the internal UUIDs used by
+        ProductSpec, not the numeric display IDs from the region-management API.
+        Only this platform's regions and non-deleted line groups are returned in stable
+        sort order. A line group's legacy region string must match exactly one
+        current region by name or canonical UUID. A null line-group region_id means
+        this mapping is missing or ambiguous and must not be selected. Create and update require the
+        selected region and main/optional backup groups to exist in this platform and
+        match the region, checked and locked inside the write transaction. Unknown
+        legacy values remain readable but must be explicitly corrected before writing.
+        An active reseller tenant (reseller.packages.manage, ADR 0018 RS-02) gets the platform's
+        regions and CNAME domains and only the platform line groups granted to it.
+        Completed idempotent writes retain their original receipts after live authorization.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [packages.manage]
+      responses:
+        '200':
+          description: Scoped resource options; empty arrays mean no available resources.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ResourceOptions'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  schemas:
+    ResourceOptions:
+      type: object
+      additionalProperties: false
+      required: [regions, node_groups, cname_domains]
+      properties:
+        cname_domains:
+          type: array
+          description: CNAME domains of 节点管理 > DNS配置; the package CNAME domain must be one of them to allocate.
+          items: {type: string, minLength: 1, maxLength: 253}
+        regions:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name]
+            properties:
+              id: {type: string, format: uuid}
+              name: {type: string, minLength: 1, maxLength: 128}
+        node_groups:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name, region_id]
+            properties:
+              id: {type: string, format: uuid}
+              name: {type: string, minLength: 1, maxLength: 128}
+              region_id: {type: [string, 'null'], format: uuid}
+  responses:
+    Error:
+      description: Stable error code; callers must render localized messages.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message, request_id]
+                properties:
+                  code: {type: string}
+                  message: {type: string}
+                  request_id: {type: string}

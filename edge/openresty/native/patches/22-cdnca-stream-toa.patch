@@ -1,0 +1,172 @@
+CDNCA L4 TOA hand-off (proxy_toa).  Original CDNCA change, not upstream.
+Before connect() the stream proxy passes the client address to the kernel
+with a private IPPROTO_TCP option; the CDNCA TOA eBPF program
+(agents/edge-agent/internal/toa/bpf) consumes it and writes TCP option 254
+on the handshake ACK.  Without the program the kernel returns ENOPROTOOPT,
+which is logged once per worker and ignored.
+
+--- a/src/event/ngx_event_connect.c
++++ b/src/event/ngx_event_connect.c
+@@ -11,6 +11,10 @@
+ #include <ngx_event_connect.h>
+ 
+ 
++struct sockaddr  *ngx_event_connect_toa_sockaddr;
++
++static void ngx_event_connect_set_toa(ngx_peer_connection_t *pc,
++    ngx_socket_t s);
+ #if (NGX_HAVE_TRANSPARENT_PROXY)
+ static ngx_int_t ngx_event_connect_set_transparent(ngx_peer_connection_t *pc,
+     ngx_socket_t s);
+@@ -108,6 +112,10 @@
+     }
+ #endif
+ 
++    if (ngx_event_connect_toa_sockaddr && type == SOCK_STREAM) {
++        ngx_event_connect_set_toa(pc, s);
++    }
++
+     if (pc->local) {
+ 
+ #if (NGX_HAVE_TRANSPARENT_PROXY)
+@@ -344,6 +352,57 @@
+     pc->connection = NULL;
+ 
+     return NGX_ERROR;
++}
++
++
++static void
++ngx_event_connect_set_toa(ngx_peer_connection_t *pc, ngx_socket_t s)
++{
++    struct sockaddr           *sa;
++    struct sockaddr_in        *sin;
++    ngx_cdnca_toa_sockopt_t   opt;
++#if (NGX_HAVE_INET6)
++    struct sockaddr_in6       *sin6;
++#endif
++    static ngx_uint_t          warned;
++
++    sa = ngx_event_connect_toa_sockaddr;
++    ngx_memzero(&opt, sizeof(ngx_cdnca_toa_sockopt_t));
++
++    switch (sa->sa_family) {
++
++    case AF_INET:
++        sin = (struct sockaddr_in *) sa;
++        opt.family = AF_INET;
++        opt.port = sin->sin_port;
++        ngx_memcpy(opt.addr, &sin->sin_addr, 4);
++        break;
++
++#if (NGX_HAVE_INET6)
++    case AF_INET6:
++        sin6 = (struct sockaddr_in6 *) sa;
++        opt.family = AF_INET6;
++        opt.port = sin6->sin6_port;
++        ngx_memcpy(opt.addr, &sin6->sin6_addr, 16);
++        break;
++#endif
++
++    default:
++        return;
++    }
++
++    if (setsockopt(s, IPPROTO_TCP, NGX_CDNCA_TOA_SOCKOPT,
++                   (const void *) &opt, sizeof(ngx_cdnca_toa_sockopt_t))
++        == -1)
++    {
++        /* TOA is best effort: never fail the upstream connection. */
++        if (!warned) {
++            warned = 1;
++            ngx_log_error(NGX_LOG_WARN, pc->log, ngx_socket_errno,
++                          "setsockopt(CDNCA_TOA) failed, client address "
++                          "is not forwarded");
++        }
++    }
+ }
+ 
+ 
+--- a/src/event/ngx_event_connect.h
++++ b/src/event/ngx_event_connect.h
+@@ -78,6 +78,24 @@
+ };
+ 
+ 
++/*
++ * CDNCA TOA hand-off (cdnca-stream-toa).  Before connect() the client
++ * address is passed to the kernel with a private TCP-level socket option.
++ * Only the CDNCA cgroup/setsockopt BPF program understands it; without
++ * that program the kernel answers ENOPROTOOPT and the connection proceeds
++ * unchanged.  The value must match agents/edge-agent/internal/toa/bpf.
++ */
++#define NGX_CDNCA_TOA_SOCKOPT  0x43464c54  /* "CFLT" */
++
++typedef struct {
++    uint16_t   family;   /* AF_INET or AF_INET6, host byte order */
++    uint16_t   port;     /* network byte order */
++    uint8_t    addr[16]; /* IPv4 uses the first 4 bytes */
++} ngx_cdnca_toa_sockopt_t;
++
++/* Set by a caller for the duration of one ngx_event_connect_peer() call. */
++extern struct sockaddr  *ngx_event_connect_toa_sockaddr;
++
+ ngx_int_t ngx_event_connect_peer(ngx_peer_connection_t *pc);
+ ngx_int_t ngx_event_get_peer(ngx_peer_connection_t *pc, void *data);
+ 
+--- a/src/stream/ngx_stream_proxy_module.c
++++ b/src/stream/ngx_stream_proxy_module.c
+@@ -34,6 +34,7 @@
+     ngx_flag_t                       half_close;
+     ngx_stream_upstream_local_t     *local;
+     ngx_flag_t                       socket_keepalive;
++    ngx_flag_t                       toa;
+ 
+ #if (NGX_STREAM_SSL)
+     ngx_flag_t                       ssl_enable;
+@@ -174,6 +175,13 @@
+       offsetof(ngx_stream_proxy_srv_conf_t, socket_keepalive),
+       NULL },
+ 
++    { ngx_string("proxy_toa"),
++      NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_FLAG,
++      ngx_conf_set_flag_slot,
++      NGX_STREAM_SRV_CONF_OFFSET,
++      offsetof(ngx_stream_proxy_srv_conf_t, toa),
++      NULL },
++
+     { ngx_string("proxy_connect_timeout"),
+       NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
+       ngx_conf_set_msec_slot,
+@@ -779,8 +787,14 @@
+     u->state->first_byte_time = (ngx_msec_t) -1;
+     u->state->response_time = (ngx_msec_t) -1;
+ 
++    if (pscf->toa) {
++        ngx_event_connect_toa_sockaddr = c->sockaddr;
++    }
++
+     rc = ngx_event_connect_peer(&u->peer);
+ 
++    ngx_event_connect_toa_sockaddr = NULL;
++
+     ngx_log_debug1(NGX_LOG_DEBUG_STREAM, c->log, 0, "proxy connect: %i", rc);
+ 
+     if (rc == NGX_ERROR) {
+@@ -2418,6 +2432,7 @@
+     conf->proxy_protocol = NGX_CONF_UNSET_UINT;
+     conf->local = NGX_CONF_UNSET_PTR;
+     conf->socket_keepalive = NGX_CONF_UNSET;
++    conf->toa = NGX_CONF_UNSET;
+     conf->half_close = NGX_CONF_UNSET;
+ 
+ #if (NGX_STREAM_SSL)
+@@ -2478,6 +2493,8 @@
+ 
+     ngx_conf_merge_value(conf->socket_keepalive,
+                               prev->socket_keepalive, 0);
++
++    ngx_conf_merge_value(conf->toa, prev->toa, 0);
+ 
+     ngx_conf_merge_value(conf->half_close, prev->half_close, 0);
+ 

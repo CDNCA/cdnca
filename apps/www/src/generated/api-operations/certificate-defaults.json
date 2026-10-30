@@ -1,0 +1,216 @@
+{
+ "id": "certificate-defaults",
+ "prefix": "/v1/certificate-defaults",
+ "operations": [
+  {
+   "operation_id": "getCertificateDefaults",
+   "method": "GET",
+   "path": "/v1/certificate-defaults",
+   "summary": "Read a user's certificate request defaults",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The default certificate type, DNS provider and CA prefilled into a new request. A user without saved defaults reads acme with revision 0. Tenant actors read their own scope; platform actors name the target tenant scope and user.",
+   "permissions": [
+    "certificates.read"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform actors; tenant actors may only target their own scope."
+    },
+    {
+     "name": "target_user_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Defaults to the authenticated user."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The user's defaults; ETag carries the revision.",
+     "fields": [
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "certificate_type",
+       "type": "string: acme / uploaded",
+       "required": true
+      },
+      {
+       "name": "dns_provider_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "issuer",
+       "type": "string: lets_encrypt / zerossl / google_trust",
+       "description": "Omitted when unset (the platform default applies)."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateCertificateDefaults",
+   "method": "PATCH",
+   "path": "/v1/certificate-defaults",
+   "summary": "Save a user's certificate request defaults",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Compare-and-set on expected_revision (version_conflict when stale). dns_provider_id must be an enabled provider in the target scope (dns_resource_conflict otherwise). issuer is a known CA that is available now: a CA without platform EAB credentials is refused with certificate_issuer_unavailable (409) when saved, the same check an order create applies; uploaded defaults drop dns_provider_id and issuer. An order that falls back to a default CA whose credentials were removed later is still refused with certificate_issuer_unavailable when it is created.",
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "target_user_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "certificate_type",
+      "type": "string: acme / uploaded",
+      "required": true
+     },
+     {
+      "name": "dns_provider_id",
+      "type": "string(uuid) | null(uuid)",
+      "description": "Empty or null clears the default provider."
+     },
+     {
+      "name": "issuer",
+      "type": "string: lets_encrypt / zerossl / google_trust /  / null | null: lets_encrypt / zerossl / google_trust /  / null",
+      "description": "Empty or null uses the platform default."
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved defaults; ETag carries the new revision.",
+     "fields": [
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "certificate_type",
+       "type": "string: acme / uploaded",
+       "required": true
+      },
+      {
+       "name": "dns_provider_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "issuer",
+       "type": "string: lets_encrypt / zerossl / google_trust",
+       "description": "Omitted when unset (the platform default applies)."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure."
+    }
+   ]
+  }
+ ]
+}

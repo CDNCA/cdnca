@@ -1,0 +1,96 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+version='@VERSION@'
+key_version='@ROLLBACK_KEY_VERSION@'
+bundle="/usr/lib/cdnca-edge-agent/deb-bundles/${version}"
+scripts=/usr/libexec/cdnca-edge-agent
+pending=/run/cdnca-edge-agent/deb-rollback-pending
+service_pending=${pending}.service
+state_root=/var/lib/cdnca-edge-agent-packaging
+
+fail_reason() {
+  code=$1
+  shift
+  printf 'reason_code=%s %s\n' "${code}" "$*" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  configure) ;;
+  abort-upgrade|abort-remove|abort-deconfigure) exit 0 ;;
+  *) fail_reason PKG_INSTALL_ROLLED_BACK "unsupported postinst action ${1:-missing}" ;;
+esac
+
+systemd-sysusers cdnca-edge-agent.conf >/dev/null ||
+  fail_reason PKG_INSTALL_ROLLED_BACK 'system user creation failed'
+systemd-tmpfiles --create cdnca-edge-agent.conf >/dev/null ||
+  fail_reason PKG_INSTALL_ROLLED_BACK 'runtime directory creation failed'
+
+trust_source="/usr/share/cdnca-edge-agent/trust/rollback-authority-v${key_version}.pem"
+trust_target="/etc/cdnca-edge-agent/rollback-authority-v${key_version}.pem"
+if [ -e "${trust_target}" ] || [ -L "${trust_target}" ]; then
+  if [ ! -f "${trust_target}" ] || [ -L "${trust_target}" ] || ! cmp -s "${trust_source}" "${trust_target}"; then
+    fail_reason PKG_INSTALL_ROLLED_BACK 'rollback trust pin differs from installed version'
+  fi
+else
+  install -o root -g root -m 0444 "${trust_source}" "${trust_target}"
+fi
+
+health_timeout=${CDNCA_EDGE_DEB_HEALTH_TIMEOUT:-30}
+health_stable=${CDNCA_EDGE_DEB_HEALTH_STABLE:-5}
+case "${health_timeout}:${health_stable}" in
+  *[!0-9:]*) fail_reason PKG_INSTALL_ROLLED_BACK 'invalid health window' ;;
+esac
+[ "${health_timeout}" -gt 0 ] || fail_reason PKG_INSTALL_ROLLED_BACK 'health timeout must be positive'
+
+same_release=false
+if [ -L /usr/lib/cdnca-edge-agent/current ] &&
+  [ "$(readlink /usr/lib/cdnca-edge-agent/current 2>/dev/null || true)" = "versions/${version}" ]; then
+  same_release=true
+fi
+action=install.sh
+[ ! -L /usr/lib/cdnca-edge-agent/current ] || action=upgrade.sh
+if ! "${scripts}/${action}" \
+  --artifact "${bundle}/edge-agent" \
+  --sbom "${bundle}/edge-agent.spdx.json" \
+  --manifest "${bundle}/manifest" \
+  --signature "${bundle}/manifest.sig" \
+  --public-key "${bundle}/release-signing.pem" \
+  --health-timeout "${health_timeout}" --health-stable "${health_stable}"; then
+  fail_reason PKG_INSTALL_ROLLED_BACK 'signed package transaction failed and selected its previous release'
+fi
+
+systemctl daemon-reload
+if [ -f /etc/cdnca-edge-agent/config.json ] && [ ! -L /etc/cdnca-edge-agent/config.json ]; then
+  "${scripts}/preflight.sh" || fail_reason PKG_INSTALL_ROLLED_BACK 'installed configuration preflight failed'
+  if [ "${same_release}" = true ] && [ "$(cat "${service_pending}" 2>/dev/null || true)" = active ]; then
+    systemctl try-restart cdnca-edge-agent.service
+  else
+    systemctl enable --now cdnca-edge-agent.service
+  fi
+  reason=PKG_SERVICE_READY
+else
+  systemctl disable cdnca-edge-agent.service >/dev/null 2>&1 || true
+  reason=PKG_ENROLLMENT_REQUIRED
+fi
+
+if [ -s "${pending}" ] && [ ! -L "${pending}" ]; then
+  authorization_sha=$(cat "${pending}")
+  case "${authorization_sha}" in
+    ''|*[!0-9a-f]*) fail_reason PKG_INSTALL_ROLLED_BACK 'invalid pending authorization receipt' ;;
+    *) [ "${#authorization_sha}" -eq 64 ] || fail_reason PKG_INSTALL_ROLLED_BACK 'invalid pending authorization receipt' ;;
+  esac
+  install -d -o root -g root -m 0700 "${state_root}/rollback-authorizations"
+  receipt="${state_root}/rollback-authorizations/${authorization_sha}.used"
+  [ ! -e "${receipt}" ] && [ ! -L "${receipt}" ] || fail_reason PKG_INSTALL_ROLLED_BACK 'rollback receipt already exists'
+  printf 'schema=cdnca.edge.deb-rollback-receipt/v1\nauthorization_sha256=%s\nversion=%s\n' \
+    "${authorization_sha}" '@DEBIAN_VERSION@' >"${receipt}"
+  chmod 0400 "${receipt}"
+fi
+rm -f -- "${pending}" "${service_pending}"
+printf '{"schema":"cdnca.edge.deb-package-receipt/v1","reason_code":"%s","version":"%s"}\n' \
+  "${reason}" '@DEBIAN_VERSION@'

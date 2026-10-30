@@ -1,0 +1,33 @@
+{
+  "schema": "cdnca.control-site/v1",
+  "enabled": true,
+  "brand": { "name": "示例云盾", "title": "示例云盾 · 安全加速", "description": "示例数据，仅用于本地预览" },
+  "plugin_content": {
+    "hero_badge": "示例 · 安全加速",
+    "hero_title": "把攻击挡在边缘，让访问更快一步",
+    "hero_subtitle": "分布式节点就近接入，WAF、CC 防护与智能调度一站完成。",
+    "hero_cta": "立即开通",
+    "stats": [
+      { "label": "节点", "value": "120+" },
+      { "label": "防护带宽", "value": "3 Tbps" },
+      { "label": "平均响应", "value": "28 ms" },
+      { "label": "可用性", "value": "99.95%" }
+    ],
+    "features_title": "核心能力",
+    "features": [
+      { "icon": "asset:fc1acc54f68feb9e624cfb05df73bca5bd500a062ad9028648eb8b6ed850f8f0", "title": "边缘加速", "body": "静态缓存与动态回源优化，就近响应。" },
+      { "icon": "asset:fc1acc54f68feb9e624cfb05df73bca5bd500a062ad9028648eb8b6ed850f8f0", "title": "Web 防护", "body": "内置规则集拦截注入与扫描，可叠加市场规则包。" },
+      { "icon": "asset:fc1acc54f68feb9e624cfb05df73bca5bd500a062ad9028648eb8b6ed850f8f0", "title": "CC 清洗", "body": "按站点自动切换挑战等级，攻击结束自动恢复。" }
+    ],
+    "plans": [
+      { "name": "基础版", "price": "¥99", "unit": "/月", "points": "1 个站点\n100 GB 流量\n基础 WAF", "featured": "", "action": { "label": "免费注册", "href": "/dashboard/register" } },
+      { "name": "专业版", "price": "¥399", "unit": "/月", "points": "10 个站点\n1 TB 流量\nCC 自动防护", "featured": "yes", "action": { "label": "立即购买", "href": "/dashboard/register" } },
+      { "name": "企业版", "price": "面议", "unit": "", "points": "不限站点\n专属线路\n7×24 支持", "featured": "", "action": { "label": "联系我们", "href": "/dashboard/register" } }
+    ],
+    "faq": [
+      { "question": "接入需要改 DNS 吗？", "answer": "把域名 CNAME 到平台分配的地址即可，源站不用改动。" },
+      { "question": "可以随时升级套餐吗？", "answer": "可以，升级后立即生效，费用按剩余天数折算。" }
+    ],
+    "footer_text": "© 2026 示例云盾（示例数据）"
+  }
+}

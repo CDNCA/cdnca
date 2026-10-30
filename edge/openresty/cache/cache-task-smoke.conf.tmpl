@@ -1,0 +1,79 @@
+worker_processes 1;
+pid {{STATE_ROOT}}/shared/nginx.pid;
+error_log {{STATE_ROOT}}/shared/error.log notice;
+
+events { worker_connections 256; }
+
+http {
+  access_log off;
+  map $upstream_http_cache_control $smoke_response_no_cache { default 0; ~*(private|no-store|no-cache) 1; }
+  proxy_cache_path {{STATE_ROOT}}/shared/cache/{{V2_NAMESPACE}} levels=1:2 keys_zone=v2_zone:1m max_size=16m inactive=60s use_temp_path=off;
+  proxy_cache_path {{STATE_ROOT}}/shared/cache/{{V1_NAMESPACE}} levels=1:2 keys_zone=v1_zone:1m max_size=16m inactive=60s use_temp_path=off;
+  proxy_cache_path {{STATE_ROOT}}/shared/cache/{{OTHER_NAMESPACE}} levels=1:2 keys_zone=other_zone:1m max_size=16m inactive=60s use_temp_path=off;
+
+  upstream smoke_origin { server 127.0.0.1:{{ORIGIN_PORT}}; }
+
+  server {
+    listen 127.0.0.1:{{V2_PUBLIC_PORT}};
+    server_name _;
+    location / {
+      proxy_pass http://smoke_origin;
+      proxy_set_header Host cache.example.test;
+      proxy_cache v2_zone;
+      proxy_cache_key "{{V2_KEY_PREFIX}}$uri$is_args$args";
+      proxy_cache_valid 200 60s;
+      proxy_no_cache $smoke_response_no_cache $upstream_http_set_cookie;
+      add_header X-CDN-Cache $upstream_cache_status always;
+      add_header X-CDNCA-Config-Version config-v2 always;
+      add_header X-CDNCA-Cache-Namespace {{V2_NAMESPACE}} always;
+    }
+  }
+
+  server {
+    listen 127.0.0.1:{{V2_PREWARM_PORT}};
+    server_name _;
+    location ^~ {{V2_PREWARM_PATH_PREFIX}} {
+      if ($http_x_cdnca_internal_cache_task != "v2") { return 403; }
+      rewrite ^{{V2_PREWARM_PREFIX_REGEX}}(.*)$ /$1 break;
+      proxy_pass http://smoke_origin;
+      proxy_set_header Host cache.example.test;
+      proxy_cache v2_zone;
+      proxy_cache_key "{{V2_KEY_PREFIX}}$uri$is_args$args";
+      proxy_cache_valid 200 60s;
+      proxy_no_cache $smoke_response_no_cache $upstream_http_set_cookie;
+      add_header X-CDN-Cache $upstream_cache_status always;
+      add_header X-CDNCA-Config-Version config-v2 always;
+      add_header X-CDNCA-Cache-Namespace {{V2_NAMESPACE}} always;
+    }
+  }
+
+  server {
+    listen 127.0.0.1:{{V1_PUBLIC_PORT}};
+    server_name _;
+    location / {
+      proxy_pass http://smoke_origin;
+      proxy_set_header Host cache.example.test;
+      proxy_cache v1_zone;
+      proxy_cache_key "{{V1_KEY_PREFIX}}$uri$is_args$args";
+      proxy_cache_valid 200 60s;
+      add_header X-CDN-Cache $upstream_cache_status always;
+      add_header X-CDNCA-Config-Version config-v1 always;
+      add_header X-CDNCA-Cache-Namespace {{V1_NAMESPACE}} always;
+    }
+  }
+
+  server {
+    listen 127.0.0.1:{{OTHER_PUBLIC_PORT}};
+    server_name _;
+    location / {
+      proxy_pass http://smoke_origin;
+      proxy_set_header Host other.example.test;
+      proxy_cache other_zone;
+      proxy_cache_key "{{OTHER_KEY_PREFIX}}$uri$is_args$args";
+      proxy_cache_valid 200 60s;
+      add_header X-CDN-Cache $upstream_cache_status always;
+      add_header X-CDNCA-Config-Version config-v2 always;
+      add_header X-CDNCA-Cache-Namespace {{OTHER_NAMESPACE}} always;
+    }
+  }
+}

@@ -1,0 +1,25 @@
+DROP TRIGGER security_policy_publication_targets_no_truncate ON security_policy_publication_targets;
+DROP TRIGGER security_policy_publication_targets_protected ON security_policy_publication_targets;
+DROP FUNCTION protect_security_policy_publication_target();
+DROP TRIGGER security_policy_site_bindings_no_truncate ON security_policy_site_bindings;
+DROP TRIGGER security_policy_site_bindings_protected ON security_policy_site_bindings;
+DROP FUNCTION protect_security_policy_site_binding();
+DROP TRIGGER security_policy_publications_no_truncate ON security_policy_publications;
+DROP TRIGGER security_policy_publications_append_only ON security_policy_publications;
+DROP FUNCTION prevent_security_policy_publication_mutation();
+DROP TRIGGER security_policy_publications_validate_insert ON security_policy_publications;
+DROP FUNCTION validate_security_policy_publication_insert();
+
+DROP TABLE security_policy_publication_targets;
+ALTER TABLE security_policy_site_bindings
+    DROP CONSTRAINT security_policy_site_bindings_last_bundle_fk;
+DROP TABLE security_policy_publications;
+DROP TABLE security_policy_site_bindings;
+
+DROP INDEX security_policies_scope_id_kind_binding_idx;
+DROP INDEX nodes_scope_id_security_binding_idx;
+DROP INDEX sites_scope_id_security_binding_idx;
+
+ALTER TABLE security_policies
+    DROP CONSTRAINT security_policies_kind_check,
+    ADD CONSTRAINT security_policies_kind_check CHECK (kind IN ('cc', 'acl'));

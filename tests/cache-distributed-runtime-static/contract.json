@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "command_stream": {
+    "name": "AGENT_COMMANDS",
+    "subjects": ["cdnca.agent.commands.cache.*"],
+    "retention": "limits",
+    "storage": "file",
+    "replicas": 3,
+    "duplicate_window_seconds": 600
+  },
+  "status_stream": {
+    "name": "AGENT_DEPLOYMENT_STATUS",
+    "subjects": [
+      "cdnca.agent.deployment-status.cache.*",
+      "cdnca.agent.deployment-status.cache-dlq.*"
+    ],
+    "retention": "limits",
+    "storage": "file",
+    "replicas": 3
+  },
+  "consumer": {
+    "durable": "control_api_cache_status",
+    "filter_subject": "cdnca.agent.deployment-status.cache.*",
+    "ack_policy": "explicit",
+    "deliver_policy": "all",
+    "replay_policy": "instant",
+    "max_deliver": 5,
+    "max_request_batch": 1
+  },
+  "required_guarantees": [
+    "tenant_site_node_token_bucket",
+    "open_claim_recovery_before_fresh_claim",
+    "nats_message_id_idempotency",
+    "bounded_retry_after",
+    "terminal_monotonicity",
+    "dead_letter_and_replay",
+    "active_config_revision_receipt"
+  ]
+}

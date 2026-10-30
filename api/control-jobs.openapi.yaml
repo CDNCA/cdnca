@@ -1,0 +1,1006 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Control Background Job Query API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    OPS-03 background job query and settlement contract backed by the canonical
+    jobstate projection. Platform and tenant identities use separate route
+    namespaces. Cancel, retry, and operator replay use durable idempotency
+    receipts and atomic audits. Immutable settlement receipts and dead letters
+    remain visible after commands.
+servers:
+  - url: /
+paths:
+  /v1/admin/jobs:
+    get:
+      operationId: listPlatformJobs
+      summary: Page through jobs across the customer control plane
+      description: >-
+        Requires a platform-scoped identity with jobs.read_all or
+        platform.admin. tenant_id narrows the global query. The time window is
+        left-closed and right-open and may not exceed 31 days. Explicit page
+        selects numbered pagination with an exact scoped and filtered total;
+        omit page to preserve the authenticated keyset cursor contract.
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.read_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/TaskFilterID'
+        - $ref: '#/components/parameters/Statuses'
+        - $ref: '#/components/parameters/Kind'
+        - $ref: '#/components/parameters/Resource'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageNumber'
+      responses:
+        '200': {$ref: '#/components/responses/JobListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/kinds:
+    get:
+      operationId: listPlatformJobKinds
+      summary: Read the integrated producer kind catalog independently of job rows
+      description: >-
+        Requires jobs.read_all or platform.admin. Accepts no query parameters.
+        Integration means a production source path creates canonical job facts,
+        not that its producer or worker is enabled or ready in this runtime.
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.read_all, platform.admin]
+      responses:
+        '200': {$ref: '#/components/responses/KindCatalogOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}:
+    get:
+      operationId: getPlatformJob
+      summary: Read a job visible to the platform administrator
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.read_all, platform.admin]
+      parameters: [{$ref: '#/components/parameters/TaskID'}]
+      responses:
+        '200': {$ref: '#/components/responses/JobDetailOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}/attempts:
+    get:
+      operationId: listPlatformJobAttempts
+      summary: Page through a job's immutable attempt history
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.read_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AttemptListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}/results:
+    get:
+      operationId: listPlatformJobResults
+      summary: Page through current per-item and per-node result projections
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.read_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/ResultListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}/receipts:
+    get:
+      operationId: listPlatformJobSettlementReceipts
+      summary: Page through immutable per-attempt settlement receipts
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.read_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/ReceiptListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}/dead-letters:
+    get:
+      operationId: listPlatformJobDeadLetters
+      summary: Page through append-only terminal-attempt dead letters
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.read_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/DeadLetterListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}/cancel:
+    post:
+      operationId: cancelPlatformJob
+      summary: Cancel a queued or running job
+      description: >-
+        Requires jobs.manage_all or platform.admin. The state transition, audit,
+        and command receipt commit atomically. The same actor and Idempotency-Key
+        return the immutable first successful snapshot with replayed=true; reuse
+        for another command returns 409.
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.manage_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/JobRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, maxProperties: 0}
+      responses:
+        '200': {$ref: '#/components/responses/CommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}/retry:
+    post:
+      operationId: retryPlatformJob
+      summary: Retry failed items in a failed or partially failed job
+      description: >-
+        Requires jobs.manage_all or platform.admin and an available attempt. The
+        state transition, audit, and command receipt commit atomically. The same
+        actor and Idempotency-Key return the immutable first successful snapshot
+        with replayed=true; reuse for another command returns 409.
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.manage_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/JobRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, maxProperties: 0}
+      responses:
+        '200': {$ref: '#/components/responses/CommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/jobs/{task_id}/replay:
+    post:
+      operationId: replayPlatformDeadLetteredJob
+      summary: Add one attempt and replay the latest dead-lettered job
+      description: >-
+        Requires jobs.manage_all or platform.admin. The state transition, audit,
+        replay fact, and command receipt commit atomically. The same actor and
+        Idempotency-Key return the immutable first successful snapshot with
+        replayed=true; reuse for another command returns 409.
+      security: [{bearerAuth: []}]
+      x-required-any-permission: [jobs.manage_all, platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/JobRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, maxProperties: 0}
+      responses:
+        '200': {$ref: '#/components/responses/CommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs:
+    get:
+      operationId: listTenantJobs
+      summary: Page through jobs in the authenticated tenant scope
+      description: >-
+        Requires a tenant-scoped identity with jobs.read. Scope is derived only
+        from the authenticated identity. Supplying tenant_id is an attempted
+        scope override and returns 403.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.read]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Statuses'
+        - $ref: '#/components/parameters/TaskFilterID'
+        - $ref: '#/components/parameters/Kind'
+        - $ref: '#/components/parameters/Resource'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/PageNumber'
+      responses:
+        '200': {$ref: '#/components/responses/JobListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/kinds:
+    get:
+      operationId: listTenantJobKinds
+      summary: Read the integrated producer catalog as a tenant
+      description: >-
+        Requires a tenant-scoped identity with jobs.read. Accepts no query
+        parameters. Contains no tenant jobs or counts and does not claim runtime
+        availability. Runtime status remains unknown until separately verified.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [jobs.read]
+      responses:
+        '200': {$ref: '#/components/responses/KindCatalogOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/{task_id}:
+    get:
+      operationId: getTenantJob
+      summary: Read a job in the authenticated tenant scope
+      description: A missing or cross-tenant task_id returns the same 404 response.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.read]
+      parameters: [{$ref: '#/components/parameters/TaskID'}]
+      responses:
+        '200': {$ref: '#/components/responses/JobDetailOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/{task_id}/attempts:
+    get:
+      operationId: listTenantJobAttempts
+      summary: Page through a tenant job's immutable attempt history
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.read]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AttemptListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/{task_id}/results:
+    get:
+      operationId: listTenantJobResults
+      summary: Page through current per-item and per-node result projections
+      description: >-
+        node_id, failure_code, and completed_at are omitted when the underlying
+        projection has no corresponding fact. No task payload is returned.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.read]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/ResultListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/{task_id}/receipts:
+    get:
+      operationId: listTenantJobSettlementReceipts
+      summary: Page through immutable settlement receipts in the authenticated tenant
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.read]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/ReceiptListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/{task_id}/dead-letters:
+    get:
+      operationId: listTenantJobDeadLetters
+      summary: Page through dead letters in the authenticated tenant
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.read]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/DeadLetterListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/{task_id}/cancel:
+    post:
+      operationId: cancelTenantJob
+      summary: Cancel a queued or running job in the authenticated tenant
+      description: >-
+        Requires jobs.manage. Scope is derived only from the authenticated
+        identity. The transition, audit, and receipt commit atomically. The same
+        actor and Idempotency-Key return the immutable first successful snapshot
+        with replayed=true; reuse for another command returns 409.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.manage]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/JobRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, maxProperties: 0}
+      responses:
+        '200': {$ref: '#/components/responses/CommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/jobs/{task_id}/retry:
+    post:
+      operationId: retryTenantJob
+      summary: Retry failed items in a tenant job
+      description: >-
+        Requires jobs.manage, a failed or partially failed state, and an available
+        attempt. The transition, audit, and receipt commit atomically. The same
+        actor and Idempotency-Key return the immutable first successful snapshot
+        with replayed=true; reuse for another command returns 409.
+      security:
+        - bearerAuth: []
+        - cdncaApiKey: []
+      x-required-permissions: [jobs.manage]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/JobRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, maxProperties: 0}
+      responses:
+        '200': {$ref: '#/components/responses/CommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cdncaApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: Send `CdncaKey <key_id>.<secret>`.
+  parameters:
+    TaskFilterID:
+      name: task_id
+      in: query
+      required: false
+      description: Exact task UUID filter.
+      schema: {type: string, format: uuid}
+    TaskID:
+      name: task_id
+      in: path
+      required: true
+      description: Canonical lower-case UUID of the background job.
+      schema: {type: string, format: uuid}
+    From:
+      name: from
+      in: query
+      required: true
+      description: Inclusive RFC3339 creation-time bound.
+      schema: {type: string, format: date-time}
+      example: '2026-07-22T00:00:00Z'
+    To:
+      name: to
+      in: query
+      required: true
+      description: Exclusive RFC3339 creation-time bound; from-to may not exceed 31 days.
+      schema: {type: string, format: date-time}
+      example: '2026-07-23T00:00:00Z'
+    TenantID:
+      name: tenant_id
+      in: query
+      required: false
+      description: Platform route only. Omit to query all tenants.
+      schema: {type: string, format: uuid}
+    Statuses:
+      name: status
+      in: query
+      required: false
+      style: form
+      explode: false
+      description: Comma-separated job states; duplicates are rejected.
+      schema:
+        type: array
+        uniqueItems: true
+        maxItems: 6
+        items: {$ref: '#/components/schemas/JobState'}
+    Kind:
+      name: kind
+      in: query
+      required: false
+      schema:
+        type: string
+        pattern: '^[a-z][a-z0-9._-]{0,127}$'
+    Resource:
+      name: resource
+      in: query
+      required: false
+      description: >-
+        Exact match against the canonical job subject/reference, or a
+        case-insensitive match against a node UUID assigned to one of the job's
+        items, so node pages can deep-link to the tasks executed on that node.
+      schema: {type: string, minLength: 1, maxLength: 512}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        Opaque, authenticated, versioned HMAC-SHA256 keyset cursor from the
+        preceding response, bound to route scope, endpoint, task, and filters.
+        Reuse with changed inputs or any token modification returns 400.
+      schema: {type: string, maxLength: 8192}
+    PageNumber:
+      name: page
+      in: query
+      required: false
+      description: >-
+        Explicit canonical positive decimal page number, mutually exclusive
+        with cursor even if cursor is empty. Count and rows use one read-only
+        repeatable-read snapshot. Different requests are live snapshots and may
+        move rows as jobs are inserted or change state. A page beyond the end
+        returns an empty data array, the requested number and the exact total.
+      schema: {type: integer, minimum: 1, maximum: 1000000}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+    JobRevision:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong ETag value returned by the latest job detail or command response.
+      schema:
+        type: string
+        pattern: '^"(?:[1-9][0-9]{0,19}|[0-9a-f]{64})"$'
+  headers:
+    RequestID:
+      description: Stable request correlation ID, also present in error bodies.
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+  schemas:
+    JobState:
+      type: string
+      enum: [queued, running, succeeded, partial_failed, failed, cancelled]
+    AttemptState:
+      type: string
+      enum: [running, succeeded, partial_failed, failed, cancelled, lease_expired]
+    ResultState:
+      type: string
+      enum: [pending, succeeded, failed, cancelled]
+    Progress:
+      type: object
+      additionalProperties: false
+      required: [total, completed, succeeded, failed, cancelled, pending]
+      properties:
+        total: {type: integer, minimum: 1}
+        completed: {type: integer, minimum: 0}
+        succeeded: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        cancelled: {type: integer, minimum: 0}
+        pending: {type: integer, minimum: 0}
+    RelatedResource:
+      type: object
+      additionalProperties: false
+      required: [reference]
+      properties:
+        reference: {type: string, minLength: 1, maxLength: 512}
+    Job:
+      type: object
+      additionalProperties: false
+      required:
+        - task_id
+        - tenant_id
+        - kind
+        - related_resource
+        - request_id
+        - status
+        - attempt
+        - max_attempts
+        - progress
+        - created_at
+        - updated_at
+        - revision
+      properties:
+        task_id: {type: string, format: uuid}
+        tenant_id: {type: string, format: uuid}
+        kind: {type: string, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+        related_resource: {$ref: '#/components/schemas/RelatedResource'}
+        request_id: {type: string, minLength: 1, maxLength: 128}
+        trace_id:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Omitted when the producer stored no trace ID.
+        status: {$ref: '#/components/schemas/JobState'}
+        attempt: {type: integer, minimum: 0}
+        max_attempts: {type: integer, minimum: 1, maximum: 1001}
+        progress: {$ref: '#/components/schemas/Progress'}
+        failure_code:
+          type: string
+          pattern: '^[a-z][a-z0-9._-]{0,127}$'
+          description: Omitted when the job projection has no failure code.
+        created_at: {type: string, format: date-time}
+        started_at:
+          type: string
+          format: date-time
+          description: Omitted before the first attempt starts.
+        updated_at: {type: string, format: date-time}
+        completed_at:
+          type: string
+          format: date-time
+          description: Omitted for non-terminal jobs.
+        revision:
+          type: string
+          pattern: '^(?:[1-9][0-9]{0,19}|[0-9a-f]{64})$'
+          description: Stable revision used in a strong If-Match precondition for commands.
+    Attempt:
+      type: object
+      additionalProperties: false
+      required: [number, status, started_at, last_heartbeat_at, lease_expires_at]
+      properties:
+        number: {type: integer, minimum: 1}
+        status: {$ref: '#/components/schemas/AttemptState'}
+        started_at: {type: string, format: date-time}
+        last_heartbeat_at: {type: string, format: date-time}
+        lease_expires_at: {type: string, format: date-time}
+        completed_at:
+          type: string
+          format: date-time
+          description: Omitted while the attempt is running.
+        failure_code:
+          type: string
+          pattern: '^[a-z][a-z0-9._-]{0,127}$'
+          description: Omitted when no failure code was recorded.
+    ItemResult:
+      type: object
+      additionalProperties: false
+      required: [ordinal, item_id, status, attempt, sequence, failure_count]
+      properties:
+        ordinal: {type: integer, minimum: 1}
+        item_id: {type: string, minLength: 1, maxLength: 256}
+        node_id:
+          type: string
+          format: uuid
+          description: Omitted when the item was not associated with a node.
+        started_at:
+          type: string
+          format: date-time
+          description: >-
+            Start of the attempt that settled this item. Omitted while the item
+            is pending or when that attempt started after the item settled.
+        failure_count:
+          type: integer
+          minimum: 0
+          description: Number of recorded failed settlement receipts for this item across attempts.
+        status: {$ref: '#/components/schemas/ResultState'}
+        attempt: {type: integer, minimum: 0}
+        sequence: {type: integer, minimum: 0}
+        failure_code:
+          type: string
+          pattern: '^[a-z][a-z0-9._-]{0,127}$'
+          description: Omitted for pending and successful items.
+        completed_at:
+          type: string
+          format: date-time
+          description: Omitted while the item is pending.
+    SettlementReceipt:
+      type: object
+      additionalProperties: false
+      required: [ordinal, item_id, status, attempt, sequence, source, reported_at]
+      properties:
+        ordinal: {type: integer, minimum: 1}
+        item_id: {type: string, minLength: 1, maxLength: 256}
+        node_id: {type: string, format: uuid}
+        status: {type: string, enum: [succeeded, failed]}
+        attempt: {type: integer, minimum: 1}
+        sequence: {type: integer, minimum: 0}
+        failure_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+        source: {type: string, enum: [worker, system]}
+        reported_at: {type: string, format: date-time}
+    DeadLetter:
+      type: object
+      additionalProperties: false
+      required: [attempt, reason_code, failed_item_count, source, created_at]
+      properties:
+        attempt: {type: integer, minimum: 1}
+        reason_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+        failed_item_count: {type: integer, minimum: 1}
+        source: {type: string, enum: [worker, lease_expiry]}
+        created_at: {type: string, format: date-time}
+    Page:
+      type: object
+      additionalProperties: false
+      properties:
+        next_cursor: {type: string, maxLength: 8192}
+    NumberedPage:
+      type: object
+      additionalProperties: false
+      required: [number, limit, total, total_pages, consistency]
+      properties:
+        number: {type: integer, minimum: 1, maximum: 1000000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        total: {type: integer, format: int64, minimum: 0}
+        total_pages:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Ceiling of total divided by limit; zero when total is zero.
+        consistency:
+          type: string
+          enum: [request_snapshot]
+          description: Count, rows and recorded dependency facts share this request's database snapshot, not a cross-request snapshot.
+    JobKind:
+      type: object
+      additionalProperties: false
+      required: [kind, name_key, integration, runtime_status]
+      properties:
+        kind: {type: string, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+        name_key: {type: string, pattern: '^jobs\.kindNames\.[A-Za-z]+$'}
+        integration: {type: string, enum: [integrated]}
+        runtime_status: {type: string, enum: [unknown]}
+    KindCatalog:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/JobKind'}}
+    TaskDependency:
+      type: object
+      additionalProperties: false
+      required: [task_id, relation, status]
+      properties:
+        task_id: {type: string, format: uuid}
+        relation: {type: string, enum: [completion]}
+        status: {$ref: '#/components/schemas/JobState'}
+    TaskMetadata:
+      type: object
+      additionalProperties: false
+      required: [task_id, name, priority, dependencies]
+      description: >-
+        Read-only presentation facts keyed one-to-one to the page's jobs. This
+        object is outside the immutable Job and never participates in command
+        revision hashes, ETags or command receipts.
+      properties:
+        task_id: {type: string, format: uuid}
+        name:
+          type: object
+          additionalProperties: false
+          required: [name_key, resource, source]
+          properties:
+            name_key: {type: string, pattern: '^jobs\.kindNames\.[A-Za-z]+$'}
+            resource: {type: string, minLength: 1, maxLength: 512}
+            source: {type: string, enum: [derived]}
+        priority:
+          type: object
+          additionalProperties: false
+          required: [policy]
+          properties:
+            policy:
+              type: string
+              enum: [ready_fifo, producer_managed, unknown]
+              description: Source-proven claim policy, never an invented numeric priority or proof that its worker is running.
+        dependencies:
+          type: object
+          additionalProperties: false
+          required: [state, items]
+          description: >-
+            observed requires exactly one same-tenant CNAME completion dependency.
+            none is reported only for integrated kinds that have no dependency
+            relation in the job model and requires an empty items array.
+            unknown requires an empty items array and does not mean no dependency.
+            This is a completion relationship, not a generic claim prerequisite DAG.
+          properties:
+            state: {type: string, enum: [observed, none, unknown]}
+            items: {type: array, maxItems: 1, items: {$ref: '#/components/schemas/TaskDependency'}}
+    QueryWindow:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+    JobListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page, query]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Job'}}
+        page:
+          oneOf:
+            - $ref: '#/components/schemas/Page'
+            - $ref: '#/components/schemas/NumberedPage'
+        query: {$ref: '#/components/schemas/QueryWindow'}
+        task_metadata:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/TaskMetadata'}
+          description: Present only in explicit numbered-page mode, including an empty array for an empty page.
+    JobDetailResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data: {$ref: '#/components/schemas/Job'}
+    AttemptListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Attempt'}}
+        page: {$ref: '#/components/schemas/Page'}
+    ResultListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/ItemResult'}}
+        page: {$ref: '#/components/schemas/Page'}
+    ReceiptListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SettlementReceipt'}}
+        page: {$ref: '#/components/schemas/Page'}
+    DeadLetterListResponse:
+      type: object
+      additionalProperties: false
+      required: [data, page]
+      properties:
+        data: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/DeadLetter'}}
+        page: {$ref: '#/components/schemas/Page'}
+    CommandResponse:
+      type: object
+      additionalProperties: false
+      required: [data, replayed]
+      properties:
+        data: {$ref: '#/components/schemas/Job'}
+        replayed:
+          type: boolean
+          description: True when this response came from the durable command receipt.
+    APIError:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: {type: string, pattern: '^job_[a-z_]+$'}
+        message: {type: string, minLength: 1, maxLength: 256}
+        request_id: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {$ref: '#/components/schemas/APIError'}
+  responses:
+    KindCatalogOK:
+      description: Registered source-backed producer kinds, independent of current job rows or runtime enablement.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/KindCatalog'}}}
+    JobListOK:
+      description: Authenticated keyset page or explicit numbered page with a same-snapshot exact total.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/JobListResponse'}}}
+    JobDetailOK:
+      description: Job projection without producer payload or credentials.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {description: Strong current job revision., schema: {type: string}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/JobDetailResponse'}}}
+    AttemptListOK:
+      description: Attempt history ordered by attempt number descending.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AttemptListResponse'}}}
+    ResultListOK:
+      description: Current item projections ordered by immutable ordinal ascending.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ResultListResponse'}}}
+    ReceiptListOK:
+      description: Settlement receipts ordered by attempt descending then ordinal ascending.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ReceiptListResponse'}}}
+    DeadLetterListOK:
+      description: Dead letters ordered by terminal attempt descending.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/DeadLetterListResponse'}}}
+    CommandOK:
+      description: Immutable cancelled or queued command result snapshot.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {description: Strong resulting job revision., schema: {type: string}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/CommandResponse'}}}
+    BadRequest: {$ref: '#/components/responses/Error400'}
+    Unauthorized: {$ref: '#/components/responses/Error401'}
+    Forbidden: {$ref: '#/components/responses/Error403'}
+    NotFound: {$ref: '#/components/responses/Error404'}
+    RequestCancelled: {$ref: '#/components/responses/Error408'}
+    BadGateway: {$ref: '#/components/responses/Error502'}
+    ServiceUnavailable: {$ref: '#/components/responses/Error503'}
+    GatewayTimeout: {$ref: '#/components/responses/Error504'}
+    Conflict: {$ref: '#/components/responses/Error409'}
+    PreconditionFailed: {$ref: '#/components/responses/Error412'}
+    Error400:
+      description: >-
+        job_invalid_request: invalid UUID, query input, Idempotency-Key, content
+        type, or exact empty JSON command body.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error401:
+      description: 'job_authentication_required: authentication is missing or invalid.'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error403:
+      description: >-
+        job_permission_denied or job_scope_forbidden: permission is missing,
+        audience is incompatible, or the caller attempted a scope override.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error404:
+      description: 'job_not_found: the task does not exist or is outside the authenticated tenant scope.'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error408:
+      description: 'job_request_cancelled: the inbound request context was cancelled.'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error409:
+      description: >-
+        job_idempotency_conflict, job_invalid_transition,
+        job_retries_exhausted, or job_producer_command_required: the key was
+        reused for another command, the job changed or is ineligible, no retry
+        attempt remains, or the job's producer owns the command. cache.operation
+        cancel/retry is executed by the cache module (same audit and receipt as
+        the cache operation API); job_producer_command_required is returned only
+        for its replay, or when cache control is not enabled.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error412:
+      description: 'job_revision_conflict: the If-Match revision is stale; refresh the job before retrying.'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error502:
+      description: >-
+        job_store_invalid_response or job_response_too_large: stored facts were
+        invalid or the bounded response was too large.
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error503:
+      description: 'job_store_unavailable: PostgreSQL or the configured Reader is unavailable.'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Error504:
+      description: 'job_query_timeout: the bounded request timed out.'
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}

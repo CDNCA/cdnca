@@ -1,0 +1,191 @@
+{
+ "id": "admin-system-mail-settings",
+ "prefix": "/v1/admin/system-mail-settings",
+ "operations": [
+  {
+   "operation_id": "getPlatformSystemMailSettings",
+   "method": "GET",
+   "path": "/v1/admin/system-mail-settings",
+   "summary": "Read platform mail settings",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current mail settings",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.platform-system-mail-settings/v1",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "value",
+       "type": "Settings",
+       "required": true
+      },
+      {
+       "name": "mail_secret_configured",
+       "type": "boolean",
+       "description": "An official mail service credential is stored (never returned)."
+      },
+      {
+       "name": "mail_secret_provider",
+       "type": "string: aliyun / sendgrid",
+       "description": "The provider the stored credential belongs to; it is reused only for that provider."
+      },
+      {
+       "name": "mail_secret_fingerprint",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "500",
+     "description": "Unexpected internal failure"
+    },
+    {
+     "status": "503",
+     "description": "Settings storage or policy is unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "updatePlatformSystemMailSettings",
+   "method": "PUT",
+   "path": "/v1/admin/system-mail-settings",
+   "summary": "Update platform mail settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Persists configuration only. Runtime settings are applied at process startup when the notification runtime is enabled; saving does not enable or reload a provider.",
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "mail_secret",
+      "type": "string",
+      "description": "Official mail service credential (DirectMail AccessKeySecret or SendGrid API key) for value.mail_provider. Omitted keeps the stored one; required when choosing an official provider whose credential is not stored."
+     },
+     {
+      "name": "value",
+      "type": "object",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved mail settings",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.platform-system-mail-settings/v1",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "value",
+       "type": "Settings",
+       "required": true
+      },
+      {
+       "name": "mail_secret_configured",
+       "type": "boolean",
+       "description": "An official mail service credential is stored (never returned)."
+      },
+      {
+       "name": "mail_secret_provider",
+       "type": "string: aliyun / sendgrid",
+       "description": "The provider the stored credential belongs to; it is reused only for that provider."
+      },
+      {
+       "name": "mail_secret_fingerprint",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Validation error"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Revision or idempotency conflict"
+    },
+    {
+     "status": "500",
+     "description": "Unexpected internal failure"
+    },
+    {
+     "status": "503",
+     "description": "Settings storage or policy is unavailable"
+    }
+   ]
+  }
+ ]
+}

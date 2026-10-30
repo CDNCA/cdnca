@@ -1,0 +1,370 @@
+{
+ "id": "admin-package-groups",
+ "prefix": "/v1/admin/package-groups",
+ "operations": [
+  {
+   "operation_id": "listPackageGroups",
+   "method": "GET",
+   "path": "/v1/admin/package-groups",
+   "summary": "List package catalog groups",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. Unknown or repeated query parameters are rejected.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "All active groups ordered by sort order and then name.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PackageGroup>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createPackageGroup",
+   "method": "POST",
+   "path": "/v1/admin/package-groups",
+   "summary": "Create a package catalog group",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. The same idempotency key and normalized input replay the original response; a changed input returns idempotency_conflict, and a duplicate active name returns package_name_conflict.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "visible",
+      "type": "boolean",
+      "required": true,
+      "description": "Whether the group is shown in package selection surfaces."
+     },
+     {
+      "name": "sort_order",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Group created, or an identical idempotent request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The platform scope or the reseller tenant scope that owns the group; names are unique per owner."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updatePackageGroup",
+   "method": "PATCH",
+   "path": "/v1/admin/package-groups/{id}",
+   "summary": "Replace package group fields using optimistic concurrency",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. expected_revision is checked atomically; stale input returns version_conflict. An identical idempotent request replays the original response.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package group or package product UUID."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "visible",
+      "type": "boolean",
+      "required": true,
+      "description": "Whether the group is shown in package selection surfaces."
+     },
+     {
+      "name": "sort_order",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Group fields replaced and revision incremented, or an identical request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The platform scope or the reseller tenant scope that owns the group; names are unique per owner."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "visible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "sort_order",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deletePackageGroup",
+   "method": "DELETE",
+   "path": "/v1/admin/package-groups/{id}",
+   "summary": "Soft-delete an unused package group",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. If-Match supplies the expected revision. A group referenced by an active package returns package_group_in_use; a stale revision returns version_conflict.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package group or package product UUID."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Group soft-deleted, or an identical idempotent request replayed."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

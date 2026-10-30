@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["api_version", "kind", "metadata", "spec", "integrity"],
+  "properties": {
+    "api_version": {"const": "marketplace.cdnca.io/v1"},
+    "kind": {"const": "Plugin"},
+    "metadata": {
+      "type": "object",
+      "required": ["id", "version", "name", "description", "publisher"],
+      "properties": {
+        "id": {"type": "string"},
+        "version": {"type": "string"},
+        "name": {"type": "object"},
+        "description": {"type": "object"},
+        "publisher": {"type": "object"}
+      }
+    },
+    "spec": {"type": "object"},
+    "integrity": {"type": "object"}
+  }
+}

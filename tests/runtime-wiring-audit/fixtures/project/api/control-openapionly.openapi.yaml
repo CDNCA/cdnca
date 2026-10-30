@@ -1,0 +1,13 @@
+openapi: 3.1.0
+info: { title: OpenAPI-only fixture, version: 1.0.0 }
+paths:
+  /v1/openapi-only:
+    get:
+      operationId: getOpenAPIOnly
+      responses:
+        '200': { description: ok }
+        '400':
+          description: bad request
+          content:
+            application/json:
+              schema: { type: object }

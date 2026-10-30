@@ -1,0 +1,69 @@
+						{ID: "origin-0", Scheme: "https", Host: "192.0.2.10", Port: 443, Weight: 100, SNI: "origin.example.test", TrustAnchor: "sha256:" + digestB},
+					converted.Scheme, converted.SNI, converted.TrustAnchor = tls.Scheme, tls.SNI, tls.TrustAnchor
+				SNI: endpoint.SNI, TrustAnchor: endpoint.TrustRef, Level: backupLevel(endpoint.Backup), MaxConns: endpoint.MaxConns}
+			Host: fmt.Sprintf("origin%02d.example.test", index), Port: 443, Weight: 100, SNI: "origin.example.test", TrustAnchor: "sha256:" + digestB})
+			TrustAnchor: "sha256:" + anchor}}}}
+			for _, digest := range site.TrustAnchors() {
+			if digest := TrustAnchorDigest(endpoint.TrustAnchor); digest != "" && !seen[digest] {
+			if endpoint.SNI != "" || endpoint.SNIMode != "" || endpoint.TrustAnchor != "" {
+			if pool.Kind != PoolOrigin || endpoint.SNI != "" && !validOriginHost(endpoint.SNI) || !ValidTrustAnchor(endpoint.TrustAnchor) {
+			t.Errorf("ValidTrustAnchor(%q) = %v", anchor, !valid)
+		"http with anchor":   func(s *Site) { s.Origin.Pools[1].Endpoints[1].TrustAnchor = "sha256:" + digestA },
+		"https no anchor":   func(s *Site) { s.Origin.Pools[1].Endpoints[0].TrustAnchor = "" },
+		"system trust": func(s *Site) { s.Origin.Pools[1].Endpoints[0].TrustAnchor = TrustSystem },
+		Endpoint{ID: "origin-2", Scheme: "https", Host: "192.0.2.11", Port: 443, Weight: 1, SNI: "o.example.test", TrustAnchor: TrustSystem},
+		Endpoint{ID: "origin-3", Scheme: "https", Host: "192.0.2.12", Port: 443, Weight: 1, SNI: "o.example.test", TrustAnchor: "sha256:" + digestA},
+		Endpoint{ID: "origin-4", Scheme: "https", Host: "192.0.2.13", Port: 443, Weight: 1, SNI: "o.example.test", TrustAnchor: "sha256:" + digestB},
+		Endpoint{ID: "origin-5", Scheme: "https", Host: "192.0.2.14", Port: 443, Weight: 1, SNI: "o.example.test", TrustAnchor: TrustNone})
+		TrustAnchor: "sha256:" + anchor}
+		if ValidTrustAnchor(anchor) != valid {
+		if tlsEndpoint.Scheme != "https" || tlsEndpoint.SNI != "origin.example.test" || !strings.HasPrefix(tlsEndpoint.TrustAnchor, "sha256:") {
+		result.TrustAnchor = *endpoint.TrustRef
+		return "https|" + endpoint.SNI + "|" + endpoint.TrustAnchor + "|" + identity
+		return FeatureDecision{}, g.denyFeature(ctx, tx, decision, ErrUnavailable, StatusInvalid, "trust_anchor_unavailable")
+		return g.deny(ctx, tx, check, ErrUnavailable, StatusInvalid, uint64(*serial), current, -1, "trust_anchor_unavailable")
+		t.Fatal("TrustAnchorDigest")
+		t.Fatalf("TrustAnchors = %s", got)
+		{name: "missing trust", want: ErrUnavailable, reason: "trust_anchor_unavailable"},
+	"origin_pools[].origins[].trust_ref":                           "-> origin.pools[].endpoints[].trust_anchor (the CA set: a referenced object, its digest)",
+	Keys    []trustAnchorEntry `json:"keys"`
+	TrustAnchor        string `json:"trust_anchor,omitempty"`
+	a := Endpoint{Scheme: "https", SNI: "origin.example.test", TrustAnchor: "sha256:" + digestA}
+	b.TrustAnchor = "sha256:" + digestB
+	debianTrustAnchor = "/usr/local/share/ca-certificates/cdnca-objectstore.crt"
+	digests = append(digests, site.TrustAnchors()...)
+	for _, digest := range site.TrustAnchors() {
+	if !edgesite.ValidTrustAnchor("sha256:" + digest) {
+	if TrustAnchorDigest("sha256:"+digestA) != digestA || TrustAnchorDigest(TrustSystem) != "" || TrustAnchorDigest(TrustNone) != "" {
+	if anchors := site.TrustAnchors(); len(anchors) != 1 || anchors[0] != digest {
+	if got := strings.Join(site.TrustAnchors(), ","); got != digestA+","+digestB {
+	rhelTrustAnchor   = "/etc/pki/ca-trust/source/anchors/cdnca-objectstore.crt"
+	system.TrustAnchor = TrustSystem
+	var document trustAnchorFile
+	{"debian", debianTrustAnchor, Command{Path: "/usr/sbin/update-ca-certificates"}},
+	{"rhel", rhelTrustAnchor, Command{Path: "/usr/bin/update-ca-trust", Args: []string{"extract"}}},
+	{Path: debianTrustAnchor},
+	{Path: rhelTrustAnchor},
+            sni = endpoint.sni, sni_mode = endpoint.sni_mode, trust = endpoint.trust_anchor, node_id = endpoint.node_id,
+        if not name or not valid_anchor(endpoint.trust_anchor) then
+        local ok, err = _M.set_host_check(endpoint.trust_anchor ~= TRUST_NONE)
+        local ok, err = origintls.set_host_check(view.trust_anchor ~= "none")
+        ngx.var.cdnca_origin_trust = endpoint.trust_anchor
+        ngx_var.cdnca_origin_trust = view.trust_anchor or ""
+        return "https|" .. (_M.name(endpoint) or "") .. "|" .. endpoint.trust_anchor .. "|" .. identity
+        sni = tls and tls_name(pool, endpoint) or nil, trust_anchor = endpoint.trust }
+        trust_anchor = pool.endpoints[last.index].trust, auth = ctx.plan.auth[pool.id],
+      sni = scheme ~= "http" and sni or nil, trust_anchor = scheme ~= "http" and ANCHOR or nil } } }
+    endpoints = { { id = "e", scheme = "https", host = "127.0.0.1", port = port, weight = 1, sni = sni, trust_anchor = anchor } } }
+    ngx.var.cdnca_origin_sni, ngx.var.cdnca_origin_trust = endpoint.sni, endpoint.trust_anchor
+// TrustAnchorDigest is the CA set object digest of anchor ("" for the
+// TrustAnchors is the CA set object digests the site's HTTPS endpoints
+// ValidTrustAnchor reports whether anchor names a CA set object, the
+func (site Site) TrustAnchors() []string {
+func TestInstallRequiresIndependentTrustAnchors(t *testing.T) {
+func TestTrustAnchors(t *testing.T) {
+func TrustAnchorDigest(anchor string) string {
+func ValidTrustAnchor(anchor string) bool {
+type trustAnchorEntry struct {
+type trustAnchorFile struct {
+| `origin.pools[]` | 按 id 升序；`kind` origin/l2；`algorithm` round_robin/ip_hash/url_hash/least_conn/random（按权重随机）/hash（`hash_key`：白名单变量模板的一致性哈希）/sticky（`sticky` {source cookie/header/arg, name}：令牌 = SHA-256("cdnca-sticky-v1\0"站点\0池\0端点) 前 12 字节十六进制，无令牌的访客由节点下发）；`request_host` {mode origin（所选端点的主机，非默认端口时带端口）/custom（value）}，缺省为访客 Host；`follow_port` 用监听公网端口回源；`endpoints[]` 保持选择顺序：`scheme` http/https，https 必须有 `trust_anchor`（`sha256:<64hex>` 池 CA 集摘要或 `system`），`sni_mode`（custom 发送 `sni`，必填；origin_host 发所选端点主机；visitor_host 逐请求发访客 `$host`；后两者不得带 `sni`，依据 `edge/openresty/dynroute/cdnca_origintls.lua:5-7`、`libs/edgeconfig/edgesite/validate.go:335-347`；主控发布时 `Pool.ExpandSNIModes` 给每个 https 端点写明 sni_mode：有 `sni` 或 `request_host` custom 为 custom，`request_host` origin 为 origin_host，否则 visitor_host），缺省 sni_mode 时 `sni` 缺省 = 回源 Host 去端口；所选 SNI 进连接复用键，不同 SNI 不共用连接；`backup`（仅 round_robin/least_conn，至少一个主端点；主端点都不可用才用）；`max_conns`（每 worker，0 不限，≤100000）；l2 端点必须有 `node_id`、`mtls_identity_sha256`、`topology_revision`；`retry` {methods ⊆ GET/HEAD, max_attempts 1–8, 各超时}；`keepalive_idle_timeout_ms`（仅 origin 池，0 或 1000–300000）|

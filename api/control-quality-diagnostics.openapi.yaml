@@ -1,0 +1,236 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Quality Diagnostics API
+  version: 1.0.0
+servers:
+  - url: /
+paths:
+  /v1/analytics/quality-diagnostics:
+    get:
+      operationId: getTenantQualityDiagnostics
+      summary: Read tenant quality diagnostics from finalized access facts
+      security:
+        - sessionBearer: []
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/QualityDiagnostics' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '408': { $ref: '#/components/responses/Cancelled' }
+        '409': { $ref: '#/components/responses/SnapshotConflict' }
+        '502': { $ref: '#/components/responses/InvalidSourceResponse' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '504': { $ref: '#/components/responses/Timeout' }
+  /v1/admin/analytics/quality-diagnostics:
+    get:
+      operationId: getPlatformQualityDiagnostics
+      summary: Read one tenant's quality diagnostics from the platform scope
+      security:
+        - sessionBearer: []
+      x-required-permissions: [platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': { $ref: '#/components/responses/QualityDiagnostics' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '405': { $ref: '#/components/responses/MethodNotAllowed' }
+        '408': { $ref: '#/components/responses/Cancelled' }
+        '409': { $ref: '#/components/responses/SnapshotConflict' }
+        '502': { $ref: '#/components/responses/InvalidSourceResponse' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+        '504': { $ref: '#/components/responses/Timeout' }
+components:
+  securitySchemes:
+    sessionBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: session
+  parameters:
+    TenantID:
+      name: tenant_id
+      in: query
+      required: true
+      schema: { type: string, format: uuid }
+    From:
+      name: from
+      in: query
+      required: true
+      description: Inclusive UTC millisecond boundary.
+      schema: { type: string, format: date-time }
+    To:
+      name: to
+      in: query
+      required: true
+      description: Exclusive UTC millisecond boundary, at most 31 days after from.
+      schema: { type: string, format: date-time }
+    SiteID:
+      name: site_id
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    NodeID:
+      name: node_id
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    Category:
+      name: category
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [upstream_5xx, edge_530, no_host, config_mismatch]
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, minLength: 1, maxLength: 4096, pattern: '^[A-Za-z0-9_-]+$' }
+  headers:
+    NoStore:
+      description: Prevents caching of scoped diagnostic facts.
+      schema: { type: string, const: no-store }
+    NoCache:
+      description: Prevents intermediary reuse.
+      schema: { type: string, const: no-cache }
+    XContentTypeOptions:
+      description: Disables content sniffing.
+      schema: { type: string, const: nosniff }
+    RequestID:
+      description: Stable request correlation identifier.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+  responses:
+    QualityDiagnostics:
+      description: Finalized, latest-state diagnostics at one exact snapshot.
+      headers:
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+        Pragma: { $ref: '#/components/headers/NoCache' }
+        X-Content-Type-Options: { $ref: '#/components/headers/XContentTypeOptions' }
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/QualityDiagnosticsResponse' }
+    InvalidRequest:
+      description: Invalid query, filter, cursor, or request envelope.
+      $ref: '#/components/responses/ErrorResponse'
+    Unauthenticated:
+      description: Session authentication is required.
+      $ref: '#/components/responses/ErrorResponse'
+    Forbidden:
+      description: The authenticated actor lacks the requested scope or permission.
+      $ref: '#/components/responses/ErrorResponse'
+    MethodNotAllowed:
+      description: Only GET is accepted.
+      $ref: '#/components/responses/ErrorResponse'
+    Cancelled:
+      description: The request was cancelled.
+      $ref: '#/components/responses/ErrorResponse'
+    SnapshotConflict:
+      description: The finalized snapshot expired or did not match the cursor page.
+      $ref: '#/components/responses/ErrorResponse'
+    InvalidSourceResponse:
+      description: The finalized authority returned invalid facts.
+      $ref: '#/components/responses/ErrorResponse'
+    Unavailable:
+      description: The finalized authority is unavailable.
+      $ref: '#/components/responses/ErrorResponse'
+    Timeout:
+      description: The finalized authority exceeded the bounded query deadline.
+      $ref: '#/components/responses/ErrorResponse'
+    ErrorResponse:
+      description: Stable error response with no raw dependency text.
+      headers:
+        Cache-Control: { $ref: '#/components/headers/NoStore' }
+        Pragma: { $ref: '#/components/headers/NoCache' }
+        X-Content-Type-Options: { $ref: '#/components/headers/XContentTypeOptions' }
+        X-Request-ID: { $ref: '#/components/headers/RequestID' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    QualityDiagnosticsResponse:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, snapshot]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/QualityDiagnostic' }
+        next_cursor:
+          type: [string, 'null']
+          maxLength: 4096
+        snapshot: { $ref: '#/components/schemas/FinalizedSnapshot' }
+        effective_tenant_id:
+          type: string
+          format: uuid
+          description: Present only for the platform route.
+    QualityDiagnostic:
+      type: object
+      additionalProperties: false
+      required: [event_id, occurred_at, site_id, node_id, category, cause_code, action_code, status_code, config_version_id, installation_id, request_id, task_id, trace_id]
+      properties:
+        event_id: { type: string, minLength: 1, maxLength: 128 }
+        occurred_at: { type: string, format: date-time }
+        site_id: { type: string, format: uuid }
+        node_id: { type: string, format: uuid }
+        category:
+          type: string
+          enum: [upstream_5xx, edge_530, no_host, config_mismatch]
+        cause_code:
+          type: string
+          enum: [upstream_failure, upstream_result_empty, upstream_result_unknown, edge_status_530, upstream_reported_no_host, host_missing, upstream_reported_config_mismatch]
+        action_code:
+          type: string
+          enum: [inspect_upstream, inspect_edge_route, configure_host, reconcile_config]
+        status_code: { type: integer, minimum: 100, maximum: 599 }
+        config_version_id: { type: string, format: uuid }
+        installation_id: { type: string, format: uuid }
+        request_id: { type: string, minLength: 1, maxLength: 128 }
+        task_id: { type: [string, 'null'], format: uuid }
+        trace_id: { type: string, minLength: 1, maxLength: 128 }
+    FinalizedSnapshot:
+      type: object
+      additionalProperties: false
+      required: [at, source_watermark, finalized_through, expires_at]
+      properties:
+        at: { type: string, format: date-time }
+        source_watermark: { type: integer, minimum: 1 }
+        finalized_through: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: { type: string, minLength: 1, maxLength: 128 }
+            message: { type: string, minLength: 1, maxLength: 256 }
+            request_id: { type: string, minLength: 1, maxLength: 128 }

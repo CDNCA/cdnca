@@ -1,0 +1,275 @@
+{
+ "id": "theme",
+ "prefix": "/v1/theme",
+ "operations": [
+  {
+   "operation_id": "getThemeAsset",
+   "method": "GET",
+   "path": "/v1/theme/assets/{sha}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A theme brand image (png/jpeg/ico). Immutable.",
+   "params": [
+    {
+     "name": "sha",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Image"
+    },
+    {
+     "status": "404",
+     "description": "Unknown digest"
+    }
+   ]
+  },
+  {
+   "operation_id": "getThemeAuthStyle",
+   "method": "GET",
+   "path": "/v1/theme/auth-style",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Public sign-in page style of the theme plugin active on the user console (site theme C, auth_style): CSS the console puts in a <style> of its own on /auth/* and the plugin's images. Forms and submission stay the platform's; nginx serves /auth/* with img-src, font-src and connect-src 'self'. An empty css without one. Cache-Control no-cache.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sign-in style",
+     "fields": [
+      {
+       "name": "css",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "images",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "405",
+     "description": "Not GET or HEAD"
+    }
+   ]
+  },
+  {
+   "operation_id": "getThemeAuthStyleAsset",
+   "method": "GET",
+   "path": "/v1/theme/auth-style/assets/{sha}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "An image of an installed plugin's sign-in style, served with a sandboxing CSP. Immutable.",
+   "params": [
+    {
+     "name": "sha",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Image"
+    },
+    {
+     "status": "404",
+     "description": "Unknown digest"
+    }
+   ]
+  },
+  {
+   "operation_id": "getCurrentTheme",
+   "method": "GET",
+   "path": "/v1/theme/current",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Public pointer to the theme the caller sees (Cache-Control no-store). A tenant session gets its tenant's theme; without a session, a Host bound to a tenant (sign-in page) gets that tenant's theme; the platform console and everyone else get the platform theme (the default theme until one is activated).",
+   "params": [
+    {
+     "name": "Authorization",
+     "in": "header",
+     "type": "string",
+     "description": "Optional bearer session"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Active theme",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.theme.current/v1",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "tokens_url",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "stylesheet_url",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope",
+       "type": "any",
+       "description": "tenant: a tenant's own theme; platform-uploaded brand images do not apply"
+      },
+      {
+       "name": "brand_assets",
+       "type": "object",
+       "description": "Slots the platform uploaded (GET /v1/brand-assets/{slot}), each with its revision; request /v1/brand-assets/{slot}?v={revision} only for these. Empty for a tenant's own theme."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "operation_id": "getThemeStylesheet",
+   "method": "GET",
+   "path": "/v1/theme/theme.{sha}.css",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Rendered custom properties on :root[data-cdnca-theme], then one block per tokens_by_role role on :root[data-cdnca-theme][data-cdnca-role=\"admin\"|\"user\"] carrying only that role's overrides. Immutable.",
+   "params": [
+    {
+     "name": "sha",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stylesheet"
+    },
+    {
+     "status": "404",
+     "description": "Unknown digest"
+    }
+   ]
+  },
+  {
+   "operation_id": "getThemeTokens",
+   "method": "GET",
+   "path": "/v1/theme/theme.{sha}.json",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Rendered tokens (cdnca.theme.rendered/v1) for ConfigProvider and layout slots. Immutable.",
+   "params": [
+    {
+     "name": "sha",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Rendered theme",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.theme.rendered/v1",
+       "required": true
+      },
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "antd_tokens",
+       "type": "object",
+       "required": true,
+       "description": "ConfigProvider tokens (shared values)"
+      },
+      {
+       "name": "antd_tokens_by_role",
+       "type": "object",
+       "description": "Only the antd tokens a role overrides (package tokens_by_role); absent when none."
+      },
+      {
+       "name": "css_variables",
+       "type": "object",
+       "required": true,
+       "description": "Shared custom properties"
+      },
+      {
+       "name": "layout",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "brand",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "Unknown digest"
+    }
+   ]
+  }
+ ]
+}

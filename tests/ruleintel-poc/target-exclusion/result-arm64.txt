@@ -1,0 +1,57 @@
+# tests/ruleintel-poc/target-exclusion/run.sh, cdnca-native-runtime:edge-golden arm64, 2026-10-19
+runtime: nginx version: openresty/1.31.1.1
+== which CRS rules the probe fires on parameter q (detection only, PL1)
+fired: 942100
+  [id "942100"]  [msg "SQL Injection Attack Detected via libinjection"] [data "Matched Data: s&sos found within ARGS:q: 1' OR '1'='1"]
+  [id "949110"]  [msg "Inbound Anomaly Score Exceeded (Total Score: 5)"] [data ""]
+pairs: 4096 over 129 rules
+grouped: 19 family guards
+== 2: parameter name from a macro
+  nginx: [emerg] "modsecurity_rules_file" directive Rules error. File: /poc/gen/macro.conf. Line: 18. Column: 119. Expecting an action, got:  %{tx.cdnca_p}" in /poc/nginx-macro.conf:13
+PASS MACRO-REJECTED expected=yes actual=yes  ctl:ruleRemoveTargetById 的参数名写宏，规则文件加载失败（扫描器不接受 %{}）
+== 1 / 3: literal and regex targets
+PASS STATIC-Q expected=200 actual=200  字面量 ARGS:q：q 上的命中被移除
+PASS STATIC-R expected=403 actual=403  字面量 ARGS:q：同一载荷在参数 r 上仍拦截（只移除目标，不移除规则）
+PASS REGEX-Q expected=403 actual=403  ARGS:/q/ 被当作字面量名，不匹配 q，仍拦截
+PASS CASE-Q expected=403 actual=403  参数名大小写不同（Q）不移除：展开集合时按原样精确比较
+== 4: alternative A, hooks switched by the transaction ID (no reload)
+PASS HOOK-flat-OFF expected=403 actual=403  flat：上下文无排除 → 拦截
+PASS HOOK-flat-ON expected=200 actual=200  flat：t= 列出 (规则,q) → 放行
+PASS HOOK-flat-OTHER-PARAM expected=403 actual=403  flat：同一上下文，载荷在 r 上 → 拦截
+PASS HOOK-flat-OFF-AGAIN expected=403 actual=403  flat：下一个请求去掉 t= → 拦截（事务级，不残留）
+PASS HOOK-grouped-OFF expected=403 actual=403  grouped：上下文无排除 → 拦截
+PASS HOOK-grouped-ON expected=200 actual=200  grouped：t= 列出 (规则,q) → 放行
+PASS HOOK-grouped-OTHER-PARAM expected=403 actual=403  grouped：同一上下文，载荷在 r 上 → 拦截
+PASS HOOK-grouped-OFF-AGAIN expected=403 actual=403  grouped：下一个请求去掉 t= → 拦截（事务级，不残留）
+PASS HOOK-JSON-NAME-UNRENDERED expected=403 actual=403  JSON 叶子名为 json.q：钩子只渲染了 q，不放行（JSON 参数要按 json.<路径> 渲染）
+PASS HOOK-UNRENDERED-PAIR expected=403 actual=403  t= 里有、但没渲染进钩子的对（zz）无效：新对要等下一次渲染 + reload
+== spoofing
+PASS SPOOF-ARG expected=403 actual=403  客户端参数 cdnca_tex 不影响 TX 变量
+== cost: clean request /c?q=world, 2000 sequential, 1 worker (interleaved rounds)
+round 1 CRS only:              {"count":2000,"failed":0,"first_error":"","max_ms":2.419,"p50_ms":0.689,"p99_ms":1.181}
+round 1 CRS only + t=:         {"count":2000,"failed":0,"first_error":"","max_ms":2.826,"p50_ms":0.693,"p99_ms":1.188}
+round 1 4096 flat hooks:       {"count":2000,"failed":0,"first_error":"","max_ms":16.302,"p50_ms":2.145,"p99_ms":9.326}
+round 1 4096 flat hooks + t=:  {"count":2000,"failed":0,"first_error":"","max_ms":4.238,"p50_ms":1.854,"p99_ms":2.924}
+round 1 4096 grouped hooks:    {"count":2000,"failed":0,"first_error":"","max_ms":2.232,"p50_ms":0.791,"p99_ms":1.366}
+round 1 4096 grouped hooks + t=: {"count":2000,"failed":0,"first_error":"","max_ms":3.754,"p50_ms":0.789,"p99_ms":1.458}
+round 2 CRS only:              {"count":2000,"failed":0,"first_error":"","max_ms":21.11,"p50_ms":0.696,"p99_ms":1.889}
+round 2 CRS only + t=:         {"count":2000,"failed":0,"first_error":"","max_ms":3.217,"p50_ms":0.691,"p99_ms":1.282}
+round 2 4096 flat hooks:       {"count":2000,"failed":0,"first_error":"","max_ms":6.087,"p50_ms":1.843,"p99_ms":3.21}
+round 2 4096 flat hooks + t=:  {"count":2000,"failed":0,"first_error":"","max_ms":7.152,"p50_ms":1.851,"p99_ms":3.086}
+round 2 4096 grouped hooks:    {"count":2000,"failed":0,"first_error":"","max_ms":2.24,"p50_ms":0.789,"p99_ms":1.437}
+round 2 4096 grouped hooks + t=: {"count":2000,"failed":0,"first_error":"","max_ms":6.155,"p50_ms":0.842,"p99_ms":2.738}
+round 3 CRS only:              {"count":2000,"failed":0,"first_error":"","max_ms":2.828,"p50_ms":0.694,"p99_ms":1.171}
+round 3 CRS only + t=:         {"count":2000,"failed":0,"first_error":"","max_ms":10.573,"p50_ms":0.696,"p99_ms":1.632}
+round 3 4096 flat hooks:       {"count":2000,"failed":0,"first_error":"","max_ms":28.661,"p50_ms":1.866,"p99_ms":3.128}
+round 3 4096 flat hooks + t=:  {"count":2000,"failed":0,"first_error":"","max_ms":4.777,"p50_ms":1.871,"p99_ms":2.985}
+round 3 4096 grouped hooks:    {"count":2000,"failed":0,"first_error":"","max_ms":4.427,"p50_ms":0.815,"p99_ms":2.005}
+round 3 4096 grouped hooks + t=: {"count":2000,"failed":0,"first_error":"","max_ms":5.518,"p50_ms":0.797,"p99_ms":1.523}
+== memory (master VmRSS, kB)
+noex: 20460
+hooks: 30572
+hooks-grouped: 30648
+modsecurity warnings logged: 14
+# rerun after replacing the PARTIAL check (ROUNDS=1 REQUESTS=500):
+PASS HOOK-flat-OTHER-RULE expected=403 actual=403  flat：t= 只列 (942200,q)，命中的是别的规则 → 拦截（按规则号精确匹配）
+PASS HOOK-grouped-OTHER-RULE expected=403 actual=403  grouped：t= 只列 (942200,q)，命中的是别的规则 → 拦截（按规则号精确匹配）
+RESULT target-exclusion failures=0

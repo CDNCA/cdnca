@@ -1,0 +1,19 @@
+{
+  "schema": "cdnca.rule-pack/v1",
+  "pack_id": "dev/acme.dev/sqli-extra",
+  "version": "1.0.0",
+  "layer": "developer",
+  "engine": "waf_v2",
+  "engine_min_version": 1,
+  "name": "SQL 注入加强",
+  "description": "参数 SQL 注入检测与后台路径拦截",
+  "params_schema": {
+    "action": {"type": "string", "enum": ["log", "block"], "bind": {"target": "waf.action", "rules": ["r010"]}}
+  },
+  "exports": ["r010", "r020"],
+  "rules": [
+    {"id": "r010", "name": "参数注入", "waf": {"match": {"inspect": [{"target": "args", "operator": "detect", "values": ["sqli"]}]}, "action": "block", "flow": "stop"}},
+    {"id": "r020", "name": "后台路径", "waf": {"match": {"path": {"kind": "prefix", "value": "/wp-admin"}}, "action": "block", "flow": "stop"}}
+  ],
+  "defaults": {"action": "block"}
+}

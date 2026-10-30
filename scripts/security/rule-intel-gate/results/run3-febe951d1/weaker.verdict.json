@@ -1,0 +1,8794 @@
+{
+  "schema": "cdnca.waf-gate-verdict/v1",
+  "passed": false,
+  "reasons": [
+    "block_rate_dropped"
+  ],
+  "base_report_sha256": "25631718fd774ebd07fadaac80c74a7dd5a37af5afcd485cc952090b3ba89edd",
+  "candidate_report_sha256": "cc286ac423dfd99110821681cf5dcf794a7d4ee18236f997a76f5a317384dbef",
+  "standard_pack_id": "system/crs-pl1",
+  "corpus_sha256": "adc530e4a786310e9c23a18b2a4822970a99b9f8df007923b2ca9924635e0189",
+  "samples": 3774,
+  "tiers": [
+    {
+      "pack_id": "system/crs-pl1-log",
+      "name": "仅记录",
+      "base": {
+        "attacks": 3522,
+        "blocked": 0,
+        "benign": 252,
+        "false_positives": 0,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 0,
+        "benign": 252,
+        "false_positives": 0,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl1",
+      "name": "标准防护",
+      "base": {
+        "attacks": 3522,
+        "blocked": 1351,
+        "benign": 252,
+        "false_positives": 29,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 1351,
+        "benign": 252,
+        "false_positives": 29,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl2",
+      "name": "严格防护",
+      "base": {
+        "attacks": 3522,
+        "blocked": 2589,
+        "benign": 252,
+        "false_positives": 53,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 1981,
+        "benign": 252,
+        "false_positives": 41,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 620
+    },
+    {
+      "pack_id": "system/crs-pl3",
+      "name": "极严格防护",
+      "base": {
+        "attacks": 3522,
+        "blocked": 2671,
+        "benign": 252,
+        "false_positives": 68,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 2076,
+        "benign": 252,
+        "false_positives": 41,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 622
+    }
+  ],
+  "changes": [
+    {
+      "id": "attack-classic-0",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "attack-classic-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932238-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932238-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932238-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932238-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-933151-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-933161-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934100-33",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934130-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-28",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-30",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942101-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942101-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942101-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-22",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-29",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-31",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-32",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-33",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-35",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-37",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-41",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-44",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942130-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942130-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-27",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-28",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-29",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-30",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-31",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-32",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-33",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-34",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-35",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-36",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-37",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-38",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-39",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-40",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-41",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-42",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-43",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-44",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-45",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-46",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-47",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-48",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-49",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-50",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-51",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-52",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-53",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-54",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-55",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-56",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-57",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-58",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-59",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-60",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-61",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-62",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-63",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-64",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-65",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-66",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-67",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-68",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-69",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-70",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-71",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-72",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942152-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942152-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942152-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-21",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-22",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-27",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-22",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-27",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-29",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-30",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-31",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-32",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-33",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-35",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-36",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-37",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-42",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-44",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-47",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-49",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-21",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-28",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-36",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-49",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-50",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-51",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-52",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-53",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-54",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-55",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-56",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-57",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-58",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-59",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-60",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-61",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-62",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-63",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-64",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-65",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-66",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-67",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-68",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-70",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-71",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-73",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-76",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-78",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-79",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-80",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-81",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942250-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942250-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942251-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942251-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942270-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942270-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942270-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942310-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942310-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942310-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942321-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942321-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942330-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-32",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-33",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-34",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-35",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-36",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-37",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-38",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-39",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-40",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-41",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942362-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942362-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-21",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-27",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-28",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-29",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-30",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-39",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-40",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-41",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-42",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-46",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-27",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-28",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-29",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-30",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-31",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-21",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-22",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-27",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-28",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-29",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-30",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-31",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-32",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-33",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-34",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-35",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-36",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-37",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-38",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-39",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-40",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-41",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-42",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-43",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-44",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-45",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-46",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-47",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-48",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-49",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-50",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-51",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-52",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-53",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-54",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-55",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-56",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-57",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-58",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-59",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-60",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-61",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-67",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-69",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942431-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942431-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942432-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942450-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942450-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942450-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942470-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-19",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-22",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-20",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-21",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-22",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942530-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942530-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-5",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-6",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-7",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-8",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-9",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-10",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-11",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-12",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-13",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-14",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-15",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-16",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-17",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-18",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-21",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-22",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-23",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-24",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-25",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-26",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-27",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-28",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-29",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-30",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-31",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-32",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-39",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-40",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-41",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-42",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-45",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-46",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-47",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-48",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-49",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942560-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942560-2",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942560-3",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942560-4",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-15",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-16",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-17",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-18",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-template-2",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-richtext-9",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-markdown-3",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-markdown-6",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-1",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-3",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-15",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-json_api-12",
+      "attack": false,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "intel-attack-1",
+      "attack": true,
+      "tier": "system/crs-pl2",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "attack-classic-0",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "attack-classic-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-932240-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-933151-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-933161-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934100-33",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934130-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-28",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-30",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-934140-33",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942100-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942101-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942101-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942101-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-22",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-29",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-31",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-32",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-33",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-35",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-37",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-41",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942120-44",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942130-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942130-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942131-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942140-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942150-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-27",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-28",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-29",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-30",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-31",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-32",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-33",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-34",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-35",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-36",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-37",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-38",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-39",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-40",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-41",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-42",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-43",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-44",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-45",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-46",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-47",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-48",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-49",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-50",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-51",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-52",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-53",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-54",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-55",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-56",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-57",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-58",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-59",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-60",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-61",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-62",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-63",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-64",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-65",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-66",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-67",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-68",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-69",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-70",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-71",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942151-72",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942152-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942152-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942152-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-21",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-22",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942160-27",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942170-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942180-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-22",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-27",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-29",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-30",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-31",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-32",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-33",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-35",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-36",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-37",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-42",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-44",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-47",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942190-49",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942200-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-21",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-28",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-36",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-39",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-40",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-49",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-50",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-51",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-52",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-53",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-54",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-55",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-56",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-57",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-58",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-59",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-60",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-61",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-62",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-63",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-64",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-65",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-66",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-67",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-68",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-70",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-71",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-73",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-76",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-78",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-79",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-80",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942210-81",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942220-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942230-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942240-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942250-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942250-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942251-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942251-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942270-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942270-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942270-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942280-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942290-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942310-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942310-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942310-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942320-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942321-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942321-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942330-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942340-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942350-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-32",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-33",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-34",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-35",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-36",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-37",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-38",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-39",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-40",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942360-41",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942362-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942362-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942362-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942370-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-21",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-27",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-28",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-29",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-30",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-39",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-40",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-41",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-42",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942380-46",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-27",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-28",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-29",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-30",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942390-31",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-15",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-21",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-22",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-27",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-28",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-29",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-30",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-31",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-32",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-33",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-34",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-35",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-36",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-37",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-38",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-39",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-40",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-41",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-42",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-43",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-44",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-45",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-46",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-47",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-48",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-49",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-50",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-51",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-52",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-53",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-54",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-55",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-56",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-57",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-58",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-59",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-60",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-61",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-67",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942410-69",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942420-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942430-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942431-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942431-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942432-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942440-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942450-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942470-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942480-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-5",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-19",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-22",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942490-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942500-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-9",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-13",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942520-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-17",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-20",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-21",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-22",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-23",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942521-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942522-11",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942530-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942530-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942540-7",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-6",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-8",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-10",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-12",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-14",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-16",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-18",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-22",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-24",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-25",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-26",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-28",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-30",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-31",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-32",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-39",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-40",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-41",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-45",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-46",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-47",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-48",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942550-49",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942560-2",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942560-3",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "crs-942560-4",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-6",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-14",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-15",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-16",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-17",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-18",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-tiers-19",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-template-2",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-template-8",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-template-14",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-template-20",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-richtext-3",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-richtext-5",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-richtext-7",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-richtext-8",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-richtext-9",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-markdown-2",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-markdown-3",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-markdown-6",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-0",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-1",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-3",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-13",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-code-15",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-json_api-12",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-json_api-14",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "benign-graphql-2",
+      "attack": false,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    },
+    {
+      "id": "intel-attack-1",
+      "attack": true,
+      "tier": "system/crs-pl3",
+      "from": "b",
+      "to": "p"
+    }
+  ]
+}

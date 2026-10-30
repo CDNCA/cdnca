@@ -1,0 +1,974 @@
+{
+ "id": "admin-notifications",
+ "prefix": "/v1/admin/notifications",
+ "operations": [
+  {
+   "operation_id": "getNotificationChannels",
+   "method": "GET",
+   "path": "/v1/admin/notifications/channels",
+   "summary": "Read global notification channel settings",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current global channel switches and capability facts.",
+     "fields": [
+      {
+       "name": "sms_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "email_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "sms_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "email_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "changed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateNotificationChannels",
+   "method": "PUT",
+   "path": "/v1/admin/notifications/channels",
+   "summary": "Update global notification channel settings",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Correlation identifier and retry key for this write. Reusing the same value for the same authenticated actor and operation requires the exact original path, revision, and body; an exact retry replays the original response, while changed semantics return 409."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "sms_enabled",
+      "type": "boolean",
+      "required": true,
+      "description": "Enables the configured SMS provider for this channel or subscription."
+     },
+     {
+      "name": "email_enabled",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current global channel switches and capability facts.",
+     "fields": [
+      {
+       "name": "sms_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "email_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "sms_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "email_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "changed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "415",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "listNotificationDeliveries",
+   "method": "GET",
+   "path": "/v1/admin/notifications/deliveries",
+   "summary": "List redacted notification delivery settlements",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Lists durable delivery state without recipient contacts, subject, body, deduplication keys, lease tokens, provider response bodies, or credentials. The cursor is stable for the selected filters.",
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "channel",
+     "in": "query",
+     "type": "string: email / sms"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: pending / dispatching / retry_wait / accepted / unknown / delivered / permanent_failed / exhausted / cancelled"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Redacted delivery settlement page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<DeliveryLog>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string(uuid)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "listNotificationDeliveryAttempts",
+   "method": "GET",
+   "path": "/v1/admin/notifications/deliveries/{outbox_id}/attempts",
+   "summary": "List redacted attempts for one notification delivery",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "params": [
+    {
+     "name": "outbox_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Redacted delivery attempt facts for one outbox item.",
+     "fields": [
+      {
+       "name": "outbox_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<DeliveryAttempt>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "listNotificationDeliveryHistory",
+   "method": "GET",
+   "path": "/v1/admin/notifications/delivery-history",
+   "summary": "List redacted immutable notification delivery facts",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform administrators with system_configuration.read or platform.admin may query all scopes or one exact scope. Session, membership and current permissions are revalidated before query validation and lookup. One row identifies one immutable outbox sequence, including anonymous recipients and replay generations. Filters combine with AND. Without from/to the complete history is queried. Each optional bound is inclusive; when both are supplied, to must be greater than from and the window at most 31 days. The current request uses one consistent database view for cursor validation, total_count and rows. Pages are ordered by observed_at, outbox_id and sequence descending. Cursors identify persisted facts and are validated against the current filters; they do not promise a snapshot across requests. Delivery history never includes message titles, bodies, full recipient contacts, provider response bodies, deduplication keys, lease tokens or credentials. New transport calls record only a masked recipient address and provider_call_started_at. A row sees only an observation in the same attempt through its own sequence; dispatch_started never reads a future settlement observation. Historical rows without observations remain null and are never backfilled from current user contacts. Message content retains its separate administrator message-query contract.",
+   "any_permissions": [
+    "system_configuration.read",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Optional exact scope; omitted means all scopes for an authorized platform administrator."
+    },
+    {
+     "name": "channel",
+     "in": "query",
+     "type": "string: email / sms"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: pending / dispatching / retry_wait / accepted / unknown / delivered / permanent_failed / exhausted / cancelled"
+    },
+    {
+     "name": "result",
+     "in": "query",
+     "type": "string: success / failure",
+     "description": "success means only delivered; failure means retry_wait, permanent_failed or exhausted. accepted, unknown, lease_unknown and cancelled are neither success nor failure. When state is also supplied, both filters must match; a contradiction returns an empty page."
+    },
+    {
+     "name": "event_type",
+     "in": "query",
+     "type": "string",
+     "description": "Exact persisted notification event type, not a legacy UI alias."
+    },
+    {
+     "name": "user_id",
+     "in": "query",
+     "type": "string",
+     "description": "Canonical lowercase nonzero UUID or positive decimal display ID, at most signed int64 maximum; filters recipients, not actors."
+    },
+    {
+     "name": "message_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Exact immutable notification_events.id, shared by original and replay outboxes."
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Inclusive observed_at lower bound, RFC3339 with optional fractional seconds."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Inclusive observed_at upper bound, RFC3339 with optional fractional seconds."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Returned outbox UUID and positive int32 fact sequence; must identify a fact satisfying the current filters."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "A consistent current-request page and filtered total, with no cross-request snapshot guarantee.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<DeliveryHistoryFact>",
+       "required": true
+      },
+      {
+       "name": "total_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "listNotificationMessages",
+   "method": "GET",
+   "path": "/v1/admin/notifications/messages",
+   "summary": "List the compatibility message projection",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Event-centric administrator view of member notification facts. Fields that are not backed by durable facts are returned as null. Site and package use the subject recorded when the event was raised; older package-monitor rows fall back to the monitor transition's exact subscription. Events raised without a site subject never match a site filter, and ownership is never inferred from current bindings. Titles, channel bodies and email_state/sms_state come from original generation-1 outbox facts (null = that channel was not generated); delivery replay does not duplicate message rows.",
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "user_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "package_id",
+     "in": "query",
+     "type": "string",
+     "description": "Exact user subscription ID from a monitor transition; product IDs do not match. Unknown IDs return an empty page."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string",
+     "description": "Site recorded when the event was raised (notification_events.subject_site_id); events without a site subject never match."
+    },
+    {
+     "name": "user",
+     "in": "query",
+     "type": "string",
+     "description": "Recipient user by exact display ID or case-insensitive substring of username / display name (current values)."
+    },
+    {
+     "name": "package",
+     "in": "query",
+     "type": "string",
+     "description": "User subscription by exact display ID or case-insensitive substring of the package name; events whose subscription no longer exists never match."
+    },
+    {
+     "name": "site",
+     "in": "query",
+     "type": "string",
+     "description": "Event-time site by exact display ID or case-insensitive substring of its current domain; events whose site no longer exists never match."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Versioned, event-centric compatibility projection of member notification facts.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<Message>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNotificationDeliveryPolicy",
+   "method": "GET",
+   "path": "/v1/admin/notifications/policy",
+   "summary": "Read notification delivery window and event policies",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Versioned global delivery window and per-event execution policy. System-required identity messages bypass these timing and subscription controls.",
+     "fields": [
+      {
+       "name": "window_mode",
+       "type": "string: all_day / custom",
+       "required": true
+      },
+      {
+       "name": "window_start",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "window_end",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "timezone",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "events",
+       "type": "array<DeliveryPolicyEvent>",
+       "required": true
+      },
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "changed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateNotificationDeliveryPolicy",
+   "method": "PUT",
+   "path": "/v1/admin/notifications/policy",
+   "summary": "Update notification delivery window and event policies",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Correlation identifier and retry key for this write. Reusing the same value for the same authenticated actor and operation requires the exact original path, revision, and body; an exact retry replays the original response, while changed semantics return 409."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "window_mode",
+      "type": "string: all_day / custom",
+      "required": true
+     },
+     {
+      "name": "window_start",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "window_end",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "timezone",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "events",
+      "type": "array<DeliveryPolicyEvent>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Versioned global delivery window and per-event execution policy. System-required identity messages bypass these timing and subscription controls.",
+     "fields": [
+      {
+       "name": "window_mode",
+       "type": "string: all_day / custom",
+       "required": true
+      },
+      {
+       "name": "window_start",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "window_end",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "timezone",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "events",
+       "type": "array<DeliveryPolicyEvent>",
+       "required": true
+      },
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "changed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "415",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "listNotificationTemplates",
+   "method": "GET",
+   "path": "/v1/admin/notifications/templates",
+   "summary": "List immutable notification template versions",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable notification template versions.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Template>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "putNotificationTemplateVersion",
+   "method": "PUT",
+   "path": "/v1/admin/notifications/templates/{template_id}/versions/{version}/{channel}",
+   "summary": "Create an immutable notification template version",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "system_configuration.manage"
+   ],
+   "params": [
+    {
+     "name": "template_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "version",
+     "in": "path",
+     "type": "integer(int64)",
+     "required": true
+    },
+    {
+     "name": "channel",
+     "in": "path",
+     "type": "string: email / sms",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Correlation identifier and retry key for this write. Reusing the same value for the same authenticated actor and operation requires the exact original path, revision, and body; an exact retry replays the original response, while changed semantics return 409."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "subject",
+      "type": "string",
+      "required": true,
+      "description": "Required and non-empty for email; must be empty for SMS. Maximum source size is 2048 UTF-8 bytes."
+     },
+     {
+      "name": "body",
+      "type": "string",
+      "required": true,
+      "description": "Maximum source size is 131072 UTF-8 bytes for email and 8192 UTF-8 bytes for SMS."
+     },
+     {
+      "name": "variables",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Created template version or an identical natural replay.",
+     "fields": [
+      {
+       "name": "template_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "channel",
+       "type": "string: email / sms",
+       "required": true
+      },
+      {
+       "name": "subject",
+       "type": "string",
+       "required": true,
+       "description": "Maximum source size is 2048 UTF-8 bytes."
+      },
+      {
+       "name": "body",
+       "type": "string",
+       "required": true,
+       "description": "Maximum source size is 131072 UTF-8 bytes."
+      },
+      {
+       "name": "variables",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "changed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "415",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  }
+ ]
+}

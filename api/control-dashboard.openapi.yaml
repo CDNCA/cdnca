@@ -1,0 +1,944 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Control Dashboard Read API
+  version: 2.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Version 2 read-only dashboard aggregates for authenticated platform
+    administrators and tenant users. PostgreSQL facts are read in one
+    repeatable-read snapshot. Analytics dependency failures are represented by
+    an unavailable analytics section and never by fabricated zero metrics.
+    This fragment is wired into control-api production composition and the root
+    OpenAPI description; the administrator and tenant Web home routes consume
+    these APIs.
+servers:
+  - url: /
+tags:
+  - name: Dashboards
+    description: Bounded operational aggregates derived from authoritative facts.
+paths:
+  /v1/admin/dashboard:
+    get:
+      tags: [Dashboards]
+      operationId: getAdminDashboard
+      summary: Read the platform administrator dashboard
+      description: >-
+        Requires a live platform session and platform.admin. The calendar
+        window is constructed in timezone, converted to a left-closed,
+        right-open UTC window, and must remain hour aligned and no longer than
+        31 local calendar days (745 elapsed hours across a fall-back). Every
+        query parameter is required, single-valued, and strict;
+        unknown parameters and tenant_id are rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/AdminRange'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/AdminDashboardOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/dashboard:
+    get:
+      tags: [Dashboards]
+      operationId: getTenantDashboard
+      summary: Read the authenticated tenant dashboard
+      description: >-
+        The target tenant, scope, user, and session are derived only from the
+        authenticated tenant session. Any tenant_id parameter, including an
+        empty or matching value, returns dashboard_scope_forbidden. The live
+        session must conjunctively retain every required permission listed
+        below in the same repeatable-read PostgreSQL transaction as the
+        aggregate reads. nodes.read is optional; when absent, node-backed
+        resource facts use the explicit unavailable branch.
+      security: [{bearerAuth: []}]
+      x-required-permissions:
+        - sites.read
+        - certificates.read
+        - billing.account.read
+        - package_subscriptions.read
+        - traffic_packages.read
+        - announcements.read
+        - jobs.read
+      x-optional-permissions:
+        - nodes.read
+      parameters:
+        - $ref: '#/components/parameters/TenantRange'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/TenantDashboardOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Current revocable control-api session access token.
+  parameters:
+    AdminRange:
+      name: range
+      in: query
+      required: true
+      description: Platform calendar range in the requested timezone.
+      schema:
+        type: string
+        enum: [seven_days, thirty_days, previous_month]
+    TenantRange:
+      name: range
+      in: query
+      required: true
+      description: Tenant calendar range in the requested timezone.
+      schema:
+        type: string
+        enum: [today, yesterday, seven_days, thirty_days]
+    Timezone:
+      name: timezone
+      in: query
+      required: true
+      description: >-
+        IANA timezone name other than Local. Calendar boundaries converted to
+        UTC must be hour aligned; zones with a non-hour boundary offset are
+        rejected rather than rounded.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+      example: Asia/Shanghai
+    SiteID:
+      name: site_id
+      in: query
+      required: false
+      description: Optional canonical site UUID for ClickHouse drill-down; tenant scope remains session-derived.
+      schema: {type: string, format: uuid}
+    NodeID:
+      name: node_id
+      in: query
+      required: false
+      description: Optional canonical node UUID for ClickHouse drill-down; tenant scope remains session-derived.
+      schema: {type: string, format: uuid}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: Optional safe correlation ID; invalid values are replaced.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9._-]{1,128}$'
+  headers:
+    RequestID:
+      description: Request correlation ID selected by the handler.
+      schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+    CacheControl:
+      description: Dashboard responses are not cacheable by shared clients.
+      schema: {type: string, const: no-store}
+  schemas:
+    DashboardMeta:
+      type: object
+      additionalProperties: false
+      required: [range, timezone, from, to, generated_at, snapshot_at, window_complete]
+      properties:
+        range:
+          type: string
+          enum: [today, yesterday, seven_days, thirty_days, previous_month]
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        from:
+          type: string
+          format: date-time
+          description: Inclusive UTC boundary.
+        to:
+          type: string
+          format: date-time
+          description: Exclusive UTC boundary.
+        generated_at: {type: string, format: date-time}
+        snapshot_at:
+          type: string
+          format: date-time
+          description: Canonical UTC millisecond fact boundary shared by all analytics sections in this response.
+        window_complete:
+          type: boolean
+          description: True when generated_at is at or after the exclusive boundary.
+    AvailableFlag:
+      type: object
+      required: [available]
+      properties:
+        available: {type: boolean, const: true}
+    UnavailableSection:
+      type: object
+      additionalProperties: false
+      required: [available, reason]
+      properties:
+        available: {type: boolean, const: false}
+        reason:
+          type: string
+          enum: [dependency_unavailable, dependency_timeout, authoritative_fact_missing]
+    AdminDashboard:
+      type: object
+      additionalProperties: false
+      required:
+        - dashboard_version
+        - meta
+        - accounts
+        - subscriptions
+        - billing
+        - resources
+        - operations
+        - entitlement
+        - node_health
+        - analytics_health
+        - account_security
+        - network
+        - analytics
+      properties:
+        dashboard_version: {type: integer, const: 2}
+        meta: {$ref: '#/components/schemas/DashboardMeta'}
+        accounts: {$ref: '#/components/schemas/AdminAccountSection'}
+        subscriptions: {$ref: '#/components/schemas/AdminSubscriptionSection'}
+        billing: {$ref: '#/components/schemas/SettlementSection'}
+        resources: {$ref: '#/components/schemas/AdminResourceSection'}
+        operations: {$ref: '#/components/schemas/OperationSection'}
+        operation_charts: {$ref: '#/components/schemas/OperationChartsSection'}
+        entitlement: {$ref: '#/components/schemas/EntitlementSection'}
+        node_health: {$ref: '#/components/schemas/NodeHealthSection'}
+        analytics_health: {$ref: '#/components/schemas/AnalyticsHealthSection'}
+        account_security: {$ref: '#/components/schemas/AccountSecuritySection'}
+        network: {$ref: '#/components/schemas/NetworkSection'}
+        analytics: {$ref: '#/components/schemas/AnalyticsSection'}
+    TenantDashboard:
+      type: object
+      additionalProperties: false
+      required:
+        - dashboard_version
+        - meta
+        - identity_verification
+        - profile
+        - resources
+        - certificates
+        - billing
+        - subscriptions
+        - traffic_packages
+        - operations
+        - notices
+        - account_security
+        - network
+        - analytics
+      properties:
+        dashboard_version: {type: integer, const: 2}
+        meta: {$ref: '#/components/schemas/DashboardMeta'}
+        identity_verification: {$ref: '#/components/schemas/IdentityVerificationSection'}
+        profile: {$ref: '#/components/schemas/ProfileSection'}
+        resources: {$ref: '#/components/schemas/TenantResourceSection'}
+        certificates: {$ref: '#/components/schemas/CertificateSection'}
+        billing: {$ref: '#/components/schemas/BalanceSection'}
+        subscriptions: {$ref: '#/components/schemas/TenantSubscriptionSection'}
+        traffic_packages: {$ref: '#/components/schemas/TrafficPackageSection'}
+        operations: {$ref: '#/components/schemas/OperationSection'}
+        notices: {$ref: '#/components/schemas/NoticeSection'}
+        account_security: {$ref: '#/components/schemas/AccountSecuritySection'}
+        network: {$ref: '#/components/schemas/NetworkSection'}
+        analytics: {$ref: '#/components/schemas/AnalyticsSection'}
+    AdminAccountStats:
+      type: object
+      additionalProperties: false
+      required: [tenants_total, tenants_active, tenant_users_total, tenant_users_active]
+      properties:
+        tenants_total: {$ref: '#/components/schemas/Count'}
+        tenants_active: {$ref: '#/components/schemas/Count'}
+        tenant_users_total: {$ref: '#/components/schemas/Count'}
+        tenant_users_active: {$ref: '#/components/schemas/Count'}
+    AdminSubscriptionStats:
+      type: object
+      additionalProperties: false
+      required: [active]
+      properties:
+        active: {$ref: '#/components/schemas/Count'}
+    SettlementStats:
+      type: object
+      additionalProperties: false
+      required: [currency, gross_settled_debit_minor, reversed_credit_minor, net_settled_minor]
+      properties:
+        currency: {type: string, const: CNY}
+        gross_settled_debit_minor: {$ref: '#/components/schemas/SignedIntegerString'}
+        reversed_credit_minor: {$ref: '#/components/schemas/SignedIntegerString'}
+        net_settled_minor: {$ref: '#/components/schemas/SignedIntegerString'}
+    AdminResourceStats:
+      type: object
+      additionalProperties: false
+      required:
+        - sites_total
+        - sites_active
+        - sites_sync_failed
+        - domains_total
+        - forwards_total
+        - nodes_total
+        - certificates_total
+        - certificates_valid
+        - certificates_expiring_30d
+      properties:
+        sites_total: {$ref: '#/components/schemas/Count'}
+        sites_active: {$ref: '#/components/schemas/Count'}
+        sites_sync_failed: {$ref: '#/components/schemas/Count'}
+        domains_total: {$ref: '#/components/schemas/Count'}
+        forwards_total: {$ref: '#/components/schemas/Count'}
+        nodes_total: {$ref: '#/components/schemas/Count'}
+        certificates_total: {$ref: '#/components/schemas/Count'}
+        certificates_valid: {$ref: '#/components/schemas/Count'}
+        certificates_expiring_30d: {$ref: '#/components/schemas/Count'}
+    TenantResourceStats:
+      type: object
+      additionalProperties: false
+      required: [sites_total, sites_active, sites_sync_failed, domains_total, forwards_total, nodes_total]
+      properties:
+        sites_total: {$ref: '#/components/schemas/Count'}
+        sites_active: {$ref: '#/components/schemas/Count'}
+        sites_sync_failed: {$ref: '#/components/schemas/Count'}
+        domains_total: {$ref: '#/components/schemas/Count'}
+        forwards_total: {$ref: '#/components/schemas/Count'}
+        nodes_total: {$ref: '#/components/schemas/Count'}
+    IdentityVerificationStats:
+      type: object
+      additionalProperties: false
+      required: [verified]
+      properties:
+        verified:
+          type: boolean
+          description: >-
+            True only when the latest personal or enterprise case is approved,
+            its verified-subject binding matches, and its evidence settlement is settled.
+    ProfileStats:
+      type: object
+      additionalProperties: false
+      properties:
+        last_login_at: {type: string, format: date-time}
+        last_login_ip: {type: string, maxLength: 64}
+        last_login_geo: {type: string, maxLength: 64}
+        last_login_region: {type: string, maxLength: 128}
+        last_login_city: {type: string, maxLength: 128}
+    CertificateStats:
+      type: object
+      additionalProperties: false
+      required: [total, valid, expiring_30d]
+      properties:
+        total: {$ref: '#/components/schemas/Count'}
+        valid: {$ref: '#/components/schemas/Count'}
+        expiring_30d: {$ref: '#/components/schemas/Count'}
+    OperationStats:
+      type: object
+      additionalProperties: false
+      required: [cache_total, cache_open, cache_failed, jobs_total, jobs_open, jobs_failed]
+      properties:
+        cache_total: {$ref: '#/components/schemas/Count'}
+        cache_open: {$ref: '#/components/schemas/Count'}
+        cache_failed: {$ref: '#/components/schemas/Count'}
+        cache_updated_at: {type: string, format: date-time}
+        jobs_total: {$ref: '#/components/schemas/Count'}
+        jobs_open: {$ref: '#/components/schemas/Count'}
+        jobs_failed: {$ref: '#/components/schemas/Count'}
+        jobs_updated_at: {type: string, format: date-time}
+    OperationCountPoint:
+      type: object
+      additionalProperties: false
+      required: [time, count]
+      properties:
+        time: {type: string, format: date-time}
+        count: {$ref: '#/components/schemas/Count'}
+    OperationAmountPoint:
+      type: object
+      additionalProperties: false
+      required: [time, sum_minor]
+      properties:
+        time: {type: string, format: date-time}
+        sum_minor: {$ref: '#/components/schemas/UnsignedIntegerString'}
+    OperationCharts:
+      type: object
+      additionalProperties: false
+      required: [new_users, package_sold, recharge]
+      properties:
+        new_users:
+          type: array
+          maxItems: 744
+          items: {$ref: '#/components/schemas/OperationCountPoint'}
+        package_sold:
+          type: array
+          maxItems: 744
+          items: {$ref: '#/components/schemas/OperationCountPoint'}
+        recharge:
+          type: array
+          maxItems: 744
+          items: {$ref: '#/components/schemas/OperationAmountPoint'}
+    EntitlementStats:
+      type: object
+      additionalProperties: false
+      required: [installation_id, status, lease_status]
+      properties:
+        installation_id: {type: string, maxLength: 256}
+        status: {type: string, maxLength: 128}
+        current_serial: {type: integer, format: int64}
+        node_limit: {type: integer, format: int64, minimum: 0}
+        lease_status: {type: [string, 'null'], maxLength: 128}
+        expires_at: {type: string, format: date-time}
+        grace_until: {type: string, format: date-time}
+        last_verified_at: {type: string, format: date-time}
+    NodeHealthStats:
+      type: object
+      additionalProperties: false
+      required:
+        - total
+        - online_fresh
+        - stale_or_offline
+        - presence_missing
+        - freshness_cutoff_seconds
+      properties:
+        total: {$ref: '#/components/schemas/Count'}
+        online_fresh: {$ref: '#/components/schemas/Count'}
+        stale_or_offline: {$ref: '#/components/schemas/Count'}
+        presence_missing: {$ref: '#/components/schemas/Count'}
+        latest_last_seen_at: {type: string, format: date-time}
+        freshness_cutoff_seconds: {type: integer, const: 45}
+    AnalyticsHealthStats:
+      type: object
+      additionalProperties: false
+      required: [active_streams, unprepared_stream_gap]
+      properties:
+        active_streams: {$ref: '#/components/schemas/Count'}
+        latest_reconciled_at: {type: string, format: date-time}
+        latest_updated_at: {type: string, format: date-time}
+        unprepared_stream_gap: {$ref: '#/components/schemas/UnsignedIntegerString'}
+    BalanceStats:
+      type: object
+      additionalProperties: false
+      required: [currency, balance_minor, revision]
+      properties:
+        currency: {type: string, const: CNY}
+        balance_minor: {type: integer, format: int64}
+        revision: {type: integer, format: int64, minimum: 0}
+        updated_at: {type: string, format: date-time}
+    TenantSubscriptionStats:
+      type: object
+      additionalProperties: false
+      required: [active, items]
+      properties:
+        active: {$ref: '#/components/schemas/Count'}
+        items:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/SubscriptionItem'}
+    SubscriptionItem:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - ends_at
+        - timezone
+        - site_limit
+        - domain_limit
+        - node_limit
+        - traffic_limit_bytes
+        - traffic_progress
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string, minLength: 1}
+        ends_at: {type: string, format: date-time}
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        site_limit: {$ref: '#/components/schemas/SubscriptionLimitString'}
+        domain_limit: {$ref: '#/components/schemas/SubscriptionLimitString'}
+        node_limit: {$ref: '#/components/schemas/SubscriptionLimitString'}
+        traffic_limit_bytes: {$ref: '#/components/schemas/SubscriptionLimitString'}
+        traffic_progress: {$ref: '#/components/schemas/SubscriptionTrafficProgressSection'}
+    SubscriptionTrafficProgress:
+      type: object
+      additionalProperties: false
+      required: [period_key, used_bytes, finalized_through, source_watermark, source_evidence_sha256]
+      properties:
+        period_key: {type: string, minLength: 1, maxLength: 256}
+        used_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        finalized_through: {type: string, format: date-time}
+        source_watermark: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        source_evidence_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    TrafficPackageStats:
+      type: object
+      additionalProperties: false
+      required: [active, granted_bytes, remaining_bytes, used_bytes]
+      properties:
+        active: {$ref: '#/components/schemas/Count'}
+        granted_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        remaining_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        used_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+    NoticeStats:
+      type: object
+      additionalProperties: false
+      required: [unread, items]
+      properties:
+        unread: {$ref: '#/components/schemas/Count'}
+        items:
+          type: array
+          maxItems: 5
+          items: {$ref: '#/components/schemas/NoticeItem'}
+    NoticeItem:
+      type: object
+      additionalProperties: false
+      required: [id, title, published_at]
+      properties:
+        id: {type: string, format: uuid}
+        title: {type: string, minLength: 1}
+        published_at: {type: string, format: date-time}
+        read_at: {type: string, format: date-time}
+    AnalyticsSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - metric_version
+        - request_count
+        - request_bytes
+        - response_bytes
+        - total_bytes
+        - average_bandwidth_bps
+        - status_2xx
+        - status_3xx
+        - status_4xx
+        - status_5xx
+        - security_events
+        - security_event_rows
+      properties:
+        metric_version: {type: integer, const: 1}
+        request_count: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        request_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        response_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        total_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        average_bandwidth_bps: {type: number, format: double, minimum: 0}
+        status_2xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        status_3xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        status_4xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        status_5xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        security_events:
+          allOf: [{$ref: '#/components/schemas/UnsignedIntegerString'}]
+          description: >-
+            Security events in requests (an aggregated CC challenge / 429 event counts its requests);
+            never a blocked-IP count.
+        security_event_rows:
+          allOf: [{$ref: '#/components/schemas/UnsignedIntegerString'}]
+          description: Security event records (an aggregated event is one).
+    AnalyticsTrendPoint:
+      type: object
+      additionalProperties: false
+      required:
+        - hour
+        - metric_version
+        - request_count
+        - request_bytes
+        - response_bytes
+        - total_bytes
+        - average_bandwidth_bps
+        - status_2xx
+        - status_3xx
+        - status_4xx
+        - status_5xx
+        - security_events
+      properties:
+        hour: {type: string, format: date-time}
+        metric_version: {type: integer, const: 1}
+        request_count: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        request_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        response_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        total_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        average_bandwidth_bps: {type: number, format: double, minimum: 0}
+        status_2xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        status_3xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        status_4xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        status_5xx: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        security_events: {$ref: '#/components/schemas/UnsignedIntegerString'}
+    AnalyticsRankItem:
+      type: object
+      additionalProperties: false
+      required: [key, request_count, response_bytes]
+      properties:
+        key: {type: string, minLength: 1, maxLength: 4355}
+        request_count: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        response_bytes: {$ref: '#/components/schemas/UnsignedIntegerString'}
+        host: {type: string, maxLength: 253, description: 'domain and url rankings: the host of the key (same as the analytics rank item).'}
+        port: {type: integer, minimum: 1, maximum: 65535, description: 'domain and url rankings: the listen port; omitted when unknown.'}
+        path: {type: string, maxLength: 4096, description: 'url ranking: the request path.'}
+        scheme: {type: string, enum: [http, https], description: 'url ranking: https when the site serves HTTPS on port, http otherwise; omitted when unknown.'}
+    AnalyticsRankSnapshot:
+      type: object
+      additionalProperties: false
+      required: [dimension, snapshot_at, items]
+      properties:
+        dimension: {type: string, enum: [domain, region, carrier]}
+        snapshot_at: {type: string, format: date-time}
+        items:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/AnalyticsRankItem'}
+    AnalyticsExtendedRankSnapshot:
+      type: object
+      additionalProperties: false
+      required: [dimension, snapshot_at, items]
+      properties:
+        dimension: {type: string, enum: [domain, url, ip, region, carrier]}
+        snapshot_at: {type: string, format: date-time}
+        items:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/AnalyticsRankItem'}
+    AnalyticsOverview:
+      type: object
+      additionalProperties: false
+      required: [summary, trend, top]
+      properties:
+        summary: {$ref: '#/components/schemas/AnalyticsSummary'}
+        trend:
+          type: array
+          maxItems: 744
+          items: {$ref: '#/components/schemas/AnalyticsTrendPoint'}
+        top:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items: {$ref: '#/components/schemas/AnalyticsRankSnapshot'}
+        top_extended:
+          type: array
+          minItems: 5
+          maxItems: 5
+          items: {$ref: '#/components/schemas/AnalyticsExtendedRankSnapshot'}
+        settling_minutes:
+          type: integer
+          minimum: 1
+          description: 最近 N 分钟数据仍在结算（只作提示，不拦截展示）；无需提示时省略。
+    AccountSecurityStats:
+      type: object
+      additionalProperties: false
+      required: [active_sessions, users_with_mfa, active_api_keys, recovery_codes_remaining]
+      properties:
+        active_sessions: {$ref: '#/components/schemas/Count'}
+        users_with_mfa: {$ref: '#/components/schemas/Count'}
+        active_api_keys: {$ref: '#/components/schemas/Count'}
+        recovery_codes_remaining: {$ref: '#/components/schemas/Count'}
+        last_security_event_at: {type: string, format: date-time}
+    NetworkRegionStats:
+      type: object
+      additionalProperties: false
+      required: [region, nodes_total, nodes_online]
+      properties:
+        region: {type: string, minLength: 1, maxLength: 128}
+        nodes_total: {$ref: '#/components/schemas/Count'}
+        nodes_online: {$ref: '#/components/schemas/Count'}
+    NetworkStats:
+      type: object
+      additionalProperties: false
+      required: [nodes_total, nodes_active, nodes_online, nodes_stale, freshness_cutoff_seconds, regions]
+      properties:
+        nodes_total: {$ref: '#/components/schemas/Count'}
+        nodes_active: {$ref: '#/components/schemas/Count'}
+        nodes_online: {$ref: '#/components/schemas/Count'}
+        nodes_stale: {$ref: '#/components/schemas/Count'}
+        freshness_cutoff_seconds: {type: integer, const: 45}
+        regions:
+          type: array
+          maxItems: 10
+          items: {$ref: '#/components/schemas/NetworkRegionStats'}
+    Count:
+      type: integer
+      format: uint64
+      minimum: 0
+    SignedIntegerString:
+      type: string
+      pattern: '^-?[0-9]+$'
+    UnsignedIntegerString:
+      type: string
+      pattern: '^(0|[1-9][0-9]*)$'
+      description: Canonical unsigned decimal integer encoded without JSON number precision loss.
+    SubscriptionLimitString:
+      type: string
+      pattern: '^(-1|0|[1-9][0-9]*)$'
+      description: Canonical decimal integer; -1 means unlimited.
+    AdminAccountSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/AdminAccountStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    AdminSubscriptionSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/AdminSubscriptionStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    SettlementSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/SettlementStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    AdminResourceSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/AdminResourceStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    TenantResourceSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/TenantResourceStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    IdentityVerificationSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/IdentityVerificationStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    ProfileSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/ProfileStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    CertificateSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/CertificateStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    OperationSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/OperationStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    OperationChartsSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/OperationCharts'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    EntitlementSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/EntitlementStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    NodeHealthSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/NodeHealthStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    AnalyticsHealthSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/AnalyticsHealthStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    BalanceSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/BalanceStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    TenantSubscriptionSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/TenantSubscriptionStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    SubscriptionTrafficProgressSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/SubscriptionTrafficProgress'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    TrafficPackageSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/TrafficPackageStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    NoticeSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/NoticeStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    AccountSecuritySection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/AccountSecurityStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    NetworkSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/NetworkStats'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    AnalyticsSection:
+      oneOf:
+        - allOf:
+            - $ref: '#/components/schemas/AvailableFlag'
+            - type: object
+              required: [value]
+              properties: {value: {$ref: '#/components/schemas/AnalyticsOverview'}}
+          unevaluatedProperties: false
+        - $ref: '#/components/schemas/UnavailableSection'
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: {type: string, pattern: '^dashboard_[a-z_]+$'}
+        message: {type: string}
+        request_id: {type: string}
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {$ref: '#/components/schemas/ErrorDetail'}
+  responses:
+    AdminDashboardOK:
+      description: Version 2 platform dashboard snapshot.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminDashboard'}
+    TenantDashboardOK:
+      description: Version 2 dashboard snapshot for the authenticated tenant only.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/TenantDashboard'}
+    BadRequest:
+      description: dashboard_invalid_request
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Unauthorized:
+      description: dashboard_authentication_required
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    Forbidden:
+      description: dashboard_scope_forbidden or dashboard_permission_denied
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    RequestCancelled:
+      description: dashboard_request_cancelled
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    InternalError:
+      description: dashboard_internal_error
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    BadGateway:
+      description: dashboard_response_too_large
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    ServiceUnavailable:
+      description: dashboard_storage_unavailable; no zero-value data is substituted.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+    GatewayTimeout:
+      description: dashboard_query_timeout
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Cache-Control: {$ref: '#/components/headers/CacheControl'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}

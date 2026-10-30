@@ -1,0 +1,45 @@
+{
+  "api_version": "marketplace.cdnca.io/v1",
+  "kind": "Plugin",
+  "metadata": {
+    "id": "com.example.site-change-receiver",
+    "version": "1.0.0",
+    "name": {
+      "zh-CN": "网站变更接收器示例",
+      "en-US": "Site Change Receiver Example"
+    },
+    "description": {
+      "zh-CN": "接收网站变更事件并按事件 ID 只处理一次的外部服务示例",
+      "en-US": "External service example that receives site change events and processes each event ID once"
+    },
+    "publisher": {
+      "id": "com.example",
+      "name": "Example Publisher",
+      "website": "https://www.example.com",
+      "support_url": "https://www.example.com/support"
+    }
+  },
+  "spec": {
+    "categories": [
+      "automation_connector"
+    ],
+    "compatibility": {
+      "control_api": ">=1.0.35 <2.0.0"
+    },
+    "entrypoint": {
+      "type": "external_https",
+      "base_url": "https://hooks.example.com",
+      "health_path": "/health/ready"
+    },
+    "permissions": [
+      "events.site.read"
+    ],
+    "subscriptions": [
+      "io.cdnca.site.v1.updated"
+    ],
+    "configuration_schema": {
+      "path": "schemas/config.schema.json",
+      "sha256": "787beb6833df1a5183fd87155583e6317246a77b0a0fb08cbce131057b366385"
+    }
+  }
+}

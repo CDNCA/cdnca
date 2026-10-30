@@ -1,0 +1,10 @@
+OWASP CRS (Core Rule Set)
+Copyright (c) 2006-2020 Trustwave and contributors. All rights reserved.
+Copyright (c) 2021-2026 CRS project. All rights reserved.
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This package redistributes the request rule files (REQUEST-9xx-*.conf) and
+the data files they read from the OWASP CRS source release named by the rule
+files' "ver:" tags, unmodified. cdnca selects rules, paranoia levels and
+anomaly thresholds in its own generated configuration (CRS profile packs
+system/crs-*), not by editing these files.

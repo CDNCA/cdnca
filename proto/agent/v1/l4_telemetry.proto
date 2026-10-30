@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package agent.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// L4SessionEventV1 is one finalized TCP/UDP session fact emitted by a signed
+// immutable edge configuration. Raw client and upstream addresses are never
+// carried by this contract.
+message L4SessionEventV1 {
+  common.v1.EventMetadata event = 1;
+  string tenant_id = 2;
+  string node_id = 3;
+  string site_id = 4;
+  string stream_id = 5;
+  string listener_id = 6;
+  string config_version_id = 7;
+  uint64 config_revision = 8;
+  string protocol = 9;
+  uint32 listen_port = 10;
+  string session_id = 11;
+  google.protobuf.Timestamp started_at = 12;
+  google.protobuf.Timestamp finalized_at = 13;
+  uint64 bytes_up = 14;
+  uint64 bytes_down = 15;
+  uint32 status_code = 16;
+  string error_code = 17;
+  bytes canonical_event_sha256 = 18;
+  bytes evidence_sha256 = 19;
+  // session_log is set only for streams with session_log (tcp/udp v7). It is
+  // the one place raw client and upstream addresses travel; they are written
+  // to the session log table, never to the session facts.
+  L4SessionLogV1 session_log = 20;
+  // package_subscription_id (L4_PACKAGE_ATTRIBUTION v1) is the package the
+  // forward belonged to in the release that served the session; empty for a
+  // forward without a package. The Gateway accepts only the value its
+  // authorization snapshot binds to (stream, config version).
+  string package_subscription_id = 21;
+  // checkpointed_bytes_up/down (L4-USAGE-01): the bytes of this TCP session
+  // already billed by its in-progress checkpoints (L4UsageCheckpointV1). The
+  // final delta billed at finalized_at is bytes - min(bytes, checkpointed);
+  // 0 for a session without checkpoints (UDP, short sessions).
+  uint64 checkpointed_bytes_up = 22;
+  uint64 checkpointed_bytes_down = 23;
+}
+
+// L4UsageCheckpointV1 (L4-USAGE-01) is the usage of a TCP session still in
+// progress since its previous checkpoint: the Agent writes one per session at
+// most every 60 seconds while bytes moved. sequence starts at 1 per session;
+// (node, listener, session, started_at, sequence) is its identity, so a
+// redelivery is the same fact. It is billed at checkpoint_at (a session
+// crossing a month bills each checkpoint in its own month).
+message L4UsageCheckpointV1 {
+  common.v1.EventMetadata event = 1;
+  string tenant_id = 2;
+  string node_id = 3;
+  string site_id = 4;
+  string stream_id = 5;
+  string listener_id = 6;
+  string config_version_id = 7;
+  uint64 config_revision = 8;
+  string protocol = 9;
+  uint32 listen_port = 10;
+  string session_id = 11;
+  google.protobuf.Timestamp started_at = 12;
+  google.protobuf.Timestamp checkpoint_at = 13;
+  uint32 sequence = 14;
+  uint64 bytes_up = 15;
+  uint64 bytes_down = 16;
+  string package_subscription_id = 17;
+}
+
+// L4SessionLogV1 is the access-log view of one session.
+message L4SessionLogV1 {
+  // client_ip is the address the node judged the session by: the PROXY
+  // protocol address when the peer is a trusted proxy, else the peer.
+  string client_ip = 1;
+  uint32 client_port = 2;
+  // peer_ip is the socket peer when it differs from client_ip.
+  string peer_ip = 3;
+  // upstream_addr is the last origin address tried ("ip:port"); empty when
+  // the session never reached an origin.
+  string upstream_addr = 4;
+  optional uint32 upstream_connect_ms = 5;
+  // end_reason: closed, killed, geo_blocked, rate_limited, banned,
+  // conn_limited, bad_request, forbidden, upstream_failed, internal_error,
+  // config_error or guard_blocked (an L4 guard rule; banned: during a ban).
+  string end_reason = 6;
+}
+
+// L4SessionEnvelopeV1 is the deterministic durable publication. The source
+// watermark is the edge spool sequence and is used as the query snapshot
+// boundary after ClickHouse ingestion.
+message L4SessionEnvelopeV1 {
+  uint32 schema_version = 1;
+  string message_id = 2;
+  google.protobuf.Timestamp produced_at = 3;
+  string tenant_id = 4;
+  string node_id = 5;
+  string site_id = 6;
+  string config_version_id = 7;
+  uint64 source_watermark = 8;
+  google.protobuf.Timestamp finalized_through = 9;
+  bytes evidence_sha256 = 10;
+  repeated L4SessionEventV1 events = 11;
+  // checkpoints (L4-USAGE-01): an envelope carries either events or
+  // checkpoints, never both.
+  repeated L4UsageCheckpointV1 checkpoints = 12;
+}

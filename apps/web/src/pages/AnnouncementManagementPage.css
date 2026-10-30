@@ -1,0 +1,397 @@
+/* Keep announcement management aligned with the compact page shell. */
+.announcement-page {
+  min-width: 0;
+  color: var(--cdnca-color-text);
+}
+
+/* The platform-scoped child keeps the legacy direct heading, so constrain it
+ * here as well to preserve one title rhythm for both announcement surfaces. */
+.announcement-page > h1 {
+  margin: 0 0 14px;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.announcement-heading {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  margin: 0 0 14px;
+}
+
+.announcement-heading h1 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.announcement-toolbar {
+  min-height: 32px;
+  margin-bottom: 14px;
+}
+
+.announcement-toolbar .ant-btn,
+.announcement-toolbar .ant-select-selector {
+  height: 32px !important;
+}
+
+.announcement-toolbar > .ant-select {
+  width: 128px;
+}
+
+.announcement-toolbar .ant-btn {
+  padding-inline: 14px;
+  font-size: 14px;
+}
+
+.announcement-page .identity-alert {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.announcement-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.announcement-table-scroll .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+}
+
+.announcement-table-scroll .ant-table-thead > tr > th {
+  height: 40px;
+  padding: 8px 12px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 24px;
+  background: var(--cdnca-color-table-header);
+  white-space: nowrap;
+}
+
+.announcement-table-scroll .ant-table-tbody > tr > td {
+  height: 40px;
+  padding: 8px 12px;
+  line-height: 24px;
+}
+
+.announcement-table-scroll .ant-table-tbody > tr:hover > td {
+  background: var(--cdnca-color-bg-soft, #f5f7fa);
+}
+
+.announcement-table-scroll .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.announcement-table-scroll .ant-btn-link {
+  height: 24px;
+  padding-inline: 4px;
+  font-size: 14px;
+}
+
+.announcement-pagination {
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  margin-top: 14px;
+}
+
+.announcement-pagination .ant-btn {
+  height: 32px;
+  padding-inline: 12px;
+  font-size: 14px;
+}
+
+.announcement-pagination > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.announcement-page .ant-drawer .ant-form-item-label > label,
+.announcement-page .ant-modal .ant-form-item-label > label {
+  font-size: 14px;
+}
+
+.announcement-page .ant-drawer .ant-input,
+.announcement-page .ant-drawer .ant-input-textarea,
+.announcement-page .ant-drawer .ant-select-selector,
+.announcement-page .ant-modal .ant-input {
+  font-size: 14px;
+}
+
+.announcement-detail-meta {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.announcement-body-preview {
+  max-height: 420px;
+  margin: 12px 0 0;
+  overflow: auto;
+  padding: 12px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--cdnca-color-table-header);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+}
+
+@media (max-width: 767px) {
+  .app-main > .identity-page.announcement-page {
+    margin: 24px;
+  }
+
+  .announcement-heading {
+    margin-bottom: 12px;
+  }
+
+  .announcement-toolbar {
+    align-items: stretch;
+  }
+
+  .announcement-toolbar > .ant-select,
+  .announcement-toolbar > .ant-btn {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .announcement-pagination {
+    flex-wrap: wrap;
+  }
+
+  .announcement-pagination > span {
+    width: 100%;
+  }
+}
+
+/* Announcement editor compatibility surface. */
+.announcement-editor-modal {
+  top: 100px;
+  max-width: calc(100vw - 16px);
+  margin: 0 auto;
+  padding-bottom: 0;
+}
+
+.announcement-editor-modal .ant-modal-content {
+  display: flex;
+  max-height: calc(100vh - 116px);
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.announcement-editor-modal .ant-modal-header {
+  margin: 0;
+  padding: 14px 16px 16px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.announcement-editor-modal .ant-modal-title {
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.announcement-editor-modal .ant-modal-body {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px 10px;
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.announcement-editor-modal .ant-modal-footer {
+  margin: 0;
+  padding: 12px 24px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.announcement-form-section {
+  margin-bottom: 0;
+  padding: 14px 16px 4px;
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 8px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+}
+
+.announcement-form-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  line-height: 21px;
+  font-weight: 600;
+}
+
+.announcement-form-section h2 > span {
+  display: inline-block;
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--cdnca-color-blue41, #2f8cf4);
+}
+
+.announcement-compat-form .ant-form-item {
+  margin-bottom: 16px;
+}
+
+.announcement-form-section + .announcement-form-section { margin-top: 14px; }
+
+.announcement-editor-modal .ant-modal-close { top: 8px; right: 8px; }
+.announcement-editor-modal .ant-form-item-required::before { display: none !important; }
+.announcement-editor-modal .ant-modal-footer .ant-btn { height: 32px; min-width: 60px; font-size: 14px; border-radius: 4px; }
+.announcement-editor-modal .ant-form-item-row { min-height: 34px; }
+
+.announcement-compat-form .ant-form-item-label {
+  flex: 0 0 96px;
+  width: 96px;
+  padding: 0 12px 0 0;
+}
+
+.announcement-compat-form .ant-form-item-label > label {
+  color: var(--cdnca-color-neutral67, #5c667a);
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.announcement-compat-form .ant-form-item-control {
+  min-width: 0;
+}
+
+.announcement-compat-form .ant-input,
+.announcement-compat-form .ant-input-number,
+.announcement-compat-form .ant-input-number-input {
+  min-height: 32px;
+  border-color: var(--cdnca-color-neutral38, #d7dce5);
+  border-radius: 5px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+}
+
+.announcement-compat-form .ant-input::placeholder {
+  color: var(--cdnca-color-neutral43, #bfc4ce);
+}
+
+.announcement-compat-form textarea.ant-input {
+  min-height: 234px;
+  resize: vertical;
+}
+
+.announcement-format-switch {
+  display: flex;
+  gap: 8px;
+}
+
+.announcement-format-button {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.announcement-format-button[aria-pressed='true'] { color: var(--cdnca-color-primary); border: 1px solid var(--cdnca-color-primary); background: var(--cdnca-color-primary-bg-soft, #f0f7ff); font-weight: 600; box-shadow: none; }
+
+.announcement-sort-input {
+  width: 180px;
+}
+
+.announcement-compat-form .ant-switch {
+  min-width: 44px;
+  height: 22px;
+  border-radius: 22px;
+}
+
+.announcement-compat-form .ant-switch .ant-switch-handle {
+  width: 18px;
+  height: 18px;
+  inset-block-start: 2px;
+}
+
+.announcement-compat-form .ant-switch.ant-switch-checked .ant-switch-handle {
+  inset-inline-start: calc(100% - 20px);
+}
+
+.announcement-compat-form .ant-checkbox-wrapper {
+  height: 44px;
+  padding: 5px 10px;
+  border: 1px solid var(--cdnca-color-neutral38, #d7dce5);
+  border-radius: 6px;
+  color: var(--cdnca-color-neutral67, #5c667a);
+  font-size: 14px;
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.announcement-advanced-audience {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+
+.announcement-advanced-audience > summary {
+  min-height: 32px;
+  cursor: pointer;
+  color: var(--cdnca-color-text-secondary);
+  line-height: 32px;
+}
+
+.announcement-advanced-audience[open] > summary {
+  margin-bottom: 8px;
+}
+
+@media (max-width: 767px) {
+  .announcement-editor-modal {
+    top: 0;
+    max-width: calc(100vw - 20px);
+    margin: 10px auto;
+  }
+
+  .announcement-editor-modal .ant-modal-content {
+    max-height: calc(100vh - 20px);
+  }
+
+  .announcement-editor-modal .ant-modal-header,
+  .announcement-editor-modal .ant-modal-body,
+  .announcement-editor-modal .ant-modal-footer {
+    padding-inline: 16px;
+  }
+
+  .announcement-form-section {
+    padding: 20px 16px 12px;
+  }
+
+  .announcement-compat-form .ant-form-item-label {
+    flex-basis: 76px;
+    width: 76px;
+    padding-right: 10px;
+  }
+}
+
+.announcement-legacy-column {
+  width: 1px !important;
+  max-width: 1px !important;
+  height: 1px !important;
+  max-height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  opacity: 0;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

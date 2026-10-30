@@ -1,0 +1,33 @@
+/* 10-27 用户：网站列表字号层级——域名突出（13px/500），用户、源站、套餐等辅助信息 12px 次要色；
+   其余单元格 13px。（域名 13px/500 主色，用户行 12px，CNAME/ID/时间 13px）。 */
+.site-table-typography .ant-table-tbody > tr > td {
+  font-size: 13px;
+}
+
+.site-table-typography .site-domain-cell > .ant-btn {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.site-table-typography .site-domain-owner,
+.site-table-typography .site-domain-owner > .ant-btn {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.site-table-typography .site-cell-label {
+  color: var(--cdnca-color-text-tertiary);
+}
+
+.site-table-typography .site-stacked-cell,
+.site-table-typography .site-origin-value,
+.site-table-typography .site-ellipsis-value {
+  font-size: 12px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.site-table-typography .site-created-cell > :first-child {
+  font-size: 13px;
+  color: var(--cdnca-color-text);
+}

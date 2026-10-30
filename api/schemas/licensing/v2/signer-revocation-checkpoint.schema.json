@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cdnca.com/schemas/licensing/v2/signer-revocation-checkpoint.schema.json",
+  "title": "CDNCA signer revocation bootstrap checkpoint v2",
+  "description": "Fresh offline-root signed checkpoint carrying the complete v1 signer-revocation prefix and signing-keyset/v2.",
+  "oneOf": [
+    { "$ref": "#/$defs/signedCheckpoint" },
+    { "$ref": "#/$defs/checkpoint" }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "keyId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?Z$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    },
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key_id", "algorithm", "public_key", "fingerprint", "status", "not_before"],
+      "properties": {
+        "key_id": { "$ref": "#/$defs/keyId" },
+        "algorithm": { "const": "Ed25519" },
+        "public_key": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "fingerprint": { "$ref": "#/$defs/digest" },
+        "status": { "enum": ["active", "verify_only", "retired"] },
+        "not_before": { "$ref": "#/$defs/time" },
+        "sign_until": { "$ref": "#/$defs/time" },
+        "verify_until": { "$ref": "#/$defs/time" }
+      }
+    },
+    "rotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rotation_id", "new_key_id", "authorized_by_key_id", "challenge_document", "pop_signature", "pop_verified_at", "authorization_document", "authorization_signature", "authorized_at", "authorization_expires_at", "activated_at"],
+      "properties": {
+        "rotation_id": { "type": "string", "format": "uuid" },
+        "new_key_id": { "$ref": "#/$defs/keyId" },
+        "authorized_by_key_id": { "$ref": "#/$defs/keyId" },
+        "challenge_document": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+        "pop_signature": { "$ref": "#/$defs/signature" },
+        "pop_verified_at": { "$ref": "#/$defs/time" },
+        "authorization_document": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
+        "authorization_signature": { "$ref": "#/$defs/signature" },
+        "authorized_at": { "$ref": "#/$defs/time" },
+        "authorization_expires_at": { "$ref": "#/$defs/time" },
+        "activated_at": { "$ref": "#/$defs/time" }
+      }
+    },
+    "keyset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "active_key_id", "keys", "rotations"],
+      "properties": {
+        "schema": { "const": "cdnca.signing-keyset/v2" },
+        "active_key_id": { "$ref": "#/$defs/keyId" },
+        "keys": { "type": "array", "minItems": 1, "maxItems": 10000, "items": { "$ref": "#/$defs/key" } },
+        "rotations": { "type": "array", "maxItems": 9999, "items": { "$ref": "#/$defs/rotation" } }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "sequence", "previous_sequence", "previous_manifest_sha256", "revoked_key_id", "revoked_key_generation", "artifact_classes", "effective_not_before", "reason", "issued_at", "expires_at"],
+      "properties": {
+        "schema": { "const": "cdnca.signer-revocation-manifest/v1" },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "previous_sequence": { "type": ["integer", "null"], "minimum": 1 },
+        "previous_manifest_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "revoked_key_id": { "$ref": "#/$defs/keyId" },
+        "revoked_key_generation": { "type": "integer", "minimum": 1 },
+        "artifact_classes": { "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true, "items": { "enum": ["lease", "policy", "release"] } },
+        "effective_not_before": { "$ref": "#/$defs/time" },
+        "reason": { "const": "signer_compromise" },
+        "issued_at": { "$ref": "#/$defs/time" },
+        "expires_at": { "$ref": "#/$defs/time" }
+      }
+    },
+    "manifestEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "algorithm", "authority_kind", "authority_key_id", "authority_key_generation", "manifest_sha256"],
+      "properties": {
+        "schema": { "const": "cdnca.signer-revocation-envelope/v1" },
+        "algorithm": { "const": "Ed25519" },
+        "authority_kind": { "enum": ["lineage", "offline_root"] },
+        "authority_key_id": { "$ref": "#/$defs/keyId" },
+        "authority_key_generation": { "type": "integer", "minimum": 1 },
+        "manifest_sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "signedManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "envelope", "signature"],
+      "properties": {
+        "manifest": { "$ref": "#/$defs/manifest" },
+        "envelope": { "$ref": "#/$defs/manifestEnvelope" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "revision", "previous_revision", "previous_checkpoint_sha256", "keyset", "keyset_sha256", "head_sequence", "head_manifest_sha256", "manifests", "issued_at", "expires_at"],
+      "properties": {
+        "schema": { "const": "cdnca.signer-revocation-checkpoint/v2" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "previous_revision": { "type": ["integer", "null"], "minimum": 1 },
+        "previous_checkpoint_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
+        "keyset": { "$ref": "#/$defs/keyset" },
+        "keyset_sha256": { "$ref": "#/$defs/digest" },
+        "head_sequence": { "type": "integer", "minimum": 0, "maximum": 10000 },
+        "head_manifest_sha256": { "anyOf": [{ "$ref": "#/$defs/digest" }, { "type": "string", "maxLength": 0 }] },
+        "manifests": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/signedManifest" } },
+        "issued_at": { "$ref": "#/$defs/time" },
+        "expires_at": { "$ref": "#/$defs/time" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "revision": { "const": 1 } } },
+          "then": {
+            "properties": {
+              "previous_revision": { "const": null },
+              "previous_checkpoint_sha256": { "const": null }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "revision": { "const": 2 } } },
+          "then": {
+            "properties": {
+              "previous_revision": { "const": 1 },
+              "previous_checkpoint_sha256": { "$ref": "#/$defs/digest" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "revision": { "type": "integer", "minimum": 2 } } },
+          "then": {
+            "properties": {
+              "previous_revision": { "type": "integer", "minimum": 1 },
+              "previous_checkpoint_sha256": { "$ref": "#/$defs/digest" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "head_sequence": { "const": 0 } } },
+          "then": {
+            "properties": {
+              "head_manifest_sha256": { "const": "" },
+              "manifests": { "const": [] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "head_sequence": { "type": "integer", "minimum": 1 } } },
+          "then": {
+            "properties": {
+              "head_manifest_sha256": { "$ref": "#/$defs/digest" },
+              "manifests": { "type": "array", "minItems": 1 }
+            }
+          }
+        }
+      ]
+    },
+    "checkpointEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "algorithm", "authority_kind", "authority_key_id", "authority_key_generation", "checkpoint_sha256"],
+      "properties": {
+        "schema": { "const": "cdnca.signer-revocation-checkpoint-envelope/v2" },
+        "algorithm": { "const": "Ed25519" },
+        "authority_kind": { "const": "offline_root" },
+        "authority_key_id": { "$ref": "#/$defs/keyId" },
+        "authority_key_generation": { "type": "integer", "minimum": 1 },
+        "checkpoint_sha256": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "signedCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint", "envelope", "signature"],
+      "properties": {
+        "checkpoint": { "$ref": "#/$defs/checkpoint" },
+        "envelope": { "$ref": "#/$defs/checkpointEnvelope" },
+        "signature": { "$ref": "#/$defs/signature" }
+      }
+    }
+  }
+}

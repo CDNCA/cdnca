@@ -1,0 +1,87 @@
+.cache-page-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.site-cache-tabs {
+  display: flex;
+  min-width: 0;
+  height: 40px;
+  align-items: flex-start;
+  gap: 4px;
+  border-bottom: 1px solid var(--cdnca-color-border);
+}
+
+.site-cache-tab {
+  display: inline-flex;
+  min-width: 84px;
+  height: 32px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  color: var(--cdnca-color-text);
+  border-radius: 4px;
+  text-decoration: none;
+}
+
+.site-cache-tab:hover,
+.site-cache-tab.is-active {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-primary-bg, #eaf4ff);
+}
+
+@media (max-width: 767px) {
+  .site-cache-tabs {
+    overflow: hidden;
+  }
+}
+
+/* fix-dblscroll：标签行右侧放工具栏（刷新预热→操作记录），标签与工具栏同一行；
+   窄屏（≤768px）工具栏换到标签下方。标签行底线移到整行上，工具栏下方也有同一条线。 */
+.site-cache-tabs-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border-bottom: 1px solid var(--cdnca-color-border);
+}
+
+.site-cache-tabs-row > .site-cache-tabs {
+  flex: 0 0 auto;
+  border-bottom: 0;
+}
+
+.site-cache-tabs-extra {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .site-cache-tabs-row > .site-cache-tabs {
+    flex-basis: 100%;
+  }
+
+  .site-cache-tabs-extra {
+    justify-content: flex-start;
+  }
+
+  .site-cache-tabs-extra > * {
+    flex: 1 1 100%;
+  }
+}

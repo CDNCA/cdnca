@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package agent.v1;
+
+message ConnectRequest {}
+message ConnectResponse {}
+
+service AgentGatewayService {
+  rpc Connect(stream ConnectRequest) returns (stream ConnectResponse);
+}

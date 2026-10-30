@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package agent.v1;
+
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// ConnectionsDependencyStateV1 is the durable source state for one metric
+// observation. Consumers accept only READY; UNKNOWN, UNAVAILABLE, the
+// unspecified value, and any future enum value are fail-closed.
+enum ConnectionsDependencyStateV1 {
+  CONNECTIONS_DEPENDENCY_STATE_V1_UNSPECIFIED = 0;
+  CONNECTIONS_DEPENDENCY_STATE_V1_READY = 1;
+  CONNECTIONS_DEPENDENCY_STATE_V1_UNKNOWN = 2;
+  CONNECTIONS_DEPENDENCY_STATE_V1_UNAVAILABLE = 3;
+}
+
+// ConnectionsMetricEnvelopeV1 is the versioned event carrier for a positive
+// connections gauge. The durable identity is (tenant_id, installation_id,
+// event.event_id, event.occurred_time, canonical_event_sha256). Redelivery of
+// that identity with the same digest is a replay; reusing event_id with a
+// different digest is a conflict and must be rejected before publication.
+//
+// Validation is deliberately documented at the carrier boundary because
+// protobuf wire decoding cannot enforce required fields, UUID shape, UTC
+// timestamps, digest length, or positive gauges. Runtime validators must reject
+// missing identities, non-UTC/invalid timestamps, non-positive connections,
+// digest conflicts, non-READY dependency state, missing finalization/evidence,
+// and non-monotonic source_watermark without fabricating a zero observation.
+message ConnectionsMetricEnvelopeV1 {
+  // Version 1 retains its positive-only gauge and subscription requirement.
+  // Version 2 is an independent listener observation: READY plus durable
+  // evidence may report a measured zero, and config_version_id is required.
+  // An empty package subscription in v2 means the site is not package-bound;
+  // it must still match the Gateway's exact site/config authorization.
+  uint32 schema_version = 1;
+  common.v1.EventMetadata event = 2;
+  string tenant_id = 3;
+  string installation_id = 4;
+  string site_id = 5;
+  string package_subscription_id = 6;
+  // A v1 gauge is positive. A v2 observed gauge may be zero; missing or
+  // unavailable source observations must never be emitted as zero.
+  uint64 connections = 7;
+  // SHA-256 of the canonical metric event; exactly 32 bytes at runtime.
+  bytes canonical_event_sha256 = 8;
+  ConnectionsDependencyStateV1 dependency_state = 9;
+  // The observation is publishable only after this UTC watermark is finalized.
+  google.protobuf.Timestamp finalized_through = 10;
+  // SHA-256 evidence digest binding the durable source snapshot; exactly 32
+  // bytes at runtime and never a raw payload or secret.
+  bytes evidence_sha256 = 11;
+  // Monotonic durable source sequence. Regressions are rejected by consumers.
+  uint64 source_watermark = 12;
+  // Authoritative edge identity and listener dimensions for realtime filters.
+  // Producers must populate all three fields; consumers fail closed when any
+  // dimension is absent instead of substituting node or site totals.
+  string node_id = 13;
+  string domain = 14;
+  uint32 listen_port = 15;
+  // Required for v2; absent in v1. Binds the observation to the immutable
+  // activated configuration rather than a self-reported current site setting.
+  string config_version_id = 16;
+}

@@ -1,0 +1,771 @@
+{
+ "id": "admin-control-upgrade-plan",
+ "prefix": "/v1/admin/control-upgrade-plan",
+ "operations": [
+  {
+   "operation_id": "getNativeControlUpgradePlanStatus",
+   "method": "GET",
+   "path": "/v1/admin/control-upgrade-plan",
+   "summary": "Read native standalone publication and matching execution status",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Available only in explicitly enabled native-standalone mode. Requires a platform session with control.upgrades.manage and rejects every query parameter. This no-store projection does not expose signed bundle bytes, download URLs, tokens, process identifiers, or filesystem paths. Unknown, corrupt, stale, or mismatched execution evidence is unavailable, never an invented not_started or success. Publication revision is zero exactly when publication is null. A running or completed execution is bound to that publication's plan, bundle digest, release sequence and, for a receipt, its versions and native-standalone target.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Installation-bound publication, execution, and runtime readiness.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "mode",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "publication_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "publication",
+       "type": "PublicationReceipt | null",
+       "required": true
+      },
+      {
+       "name": "execution",
+       "type": "NativeExecutionStatus",
+       "required": true,
+       "description": "not_started and unavailable have null phase and receipt. running has a nonterminal phase and null receipt. completed has completed, rolled_back, or failed phase with the corresponding applied, rolled_back, or failed receipt."
+      },
+      {
+       "name": "runtime",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code and request identifier."
+    }
+   ]
+  },
+  {
+   "operation_id": "publishControlUpgradePlan",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-plan",
+   "summary": "Publish a verified signed control-plane upgrade bundle",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform session with control.upgrades.manage. If-Match is the current publication revision and Idempotency-Key is bound to the exact signed bundle. The bundle is verified against the local License trust snapshot before the Kubernetes Secret or installation-bound systemd PostgreSQL repository is updated with revision compare-and-swap. Systemd HA uses the same repository as the internal plan source and does not relax its strict-majority quorum. Native-standalone uses a separate root-owned executor, package digest and fail-closed maintenance gate; a new publication requires a trusted ready runner and recent authenticated plan-source read. It may interrupt the single management host and is not an HA upgrade. An exact authenticated native replay remains a read-only operation during drain and after the installed version changes: raw bundle bytes, idempotency key, expected revision, actor and scope must match the durable publication. The original publication receipt and ETag are returned.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "A new monotonic publication was persisted.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "receipt_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "plan_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "bundle_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "publication_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "channel_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "release_sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "installation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "component",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "protocol_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "idempotency_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "actor_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "actor_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "The exact idempotent publication was replayed without another write.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "receipt_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "plan_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "bundle_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "publication_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "channel_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "release_sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "installation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "component",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "protocol_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "idempotency_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "actor_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "actor_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "409",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "415",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code and request identifier."
+    }
+   ]
+  },
+  {
+   "operation_id": "issueNativeControlUpgradePlan",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-plan/issue",
+   "summary": "Have the License service issue a signed plan and publish it",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Available only in native-standalone mode. Requires a platform session with control.upgrades.manage, exactly one Idempotency-Key and no query parameter. The control API asks the License service for a parent upgrade grant (the channel target, the pin, or requested_artifact_id from the version picker) and a signed plan artifact bundle, then publishes it as POST /v1/admin/control-upgrade-plan does, at the current publication revision. A target the License service refuses is 409 upgrade_target_blocked with its reason_code (for example same_version when the parent grant is a reinstall, downgrade_not_supported for a rollback). Any other License business refusal (403/409/422 with a code) is passed through as 409 with the License code, for example upgrade_plan_artifact_bundle_unavailable or installation_banned. Only an unreachable License service, a timeout or a License 5xx is 503 control_upgrade_state_unavailable. Without a License client the answer is 503 plan_source_unavailable; a draining master is 503 control_upgrade_draining.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "requested_artifact_id",
+      "type": "string(uuid)",
+      "description": "The chosen option's artifact_id (lower case canonical UUID); absent keeps the channel target or the pin."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "A new monotonic publication was persisted.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "receipt_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "plan_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "bundle_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "publication_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "channel_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "release_sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "installation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "component",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "protocol_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "idempotency_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "actor_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "actor_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "The exact idempotent publication was replayed without another write.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "receipt_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "plan_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "bundle_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "publication_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "channel_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "release_sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "installation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "component",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rollback_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "protocol_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "idempotency_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "actor_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "actor_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "409",
+     "description": "version_conflict, idempotency_conflict, control_upgrade_plan_conflict, a passed-through License refusal code (ErrorEnvelope), or upgrade_target_blocked with reason_code."
+    },
+    {
+     "status": "415",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code and request identifier."
+    }
+   ]
+  },
+  {
+   "operation_id": "listNativeControlUpgradeOptions",
+   "method": "GET",
+   "path": "/v1/admin/control-upgrade-plan/options",
+   "summary": "List the versions the master may upgrade to (version picker)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Available only in native-standalone mode. Requires a platform session with control.upgrades.manage and rejects every query parameter. The License service lists the installation's selectable versions for the running control API version and protocol. Without a License client the answer is 503 plan_source_unavailable; a License service that cannot list versions is 503 upgrade_options_unavailable.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The License service's upgrade options.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "options",
+       "type": "UpgradeOptions",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code and request identifier."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNativeControlUpgradeRunLog",
+   "method": "GET",
+   "path": "/v1/admin/control-upgrade-plan/run-log",
+   "summary": "Read the native master upgrade script log and service-log tail",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Available only in native-standalone mode. Requires a platform session with control.upgrades.manage and rejects every query parameter. The root-owned runner publishes a bounded log for the current execution: stable event and reason codes (rendered per locale by the console, never server text) and, at terminal points, the last journal lines of the control API, gateway and runner. Journal lines are stripped of control characters and redacted (URL query strings and userinfo, bearer/basic credentials, JWTs, secret-named flags and key/value pairs, private keys) by the runner and again before this response. Download events record only the artifact host. A log of another plan or sequence, or one that is missing or corrupt, is state unavailable with a null run_log.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The current execution's run log, or unavailable.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: available / unavailable",
+       "required": true
+      },
+      {
+       "name": "run_log",
+       "type": "NativeRunLog | null",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code and request identifier."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code and request identifier."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,90 @@
+{
+  "schema": "cdnca:dns-provider-sandbox-e2e-contract:v1",
+  "preflight": {
+    "all_providers_before_mutation": true,
+    "minimum_public_recursive": 2
+  },
+  "journal": {
+    "before_each_mutation": true,
+    "atomic_mode": "0600-rename-fsync"
+  },
+  "recovery": {
+    "unknown_outcome_exact_identity_readback": true,
+    "authoritative_before_public_recursive": true,
+    "cleanup_proves_provider_and_dns_absence": true
+  },
+  "evidence": {
+    "provider_identity": "domain-separated-sha256",
+    "monotonic_resource_revision": true,
+    "raw_provider_record_id": false,
+    "raw_zone_or_record_value": false
+  },
+  "providers": [
+    {
+      "code": "cloudflare",
+      "product": "Cloudflare",
+      "alias": false,
+      "credential_schema": ["api_token"],
+      "record_types": ["A", "AAAA", "CNAME", "TXT"],
+      "operations": ["create", "read", "update", "rate_limit", "delete", "readback"],
+      "line": false,
+      "weight": false,
+      "retry_after": true
+    },
+    {
+      "code": "aliyun",
+      "product": "Alibaba Cloud DNS",
+      "alias": false,
+      "credential_schema": ["access_key_id", "access_key_secret"],
+      "record_types": ["A", "AAAA", "CNAME", "TXT"],
+      "operations": ["create", "read", "update", "rate_limit", "delete", "readback"],
+      "line": false,
+      "weight": false,
+      "retry_after": true
+    },
+    {
+      "code": "huawei",
+      "product": "Huawei Cloud DNS",
+      "alias": false,
+      "credential_schema": ["access_key", "project_id", "region", "secret_key"],
+      "record_types": ["A", "AAAA", "CNAME", "TXT"],
+      "operations": ["create", "read", "update", "rate_limit", "delete", "readback"],
+      "line": false,
+      "weight": false,
+      "retry_after": true
+    },
+    {
+      "code": "dnspod_cn",
+      "product": "DNSPod CN",
+      "alias": false,
+      "credential_schema": ["dp_id", "dp_key"],
+      "record_types": ["A", "AAAA", "CNAME", "TXT"],
+      "operations": ["create", "read", "update", "rate_limit", "delete", "readback"],
+      "line": true,
+      "weight": true,
+      "retry_after": true
+    },
+    {
+      "code": "dns_com",
+      "product": "DNS.COM",
+      "alias": false,
+      "credential_schema": ["api_key", "api_secret"],
+      "record_types": ["A", "AAAA", "CNAME", "TXT"],
+      "operations": ["create", "read", "update", "rate_limit", "delete", "readback"],
+      "line": false,
+      "weight": false,
+      "retry_after": true
+    },
+    {
+      "code": "dns_la",
+      "product": "DNS.LA",
+      "alias": false,
+      "credential_schema": ["api_id", "api_secret"],
+      "record_types": ["A", "AAAA", "CNAME", "TXT"],
+      "operations": ["create", "read", "update", "rate_limit", "delete", "readback"],
+      "line": false,
+      "weight": false,
+      "retry_after": true
+    }
+  ]
+}

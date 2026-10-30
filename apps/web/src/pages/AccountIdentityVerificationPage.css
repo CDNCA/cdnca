@@ -1,0 +1,236 @@
+/* Identity verification keeps private-material and case semantics intact while using the account-center rhythm. */
+.account-identity-verification-page {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-identity-verification-page > h1 {
+  margin: 0 0 12px;
+  color: var(--cdnca-color-text);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 26px;
+}
+
+.account-identity-verification-page .identity-section-title {
+  margin: 16px 0 10px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.account-identity-verification-page .identity-toolbar,
+.account-identity-verification-page .ant-form {
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-identity-verification-page .identity-toolbar {
+  margin-bottom: 12px;
+}
+
+.account-identity-verification-page .identity-lookup-toolbar > .ant-input {
+  width: 320px;
+  max-width: 100%;
+}
+
+.account-identity-verification-page .identity-lookup-toolbar > .ant-btn,
+.account-identity-verification-page .identity-case-actions > .ant-btn,
+.account-identity-verification-page .identity-upload-toolbar > .ant-btn {
+  padding-inline: 14px;
+  font-size: 14px;
+}
+
+.account-identity-verification-page .identity-form {
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.account-identity-verification-page .identity-form .ant-form-item-label > label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 32px;
+}
+
+.account-identity-verification-page .identity-create-form .ant-form-item:nth-child(2) .ant-input-affix-wrapper,
+.account-identity-verification-page .identity-provider-form .ant-form-item:nth-child(2) .ant-input {
+  width: 300px;
+  max-width: 100%;
+}
+
+.account-identity-verification-page .identity-upload-toolbar input[type="file"] {
+  width: 300px;
+  max-width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 22px;
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 4px;
+}
+
+.account-identity-verification-page .identity-toolbar .ant-input,
+.account-identity-verification-page .identity-toolbar .ant-select-selector,
+.account-identity-verification-page .identity-toolbar .ant-btn,
+.account-identity-verification-page .ant-form .ant-input,
+.account-identity-verification-page .ant-form .ant-input-affix-wrapper,
+.account-identity-verification-page .ant-form .ant-select-selector,
+.account-identity-verification-page .ant-form .ant-btn {
+  min-height: 32px;
+  height: 32px;
+}
+
+.account-identity-verification-page .ant-form-item {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.account-identity-verification-page .ant-form-item-control,
+.account-identity-verification-page .ant-form-item-control-input,
+.account-identity-verification-page .ant-form-item-control-input-content {
+  min-width: 0;
+}
+
+.account-identity-verification-page .ant-alert {
+  min-width: 0;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+
+.account-identity-verification-page .identity-introduction {
+  margin-bottom: 14px;
+}
+
+.account-identity-verification-page .ant-descriptions,
+.account-identity-verification-page .ant-table-wrapper {
+  max-width: 100%;
+}
+
+.account-identity-verification-page .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-identity-verification-page .ant-table-thead > tr > th {
+  height: 40px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 40px;
+  white-space: nowrap;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border-bottom-color: var(--cdnca-color-border-secondary);
+}
+
+.account-identity-verification-page .ant-table-tbody > tr > td {
+  height: 40px;
+  min-height: 40px;
+  padding: 0 12px !important;
+  font-size: 14px;
+  line-height: 21px;
+  vertical-align: middle;
+  border-bottom-color: var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+.account-identity-verification-page .ant-table-tbody > tr:hover > td {
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+}
+
+.account-identity-verification-page .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.account-identity-verification-page .ant-descriptions {
+  font-size: 14px;
+}
+
+.account-identity-verification-page .ant-descriptions-item-label,
+.account-identity-verification-page .ant-descriptions-item-content {
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-identity-verification-page .ant-descriptions-item-label {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.account-identity-verification-page .identity-case-actions {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.account-identity-verification-page .identity-toolbar:last-child {
+  margin-top: 0;
+}
+
+@media (max-width: 767px) {
+  .account-identity-verification-page {
+    padding: 12px;
+  }
+
+  .account-identity-verification-page > h1 {
+    margin-bottom: 12px;
+    font-size: 18px;
+    line-height: 26px;
+  }
+
+  .account-identity-verification-page .identity-section-title {
+    margin-top: 14px;
+  }
+
+  .account-identity-verification-page .identity-toolbar,
+  .account-identity-verification-page .ant-form {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-identity-verification-page .identity-form {
+    align-items: stretch;
+  }
+
+  .account-identity-verification-page .identity-toolbar > *,
+  .account-identity-verification-page .ant-form-item,
+  .account-identity-verification-page .ant-form-item-control,
+  .account-identity-verification-page .ant-form-item-control-input,
+  .account-identity-verification-page .ant-form-item-control-input-content,
+  .account-identity-verification-page .ant-btn,
+  .account-identity-verification-page .ant-input,
+  .account-identity-verification-page .ant-input-affix-wrapper,
+  .account-identity-verification-page .ant-select {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .account-identity-verification-page .identity-lookup-toolbar > .ant-input,
+  .account-identity-verification-page .identity-create-form .ant-form-item:nth-child(2) .ant-input-affix-wrapper,
+  .account-identity-verification-page .identity-provider-form .ant-form-item:nth-child(2) .ant-input,
+  .account-identity-verification-page .identity-upload-toolbar input[type="file"] {
+    width: 100%;
+  }
+
+  .account-identity-verification-page .ant-form-item-label {
+    padding: 0 0 4px;
+  }
+
+  .account-identity-verification-page .ant-space {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+}

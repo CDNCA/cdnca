@@ -1,0 +1,32 @@
+{
+ "id": "-health-ready",
+ "prefix": "/health/ready",
+ "operations": [
+  {
+   "operation_id": "getReadiness",
+   "method": "GET",
+   "path": "/health/ready",
+   "summary": "Dependency readiness",
+   "auth": [
+    "none"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Required dependencies are ready.",
+     "fields": [
+      {
+       "name": "status",
+       "type": "string: live / ready",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

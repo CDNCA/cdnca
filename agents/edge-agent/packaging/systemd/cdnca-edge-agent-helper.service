@@ -1,0 +1,71 @@
+[Unit]
+Description=CDNCA edge agent privileged packaging helper
+Documentation=file:///usr/share/doc/cdnca-edge-agent/README.md
+Requires=cdnca-edge-agent-helper.socket
+After=cdnca-edge-agent-helper.socket
+ConditionFileIsExecutable=/usr/libexec/cdnca-edge-agent-helper
+ConditionPathIsDirectory=/var/lib/cdnca-edge-agent-backups/active-state
+ConditionPathExists=!/var/lib/cdnca-edge-agent-packaging/layout-migration
+
+[Service]
+Type=exec
+# Runs as root by default. Do not set User=root/Group=root: with
+# NoNewPrivileges and the Protect*/Private* sandbox below, systemd 255 then
+# drops CAP_SETUID from the effective set, packaging's setpriv --reuid probe
+# fails with EPERM and every upgrade is rejected.
+UMask=0077
+ExecStart=/usr/libexec/cdnca-edge-agent-helper serve
+StateDirectory=cdnca-edge-agent-helper cdnca-edge-agent-backups
+StateDirectoryMode=0700
+WorkingDirectory=/
+StandardInput=null
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=15s
+TimeoutStopSec=15s
+KillMode=mixed
+KeyringMode=private
+
+NoNewPrivileges=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+PrivateTmp=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectHome=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectSystem=strict
+ReadOnlyPaths=/etc/cdnca-edge-agent/package-signing.pem
+ReadWritePaths=/var/lib/cdnca-edge-agent-helper
+ReadWritePaths=/var/lib/cdnca-edge-agent-packaging
+ReadWritePaths=/var/lib/cdnca-edge-agent-backups
+ReadWritePaths=/var/lib/cdnca-edge
+ReadWritePaths=/var/log/cdnca-edge-agent
+ReadWritePaths=/usr/lib/cdnca-edge-agent
+ReadWritePaths=/usr/libexec/cdnca-edge-agent
+ReadWritePaths=/usr/lib/systemd/system
+ReadWritePaths=/usr/lib/sysusers.d
+ReadWritePaths=/usr/lib/tmpfiles.d
+ReadWritePaths=/etc/logrotate.d
+ReadWritePaths=/etc/cdnca-edge-agent
+ReadWritePaths=/usr/share/doc/cdnca-edge-agent
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_SETGID CAP_SETUID
+AmbientCapabilities=
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RemoveIPC=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service @chown @setuid
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

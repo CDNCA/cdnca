@@ -1,0 +1,1298 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control System Configuration API
+  version: 2.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Platform-scoped canonical system-configuration v2 revisions backed by migrations 035 and 219,
+    with immutable bindings to signed tenant Edge publications and rollouts.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/system-configuration/categories/{category}:
+    parameters:
+      - $ref: '#/components/parameters/Category'
+    get:
+      operationId: getActiveSystemConfigurationCategory
+      summary: 读取当前可编辑的系统配置分类
+      responses:
+        '200':
+          description: 当前 head 分类；revision 与 ETag 都是 head revision，active_revision 单独标识已生效版本。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDocument'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: saveSystemConfigurationCategory
+      summary: 基于当前 head snapshot 保存新的 canonical draft
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryWriteRequest'
+      responses:
+        '200':
+          description: 新 draft，或相同幂等请求的首次响应；连续分类保存继承当前 head draft。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Idempotency-Replayed:
+              description: 相同 canonical 请求重放时为 true。
+              schema:
+                type: string
+                const: 'true'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryDocument'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/EntitlementDenied'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /v1/admin/system-configuration/revisions/{revision}/preflight:
+    parameters:
+      - $ref: '#/components/parameters/Revision'
+    post:
+      operationId: preflightSystemConfigurationRevision
+      summary: 对 canonical draft 执行服务端预检并固化结果
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [snapshot_sha256]
+              properties:
+                snapshot_sha256: { $ref: '#/components/schemas/SHA256' }
+                expected_pending_categories:
+                  $ref: '#/components/schemas/PendingCategories'
+                  description: 可选；提供时必须与该 revision 相对当前 active 有差异的分类集合一致（不计顺序），否则 409 system_configuration_pending_categories_changed。
+      responses:
+        '200':
+          description: 预检已固化；只有全部检查通过的 draft 才变为 validated。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevisionLifecycleResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/admin/system-configuration/revisions/{revision}/activate:
+    parameters:
+      - $ref: '#/components/parameters/Revision'
+    post:
+      operationId: activateSystemConfigurationRevision
+      summary: 事务性生成所有有效租户 Edge 制品后激活 revision
+      description: >-
+        精确绑定 system revision 和 snapshot SHA；任一租户编译、签名、entitlement、目标或持久化失败时，
+        平台 active revision、租户 source revision、制品和 rollout 全部保持原值。
+        各分类共用一条 revision 流，激活会让该 revision 相对 active 有差异的全部分类一并生效：
+        请求体 expected_pending_categories 必须与服务端计算的集合一致（不计顺序）；
+        只有一个分类有差异时可省略请求体，多于一个时省略或不一致均返回 409 system_configuration_pending_categories_changed。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                expected_pending_categories: { $ref: '#/components/schemas/PendingCategories' }
+      responses:
+        '200':
+          description: 系统 revision 与所有租户 publication 已在同一事务中激活/创建。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevisionLifecycleResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/PublicationFailed' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/admin/system-configuration/revisions/{revision}/rollback:
+    parameters:
+      - $ref: '#/components/parameters/Revision'
+    post:
+      operationId: rollbackSystemConfigurationRevision
+      summary: 从已生效历史 revision 创建新的回滚草稿
+      description: >-
+        revision 是目标历史版本；If-Match 是当前 head revision，请求正文携带当前 active revision。
+        成功只创建新的严格递增 draft，保留 source_revision，仍须重新预检和激活才能生效。
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_active_revision]
+              properties:
+                expected_active_revision:
+                  type: integer
+                  format: int64
+                  minimum: 1
+      responses:
+        '200':
+          description: 已从目标历史版本创建新的回滚草稿；尚未改变 active revision。
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+            Idempotency-Replayed:
+              description: 相同 canonical 请求重放时为 true。
+              schema:
+                type: string
+                const: 'true'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RollbackRevisionResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/admin/system-configuration/revisions/{revision}/publications:
+    parameters:
+      - $ref: '#/components/parameters/Revision'
+    get:
+      operationId: getSystemConfigurationRevisionPublications
+      summary: 查询 revision 对各租户的不可变 publication 与 rollout 状态
+      responses:
+        '200':
+          description: 绑定按 tenant scope 稳定排序；rollout_state 来自现有 LKG/健康 rollout 事实。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActivationPublicationPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /v1/admin/acme-ca-credentials:
+    get:
+      operationId: listACMECACredentials
+      summary: EAB credentials of the ACME CAs that require them (ZeroSSL, Google Trust Services)
+      description: >-
+        The HMAC key is write-only; an item shows only its key ID and the first
+        8 hex digits of the key's SHA-256. Requires system_configuration.read.
+      responses:
+        '200':
+          description: Both CAs, configured or not.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ACMECACredential' } }
+  /v1/admin/acme-ca-credentials/{ca}:
+    put:
+      operationId: putACMECACredential
+      summary: Set or clear one CA's EAB credentials
+      description: >-
+        Requires system_configuration.manage; audited as acme.ca_credential.update (never the key).
+        The key is sealed with the DNS credential keyring.
+      parameters:
+        - { name: ca, in: path, required: true, schema: { type: string, enum: [zerossl, google_trust] } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_revision]
+              properties:
+                expected_revision: { type: integer, minimum: 0 }
+                eab_key_id: { type: string, maxLength: 256 }
+                eab_hmac_key: { type: string, description: 'base64url HMAC key as the CA shows it, at least 16 bytes' }
+                clear: { type: boolean }
+      responses:
+        '200':
+          description: The CA's credentials after the write.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ACMECACredential' }
+        '400': { description: acme_ca_credential_invalid }
+        '409': { description: acme_ca_credential_revision_conflict }
+  /v1/admin/acme-ca-credentials/zerossl/eab-from-email:
+    post:
+      operationId: fetchZeroSSLEABFromEmail
+      summary: Obtain ZeroSSL EAB credentials for an account email and store them
+      description: >-
+        Calls ZeroSSL's public EAB endpoint (api.zerossl.com/acme/eab-credentials-email) and saves the
+        returned key ID and HMAC key like PUT /v1/admin/acme-ca-credentials/zerossl (sealed, audited as
+        acme.ca_credential.update). The HMAC key is never returned. Requires system_configuration.manage.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_revision, email]
+              properties:
+                expected_revision: { type: integer, minimum: 0 }
+                email: { type: string, format: email, maxLength: 254 }
+      responses:
+        '200':
+          description: ZeroSSL credentials after the write.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ACMECACredential' }
+        '400': { description: acme_ca_credential_email_invalid }
+        '409': { description: acme_ca_credential_revision_conflict }
+        '502': { description: acme_ca_credential_eab_fetch_failed }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api access token
+      description: Exactly one Authorization header. The runtime calls identity.Service.AuthenticateSession.
+  parameters:
+    Category:
+      name: category
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/Category'
+    Revision:
+      name: revision
+      in: path
+      required: true
+      description: 平台系统配置的严格递增 revision。
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: 带双引号的当前非负 head revision，例如 "0" 或 "12"。
+      schema:
+        type: string
+        pattern: '^"(0|[1-9][0-9]*)"$'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+  headers:
+    ETag:
+      description: 当前 head revision 的强 ETag。
+      schema:
+        type: string
+        pattern: '^"(0|[1-9][0-9]*)"$'
+  schemas:
+    ACMECACredential:
+      type: object
+      additionalProperties: false
+      required: [ca, directory_url, configured, revision]
+      properties:
+        ca: { type: string, enum: [zerossl, google_trust] }
+        directory_url: { type: string, format: uri }
+        configured: { type: boolean }
+        eab_key_id: { type: string }
+        eab_hmac_sha256_prefix: { type: string, pattern: '^[0-9a-f]{8}$' }
+        revision: { type: integer, minimum: 0 }
+        updated_at: { type: string, format: date-time }
+        updated_by_user_id: { type: string, format: uuid }
+    Category:
+      type: string
+      enum: [nginx, defaults, resources, error_pages, secrets, node_monitoring, ddos_protection, access_log_fields]
+    RevisionLifecycleResult:
+      type: object
+      additionalProperties: false
+      required: [revision, status, snapshot_sha256, replayed]
+      properties:
+        revision: { type: integer, format: int64, minimum: 1 }
+        status: { type: string, enum: [validated, active] }
+        snapshot_sha256: { $ref: '#/components/schemas/SHA256' }
+        replayed: { type: boolean }
+    RollbackRevisionResult:
+      type: object
+      additionalProperties: false
+      required: [revision, status, snapshot_sha256, source_revision, replayed]
+      properties:
+        revision: { type: integer, format: int64, minimum: 1 }
+        status: { type: string, const: draft }
+        snapshot_sha256: { $ref: '#/components/schemas/SHA256' }
+        source_revision: { type: integer, format: int64, minimum: 1 }
+        replayed: { type: boolean }
+    ActivationPublicationPage:
+      type: object
+      additionalProperties: false
+      required: [revision, publications]
+      properties:
+        revision: { type: integer, format: int64, minimum: 1 }
+        publications:
+          type: array
+          items: { $ref: '#/components/schemas/ActivationPublication' }
+    ActivationPublication:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, tenant_source_revision, publication_id, config_version_id, rollout_id,
+        rollout_state, artifact_sha256, reason_code, created_at]
+      properties:
+        tenant_scope_id: { type: string, format: uuid }
+        tenant_source_revision: { type: integer, format: int64, minimum: 1 }
+        publication_id: { type: string, format: uuid }
+        config_version_id: { type: string, format: uuid }
+        rollout_id: { type: string, format: uuid }
+        rollout_state: { type: string, enum: [queued, running, paused, succeeded, partial_failed, failed, cancelled] }
+        artifact_sha256: { $ref: '#/components/schemas/SHA256' }
+        reason_code: { type: string, const: system_configuration_activated }
+        created_at: { type: string, format: date-time }
+    PendingCategories:
+      type: array
+      uniqueItems: true
+      maxItems: 7
+      items: { $ref: '#/components/schemas/Category' }
+    CategoryDocument:
+      type: object
+      additionalProperties: false
+      required: [schema, category, head_revision, active_revision, revision, status, snapshot_sha256, pending_categories, value]
+      properties:
+        schema:
+          type: string
+          const: cdnca.system-configuration/v2
+        category:
+          $ref: '#/components/schemas/Category'
+        head_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        active_revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 首次安装尚未激活任何 revision 时为 0。
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 当前 head revision；首次安装读取项目默认配置时为 0，持久化 revision 从 1 开始。
+        status:
+          type: string
+          enum: [draft, validated, active, superseded, rejected]
+        snapshot_sha256:
+          $ref: '#/components/schemas/SHA256'
+        pending_categories:
+          $ref: '#/components/schemas/PendingCategories'
+          description: head 相对 active（首次激活前相对项目默认配置）有差异的分类，按分类目录顺序；激活 head 会让这些分类一并生效。
+        value:
+          oneOf:
+            - $ref: '#/components/schemas/NginxLimits'
+            - $ref: '#/components/schemas/DefaultReferences'
+            - $ref: '#/components/schemas/ResourceLimits'
+            - $ref: '#/components/schemas/ErrorPages'
+            - $ref: '#/components/schemas/MaskedSensitiveReferences'
+            - $ref: '#/components/schemas/NodeMonitoringConfiguration'
+            - $ref: '#/components/schemas/DDoSProtection'
+            - $ref: '#/components/schemas/AccessLogFields'
+    CategoryWriteRequest:
+      oneOf:
+        - $ref: '#/components/schemas/NginxWriteRequest'
+        - $ref: '#/components/schemas/DefaultsWriteRequest'
+        - $ref: '#/components/schemas/ResourcesWriteRequest'
+        - $ref: '#/components/schemas/ErrorPagesWriteRequest'
+        - $ref: '#/components/schemas/SecretsWriteRequest'
+        - $ref: '#/components/schemas/NodeMonitoringWriteRequest'
+        - $ref: '#/components/schemas/DDoSProtectionWriteRequest'
+        - $ref: '#/components/schemas/AccessLogFieldsWriteRequest'
+    NginxWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/NginxLimits'
+    DefaultsWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/DefaultReferences'
+    ResourcesWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/ResourceLimits'
+    ErrorPagesWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/ErrorPages'
+    SecretsWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/SecretIntentValue'
+    NodeMonitoringWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/NodeMonitoringConfiguration'
+    NginxLimits:
+      type: object
+      additionalProperties: false
+      required: [worker, http, stream, overrides]
+      properties:
+        worker: { $ref: '#/components/schemas/NginxWorker' }
+        http: { $ref: '#/components/schemas/NginxHTTP' }
+        stream: { $ref: '#/components/schemas/NginxStream' }
+        overrides:
+          type: array
+          items: { $ref: '#/components/schemas/ScopedNginxOverride' }
+    NginxWorker:
+      type: object
+      additionalProperties: false
+      required: [worker_processes, worker_connections, worker_rlimit_nofile, worker_shutdown_timeout_ms, logs_dir]
+      properties:
+        worker_processes: { type: integer, minimum: 0, maximum: 256 }
+        worker_connections: { type: integer, minimum: 128, maximum: 1048576 }
+        worker_rlimit_nofile: { type: integer, minimum: 1024, maximum: 1048576 }
+        worker_shutdown_timeout_ms: { type: integer, minimum: 1000, maximum: 300000 }
+        logs_dir: { type: string, pattern: '^/var/log/cdnca(?:/[^/]+)*$' }
+    NginxHTTP:
+      type: object
+      additionalProperties: false
+      required: [gzip_comp_level, gzip_http_version, gzip_min_length_bytes, gzip_vary, server_addr_outgoing,
+        proxy_request_buffering, proxy_buffering, proxy_cache_dir, proxy_cache_max_size_bytes,
+        proxy_cache_methods, proxy_http_version, proxy_max_temp_file_size_bytes, proxy_next_upstream,
+        proxy_connect_timeout_ms, proxy_send_timeout_ms, proxy_read_timeout_ms, client_body_buffer_size_bytes,
+        server, client_max_body_size_bytes, default_type, keepalive_requests, keepalive_timeout_ms,
+        log_not_found, server_tokens, large_client_header_buffers, server_names_hash_max_size,
+        server_names_hash_bucket_size]
+      properties:
+        gzip_comp_level: { type: integer, minimum: 1, maximum: 9 }
+        gzip_http_version: { type: string, enum: ['1.0', '1.1'] }
+        gzip_min_length_bytes: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        gzip_vary: { type: boolean }
+        server_addr_outgoing: { type: boolean }
+        proxy_request_buffering: { type: boolean }
+        proxy_buffering: { type: boolean }
+        proxy_cache_dir: { type: string, pattern: '^/var/lib/cdnca(?:/[^/]+)*$' }
+        proxy_cache_max_size_bytes: { type: integer, format: int64, minimum: 0, maximum: 1125899906842624 }
+        proxy_cache_methods: { type: array, minItems: 1, maxItems: 2, uniqueItems: true, items: { type: string, enum: [GET, HEAD] } }
+        proxy_http_version: { type: string, enum: ['1.0', '1.1'] }
+        proxy_max_temp_file_size_bytes: { type: integer, format: int64, minimum: 0, maximum: 1099511627776 }
+        proxy_next_upstream:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [error, timeout, invalid_header, http_500, http_502, http_503, http_504, http_403, http_404, http_429, non_idempotent, off] }
+        proxy_connect_timeout_ms: { type: integer, minimum: 100, maximum: 75000 }
+        proxy_send_timeout_ms: { type: integer, minimum: 100, maximum: 3600000 }
+        proxy_read_timeout_ms: { type: integer, minimum: 100, maximum: 3600000 }
+        client_body_buffer_size_bytes: { type: integer, format: int64, minimum: 1024, maximum: 1073741824 }
+        server: { type: string, maxLength: 64, pattern: '^$|^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$' }
+        client_max_body_size_bytes: { type: integer, format: int64, minimum: 1024, maximum: 10737418240 }
+        default_type: { type: string, pattern: "^[!#$%&'*+.^_`|~0-9A-Za-z-]+/[!#$%&'*+.^_`|~0-9A-Za-z-]+$" }
+        keepalive_requests: { type: integer, minimum: 1, maximum: 1000000 }
+        keepalive_timeout_ms: { type: integer, minimum: 100, maximum: 3600000 }
+        log_not_found: { type: boolean }
+        server_tokens: { type: boolean }
+        large_client_header_buffers: { $ref: '#/components/schemas/LargeClientHeaderBuffers' }
+        server_names_hash_max_size: { type: integer, minimum: 512, maximum: 65536 }
+        server_names_hash_bucket_size: { type: integer, minimum: 32, maximum: 1024 }
+    NginxStream:
+      type: object
+      additionalProperties: false
+      required: [proxy_connect_timeout_ms, proxy_timeout_ms]
+      properties:
+        proxy_connect_timeout_ms: { type: integer, minimum: 100, maximum: 75000 }
+        proxy_timeout_ms: { type: integer, minimum: 100, maximum: 86400000 }
+    ScopedNginxOverride:
+      type: object
+      additionalProperties: false
+      required: [id, scope, scope_id, values]
+      properties:
+        id: { $ref: '#/components/schemas/ShortConfigurationID' }
+        scope: { type: string, enum: [region, node] }
+        scope_id: { type: string, minLength: 1, maxLength: 256 }
+        values: { $ref: '#/components/schemas/NginxOverride' }
+    NginxOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        worker: { $ref: '#/components/schemas/NginxWorkerOverride' }
+        http: { $ref: '#/components/schemas/NginxHTTPOverride' }
+        stream: { $ref: '#/components/schemas/NginxStreamOverride' }
+    NginxWorkerOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        worker_processes: { type: integer, minimum: 0, maximum: 256 }
+        worker_connections: { type: integer, minimum: 128, maximum: 1048576 }
+        worker_rlimit_nofile: { type: integer, minimum: 1024, maximum: 1048576 }
+        worker_shutdown_timeout_ms: { type: integer, minimum: 1000, maximum: 300000 }
+        logs_dir: { type: string, pattern: '^/var/log/cdnca(?:/[^/]+)*$' }
+    NginxHTTPOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        gzip_comp_level: { type: integer, minimum: 1, maximum: 9 }
+        gzip_http_version: { type: string, enum: ['1.0', '1.1'] }
+        gzip_min_length_bytes: { type: integer, format: int64, minimum: 0, maximum: 1073741824 }
+        gzip_vary: { type: boolean }
+        server_addr_outgoing: { type: boolean }
+        proxy_request_buffering: { type: boolean }
+        proxy_buffering: { type: boolean }
+        proxy_cache_dir: { type: string, pattern: '^/var/lib/cdnca(?:/[^/]+)*$' }
+        proxy_cache_max_size_bytes: { type: integer, format: int64, minimum: 0, maximum: 1125899906842624 }
+        proxy_cache_methods:
+          type: array
+          minItems: 1
+          maxItems: 2
+          uniqueItems: true
+          items: { type: string, enum: [GET, HEAD] }
+        proxy_http_version: { type: string, enum: ['1.0', '1.1'] }
+        proxy_max_temp_file_size_bytes: { type: integer, format: int64, minimum: 0, maximum: 1099511627776 }
+        proxy_next_upstream:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [error, timeout, invalid_header, http_500, http_502, http_503, http_504,
+              http_403, http_404, http_429, non_idempotent, off]
+        proxy_connect_timeout_ms: { type: integer, minimum: 100, maximum: 75000 }
+        proxy_send_timeout_ms: { type: integer, minimum: 100, maximum: 3600000 }
+        proxy_read_timeout_ms: { type: integer, minimum: 100, maximum: 3600000 }
+        client_body_buffer_size_bytes: { type: integer, format: int64, minimum: 1024, maximum: 1073741824 }
+        server: { type: string, maxLength: 64, pattern: '^$|^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$' }
+        client_max_body_size_bytes: { type: integer, format: int64, minimum: 1024, maximum: 10737418240 }
+        default_type: { type: string, maxLength: 128, pattern: "^[!#$%&'*+.^_`|~0-9A-Za-z-]+/[!#$%&'*+.^_`|~0-9A-Za-z-]+$" }
+        keepalive_requests: { type: integer, minimum: 1, maximum: 1000000 }
+        keepalive_timeout_ms: { type: integer, minimum: 100, maximum: 3600000 }
+        log_not_found: { type: boolean }
+        server_tokens: { type: boolean }
+        large_client_header_buffers: { $ref: '#/components/schemas/LargeClientHeaderBuffers' }
+        server_names_hash_max_size: { type: integer, minimum: 512, maximum: 65536 }
+        server_names_hash_bucket_size: { type: integer, minimum: 32, maximum: 1024 }
+    LargeClientHeaderBuffers:
+      type: object
+      additionalProperties: false
+      required: [count, size_bytes]
+      properties:
+        count: { type: integer, minimum: 1, maximum: 32 }
+        size_bytes: { type: integer, format: int64, minimum: 1024, maximum: 1048576 }
+    NginxStreamOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        proxy_connect_timeout_ms: { type: integer, minimum: 100, maximum: 75000 }
+        proxy_timeout_ms: { type: integer, minimum: 100, maximum: 86400000 }
+    ShortConfigurationID:
+      type: string
+      pattern: '^[a-z0-9][a-z0-9_-]{7,31}$'
+    DefaultReferences:
+      type: object
+      additionalProperties: false
+      required: [website, stream, certificate, overrides]
+      properties:
+        website: { $ref: '#/components/schemas/DefaultWebsite' }
+        stream:
+          type: object
+          additionalProperties: false
+          required: [protocol, load_balancing, proxy_protocol_enabled]
+          properties:
+            protocol: { type: string, enum: [tcp, udp] }
+            load_balancing: { type: string, enum: [round_robin, ip_hash] }
+            proxy_protocol_enabled: { type: boolean }
+        certificate:
+          type: object
+          additionalProperties: false
+          required: [issuer]
+          properties:
+            issuer: { type: string, enum: [lets_encrypt, zerossl, google_trust] }
+        overrides:
+          type: array
+          items: { $ref: '#/components/schemas/ScopedDefaultOverride' }
+    DefaultWebsite:
+      type: object
+      additionalProperties: false
+      required: [http, https, origin, cache_rules, origin_request_headers, access_log, security, other]
+      properties:
+        http:
+          type: object
+          additionalProperties: false
+          required: [listen_ports]
+          properties: { listen_ports: { $ref: '#/components/schemas/PortList' } }
+        https:
+          type: object
+          additionalProperties: false
+          required: [listen_ports, hsts_enabled, http2_enabled, http3_enabled, force_https, ssl, ocsp_stapling_enabled]
+          properties:
+            listen_ports: { $ref: '#/components/schemas/PortList' }
+            hsts_enabled: { type: boolean, description: "New sites created with HTTPS get HSTS (max-age one year, no includeSubDomains or preload); sites change it in their access settings." }
+            http2_enabled: { type: boolean }
+            http3_enabled: { type: boolean }
+            force_https: { type: boolean }
+            ssl: { $ref: '#/components/schemas/DefaultSSL' }
+            ocsp_stapling_enabled: { type: boolean }
+        origin:
+          type: object
+          additionalProperties: false
+          required: [scheme, http_port, https_port, response_timeout_seconds, connect_timeout_seconds,
+            ssl_protocols, http_version, keepalive_enabled, post_body_limit_bytes]
+          properties:
+            scheme: { type: string, enum: [http, https, follow, follow_with_port] }
+            http_port: { type: integer, minimum: 1, maximum: 65535 }
+            https_port: { type: integer, minimum: 1, maximum: 65535 }
+            response_timeout_seconds: { type: integer, minimum: 1, maximum: 3600 }
+            connect_timeout_seconds: { type: integer, minimum: 1, maximum: 75 }
+            ssl_protocols: { $ref: '#/components/schemas/TLSProtocols' }
+            http_version: { type: string, enum: ['1.0', '1.1'] }
+            keepalive_enabled: { type: boolean }
+            post_body_limit_bytes: { type: integer, format: int64, minimum: 1024, maximum: 10737418240 }
+        cache_rules: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/DefaultCacheRule' } }
+        origin_request_headers: { type: array, maxItems: 100, items: { $ref: '#/components/schemas/DefaultOriginHeader' } }
+        access_log:
+          type: object
+          additionalProperties: false
+          required: [capture_request_headers, capture_response_headers, capture_request_body, request_body_limit_kb]
+          properties:
+            capture_request_headers: { type: boolean }
+            capture_response_headers: { type: boolean }
+            capture_request_body: { type: boolean }
+            request_body_limit_kb: { type: integer, minimum: 0, maximum: 10240 }
+        security:
+          type: object
+          additionalProperties: false
+          required: [default_cc_policy_id, waf_enabled, waf_auto_block, waf_modules]
+          properties:
+            default_cc_policy_id: { type: [string, 'null'], maxLength: 256 }
+            waf_enabled: { type: boolean }
+            waf_auto_block:
+              type: object
+              additionalProperties: false
+              required: [enabled, window_seconds, hit_threshold, block_seconds]
+              properties:
+                enabled: { type: boolean }
+                window_seconds: { type: integer, minimum: 1, maximum: 86400 }
+                hit_threshold: { type: integer, minimum: 1, maximum: 1000000 }
+                block_seconds: { type: integer, minimum: 1, maximum: 604800 }
+            waf_modules: { $ref: '#/components/schemas/DefaultWAFModules' }
+        other: { $ref: '#/components/schemas/DefaultOther' }
+    DefaultSSL:
+      type: object
+      additionalProperties: false
+      required: [mode, protocols, cipher_suites, prefer_server_ciphers]
+      properties:
+        mode: { type: string, enum: [recommended, legacy_tls12, legacy_full] }
+        protocols: { $ref: '#/components/schemas/TLSProtocols' }
+        cipher_suites:
+          type: string
+          maxLength: 4096
+          pattern: '^[^\u0000-\u001f\u007f-\u009f]*$'
+        prefer_server_ciphers: { type: boolean }
+      oneOf:
+        - properties:
+            mode: { const: recommended }
+            protocols: { const: [TLSv1.2, TLSv1.3] }
+            cipher_suites:
+              const: ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305
+            prefer_server_ciphers: { const: false }
+        - properties:
+            mode: { const: legacy_tls12 }
+            protocols: { const: [TLSv1.2, TLSv1.3] }
+            cipher_suites:
+              const: ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA
+            prefer_server_ciphers: { const: true }
+        - properties:
+            mode: { const: legacy_full }
+            protocols: { const: [TLSv1, TLSv1.1, TLSv1.2, TLSv1.3] }
+            cipher_suites: { const: 'DEFAULT:@SECLEVEL=0' }
+            prefer_server_ciphers: { const: true }
+    DefaultCacheRule:
+      type: object
+      additionalProperties: false
+      required: [id, match, content, ttl_seconds, ignore_query, force_cache, range, ignore_vary,
+        no_cache, enabled, position]
+      properties:
+        id: { $ref: '#/components/schemas/ShortConfigurationID' }
+        match:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[^\u0000-\u001f\u007f-\u009f]*$'
+        content:
+          type: [string, 'null']
+          maxLength: 2048
+          pattern: '^[^\u0000-\u001f\u007f-\u009f]*$'
+        ttl_seconds: { type: integer, minimum: 0, maximum: 31536000 }
+        ignore_query: { type: boolean }
+        force_cache: { type: boolean }
+        range: { type: boolean }
+        ignore_vary: { type: boolean }
+        no_cache:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/DefaultCacheNoCacheCondition' }
+        enabled: { type: boolean }
+        position: { type: integer, minimum: 0, maximum: 99 }
+    DefaultCacheNoCacheCondition:
+      type: object
+      additionalProperties: false
+      required: [variable, string]
+      properties:
+        variable:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[^\u0000-\u001f\u007f-\u009f]*$'
+        string:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          pattern: '^[^\u0000-\u001f\u007f-\u009f]*$'
+    DefaultOriginHeader:
+      type: object
+      additionalProperties: false
+      required: [id, name, value, action, allow_duplicate, enabled, position]
+      properties:
+        id: { $ref: '#/components/schemas/ShortConfigurationID' }
+        name: { type: string, minLength: 1, maxLength: 256 }
+        value: { type: [string, 'null'], maxLength: 4096 }
+        action: { type: string, enum: [set, append, delete] }
+        allow_duplicate: { type: boolean }
+        enabled: { type: boolean }
+        position: { type: integer, minimum: 0, maximum: 99 }
+    DefaultWAFModules:
+      type: object
+      additionalProperties: false
+      required: [sqli, xss, upload, fi, cmdi, java, jdeser, php, phpdeser, ssti]
+      properties:
+        sqli: { $ref: '#/components/schemas/WAFModuleMode' }
+        xss: { $ref: '#/components/schemas/WAFModuleMode' }
+        upload: { $ref: '#/components/schemas/WAFModuleMode' }
+        fi: { $ref: '#/components/schemas/WAFModuleMode' }
+        cmdi: { $ref: '#/components/schemas/WAFModuleMode' }
+        java: { $ref: '#/components/schemas/WAFModuleMode' }
+        jdeser: { $ref: '#/components/schemas/WAFModuleMode' }
+        php: { $ref: '#/components/schemas/WAFModuleMode' }
+        phpdeser: { $ref: '#/components/schemas/WAFModuleMode' }
+        ssti: { $ref: '#/components/schemas/WAFModuleMode' }
+    DefaultOther:
+      type: object
+      additionalProperties: false
+      required: [load_balancing, gzip_enabled, gzip_types, websocket_enabled]
+      description: >-
+        load_balancing is new sites' origin load balancing; gzip_enabled and
+        gzip_types are the node-wide gzip default (text/html is always
+        compressed), which a site's own compression overrides.
+      properties:
+        load_balancing: { type: string, enum: [round_robin, ip_hash, url_hash, least_conn, random] }
+        gzip_enabled: { type: boolean }
+        gzip_types: { type: array, maxItems: 128, uniqueItems: true, items: { type: string } }
+        websocket_enabled: { type: boolean }
+    ScopedDefaultOverride:
+      type: object
+      additionalProperties: false
+      required: [id, scope, scope_id, values]
+      properties:
+        id: { $ref: '#/components/schemas/ShortConfigurationID' }
+        scope: { type: string, const: region }
+        scope_id: { type: string, minLength: 1, maxLength: 256 }
+        values: { $ref: '#/components/schemas/DefaultOverride' }
+    DefaultOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        website: { $ref: '#/components/schemas/DefaultWebsiteOverride' }
+        stream: { $ref: '#/components/schemas/DefaultStreamOverride' }
+        certificate: { $ref: '#/components/schemas/DefaultCertificateOverride' }
+    DefaultWebsiteOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        http_listen_ports: { $ref: '#/components/schemas/PortList' }
+        https_listen_ports: { $ref: '#/components/schemas/PortList' }
+        hsts_enabled: { type: boolean }
+        http2_enabled: { type: boolean }
+        http3_enabled: { type: boolean }
+        force_https: { type: boolean }
+        ssl: { $ref: '#/components/schemas/DefaultSSL' }
+        ocsp_stapling_enabled: { type: boolean }
+        origin: { $ref: '#/components/schemas/DefaultWebsiteOriginOverride' }
+        cache_rules:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/DefaultCacheRule' }
+        origin_request_headers:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/DefaultOriginHeader' }
+        default_cc_policy_id:
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 256
+              pattern: '^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$'
+            - type: 'null'
+        waf_enabled: { type: boolean }
+        waf_modules: { $ref: '#/components/schemas/DefaultWAFModules' }
+        other: { $ref: '#/components/schemas/DefaultOther' }
+    DefaultWebsiteOriginOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        scheme: { type: string, enum: [http, https, follow, follow_with_port] }
+        http_port: { type: integer, minimum: 1, maximum: 65535 }
+        https_port: { type: integer, minimum: 1, maximum: 65535 }
+        response_timeout_seconds: { type: integer, minimum: 1, maximum: 3600 }
+        connect_timeout_seconds: { type: integer, minimum: 1, maximum: 75 }
+        ssl_protocols: { $ref: '#/components/schemas/TLSProtocols' }
+        http_version: { type: string, enum: ['1.0', '1.1'] }
+        keepalive_enabled: { type: boolean }
+        post_body_limit_bytes: { type: integer, format: int64, minimum: 1024, maximum: 10737418240 }
+    DefaultStreamOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        protocol: { type: string, enum: [tcp, udp] }
+        load_balancing: { type: string, enum: [round_robin, ip_hash] }
+        proxy_protocol_enabled: { type: boolean }
+    DefaultCertificateOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        issuer: { type: string, enum: [lets_encrypt, zerossl, google_trust] }
+    WAFModuleMode: { type: string, enum: [off, detect, on] }
+    TLSProtocols:
+      type: array
+      minItems: 1
+      maxItems: 6
+      uniqueItems: true
+      items: { type: string, enum: [SSLv2, SSLv3, TLSv1, TLSv1.1, TLSv1.2, TLSv1.3] }
+    PortList:
+      type: array
+      minItems: 1
+      maxItems: 64
+      uniqueItems: true
+      items: { type: integer, minimum: 1, maximum: 65535 }
+    ResourceLimits:
+      type: object
+      additionalProperties: false
+      required: [site, stream, site_stream, overrides]
+      properties:
+        site: { $ref: '#/components/schemas/ResourceSite' }
+        stream: { $ref: '#/components/schemas/ResourceStream' }
+        site_stream: { $ref: '#/components/schemas/ResourceSiteStream' }
+        overrides:
+          type: array
+          items: { $ref: '#/components/schemas/ScopedResourceOverride' }
+    ResourceSite:
+      type: object
+      additionalProperties: false
+      required: [related_config_min_limit, related_config_max_times_limit, black_ip_limit,
+        white_ip_limit, daily_clean_url_limit, daily_clean_dir_limit, daily_pre_cache_url_limit,
+        daily_ip_unlock_limit, ip_unlock_per_request_limit, cc_rule_max_limit, max_domains_per_site,
+        listen_default_http_80, daily_access_log_download_limit, access_log_tmp_dir, access_log_retain_hours]
+      properties:
+        related_config_min_limit: { type: integer, minimum: 1, maximum: 100000 }
+        related_config_max_times_limit: { type: integer, minimum: 1, maximum: 1000 }
+        black_ip_limit: { type: integer, minimum: 1, maximum: 1000000 }
+        white_ip_limit: { type: integer, minimum: 1, maximum: 1000000 }
+        daily_clean_url_limit: { type: integer, minimum: 1, maximum: 10000000 }
+        daily_clean_dir_limit: { type: integer, minimum: 1, maximum: 1000000 }
+        daily_pre_cache_url_limit: { type: integer, minimum: 1, maximum: 10000000 }
+        daily_ip_unlock_limit: { type: integer, minimum: 1, maximum: 10000000 }
+        ip_unlock_per_request_limit: { type: integer, minimum: 1, maximum: 100000 }
+        cc_rule_max_limit: { type: integer, minimum: 1, maximum: 100000 }
+        max_domains_per_site: { type: integer, minimum: 1, maximum: 100 }
+        listen_default_http_80: { type: boolean }
+        daily_access_log_download_limit: { type: integer, minimum: 1, maximum: 100000 }
+        access_log_tmp_dir: { type: string, pattern: '^(?:/data/download-temp|/var/lib/cdnca)(?:/(?!\.{1,2}(?:/|$))[^/\\\u0000-\u001f\u007f-\u009f]+)*/?$' }
+        access_log_retain_hours: { type: integer, minimum: 1, maximum: 720 }
+    ResourceStream:
+      type: object
+      additionalProperties: false
+      required: [custom_port_not_allow, related_config_min_limit, related_config_max_times_limit, acl_max_limit]
+      properties:
+        custom_port_not_allow: { $ref: '#/components/schemas/PortRanges' }
+        related_config_min_limit: { type: integer, minimum: 1, maximum: 100000 }
+        related_config_max_times_limit: { type: integer, minimum: 1, maximum: 100 }
+        acl_max_limit: { type: integer, minimum: 1, maximum: 100000 }
+    ResourceSiteStream:
+      type: object
+      additionalProperties: false
+      required: [custom_port_not_allow, custom_port_allow]
+      properties:
+        custom_port_not_allow: { $ref: '#/components/schemas/PortRanges' }
+        custom_port_allow: { $ref: '#/components/schemas/PortRanges' }
+    PortRanges:
+      type: array
+      maxItems: 128
+      items: { $ref: '#/components/schemas/PortRange' }
+    PortRange:
+      type: object
+      additionalProperties: false
+      required: [from, to]
+      properties:
+        from: { type: integer, minimum: 1, maximum: 65535 }
+        to: { type: integer, minimum: 1, maximum: 65535 }
+    ScopedResourceOverride:
+      type: object
+      additionalProperties: false
+      required: [id, scope, scope_id, values]
+      properties:
+        id: { $ref: '#/components/schemas/ShortConfigurationID' }
+        scope: { type: string, const: region }
+        scope_id: { type: string, minLength: 1, maxLength: 256 }
+        values: { $ref: '#/components/schemas/ResourceOverride' }
+    ResourceOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        site: { $ref: '#/components/schemas/ResourceSiteOverride' }
+        stream: { $ref: '#/components/schemas/ResourceStreamOverride' }
+        site_stream: { $ref: '#/components/schemas/ResourceSiteStreamOverride' }
+    ResourceSiteOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        black_ip_limit: { type: integer, minimum: 1, maximum: 1000000 }
+        white_ip_limit: { type: integer, minimum: 1, maximum: 1000000 }
+        listen_default_http_80: { type: boolean }
+    ResourceStreamOverride:
+      type: object
+      additionalProperties: false
+      required: [custom_port_not_allow]
+      properties:
+        custom_port_not_allow: { $ref: '#/components/schemas/PortRanges' }
+    ResourceSiteStreamOverride:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        custom_port_not_allow: { $ref: '#/components/schemas/PortRanges' }
+        custom_port_allow: { $ref: '#/components/schemas/PortRanges' }
+    AccessLogFieldsWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/AccessLogFields'
+    AccessLogFields:
+      type: object
+      additionalProperties: false
+      description: >-
+        访问日志记录的可选字段（libs/edgeconfig AccessLogFieldCatalog）。基础字段（时间、网站、域名、路径、状态码、方法、协议、
+        字节数、耗时、客户端 IP、缓存状态）始终记录，不在此列。请求头/响应头类字段由节点按勾选采集（并入每个网站的采集白名单，
+        不依赖网站采集策略）；其余字段未勾选时主控入库前置空，ClickHouse 不存。是否拦截页（block_page）未勾选时入库前
+        blocked 置 false，拦截页的流量计入套餐流量。保存后按目录顺序规范化。从未保存时为
+        [client_family, client_geo, referer, user_agent, content_type, origin_timing, block_page, ja4]。
+      required: [fields]
+      properties:
+        fields:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum: [client_family, client_geo, referer, user_agent, accept_language, content_type, content_encoding,
+              origin_timing, upstream_addr, cache_control, x_forwarded_for, x_real_ip, block_page, ja4]
+    DDoSProtectionWriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value:
+          $ref: '#/components/schemas/DDoSProtection'
+    DDoSProtection:
+      type: object
+      additionalProperties: false
+      description: >-
+        节点级内核连接防护（nftables，作用于节点实际监听的全部 TCP 端口，网站与四层转发一致）。
+        计数单位为客户端：IPv4 地址或 IPv6 /64。字段为 0 表示关闭；全部关闭时节点不安装防护表。
+        节点自身地址（全部节点的主 IP/副 IP）自动豁免，不需要列入 allow_networks。
+      required: [max_connections_per_ip, new_connections_per_second, new_connections_per_minute,
+        rate_ban_seconds, max_connections_per_port, allow_networks, cc_kernel_ban]
+      properties:
+        max_connections_per_ip: { type: integer, minimum: 0, maximum: 1000000, description: 单客户端并发连接上限 }
+        new_connections_per_second: { type: integer, minimum: 0, maximum: 1000000, description: 单客户端每秒新建连接上限 }
+        new_connections_per_minute: { type: integer, minimum: 0, maximum: 60000000, description: 单客户端每分钟新建连接上限 }
+        rate_ban_seconds:
+          type: integer
+          minimum: 0
+          maximum: 604800
+          description: 超过新建速率后内核封禁秒数；非 0 时至少要开一个新建速率限制
+        max_connections_per_port: { type: integer, minimum: 0, maximum: 10000000, description: 单端口总并发连接上限 }
+        empty_connection:
+          type: object
+          additionalProperties: false
+          description: 空连接检测：连接建立 idle_seconds 秒仍未收到客户端任何字节即为空连接；窗口内达到 threshold 次封禁并断开其空连接
+          required: [idle_seconds, threshold, window_seconds, ban_seconds]
+          properties:
+            idle_seconds: { type: integer, minimum: 5, maximum: 600 }
+            threshold: { type: integer, minimum: 3, maximum: 10000 }
+            window_seconds: { type: integer, minimum: 10, maximum: 3600 }
+            ban_seconds: { type: integer, minimum: 1, maximum: 604800 }
+        allow_networks:
+          type: array
+          maxItems: 256
+          items: { type: string, description: IPv4/IPv6 地址或 CIDR；保存后规范为网段 }
+        cc_kernel_ban:
+          type: string
+          enum: [off, exclusive_ports, site_ports]
+          description: >-
+            CC 临时封禁（按客户端地址计数的规则）是否同步到内核：off 只在 OpenResty；exclusive_ports 只封该站点独占的端口；
+            site_ports 封该站点全部端口（共享端口上同时影响同端口其他站点）。
+        tcp_flag_filter:
+          type: boolean
+          const: true
+          description: >-
+            TCP 异形包过滤总开关，只作用于受保护端口（回环不过滤）；缺省为关。开启时必须带 tcp_flag_types。
+            从未保存过本分类时，平台默认开启并过滤 null/xmas/syn_fin/syn_rst，且 drop_invalid 开启。
+        tcp_flag_types:
+          type: array
+          minItems: 1
+          maxItems: 6
+          uniqueItems: true
+          description: >-
+            过滤类型，按 null, xmas, syn_fin, syn_rst, fin, all 的顺序规范化；总开关关闭时仍保留（页面恢复用），不生效。
+            null=无标志；xmas=恰为 FIN+PSH+URG；syn_fin/syn_rst=两者同时置位；fin=恰为 FIN（无 ACK）且不属于已建立连接；
+            all=六个标志全置。fin 与 all 默认关闭：正常关闭连接会发 FIN（带 ACK，不会命中），但个别协议栈与探测会单独发 FIN。
+          items: { type: string, enum: ['null', xmas, syn_fin, syn_rst, fin, all] }
+        drop_invalid:
+          type: boolean
+          const: true
+          description: 丢弃 conntrack 状态为 INVALID 的报文（受保护端口）；回环、全部节点地址与 allow_networks（健康检查来源）豁免。缺省为关。
+    NodeMonitoringConfiguration:
+      type: object
+      additionalProperties: false
+      required: [port_mode, probe_interval_ms, probe_timeout_ms, failure_threshold,
+        recovery_threshold, failure_debounce_ms, recovery_debounce_ms, recovery_notification_enabled]
+      properties:
+        port_mode: { type: string, enum: [default, custom] }
+        custom_port: { type: integer, minimum: 1, maximum: 65535 }
+        monitor_enabled: { type: boolean }
+        protocol: { type: string, enum: [http, tcp, ping] }
+        monitor_port: { type: integer, minimum: 1, maximum: 65535 }
+        monitor_groups:
+          type: array
+          minItems: 1
+          maxItems: 5
+          uniqueItems: true
+          items: { type: string, enum: [domestic, telecom, unicom, mobile, overseas] }
+        monitor_action: { type: string, enum: [none, pause] }
+        failure_ratio: { type: integer, minimum: 1, maximum: 100 }
+        bandwidth_over_limit: { type: integer, minimum: 1, maximum: 20 }
+        probe_interval_ms: { type: integer, minimum: 1000, maximum: 300000 }
+        probe_timeout_ms: { type: integer, minimum: 100, maximum: 60000 }
+        failure_threshold: { type: integer, minimum: 1, maximum: 20 }
+        recovery_threshold: { type: integer, minimum: 1, maximum: 20 }
+        failure_debounce_ms: { type: integer, minimum: 0, maximum: 3600000 }
+        recovery_debounce_ms: { type: integer, minimum: 0, maximum: 3600000 }
+        recovery_notification_enabled: { type: boolean }
+      oneOf:
+        - properties:
+            port_mode: { const: default }
+          not:
+            required: [custom_port]
+        - required: [custom_port]
+          properties:
+            port_mode: { const: custom }
+    ErrorPages:
+      type: array
+      maxItems: 13
+      items:
+        $ref: '#/components/schemas/ErrorPageMetadata'
+    ErrorPageMetadata:
+      type: object
+      additionalProperties: false
+      required: [status_code, mime_type, size_bytes, sha256, storage_object_key]
+      properties:
+        status_code: { type: integer, enum: [400, 401, 403, 404, 405, 408, 413, 429, 500, 501, 502, 503, 504] }
+        mime_type: { type: string, enum: [application/json, text/html, text/plain] }
+        size_bytes: { type: integer, format: int64, minimum: 1, maximum: 1048576 }
+        sha256: { $ref: '#/components/schemas/SHA256' }
+        storage_object_key: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$' }
+    SecretIntentValue:
+      type: object
+      additionalProperties: false
+      required: [error_page_storage]
+      properties:
+        error_page_storage:
+          oneOf:
+            - $ref: '#/components/schemas/SecretReplaceIntent'
+            - $ref: '#/components/schemas/SecretClearIntent'
+    SecretReplaceIntent:
+      type: object
+      additionalProperties: false
+      required: [intent, replacement]
+      properties:
+        intent: { type: string, const: replace }
+        replacement:
+          $ref: '#/components/schemas/SecretEnvelopeReference'
+    SecretClearIntent:
+      type: object
+      additionalProperties: false
+      required: [intent]
+      properties:
+        intent: { type: string, const: clear }
+    SecretEnvelopeReference:
+      type: object
+      additionalProperties: false
+      required: [provider, reference, key_id, algorithm, ciphertext_sha256]
+      properties:
+        provider: { type: string, enum: [vault, kms-envelope] }
+        reference: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$' }
+        key_id: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$' }
+        algorithm: { type: string, enum: [aes-256-gcm, chacha20-poly1305, kms-managed] }
+        ciphertext_sha256: { $ref: '#/components/schemas/SHA256' }
+    MaskedSensitiveReferences:
+      type: object
+      additionalProperties: false
+      properties:
+        error_page_storage:
+          $ref: '#/components/schemas/MaskedSecretEnvelopeReference'
+    MaskedSecretEnvelopeReference:
+      type: object
+      additionalProperties: false
+      required: [provider, reference, key_id, algorithm, ciphertext_sha256, masked]
+      properties:
+        provider: { type: string, enum: [vault, kms-envelope] }
+        reference: { type: string, pattern: '^\*\*\*\*.{0,4}$' }
+        key_id: { type: string }
+        algorithm: { type: string, enum: [aes-256-gcm, chacha20-poly1305, kms-managed] }
+        ciphertext_sha256: { $ref: '#/components/schemas/SHA256' }
+        masked: { type: boolean, const: true }
+    SHA256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            request_id: { type: string }
+  responses:
+    BadRequest:
+      description: 分类、header、JSON key、类型或范围无效。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Bearer session 缺失、无效、撤销或包含不可信 principal header。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: 正式 session 当前不具备 platform shape 或所需权限。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    NotFound:
+      description: 分类或请求的 system-configuration revision 不存在；首次安装尚无持久化 revision 时，分类读取返回 bootstrap revision 0。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Conflict:
+      description: head revision CAS 失败、Idempotency-Key 异载荷重用，或激活/预检确认的待生效分类与服务端不一致（system_configuration_pending_categories_changed）。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    EntitlementDenied:
+      description: 变更是扩张，但本地已验证 entitlement 未授权或不可用。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    PublicationFailed:
+      description: Edge 编译、签名、授权、目标或事务持久化失败；原 active/LKG 保持不变。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    InternalError:
+      description: 安全映射后的内部失败；不返回数据库或 secret 细节。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }

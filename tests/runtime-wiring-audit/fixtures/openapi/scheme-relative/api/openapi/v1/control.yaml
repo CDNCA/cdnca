@@ -1,0 +1,5 @@
+openapi: 3.1.0
+info: { title: Non-local reference fixture, version: 1.0.0 }
+paths:
+  /v1/external:
+    $ref: '//host.example/spec.yaml#/paths/~1v1~1external'

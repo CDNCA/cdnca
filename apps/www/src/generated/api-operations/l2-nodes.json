@@ -1,0 +1,435 @@
+{
+ "id": "l2-nodes",
+ "prefix": "/v1/l2-nodes",
+ "operations": [
+  {
+   "operation_id": "listL2Nodes",
+   "method": "GET",
+   "path": "/v1/l2-nodes",
+   "summary": "查询 L2 节点成员或可添加节点",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "未指定 available 或值为空时，按 sort、display_id 返回该配置的成员（不存在的配置得到空列表）；available=true 时，配置必须存在，返回本作用域未退役且尚未加入任何 L2 配置的节点，按 display_id 排序。两种模式均不分页；available=false 不合法。",
+   "permissions": [
+    "node_scheduling.read"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "config_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "只允许一个非零配置 UUID。"
+    },
+    {
+     "name": "available",
+     "in": "query",
+     "type": "string: true / ",
+     "description": "最多出现一次；仅 true 或空字符串合法。"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "available=true 返回候选节点列表，否则返回成员列表；无数据时 items 为空数组。"
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "addL2Nodes",
+   "method": "POST",
+   "path": "/v1/l2-nodes",
+   "summary": "批量添加 L2 节点成员",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "原子添加 1 至 512 个不重复节点；配置、可选条件和未退役节点必须属于自身作用域。已加入任一 L2 配置的节点冲突返回 409。每个成员初始 revision=1、enabled=true、weight=100，node_ids 排序后 sort 从 0 按 10 递增；不返回 ETag 或 Location。写入受实时管理权限和幂等键约束，If-Match 必须为 \"0\"。",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Must be the single exact quoted value \"0\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "config_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "node_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "condition_id",
+      "type": "string(uuid) | null",
+      "description": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "返回创建的成员列表或已完成请求的原结果。",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<L2Node>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateL2Node",
+   "method": "PUT",
+   "path": "/v1/l2-nodes/{id}",
+   "summary": "替换 L2 节点成员设置",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "id 为成员 UUID，不是 node_id。完整替换条件、启用状态、权重和排序并递增修订；省略或传 null 的 condition_id 清除条件。enabled、weight、sort 不可省略或为 null；写入受自身作用域、实时管理权限、修订和幂等键约束。此单项路径不支持 GET。",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "非零 L2 节点成员 UUID；不同于节点 node_id。"
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single quoted positive decimal current revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "condition_id",
+      "type": "string(uuid) | null",
+      "description": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "weight",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "sort",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "返回更新后的成员对象或已完成请求的原结果。",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "condition_id",
+       "type": "string(uuid) | null",
+       "required": true,
+       "description": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
+      },
+      {
+       "name": "condition_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ip_address",
+       "type": "string",
+       "required": true,
+       "description": "优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。"
+      },
+      {
+       "name": "admin_state",
+       "type": "string: pending / active / draining / disabled / retired",
+       "required": true
+      },
+      {
+       "name": "online_status",
+       "type": "string: online / offline / unknown",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "weight",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "sort",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "412",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteL2Node",
+   "method": "DELETE",
+   "path": "/v1/l2-nodes/{id}",
+   "summary": "删除 L2 节点成员",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "id 为成员 UUID，只软删除成员关系，不删除节点。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "非零 L2 节点成员 UUID；不同于节点 node_id。"
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single quoted positive decimal current revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "软删除完成或已完成请求的结果被重放。"
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "412",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  }
+ ]
+}

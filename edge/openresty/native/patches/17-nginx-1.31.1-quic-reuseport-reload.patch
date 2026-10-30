@@ -1,0 +1,2709 @@
+From: CDNCA edge runtime maintainers
+Subject: [PATCH] QUIC: route new and established connections across reload
+
+Backport the complete eBPF QUIC dispatch model to the OpenResty-pinned Nginx
+1.31.1 source.  Each reuseport group keeps separate sockets for accepting new
+connections and serving established connections.  New Initial packets route
+only to the active master generation while connection-ID entries keep existing
+connections on their draining workers.
+
+This replaces the insufficient listener-only workaround: closing non-owning
+socket copies cannot prevent the kernel from hashing a fresh Initial packet to
+the old worker socket that must remain open for established connections.
+
+Upstream issue: https://github.com/nginx/nginx/issues/425
+Upstream Nginx proposal: https://github.com/nginx/nginx/pull/1219
+Reference implementation:
+https://github.com/webserver-llc/angie/commit/4b527f5087923c7da54c301648840221fa1d727d
+
+Included Nginx proposal commits are limited to the reload dispatcher, inherited
+map error handling, removal of a generated build artifact, and IPv6 worker
+socket handling.  Unrelated QUIC payload-size changes are intentionally omitted.
+
+CDNCA 1.31.1 port: preserve newer congestion, encryption-level, OpenSSL,
+and address-validation logic; adapt only context and BPF extern declarations.
+The embedded dispatcher instructions are byte-identical to the prior approved
+reload patch. Keep the OpenResty socket-leak-check conditional intact.
+
+diff --git a/auto/modules b/auto/modules
+index 1a5e4212..b57127a2 100644
+--- a/auto/modules
++++ b/auto/modules
+@@ -1359,11 +1359,11 @@ if [ $USE_OPENSSL_QUIC = YES ]; then
+ 
+     . auto/module
+ 
+-    if [ $QUIC_BPF = YES -a $SO_COOKIE_FOUND = YES ]; then
++    if [ $QUIC_BPF = YES ]; then
+         ngx_module_type=CORE
+         ngx_module_name=ngx_quic_bpf_module
+         ngx_module_incs=
+-        ngx_module_deps=
++        ngx_module_deps=src/event/quic/ngx_event_quic_bpf.h
+         ngx_module_srcs="src/event/quic/ngx_event_quic_bpf.c \
+                          src/event/quic/ngx_event_quic_bpf_code.c"
+         ngx_module_libs=
+diff --git a/auto/options b/auto/options
+index 6a6e990a..96871af4 100644
+--- a/auto/options
++++ b/auto/options
+@@ -171,8 +171,6 @@ USE_GEOIP=NO
+ NGX_GOOGLE_PERFTOOLS=NO
+ NGX_CPP_TEST=NO
+ 
+-SO_COOKIE_FOUND=NO
+-
+ NGX_LIBATOMIC=NO
+ 
+ NGX_CPU_CACHE_LINE=
+diff --git a/auto/os/linux b/auto/os/linux
+index bc0556b3..2fe25497 100644
+--- a/auto/os/linux
++++ b/auto/os/linux
+@@ -236,9 +236,9 @@ fi
+ ngx_include="sys/vfs.h";     . auto/include
+ 
+ 
+-# BPF sockhash
++# BPF maps
+ 
+-ngx_feature="BPF sockhash"
++ngx_feature="BPF maps"
+ ngx_feature_name="NGX_HAVE_BPF"
+ ngx_feature_run=no
+ ngx_feature_incs="#include <linux/bpf.h>
+@@ -249,7 +249,18 @@ ngx_feature_test="union bpf_attr attr = { 0 };
+ 
+                   attr.map_flags = 0;
+                   attr.map_type = BPF_MAP_TYPE_SOCKHASH;
++                  syscall(__NR_bpf, 0, &attr, 0);
+ 
++                  attr.map_flags = 0;
++                  attr.map_type = BPF_MAP_TYPE_SOCKMAP;
++                  syscall(__NR_bpf, 0, &attr, 0);
++
++                  attr.map_flags = 0;
++                  attr.map_type = BPF_MAP_TYPE_ARRAY_OF_MAPS;
++                  syscall(__NR_bpf, 0, &attr, 0);
++
++                  attr.map_flags = 0;
++                  attr.map_type = BPF_MAP_TYPE_ARRAY;
+                   syscall(__NR_bpf, 0, &attr, 0);"
+ . auto/feature
+ 
+@@ -263,23 +274,6 @@ if [ $ngx_found = yes ]; then
+ fi
+ 
+ 
+-ngx_feature="SO_COOKIE"
+-ngx_feature_name="NGX_HAVE_SO_COOKIE"
+-ngx_feature_run=no
+-ngx_feature_incs="#include <sys/socket.h>
+-                  $NGX_INCLUDE_INTTYPES_H"
+-ngx_feature_path=
+-ngx_feature_libs=
+-ngx_feature_test="socklen_t optlen = sizeof(uint64_t);
+-                  uint64_t cookie;
+-                  getsockopt(0, SOL_SOCKET, SO_COOKIE, &cookie, &optlen)"
+-. auto/feature
+-
+-if [ $ngx_found = yes ]; then
+-    SO_COOKIE_FOUND=YES
+-fi
+-
+-
+ # UDP segmentation offloading
+ 
+ ngx_feature="UDP_SEGMENT"
+diff --git a/src/core/ngx_bpf.c b/src/core/ngx_bpf.c
+index 363a02c7..fb5f83ae 100644
+--- a/src/core/ngx_bpf.c
++++ b/src/core/ngx_bpf.c
+@@ -98,6 +98,33 @@ ngx_bpf_map_create(ngx_log_t *log, enum bpf_map_type type, int key_size,
+ }
+ 
+ 
++int
++ngx_bpf_map_create_outer(ngx_log_t *log, enum bpf_map_type type,
++    int max_entries, uint32_t map_flags, int template_fd)
++{
++    int             fd;
++    union bpf_attr  attr;
++
++    ngx_memzero(&attr, sizeof(union bpf_attr));
++
++    attr.map_type = type;
++    attr.key_size = sizeof(uint32_t);
++    attr.value_size = sizeof(uint32_t);
++    attr.max_entries = max_entries;
++    attr.map_flags = map_flags;
++    attr.inner_map_fd = template_fd;
++
++    fd = ngx_bpf(BPF_MAP_CREATE, &attr, sizeof(attr));
++    if (fd < 0) {
++        ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
++                      "failed to create outer BPF map");
++        return NGX_ERROR;
++    }
++
++    return fd;
++}
++
++
+ int
+ ngx_bpf_map_update(int fd, const void *key, const void *value, uint64_t flags)
+ {
+diff --git a/src/core/ngx_bpf.h b/src/core/ngx_bpf.h
+index f62a36e1..ae1ce113 100644
+--- a/src/core/ngx_bpf.h
++++ b/src/core/ngx_bpf.h
+@@ -35,6 +35,8 @@ int ngx_bpf_load_program(ngx_log_t *log, ngx_bpf_program_t *program);
+ 
+ int ngx_bpf_map_create(ngx_log_t *log, enum bpf_map_type type, int key_size,
+     int value_size, int max_entries, uint32_t map_flags);
++int ngx_bpf_map_create_outer(ngx_log_t *log, enum bpf_map_type type,
++    int max_entries, uint32_t map_flags, int template_fd);
+ int ngx_bpf_map_update(int fd, const void *key, const void *value,
+     uint64_t flags);
+ int ngx_bpf_map_delete(int fd, const void *key);
+diff --git a/src/core/ngx_connection.c b/src/core/ngx_connection.c
+index 75809d9a..8a009a84 100644
+--- a/src/core/ngx_connection.c
++++ b/src/core/ngx_connection.c
+@@ -8,6 +8,7 @@
+ #include <ngx_config.h>
+ #include <ngx_core.h>
+ #include <ngx_event.h>
++#include <ngx_event_quic.h>
+ 
+ 
+ ngx_os_io_t  ngx_io;
+@@ -1111,7 +1112,34 @@ ngx_close_listening_sockets(ngx_cycle_t *cycle)
+ 
+ #if (NGX_QUIC)
+         if (ls[i].quic) {
+-            continue;
++            if (!ngx_quic_bpf_enabled(cycle)) {
++#if (NGX_HAVE_REUSEPORT)
++                /*
++                 * during graceful shutdown, close QUIC reuseport sockets
++                 * not owned by this worker to remove them from the reuseport
++                 * group, preventing new connections from being routed to
++                 * shutting-down workers by the kernel or BPF program
++                 */
++                if (ls[i].reuseport
++                    && ngx_process == NGX_PROCESS_WORKER
++                    && ls[i].worker != ngx_worker)
++                {
++                    ngx_log_debug2(NGX_LOG_DEBUG_CORE, cycle->log, 0,
++                                   "quic close reuseport %V #%d",
++                                   &ls[i].addr_text, ls[i].fd);
++
++                    if (ngx_close_socket(ls[i].fd) == -1) {
++                        ngx_log_error(NGX_LOG_EMERG, cycle->log,
++                                      ngx_socket_errno,
++                                      ngx_close_socket_n " %V failed",
++                                      &ls[i].addr_text);
++                    }
++
++                    ls[i].fd = (ngx_socket_t) -1;
++                }
++#endif
++                continue;
++            }
+         }
+ #endif
+ 
+diff --git a/src/event/ngx_event.h b/src/event/ngx_event.h
+--- a/src/event/ngx_event.h
++++ b/src/event/ngx_event.h
+@@ -76,6 +76,7 @@ struct ngx_event_s {
+ #if (HAVE_SOCKET_CLOEXEC_PATCH)
+     unsigned         skip_socket_leak_check:1;
+ #endif
++    unsigned         quic:1;
+ 
+     unsigned         cancelable:1;
+ 
+diff --git a/src/event/quic/bpf/makefile b/src/event/quic/bpf/makefile
+index b4d758f3..59d4e562 100644
+--- a/src/event/quic/bpf/makefile
++++ b/src/event/quic/bpf/makefile
+@@ -1,4 +1,4 @@
+-CFLAGS=-O2 -Wall
++CFLAGS=-O2 -Wall $(MAKE_CFLAGS)
+ 
+ LICENSE=BSD
+ 
+diff --git a/src/event/quic/bpf/ngx_quic_reuseport_helper.c b/src/event/quic/bpf/ngx_quic_reuseport_helper.c
+index 999e7607..e769ae95 100644
+--- a/src/event/quic/bpf/ngx_quic_reuseport_helper.c
++++ b/src/event/quic/bpf/ngx_quic_reuseport_helper.c
+@@ -1,11 +1,12 @@
++
++/*
++ * Copyright (C) Nginx, Inc.
++ */
++
+ #include <errno.h>
+ #include <linux/string.h>
+ #include <linux/udp.h>
+ #include <linux/bpf.h>
+-/*
+- * the bpf_helpers.h is not included into linux-headers, only available
+- * with kernel sources in "tools/lib/bpf/bpf_helpers.h" or in libbpf.
+- */
+ #include <bpf/bpf_helpers.h>
+ 
+ 
+@@ -43,98 +44,191 @@ char _license[] SEC("license") = LICENSE;
+ #define NGX_QUIC_PKT_LONG        0x80  /* header form */
+ #define NGX_QUIC_SERVER_CID_LEN  20
+ 
+-
+-#define advance_data(nbytes)                                                  \
+-    offset += nbytes;                                                         \
+-    if (start + offset > end) {                                               \
+-        debugmsg("cannot read %ld bytes at offset %ld", nbytes, offset);      \
+-        goto failed;                                                          \
+-    }                                                                         \
+-    data = start + offset - 1;
++#define NGX_QUIC_BPF_NMASTERS_IDX 2
++#define NGX_QUIC_BPF_ACT_MASTER_IDX 3
+ 
+ 
+-#define ngx_quic_parse_uint64(p)                                              \
+-    (((__u64)(p)[0] << 56) |                                                  \
+-     ((__u64)(p)[1] << 48) |                                                  \
+-     ((__u64)(p)[2] << 40) |                                                  \
+-     ((__u64)(p)[3] << 32) |                                                  \
+-     ((__u64)(p)[4] << 24) |                                                  \
+-     ((__u64)(p)[5] << 16) |                                                  \
+-     ((__u64)(p)[6] << 8)  |                                                  \
+-     ((__u64)(p)[7]))
+-
+-/*
+- * actual map object is created by the "bpf" system call,
+- * all pointers to this variable are replaced by the bpf loader
+- */
+-extern int ngx_quic_sockmap;
++extern int ngx_quic_master_state;
++extern int ngx_quic_listen_maps;
++extern int ngx_quic_connections;
+ 
+ 
+ SEC(PROGNAME)
+ int ngx_quic_select_socket_by_dcid(struct sk_reuseport_md *ctx)
+ {
+-    int             rc;
+-    __u64           key;
++    int             rc, flags;
++    long            err;
++    __u32           idx, *val, *lmap_ptr, nwrk, ns, active;
+     size_t          len, offset;
+-    unsigned char  *start, *end, *data, *dcid;
++    unsigned char  *start, *end, dcid[NGX_QUIC_SERVER_CID_LEN];
+ 
++    /* direct packet access pointers, [s..e] may be less than ctx->len */
+     start = ctx->data;
+-    end = (unsigned char *) ctx->data_end;
+-    offset = 0;
+-
+-    advance_data(sizeof(struct udphdr)); /* data at UDP header */
+-    advance_data(1); /* data at QUIC flags */
++    end = ctx->data_end;
+ 
+-    if (data[0] & NGX_QUIC_PKT_LONG) {
++    offset = sizeof(struct udphdr) + 1; /* UDP header + QUIC flags */
+ 
+-        advance_data(4); /* data at QUIC version */
+-        advance_data(1); /* data at DCID len */
++    if (start + offset > end) {
+ 
+-        len = data[0];   /* read DCID length */
++        /* direct access is not guaranteed, we may need to load data */
++        if (offset >= ctx->len) {
++            goto bad_dgram;
++        }
+ 
+-        if (len < 8) {
+-            /* it's useless to search for key in such short DCID */
+-            return SK_PASS;
++        err = bpf_skb_load_bytes(ctx, offset - 1, dcid, 1);
++        if (err != 0) {
++            goto bad_dgram;
+         }
+ 
++        flags = dcid[0];
++
+     } else {
+-        len = NGX_QUIC_SERVER_CID_LEN;
++        flags = start[offset - 1];
+     }
+ 
+-    dcid = &data[1];
+-    advance_data(len); /* we expect the packet to have full DCID */
++    if (flags & NGX_QUIC_PKT_LONG) {
++        offset += 5; /* QUIC version + DCID len */
++        if (start + offset > end) {
++
++            if (offset >= ctx->len) {
++                goto bad_dgram;
++            }
+ 
+-    /* make verifier happy */
+-    if (dcid + sizeof(__u64) > end) {
+-        goto failed;
++            err = bpf_skb_load_bytes(ctx, offset - 1, dcid,  1);
++            if (err != 0) {
++                goto bad_dgram;
++            }
++
++            len = dcid[0];
++
++        } else {
++            len = start[offset - 1];
++        }
++
++        if (len != NGX_QUIC_SERVER_CID_LEN) {
++            goto new_conn;
++        }
+     }
+ 
+-    key = ngx_quic_parse_uint64(dcid);
++    if (start + offset + NGX_QUIC_SERVER_CID_LEN > end) {
+ 
+-    rc = bpf_sk_select_reuseport(ctx, &ngx_quic_sockmap, &key, 0);
++        if ((offset + NGX_QUIC_SERVER_CID_LEN) >= ctx->len) {
++            goto bad_dgram;
++        }
+ 
+-    switch (rc) {
+-    case 0:
+-        debugmsg("nginx quic socket selected by key 0x%llx", key);
+-        return SK_PASS;
++        err = bpf_skb_load_bytes(ctx, offset, dcid, NGX_QUIC_SERVER_CID_LEN);
++        if (err != 0) {
++            goto bad_dgram;
++        }
++
++    } else {
++        memcpy(dcid, start + offset, NGX_QUIC_SERVER_CID_LEN);
++    }
++
++    rc = bpf_sk_select_reuseport(ctx, &ngx_quic_connections, dcid, 0);
+ 
+-    /* kernel returns positive error numbers, errno.h defines positive */
+-    case -ENOENT:
+-        debugmsg("nginx quic default route for key 0x%llx", key);
+-        /* let the default reuseport logic decide which socket to choose */
++    if (rc == 0) {
++        debugmsg("nginx quic socket selected by dcid");
+         return SK_PASS;
++    }
+ 
+-    default:
+-        debugmsg("nginx quic bpf_sk_select_reuseport err: %d key 0x%llx",
+-                 rc, key);
+-        goto failed;
++    if (rc != -ENOENT) {
++        debugmsg("nginx quic bpf_sk_select_reuseport() failed:%d", rc);
++        /*
++         * we don't know which worker owns the connection
++         * - consider this packet a martian and drop
++         */
++        return SK_DROP;
+     }
+ 
+-failed:
+-    /*
+-     * SK_DROP will generate ICMP, but we may want to process "invalid" packet
+-     * in userspace quic to investigate further and finally react properly
+-     * (maybe ignore, maybe send something in response or close connection)
+-     */
+-    return SK_PASS;
++new_conn:
++
++    debugmsg("nginx quic new connection");
++
++    idx = NGX_QUIC_BPF_NMASTERS_IDX;
++
++    val = bpf_map_lookup_elem(&ngx_quic_master_state, &idx);
++    if (val == NULL) {
++        /*
++         * we expect that map always has entries at predefined indexes;
++         * map is constructed and updated before the program is attached,
++         * so something is very wrong here;
++         * drop the packet, so anyone will notice the problem and read logs
++         */
++        debugmsg("nginx quic master_state map is inconsistent");
++        return SK_DROP;
++    }
++
++    debugmsg("nginx quic master count %d", *val);
++
++    if (*val == 2) {
++        /* two masters, select randomly which to use */
++        active = (bpf_get_prandom_u32() % 2);
++
++        debugmsg("nginx quic selected randomly master #%d", active);
++
++    } else {
++        /* single master running, choose active */
++        idx = NGX_QUIC_BPF_ACT_MASTER_IDX;
++
++        val = bpf_map_lookup_elem(&ngx_quic_master_state, &idx);
++        if (val == NULL) {
++            /*
++             * shouldn't normally happen, but in case of abnormal
++             * process termination this could be left in inconsistent
++             * state;
++             * we don't know how to pass packet to proper worker,
++             * so just drop it
++             */
++            debugmsg("nginx quic master_state map state is inconsistent");
++            return SK_DROP;
++        }
++        active = *val;
++
++        debugmsg("nginx quic selected active master: #%d", active);
++    }
++
++
++    /* select the number of workers in active master */
++    val = bpf_map_lookup_elem(&ngx_quic_master_state, &active);
++    if (val == NULL) {
++        /* again, map state is inconsistent, drop the packet */
++        debugmsg("nginx quic master_state map state is inconsistent");
++        return SK_DROP;
++    }
++
++    nwrk = *val;
++    debugmsg("  nginx quic nworkers is %d", nwrk);
++
++    /* get the pointer to the inner map - with listen sockets */
++    lmap_ptr = bpf_map_lookup_elem(&ngx_quic_listen_maps, &active);
++    if (lmap_ptr == NULL) {
++        /*
++         * the active master entry does not point to valid inner map;
++         * something is very bad, drop it
++         */
++        debugmsg("nginx quic listen_maps failed");
++        return SK_DROP;
++    }
++
++    /* select the worker to use */
++    ns = ctx->hash % nwrk;
++
++    rc = bpf_sk_select_reuseport(ctx, lmap_ptr, &ns, 0);
++    if (rc == 0) {
++        debugmsg("nginx quic socket selected by hash:%d of %d", (int) ns, nwrk);
++        return SK_PASS;
++    }
++
++    /* again, our map is in inconsistent state, drop the packet */
++    debugmsg("nginx quic select_reuseport failed:%d", rc);
++
++    return SK_DROP;
++
++bad_dgram:
++
++    debugmsg("nginx quic bad datagram");
++
++    /* we cannot even parse this as QUIC - drop it */
++    return SK_DROP;
+ }
+diff --git a/src/event/quic/ngx_event_quic.c b/src/event/quic/ngx_event_quic.c
+index c03b1d00..9cef03d2 100644
+--- a/src/event/quic/ngx_event_quic.c
++++ b/src/event/quic/ngx_event_quic.c
+@@ -315,6 +315,12 @@ ngx_quic_new_connection(ngx_connection_t *c, ngx_quic_conf_t *conf,
+                       + conf->max_concurrent_streams_bidi)
+                      * conf->stream_buffer_size / 2000;
+ 
++    if (c->fd == c->listening->fd
++        && ngx_quic_bpf_enabled((ngx_cycle_t *) ngx_cycle))
++    {
++        qc->listen_bound = 1;
++    }
++
+     if (pkt->validated && pkt->retried) {
+         qc->tp.retry_scid.len = pkt->dcid.len;
+         qc->tp.retry_scid.data = ngx_pstrdup(c->pool, &pkt->dcid);
+@@ -424,6 +430,15 @@ ngx_quic_input_handler(ngx_event_t *rev)
+             return;
+         }
+ 
++        if (qc->listen_bound) {
++            c->fd = (ngx_socket_t) -1;
++
++            qc->error = NGX_QUIC_ERR_NO_ERROR;
++            qc->error_reason = "graceful shutdown";
++            ngx_quic_close_connection(c, NGX_ERROR);
++            return;
++        }
++
+         if (!qc->closing && qc->conf->shutdown) {
+             qc->conf->shutdown(c);
+         }
+@@ -924,7 +939,9 @@ ngx_quic_handle_packet(ngx_connection_t *c, ngx_quic_conf_t *conf,
+         pkt->odcid = pkt->dcid;
+     }
+ 
+-    if (ngx_terminate || ngx_exiting) {
++    if ((ngx_terminate || ngx_exiting)
++        && !ngx_quic_bpf_enabled((ngx_cycle_t *) ngx_cycle))
++    {
+         if (conf->retry) {
+             return ngx_quic_send_retry(c, conf, pkt);
+         }
+diff --git a/src/event/quic/ngx_event_quic.h b/src/event/quic/ngx_event_quic.h
+index 15201671..a4b3eedf 100644
+--- a/src/event/quic/ngx_event_quic.h
++++ b/src/event/quic/ngx_event_quic.h
+@@ -126,5 +126,11 @@ ngx_int_t ngx_quic_get_packet_dcid(ngx_log_t *log, u_char *data, size_t len,
+ ngx_int_t ngx_quic_derive_key(ngx_log_t *log, const char *label,
+     ngx_str_t *secret, ngx_str_t *salt, u_char *out, size_t len);
+ void ngx_quic_input_handler(ngx_event_t *rev);
+ 
++#if (NGX_QUIC_BPF)
++ngx_uint_t ngx_quic_bpf_enabled(ngx_cycle_t *cycle);
++#else
++#define ngx_quic_bpf_enabled(c)  0
++#endif
++
+ #endif /* _NGX_EVENT_QUIC_H_INCLUDED_ */
+diff --git a/src/event/quic/ngx_event_quic_bpf.c b/src/event/quic/ngx_event_quic_bpf.c
+index ab024ad5..219ffe17 100644
+--- a/src/event/quic/ngx_event_quic_bpf.c
++++ b/src/event/quic/ngx_event_quic_bpf.c
+@@ -6,12 +6,17 @@
+ 
+ #include <ngx_config.h>
+ #include <ngx_core.h>
++#include <ngx_event.h>
++#include <ngx_event_quic_connection.h>
+ 
+ 
+ #define NGX_QUIC_BPF_VARNAME  "NGINX_BPF_MAPS"
+ #define NGX_QUIC_BPF_VARSEP    ';'
+ #define NGX_QUIC_BPF_ADDRSEP   '#'
++#define NGX_QUIC_BPF_GSEP      '|'
+ 
++#define NGX_QUIC_BPF_NMASTERS_IDX 2
++#define NGX_QUIC_BPF_ACT_MASTER_IDX 3
+ 
+ #define ngx_quic_bpf_get_conf(cycle)                                          \
+     (ngx_quic_bpf_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_quic_bpf_module)
+@@ -24,41 +29,85 @@
+     (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module)
+ 
+ 
++typedef enum {
++    NGX_QUIC_BPF_GROUP_INIT,
++    NGX_QUIC_BPF_GROUP_RELOAD,
++    NGX_QUIC_BPF_GROUP_INHERIT,
++} ngx_quic_bpf_group_mode_t;
++
++
++/* per reuseport group of socket */
+ typedef struct {
+     ngx_queue_t           queue;
+-    int                   map_fd;
++
++    int                   listen_map;
++    int                   listen_map_array;
++    int                   connection_map;
+ 
+     struct sockaddr      *sockaddr;
+     socklen_t             socklen;
+-    ngx_uint_t            unused;     /* unsigned  unused:1; */
+-} ngx_quic_sock_group_t;
++
++    ngx_array_t           listening; /* of ngx_quic_bpf_listening_t */
++
++    ngx_uint_t            nlisten;
++
++#if (NGX_DEBUG)
++    ngx_str_t             name;
++#endif
++} ngx_quic_bpf_group_t;
++
++
++typedef struct {
++    ngx_socket_t          fd;
++    ngx_listening_t      *listening;
++    ngx_connection_t     *connection;
++} ngx_quic_bpf_listening_t;
+ 
+ 
+ typedef struct {
+     ngx_flag_t            enabled;
+-    ngx_uint_t            map_size;
+-    ngx_queue_t           groups;     /* of ngx_quic_sock_group_t */
++    ngx_uint_t            max_connection_ids;
++    ngx_queue_t           groups;
++    int                   master_state_map;
++    u_char               *env;
++    ngx_uint_t            master_index; /* unsigned master_index:1 */
+ } ngx_quic_bpf_conf_t;
+ 
+ 
+ static void *ngx_quic_bpf_create_conf(ngx_cycle_t *cycle);
++static char *ngx_quic_bpf_init_conf(ngx_cycle_t *cycle, void *conf);
+ static ngx_int_t ngx_quic_bpf_module_init(ngx_cycle_t *cycle);
+ 
+ static void ngx_quic_bpf_cleanup(void *data);
+-static ngx_inline void ngx_quic_bpf_close(ngx_log_t *log, int fd,
+-    const char *name);
++static ngx_inline void ngx_quic_bpf_close(ngx_log_t *log, int fd);
+ 
+-static ngx_quic_sock_group_t *ngx_quic_bpf_find_group(ngx_quic_bpf_conf_t *bcf,
+-    ngx_listening_t *ls);
+-static ngx_quic_sock_group_t *ngx_quic_bpf_alloc_group(ngx_cycle_t *cycle,
+-    struct sockaddr *sa, socklen_t socklen);
+-static ngx_quic_sock_group_t *ngx_quic_bpf_create_group(ngx_cycle_t *cycle,
++static ngx_quic_bpf_group_t *ngx_quic_bpf_find_group(ngx_cycle_t *cycle,
+     ngx_listening_t *ls);
+-static ngx_quic_sock_group_t *ngx_quic_bpf_get_group(ngx_cycle_t *cycle,
++static ngx_quic_bpf_group_t *ngx_quic_bpf_create_group(ngx_cycle_t *cycle,
++    ngx_quic_bpf_group_mode_t mode, struct sockaddr *sa, socklen_t socklen,
++    int conn_map, int lma);
++static ngx_inline void ngx_quic_bpf_group_delete(ngx_cycle_t *cycle,
++    ngx_quic_bpf_group_t *grp);
++static ngx_int_t ngx_quic_bpf_group_attach_prog(ngx_cycle_t *cycle,
++    ngx_quic_bpf_group_t *grp, int fd);
++static ngx_quic_bpf_group_t *ngx_quic_bpf_get_group(ngx_cycle_t *cycle,
+     ngx_listening_t *ls);
+ static ngx_int_t ngx_quic_bpf_group_add_socket(ngx_cycle_t *cycle,
+     ngx_listening_t *ls);
+-static uint64_t ngx_quic_bpf_socket_key(ngx_fd_t fd, ngx_log_t *log);
++static ngx_int_t ngx_quic_bpf_add_worker_socket(ngx_cycle_t *cycle,
++    ngx_quic_bpf_group_t *grp, ngx_listening_t *ls);
++
++static int ngx_quic_bpf_create_map(ngx_cycle_t *cycle, enum bpf_map_type type,
++    int key_size, int value_size, int max_entries, uint32_t map_flags,
++    const char *name);
++static int ngx_quic_bpf_create_outer_map(ngx_cycle_t *cycle,
++    enum bpf_map_type outer_type, enum bpf_map_type inner_map_type,
++    int inner_key_size, int inner_value_size, int max_entries,
++    uint32_t map_flags, const char *name);
++
++static ngx_inline ngx_int_t ngx_quic_bpf_setup_map_fd(ngx_log_t *log, int fd);
++static ngx_inline ngx_int_t ngx_quic_bpf_map_set(ngx_log_t *log, int fd,
++    uint64_t key, uint64_t value, const char *name);
+ 
+ static ngx_int_t ngx_quic_bpf_export_maps(ngx_cycle_t *cycle);
+ static ngx_int_t ngx_quic_bpf_import_maps(ngx_cycle_t *cycle);
+@@ -82,7 +131,7 @@ static ngx_command_t  ngx_quic_bpf_commands[] = {
+ static ngx_core_module_t  ngx_quic_bpf_module_ctx = {
+     ngx_string("quic_bpf"),
+     ngx_quic_bpf_create_conf,
+-    NULL
++    ngx_quic_bpf_init_conf
+ };
+ 
+ 
+@@ -112,8 +161,15 @@ ngx_quic_bpf_create_conf(ngx_cycle_t *cycle)
+         return NULL;
+     }
+ 
++    /*
++     * set by ngx_pcalloc():
++     *
++     *     bcf->master_index = 0;
++     *     bcf->env = NULL;
++     */
++
+     bcf->enabled = NGX_CONF_UNSET;
+-    bcf->map_size = NGX_CONF_UNSET_UINT;
++    bcf->master_state_map = -1;
+ 
+     ngx_queue_init(&bcf->groups);
+ 
+@@ -121,14 +177,88 @@ ngx_quic_bpf_create_conf(ngx_cycle_t *cycle)
+ }
+ 
+ 
++static char *
++ngx_quic_bpf_init_conf(ngx_cycle_t *cycle, void *conf)
++{
++    ngx_quic_bpf_conf_t *bcf = conf;
++
++    u_char               *p;
++    size_t                len;
++    ngx_quic_bpf_conf_t  *obcf;
++
++    ngx_conf_init_value(bcf->enabled, 0);
++
++    /*
++     * preserve environment variable value early, as it may be reset by
++     * some module later, i.e. perl
++     */
++    p = (u_char *) getenv(NGX_QUIC_BPF_VARNAME);
++    if (p) {
++        len = ngx_strlen(p);
++        bcf->env = ngx_pnalloc(cycle->pool, len + 1);
++        if (bcf->env == NULL) {
++            return NGX_CONF_ERROR;
++        }
++        ngx_memcpy(bcf->env, p, len + 1);
++    }
++
++    if (cycle->old_cycle->conf_ctx == NULL) {
++        return NGX_CONF_OK;
++    }
++
++    obcf = ngx_quic_bpf_get_conf(cycle->old_cycle);
++    if (obcf == NULL) {
++        return NGX_CONF_OK;
++    }
++
++    if (obcf->enabled != bcf->enabled) {
++        ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
++                      "cannot change \"quic_bpf\" after reload, ignoring");
++        bcf->enabled = obcf->enabled;
++    }
++
++    if (!bcf->enabled) {
++        return NGX_CONF_OK;
++    }
++
++    /*
++     * we have old configuration here, so this is reload;
++     *
++     * preserve reusable parts of global configuration:
++     *  master_index (does not change)
++     *  master_state fd - duplicate, as it is closed in conf cleanup
++     */
++
++    bcf->master_index = obcf->master_index;
++
++    bcf->master_state_map = dup(obcf->master_state_map);
++    if (bcf->master_state_map == -1) {
++        ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
++                      "quic bpf failed to duplicate master_state_map");
++
++        return NGX_CONF_ERROR;
++    }
++
++    ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "quic bpf init conf master_state map fd:%d master_index:%d",
++                   bcf->master_state_map, bcf->master_index);
++
++    return NGX_CONF_OK;
++}
++
++
+ static ngx_int_t
+ ngx_quic_bpf_module_init(ngx_cycle_t *cycle)
+ {
++    int                   mapfd;
+     ngx_uint_t            i;
++    ngx_queue_t          *q;
+     ngx_listening_t      *ls;
+     ngx_core_conf_t      *ccf;
++    ngx_event_conf_t     *ecf;
+     ngx_pool_cleanup_t   *cln;
+     ngx_quic_bpf_conf_t  *bcf;
++    ngx_quic_bpf_group_t *grp;
+ 
+     if (ngx_test_config) {
+         /*
+@@ -138,12 +268,15 @@ ngx_quic_bpf_module_init(ngx_cycle_t *cycle)
+         return NGX_OK;
+     }
+ 
+-    ccf = ngx_core_get_conf(cycle);
+     bcf = ngx_quic_bpf_get_conf(cycle);
++    if (!bcf->enabled) {
++        return NGX_OK;
++    }
+ 
+-    ngx_conf_init_value(bcf->enabled, 0);
++    ccf = ngx_core_get_conf(cycle);
++    ecf = ngx_event_get_conf(cycle->conf_ctx, ngx_event_core_module);
+ 
+-    bcf->map_size = ccf->worker_processes * 4;
++    bcf->max_connection_ids = ecf->connections * NGX_QUIC_MAX_SERVER_IDS;
+ 
+     cln = ngx_pool_cleanup_add(cycle->pool, 0);
+     if (cln == NULL) {
+@@ -153,12 +286,60 @@ ngx_quic_bpf_module_init(ngx_cycle_t *cycle)
+     cln->data = bcf;
+     cln->handler = ngx_quic_bpf_cleanup;
+ 
++    ls = cycle->listening.elts;
++
+     if (ngx_inherited && ngx_is_init_cycle(cycle->old_cycle)) {
+         if (ngx_quic_bpf_import_maps(cycle) != NGX_OK) {
++            ngx_log_error(NGX_LOG_WARN, cycle->log, 0,
++                          "quic bpf failed to import maps, "
++                          "creating new maps; "
++                          "existing QUIC connections may be disrupted");
++        }
++    }
++
++    if (bcf->master_state_map == -1) {
++        /* initial master state creation */
++
++        ngx_log_debug0(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                       "quic bpf init initial master");
++
++        mapfd = ngx_quic_bpf_create_map(cycle, BPF_MAP_TYPE_ARRAY,
++                                        sizeof(uint32_t), sizeof(uint32_t),
++                                        4, 0, "master_state");
++        if (mapfd == -1) {
++            goto failed;
++        }
++        bcf->master_state_map = mapfd;
++
++        /* we are the only (initial) master */
++        if (ngx_quic_bpf_map_set(cycle->log, bcf->master_state_map,
++                                 NGX_QUIC_BPF_NMASTERS_IDX, 1,
++                                 "master_state")
++            != NGX_OK)
++        {
++            goto failed;
++        }
++
++        /* set active master index */
++        if (ngx_quic_bpf_map_set(cycle->log, bcf->master_state_map,
++                                 NGX_QUIC_BPF_ACT_MASTER_IDX,
++                                 bcf->master_index,
++                                 "master_state")
++            != NGX_OK)
++        {
+             goto failed;
+         }
+     }
+ 
++    /* update worker process counter for this master */
++    if (ngx_quic_bpf_map_set(cycle->log, bcf->master_state_map,
++                             bcf->master_index, ccf->worker_processes,
++                             "master_state")
++        != NGX_OK)
++    {
++        goto failed;
++    }
++
+     ls = cycle->listening.elts;
+ 
+     for (i = 0; i < cycle->listening.nelts; i++) {
+@@ -169,6 +350,40 @@ ngx_quic_bpf_module_init(ngx_cycle_t *cycle)
+         }
+     }
+ 
++    /*
++     * all worker sockets are now populated in each group's listen_map;
++     * atomically publish by updating listen_map_array[master_index] now,
++     * avoiding the window where BPF sees an empty map and drops packets
++     */
++
++    for (q = ngx_queue_head(&bcf->groups);
++         q != ngx_queue_sentinel(&bcf->groups);
++         q = ngx_queue_next(q))
++    {
++        grp = ngx_queue_data(q, ngx_quic_bpf_group_t, queue);
++
++        if (ngx_quic_bpf_map_set(cycle->log, grp->listen_map_array,
++                                 bcf->master_index, grp->listen_map,
++                                 "listen_map_array")
++            != NGX_OK)
++        {
++            goto failed;
++        }
++    }
++
++    if (ngx_inherited && ngx_is_init_cycle(cycle->old_cycle)) {
++
++        ngx_log_error(NGX_LOG_INFO, cycle->log, 0,
++                      "quic bpf new master: running two simultaneously");
++
++        if (ngx_quic_bpf_map_set(cycle->log, bcf->master_state_map,
++                                 NGX_QUIC_BPF_NMASTERS_IDX, 2, "master_state")
++            != NGX_OK)
++        {
++            goto failed;
++        }
++    }
++
+     if (ngx_quic_bpf_export_maps(cycle) != NGX_OK) {
+         goto failed;
+     }
+@@ -177,6 +392,10 @@ ngx_quic_bpf_module_init(ngx_cycle_t *cycle)
+ 
+ failed:
+ 
++    if (bcf->master_state_map != -1) {
++        ngx_quic_bpf_close(cycle->log, bcf->master_state_map);
++    }
++
+     if (ngx_is_init_cycle(cycle->old_cycle)) {
+         ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
+                       "ngx_quic_bpf_module failed to initialize, check limits");
+@@ -188,7 +407,7 @@ failed:
+     /*
+      * returning error now will lead to master process exiting immediately
+      * leaving worker processes orphaned, what is really unexpected.
+-     * Instead, just issue a not about failed initialization and try
++     * Instead, just issue a note about failed initialization and try
+      * to cleanup a bit. Still program can be already loaded to kernel
+      * for some reuseport groups, and there is no way to revert, so
+      * behaviour may be inconsistent.
+@@ -203,48 +422,169 @@ failed:
+ }
+ 
+ 
++static ngx_inline ngx_int_t
++ngx_quic_bpf_map_set(ngx_log_t *log, int fd, uint64_t key, uint64_t value,
++    const char *name)
++{
++    ngx_log_debug4(NGX_LOG_DEBUG_EVENT, log, 0,
++                   "quic bpf update map fd:%d %s[%d]=%d", fd, name, key, value);
++
++    if (ngx_bpf_map_update(fd, &key, &value, BPF_ANY) == -1) {
++        ngx_log_error(NGX_LOG_EMERG, log, ngx_errno,
++                      "quic bpf failed to update %s map fd:%d key:%d value:%d",
++                      name, fd, key, value);
++
++        return NGX_ERROR;
++    }
++
++    return NGX_OK;
++}
++
++
++ngx_uint_t
++ngx_quic_bpf_enabled(ngx_cycle_t *cycle)
++{
++    ngx_quic_bpf_conf_t  *bcf;
++
++    bcf = ngx_quic_bpf_get_conf(cycle);
++
++    return bcf->enabled ? 1 : 0;
++}
++
++
+ static void
+ ngx_quic_bpf_cleanup(void *data)
+ {
+     ngx_quic_bpf_conf_t  *bcf = (ngx_quic_bpf_conf_t *) data;
+ 
+-    ngx_queue_t            *q;
+-    ngx_quic_sock_group_t  *grp;
++    ngx_log_t                 *log;
++    ngx_uint_t                 i;
++    ngx_queue_t               *q;
++    ngx_quic_bpf_group_t      *grp;
++    ngx_quic_bpf_listening_t  *bls;
++
++    log = ngx_cycle->log;
+ 
+     for (q = ngx_queue_head(&bcf->groups);
+          q != ngx_queue_sentinel(&bcf->groups);
+          q = ngx_queue_next(q))
+     {
+-        grp = ngx_queue_data(q, ngx_quic_sock_group_t, queue);
++        grp = ngx_queue_data(q, ngx_quic_bpf_group_t, queue);
++
++        ngx_quic_bpf_close(log, grp->listen_map);
++        ngx_quic_bpf_close(log, grp->listen_map_array);
++        ngx_quic_bpf_close(log, grp->connection_map);
++
++        bls = grp->listening.elts;
++
++        for (i = 0; i < grp->listening.nelts; i++) {
++            if (bls[i].fd != (ngx_socket_t) -1) {
++                if (ngx_close_socket(bls[i].fd) == -1) {
++                    ngx_log_error(NGX_LOG_ALERT, log, ngx_socket_errno,
++                                  "quic bpf " ngx_close_socket_n " failed");
++                }
++            }
++        }
++    }
++
++    if (ngx_process == NGX_PROCESS_MASTER) {
++
++        if (ngx_quit) {
++
++            ngx_log_error(NGX_LOG_INFO, log, 0,
++                          "quic bpf old master exiting, new master is active");
++
++            /* just 1 master left */
++            if (ngx_quic_bpf_map_set(log, bcf->master_state_map,
++                                     NGX_QUIC_BPF_NMASTERS_IDX, 1,
++                                     "master_state")
++                != NGX_OK)
++            {
++                goto oops;
++            }
+ 
+-        ngx_quic_bpf_close(ngx_cycle->log, grp->map_fd, "map");
++            /* and the active master is another one */
++            if (ngx_quic_bpf_map_set(log, bcf->master_state_map,
++                                     NGX_QUIC_BPF_ACT_MASTER_IDX,
++                                     !bcf->master_index, "master_state")
++                != NGX_OK)
++            {
++                goto oops;
++            }
++
++
++        } else if (ngx_terminate) {
++
++            ngx_log_error(NGX_LOG_INFO, log, 0,
++                          "quic bpf new master exiting, decrement nmasters");
++
++            /*
++             * only 1 master left - original, new one is exiting;
++             * active is the old one; the active status is passed
++             * when and old master exits, so things are untouched
++             */
++            if (ngx_quic_bpf_map_set(log, bcf->master_state_map,
++                                     NGX_QUIC_BPF_NMASTERS_IDX, 1,
++                                     "master_state")
++                != NGX_OK)
++            {
++                goto oops;
++            }
++        }
+     }
++
++    ngx_quic_bpf_close(log, bcf->master_state_map);
++
++    return;
++
++oops:
++
++    /*
++     * Hopefully, this should never practically happen;
++     * not that much we can do about it: we failed to update
++     * global map that holds count of masters and worker processes in em.
++     * the result is that reuseport helper will hit errors on lookups
++     * and drop packets or redirect them to wrong workers.
++     * restart is needed to recover.
++     */
++
++    ngx_log_error(NGX_LOG_ALERT, log, 0,
++                  "quic bpf failed to update master_state map;"
++                  "kernel packet helper is in inconsistent state;"
++                  "restart may be needed");
++
++    ngx_quic_bpf_close(log, bcf->master_state_map);
+ }
+ 
+ 
+ static ngx_inline void
+-ngx_quic_bpf_close(ngx_log_t *log, int fd, const char *name)
++ngx_quic_bpf_close(ngx_log_t *log, int fd)
+ {
+-    if (close(fd) != -1) {
+-        return;
++    if (close(fd) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, log, ngx_errno,
++                      "quic bpf close map fd:%d failed", fd);
+     }
+-
+-    ngx_log_error(NGX_LOG_EMERG, log, ngx_errno,
+-                  "quic bpf close %s fd:%d failed", name, fd);
+ }
+ 
+ 
+-static ngx_quic_sock_group_t *
+-ngx_quic_bpf_find_group(ngx_quic_bpf_conf_t *bcf, ngx_listening_t *ls)
++static ngx_quic_bpf_group_t *
++ngx_quic_bpf_find_group(ngx_cycle_t *cycle, ngx_listening_t *ls)
+ {
+-    ngx_queue_t            *q;
+-    ngx_quic_sock_group_t  *grp;
++    ngx_queue_t           *q;
++    ngx_quic_bpf_conf_t   *bcf;
++    ngx_quic_bpf_group_t  *grp;
++
++    bcf = ngx_quic_bpf_get_conf(cycle);
++
++    if (!bcf->enabled || !ls->quic || !ls->reuseport) {
++        return NULL;
++    }
+ 
+     for (q = ngx_queue_head(&bcf->groups);
+          q != ngx_queue_sentinel(&bcf->groups);
+          q = ngx_queue_next(q))
+     {
+-        grp = ngx_queue_data(q, ngx_quic_sock_group_t, queue);
++        grp = ngx_queue_data(q, ngx_quic_bpf_group_t, queue);
+ 
+         if (ngx_cmp_sockaddr(ls->sockaddr, ls->socklen,
+                              grp->sockaddr, grp->socklen, 1)
+@@ -258,239 +598,519 @@ ngx_quic_bpf_find_group(ngx_quic_bpf_conf_t *bcf, ngx_listening_t *ls)
+ }
+ 
+ 
+-static ngx_quic_sock_group_t *
+-ngx_quic_bpf_alloc_group(ngx_cycle_t *cycle, struct sockaddr *sa,
+-    socklen_t socklen)
++static int
++ngx_quic_bpf_create_map(ngx_cycle_t *cycle, enum bpf_map_type type,
++    int key_size, int value_size, int max_entries, uint32_t map_flags,
++    const char *name)
+ {
+-    ngx_quic_bpf_conf_t    *bcf;
+-    ngx_quic_sock_group_t  *grp;
++    int  fd;
+ 
+-    bcf = ngx_quic_bpf_get_conf(cycle);
+-
+-    grp = ngx_pcalloc(cycle->pool, sizeof(ngx_quic_sock_group_t));
+-    if (grp == NULL) {
+-        return NULL;
++    fd = ngx_bpf_map_create(cycle->log, type, key_size, value_size,
++                            max_entries, map_flags);
++    if (fd == -1) {
++        return -1;
+     }
+ 
+-    grp->socklen = socklen;
+-    grp->sockaddr = ngx_palloc(cycle->pool, socklen);
+-    if (grp->sockaddr == NULL) {
+-        return NULL;
++    if (ngx_quic_bpf_setup_map_fd(cycle->log, fd) != NGX_OK) {
++        return -1;
+     }
+-    ngx_memcpy(grp->sockaddr, sa, socklen);
+ 
+-    ngx_queue_insert_tail(&bcf->groups, &grp->queue);
++    ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "quic bpf %s map created fd:%d", name, fd);
+ 
+-    return grp;
++    return fd;
+ }
+ 
+ 
+-static ngx_quic_sock_group_t *
+-ngx_quic_bpf_create_group(ngx_cycle_t *cycle, ngx_listening_t *ls)
++static int
++ngx_quic_bpf_create_outer_map(ngx_cycle_t *cycle, enum bpf_map_type outer_type,
++    enum bpf_map_type inner_map_type, int inner_key_size, int inner_value_size,
++    int max_entries, uint32_t map_flags, const char *name)
+ {
+-    int                     progfd, failed, flags, rc;
+-    ngx_quic_bpf_conf_t    *bcf;
+-    ngx_quic_sock_group_t  *grp;
+-
+-    bcf = ngx_quic_bpf_get_conf(cycle);
++    int  fd, tmpl;
+ 
+-    if (!bcf->enabled) {
+-        return NULL;
++    /* template map for array of maps - only needed on creation */
++    tmpl = ngx_quic_bpf_create_map(cycle, inner_map_type, inner_key_size,
++                                   inner_value_size, 1, 0, "template");
++    if (tmpl == -1) {
++        return -1;
+     }
+ 
+-    grp = ngx_quic_bpf_alloc_group(cycle, ls->sockaddr, ls->socklen);
+-    if (grp == NULL) {
+-        return NULL;
++    fd = ngx_bpf_map_create_outer(cycle->log, outer_type, max_entries,
++                                  map_flags, tmpl);
++
++    ngx_quic_bpf_close(cycle->log, tmpl);
++
++    if (fd == -1) {
++        return -1;
+     }
+ 
+-    grp->map_fd = ngx_bpf_map_create(cycle->log, BPF_MAP_TYPE_SOCKHASH,
+-                                     sizeof(uint64_t), sizeof(uint64_t),
+-                                     bcf->map_size, 0);
+-    if (grp->map_fd == -1) {
+-        goto failed;
++    if (ngx_quic_bpf_setup_map_fd(cycle->log, fd) != NGX_OK) {
++        return -1;
+     }
+ 
+-    flags = fcntl(grp->map_fd, F_GETFD);
++    ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "quic bpf %s outer map created fd:%d", name, fd);
++
++    return fd;
++}
++
++
++static ngx_inline ngx_int_t
++ngx_quic_bpf_setup_map_fd(ngx_log_t *log, int fd)
++{
++    int  flags;
++
++    flags = fcntl(fd, F_GETFD);
+     if (flags == -1) {
+-        ngx_log_error(NGX_LOG_EMERG, cycle->log, errno,
+-                      "quic bpf getfd failed");
+-        goto failed;
++        ngx_log_error(NGX_LOG_EMERG, log, ngx_errno,
++                      "quic bpf fcntl(F_GETFD) failed");
++        return NGX_ERROR;
+     }
+ 
+-    /* need to inherit map during binary upgrade after exec */
+     flags &= ~FD_CLOEXEC;
+ 
+-    rc = fcntl(grp->map_fd, F_SETFD, flags);
+-    if (rc == -1) {
+-        ngx_log_error(NGX_LOG_EMERG, cycle->log, errno,
+-                      "quic bpf setfd failed");
+-        goto failed;
++    if (fcntl(fd, F_SETFD, flags) == -1) {
++        ngx_log_error(NGX_LOG_EMERG, log, ngx_errno,
++                      "quic bpf fcntl(F_SETFD) failed");
++        return NGX_ERROR;
+     }
+ 
+-    ngx_bpf_program_link(&ngx_quic_reuseport_helper,
+-                         "ngx_quic_sockmap", grp->map_fd);
++    return NGX_OK;
++}
+ 
+-    progfd = ngx_bpf_load_program(cycle->log, &ngx_quic_reuseport_helper);
+-    if (progfd < 0) {
+-        goto failed;
++
++static ngx_quic_bpf_group_t *
++ngx_quic_bpf_create_group(ngx_cycle_t *cycle, ngx_quic_bpf_group_mode_t mode,
++    struct sockaddr *sa, socklen_t socklen, int conn_map, int lma)
++{
++    ngx_core_conf_t       *ccf;
++    ngx_quic_bpf_conf_t   *bcf;
++    ngx_quic_bpf_group_t  *grp;
++
++    grp = ngx_pcalloc(cycle->pool, sizeof(ngx_quic_bpf_group_t));
++    if (grp == NULL) {
++        return NULL;
+     }
+ 
+-    failed = 0;
++    grp->listen_map = -1;
++    grp->listen_map_array = -1;
++    grp->connection_map = -1;
+ 
+-    if (setsockopt(ls->fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_EBPF,
+-                   &progfd, sizeof(int))
+-        == -1)
++    if (ngx_array_init(&grp->listening, cycle->pool, 1,
++                       sizeof(ngx_quic_bpf_listening_t))
++        != NGX_OK)
+     {
+-        ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_socket_errno,
+-                      "quic bpf setsockopt(SO_ATTACH_REUSEPORT_EBPF) failed");
+-        failed = 1;
++        return NULL;
++    }
++
++    grp->socklen = socklen;
++
++    if (mode == NGX_QUIC_BPF_GROUP_INHERIT) {
++        grp->sockaddr = ngx_palloc(cycle->pool, socklen);
++        if (grp->sockaddr == NULL) {
++            return NULL;
++        }
++
++        ngx_memcpy(grp->sockaddr, sa, socklen);
++
++    } else {
++        grp->sockaddr = sa;
+     }
+ 
+-    ngx_quic_bpf_close(cycle->log, progfd, "program");
+ 
+-    if (failed) {
++#if (NGX_DEBUG)
++    grp->name.data = ngx_pnalloc(cycle->pool, NGX_SOCKADDR_STRLEN);
++    if (grp->name.data == NULL) {
++        return NULL;
++    }
++
++    grp->name.len = ngx_sock_ntop(sa, socklen, grp->name.data,
++                                  NGX_SOCKADDR_STRLEN, 1);
++
++#endif
++
++    ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "quic bpf %s group for \"%V\"",
++                   mode == NGX_QUIC_BPF_GROUP_INIT ? "creating"
++                       : (mode == NGX_QUIC_BPF_GROUP_RELOAD ? "updating"
++                                                            : "inheriting"),
++                   &grp->name);
++
++    bcf = ngx_quic_bpf_get_conf(cycle);
++
++    switch (mode) {
++
++    case NGX_QUIC_BPF_GROUP_RELOAD:
++
++        /* reload: old configuration will close maps, create own descriptors */
++
++        grp->connection_map = dup(conn_map);
++        if (grp->connection_map == -1) {
++            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
++                          "quic bpf failed to dup connection_map");
++            goto failed;
++        }
++
++        grp->listen_map_array = dup(lma);
++        if (grp->listen_map_array == -1) {
++            ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
++                          "quic bpf failed to dup listen_map_array");
++            goto failed;
++        }
++
++        break;
++
++    case NGX_QUIC_BPF_GROUP_INHERIT:
++
++        /* we are the new master and inherited sockets and maps via env */
++
++        grp->connection_map = conn_map;
++        grp->listen_map_array = lma;
++
++        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                       "quic bpf inherit connection_map:%d "
++                       "listen_map_array:%d", conn_map, lma);
++        break;
++
++    case NGX_QUIC_BPF_GROUP_INIT:
++
++        conn_map = ngx_quic_bpf_create_map(cycle, BPF_MAP_TYPE_SOCKHASH,
++                                           NGX_QUIC_SERVER_CID_LEN,
++                                           sizeof(uint64_t),
++                                           bcf->max_connection_ids, 0,
++                                           "connections");
++        if (conn_map == -1) {
++            goto failed;
++        }
++
++        grp->connection_map = conn_map;
++
++        /* size: only two masters can exist at the same time */
++        lma = ngx_quic_bpf_create_outer_map(cycle, BPF_MAP_TYPE_ARRAY_OF_MAPS,
++                                            BPF_MAP_TYPE_SOCKMAP,
++                                            sizeof(uint32_t), sizeof(uint64_t),
++                                            2, 0, "listen_map_array");
++        if (lma == -1) {
++            goto failed;
++        }
++
++        grp->listen_map_array = lma;
++        break;
++    }
++
++    ccf = ngx_core_get_conf(cycle);
++
++    /* always created, specific for this configuration */
++    grp->listen_map = ngx_quic_bpf_create_map(cycle, BPF_MAP_TYPE_SOCKMAP,
++                                              sizeof(uint32_t),
++                                              sizeof(uint64_t),
++                                              ccf->worker_processes, 0,
++                                              "listeners");
++    if (grp->listen_map == -1) {
+         goto failed;
+     }
+ 
+-    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
+-                   "quic bpf sockmap created fd:%d", grp->map_fd);
++    /*
++     * listen_map_array[master_index] is updated after all worker sockets
++     * are added to listen_map, to avoid a window where the BPF program
++     * sees an empty listen_map and drops new connection packets
++     */
++
++    ngx_queue_insert_tail(&bcf->groups, &grp->queue);
++
+     return grp;
+ 
+ failed:
+ 
+-    if (grp->map_fd != -1) {
+-        ngx_quic_bpf_close(cycle->log, grp->map_fd, "map");
++    ngx_quic_bpf_group_delete(cycle, grp);
++
++    return NULL;
++}
++
++
++static ngx_inline void
++ngx_quic_bpf_group_delete(ngx_cycle_t *cycle, ngx_quic_bpf_group_t *grp)
++{
++    if (grp->listen_map != -1) {
++        ngx_quic_bpf_close(cycle->log, grp->listen_map);
+     }
+ 
+-    ngx_queue_remove(&grp->queue);
++    if (grp->connection_map != -1) {
++        ngx_quic_bpf_close(cycle->log, grp->connection_map);
++    }
+ 
+-    return NULL;
++    if (grp->listen_map_array != -1) {
++        ngx_quic_bpf_close(cycle->log, grp->listen_map_array);
++    }
+ }
+ 
+ 
+-static ngx_quic_sock_group_t *
+-ngx_quic_bpf_get_group(ngx_cycle_t *cycle, ngx_listening_t *ls)
++static ngx_int_t
++ngx_quic_bpf_group_attach_prog(ngx_cycle_t *cycle, ngx_quic_bpf_group_t *grp,
++    int fd)
+ {
+-    ngx_quic_bpf_conf_t    *bcf, *old_bcf;
+-    ngx_quic_sock_group_t  *grp, *ogrp;
++    int                   progfd, rc;
++    ngx_err_t             err;
++    ngx_quic_bpf_conf_t  *bcf;
+ 
+     bcf = ngx_quic_bpf_get_conf(cycle);
+ 
+-    grp = ngx_quic_bpf_find_group(bcf, ls);
++    ngx_bpf_program_link(&ngx_quic_reuseport_helper,
++                         "ngx_quic_connections", grp->connection_map);
++
++    ngx_bpf_program_link(&ngx_quic_reuseport_helper,
++                         "ngx_quic_listen_maps", grp->listen_map_array);
++
++    ngx_bpf_program_link(&ngx_quic_reuseport_helper,
++                         "ngx_quic_master_state", bcf->master_state_map);
++
++    progfd = ngx_bpf_load_program(cycle->log, &ngx_quic_reuseport_helper);
++    if (progfd < 0) {
++        return NGX_ERROR;
++    }
++
++    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "quic bpf program fd:%d", progfd);
++
++    rc = setsockopt(fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_EBPF,
++                    &progfd, sizeof(int));
++
++    err = ngx_socket_errno;
++
++    ngx_quic_bpf_close(cycle->log, progfd);
++
++    if (rc == -1) {
++        ngx_log_error(NGX_LOG_EMERG, cycle->log, err,
++                      "quic bpf setsockopt(SO_ATTACH_REUSEPORT_EBPF) failed");
++        return NGX_ERROR;
++    }
++
++    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "quic bpf program attached to \"%V\"", &grp->name);
++
++    return NGX_OK;
++}
++
++
++static ngx_quic_bpf_group_t *
++ngx_quic_bpf_get_group(ngx_cycle_t *cycle, ngx_listening_t *ls)
++{
++    ngx_quic_bpf_conf_t   *old_bcf;
++    ngx_quic_bpf_group_t  *grp, *ogrp;
++
++    grp = ngx_quic_bpf_find_group(cycle, ls);
+     if (grp) {
+         return grp;
+     }
+ 
+     old_bcf = ngx_quic_bpf_get_old_conf(cycle);
+-
+     if (old_bcf == NULL) {
+-        return ngx_quic_bpf_create_group(cycle, ls);
++        goto init;
+     }
+ 
+-    ogrp = ngx_quic_bpf_find_group(old_bcf, ls);
++    ogrp = ngx_quic_bpf_find_group(cycle->old_cycle, ls);
+     if (ogrp == NULL) {
+-        return ngx_quic_bpf_create_group(cycle, ls);
++        goto init;
+     }
+ 
+-    grp = ngx_quic_bpf_alloc_group(cycle, ls->sockaddr, ls->socklen);
++    return ngx_quic_bpf_create_group(cycle, NGX_QUIC_BPF_GROUP_RELOAD,
++                                     ls->sockaddr, ls->socklen,
++                                     ogrp->connection_map,
++                                     ogrp->listen_map_array);
++
++init:
++
++    grp = ngx_quic_bpf_create_group(cycle, NGX_QUIC_BPF_GROUP_INIT,
++                                    ls->sockaddr, ls->socklen, -1, -1);
+     if (grp == NULL) {
+         return NULL;
+     }
+ 
+-    grp->map_fd = dup(ogrp->map_fd);
+-    if (grp->map_fd == -1) {
+-        ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+-                      "quic bpf failed to duplicate bpf map descriptor");
+-
++    if (ngx_quic_bpf_group_attach_prog(cycle, grp, ls->fd) != NGX_OK) {
+         ngx_queue_remove(&grp->queue);
+-
++        ngx_quic_bpf_group_delete(cycle, grp);
+         return NULL;
+     }
+ 
+-    ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
+-                   "quic bpf sockmap fd duplicated old:%d new:%d",
+-                   ogrp->map_fd, grp->map_fd);
+-
+     return grp;
+ }
+ 
+ 
+ static ngx_int_t
+-ngx_quic_bpf_group_add_socket(ngx_cycle_t *cycle,  ngx_listening_t *ls)
++ngx_quic_bpf_group_add_socket(ngx_cycle_t *cycle, ngx_listening_t *ls)
+ {
+-    uint64_t                cookie;
+-    ngx_quic_bpf_conf_t    *bcf;
+-    ngx_quic_sock_group_t  *grp;
+-
+-    bcf = ngx_quic_bpf_get_conf(cycle);
++    ngx_quic_bpf_group_t  *grp;
+ 
+     grp = ngx_quic_bpf_get_group(cycle, ls);
+-
+     if (grp == NULL) {
+-        if (!bcf->enabled) {
+-            return NGX_OK;
+-        }
+-
+         return NGX_ERROR;
+     }
+ 
+-    grp->unused = 0;
+-
+-    cookie = ngx_quic_bpf_socket_key(ls->fd, cycle->log);
+-    if (cookie == (uint64_t) NGX_ERROR) {
++    if (ngx_quic_bpf_add_worker_socket(cycle, grp, ls) != NGX_OK) {
+         return NGX_ERROR;
+     }
+ 
+-    /* map[cookie] = socket; for use in kernel helper */
+-    if (ngx_bpf_map_update(grp->map_fd, &cookie, &ls->fd, BPF_ANY) == -1) {
+-        ngx_log_error(NGX_LOG_EMERG, cycle->log, ngx_errno,
+-                      "quic bpf failed to update socket map key=%xL", cookie);
++    if (ngx_quic_bpf_map_set(cycle->log, grp->listen_map, ls->worker, ls->fd,
++                             "listeners")
++        != NGX_OK)
++    {
+         return NGX_ERROR;
+     }
+ 
+-    ngx_log_debug4(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
+-                 "quic bpf sockmap fd:%d add socket:%d cookie:0x%xL worker:%ui",
+-                 grp->map_fd, ls->fd, cookie, ls->worker);
+-
+-    /* do not inherit this socket */
+-    ls->ignore = 1;
++    grp->nlisten = ls->worker + 1;
+ 
+     return NGX_OK;
+ }
+ 
+ 
+-static uint64_t
+-ngx_quic_bpf_socket_key(ngx_fd_t fd, ngx_log_t *log)
++static ngx_int_t
++ngx_quic_bpf_add_worker_socket(ngx_cycle_t *cycle, ngx_quic_bpf_group_t *grp,
++    ngx_listening_t *ls)
+ {
+-    uint64_t   cookie;
+-    socklen_t  optlen;
++    int                        value;
++    ngx_uint_t                 i, n;
++    ngx_socket_t               s;
++    ngx_quic_bpf_listening_t  *bls;
++
++    s = ngx_socket(ls->sockaddr->sa_family, SOCK_DGRAM, 0);
++    if (s == (ngx_socket_t) -1) {
++        ngx_log_error(NGX_LOG_ERR, cycle->log, ngx_socket_errno,
++                      "quic bpf " ngx_socket_n " failed");
++        return NGX_ERROR;
++    }
++
++    if (ngx_nonblocking(s) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                      "quic bpf " ngx_nonblocking_n " worker socket failed");
++        goto failed;
++    }
+ 
+-    optlen = sizeof(cookie);
++    value = 1;
+ 
+-    if (getsockopt(fd, SOL_SOCKET, SO_COOKIE, &cookie, &optlen) == -1) {
+-        ngx_log_error(NGX_LOG_EMERG, log, ngx_socket_errno,
+-                      "quic bpf getsockopt(SO_COOKIE) failed");
++    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR,
++                (const void *) &value, sizeof(int))
++        == -1)
++    {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                      "quic bpf setsockopt(SO_REUSEADDR) worker socket failed");
++        goto failed;
++    }
+ 
+-        return (ngx_uint_t) NGX_ERROR;
++    if (setsockopt(s, SOL_SOCKET, SO_REUSEPORT,
++                   (const void *) &value, sizeof(int))
++        == -1)
++    {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                      "quic bpf setsockopt(SO_REUSEPORT) worker socket failed");
++        goto failed;
+     }
+ 
+-    return cookie;
++#if (NGX_HAVE_IP_PKTINFO)
++    if (ls->wildcard && ls->sockaddr->sa_family == AF_INET) {
++        if (setsockopt(s, IPPROTO_IP, IP_PKTINFO,
++                       (const void *) &value, sizeof(int))
++            == -1)
++        {
++            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                          "quic bpf setsockopt(IP_PKTINFO) "
++                          "worker socket failed");
++            goto failed;
++        }
++    }
++#endif
++
++#if (NGX_HAVE_INET6 && NGX_HAVE_IPV6_RECVPKTINFO)
++    if (ls->wildcard && ls->sockaddr->sa_family == AF_INET6) {
++        if (setsockopt(s, IPPROTO_IPV6, IPV6_RECVPKTINFO,
++                       (const void *) &value, sizeof(int))
++            == -1)
++        {
++            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                          "quic bpf setsockopt(IPV6_RECVPKTINFO) "
++                          "worker socket failed");
++        }
++    }
++#endif
++
++#if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
++    if (ls->sockaddr->sa_family == AF_INET6) {
++
++        /*
++         * must mirror the listener, otherwise bind() enrolls the
++         * socket into the wrong SO_REUSEPORT group and
++         * bpf_sk_select_reuseport() rejects it with EBADFD
++         */
++
++        value = ls->ipv6only;
++
++        if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY,
++                       (const void *) &value, sizeof(int))
++            == -1)
++        {
++            ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                          "quic bpf setsockopt(IPV6_V6ONLY) "
++                          "worker socket failed");
++            goto failed;
++        }
++    }
++#endif
++
++    if (bind(s, ls->sockaddr, ls->socklen) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                      "quic bpf bind() failed");
++        goto failed;
++    }
++
++    if (ls->worker >= grp->listening.nelts) {
++        n = ls->worker + 1 - grp->listening.nelts;
++
++        bls = ngx_array_push_n(&grp->listening, n);
++        if (bls == NULL) {
++            goto failed;
++        }
++
++        ngx_memzero(bls, n * sizeof(ngx_quic_bpf_listening_t));
++
++        for (i = 0; i < n; i++) {
++            bls[i].fd = (ngx_socket_t) -1;
++        }
++    }
++
++    bls = grp->listening.elts;
++    bls[ls->worker].fd = s;
++    bls[ls->worker].listening = ls;
++
++    return NGX_OK;
++
++failed:
++
++    if (ngx_close_socket(s) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_socket_errno,
++                      "quic bpf " ngx_close_socket_n " failed");
++    }
++
++    return NGX_ERROR;
+ }
+ 
+ 
+ static ngx_int_t
+ ngx_quic_bpf_export_maps(ngx_cycle_t *cycle)
+ {
+-    u_char                 *p, *buf;
+-    size_t                  len;
+-    ngx_str_t              *var;
+-    ngx_queue_t            *q;
+-    ngx_core_conf_t        *ccf;
+-    ngx_quic_bpf_conf_t    *bcf;
+-    ngx_quic_sock_group_t  *grp;
++    u_char                *p, *buf;
++    size_t                 len;
++    ngx_str_t             *var;
++    ngx_queue_t           *q;
++    ngx_core_conf_t       *ccf;
++    ngx_quic_bpf_conf_t   *bcf;
++    ngx_quic_bpf_group_t  *grp;
+ 
+-    ccf = ngx_core_get_conf(cycle);
+     bcf = ngx_quic_bpf_get_conf(cycle);
++    if (!bcf->enabled) {
++        return NGX_OK;
++    }
++
++    ccf = ngx_core_get_conf(cycle);
+ 
+     len = sizeof(NGX_QUIC_BPF_VARNAME) + 1;
+ 
+@@ -498,26 +1118,29 @@ ngx_quic_bpf_export_maps(ngx_cycle_t *cycle)
+ 
+     while (q != ngx_queue_sentinel(&bcf->groups)) {
+ 
+-        grp = ngx_queue_data(q, ngx_quic_sock_group_t, queue);
++        grp = ngx_queue_data(q, ngx_quic_bpf_group_t, queue);
+ 
+         q = ngx_queue_next(q);
+ 
+-        if (grp->unused) {
++        if (grp->nlisten == 0) {
+             /*
+              * map was inherited, but it is not used in this configuration;
+              * do not pass such map further and drop the group to prevent
+              * interference with changes during reload
+              */
+ 
+-            ngx_quic_bpf_close(cycle->log, grp->map_fd, "map");
+-            ngx_queue_remove(&grp->queue);
++            ngx_quic_bpf_close(cycle->log, grp->listen_map);
++            ngx_quic_bpf_close(cycle->log, grp->connection_map);
++            ngx_quic_bpf_close(cycle->log, grp->listen_map_array);
+ 
++            ngx_queue_remove(&grp->queue);
+             continue;
+         }
+ 
+-        len += NGX_INT32_LEN + 1 + NGX_SOCKADDR_STRLEN + 1;
++        len += (NGX_INT32_LEN + 1) * 2 + NGX_SOCKADDR_STRLEN + 1;
+     }
+ 
++    len += (NGX_INT32_LEN + 1) * 2;
+     len++;
+ 
+     buf = ngx_palloc(cycle->pool, len);
+@@ -528,19 +1151,25 @@ ngx_quic_bpf_export_maps(ngx_cycle_t *cycle)
+     p = ngx_cpymem(buf, NGX_QUIC_BPF_VARNAME "=",
+                    sizeof(NGX_QUIC_BPF_VARNAME));
+ 
++
++    p = ngx_sprintf(p, "%ud", !bcf->master_index);
++    *p++ = NGX_QUIC_BPF_GSEP;
++    p = ngx_sprintf(p, "%ud", bcf->master_state_map);
++    *p++ = NGX_QUIC_BPF_GSEP;
++
+     for (q = ngx_queue_head(&bcf->groups);
+          q != ngx_queue_sentinel(&bcf->groups);
+          q = ngx_queue_next(q))
+     {
+-        grp = ngx_queue_data(q, ngx_quic_sock_group_t, queue);
+-
+-        p = ngx_sprintf(p, "%ud", grp->map_fd);
++        grp = ngx_queue_data(q, ngx_quic_bpf_group_t, queue);
+ 
++        p = ngx_sprintf(p, "%ud", grp->connection_map);
++        *p++ = NGX_QUIC_BPF_ADDRSEP;
++        p = ngx_sprintf(p, "%ud", grp->listen_map_array);
+         *p++ = NGX_QUIC_BPF_ADDRSEP;
+ 
+         p += ngx_sock_ntop(grp->sockaddr, grp->socklen, p,
+                            NGX_SOCKADDR_STRLEN, 1);
+-
+         *p++ = NGX_QUIC_BPF_VARSEP;
+     }
+ 
+@@ -561,96 +1190,242 @@ ngx_quic_bpf_export_maps(ngx_cycle_t *cycle)
+ static ngx_int_t
+ ngx_quic_bpf_import_maps(ngx_cycle_t *cycle)
+ {
+-    int                     s;
+-    u_char                 *inherited, *p, *v;
+-    ngx_uint_t              in_fd;
+-    ngx_addr_t              tmp;
+-    ngx_quic_bpf_conf_t    *bcf;
+-    ngx_quic_sock_group_t  *grp;
++    int                    fds[2], globs[2];
++    u_char                *inherited, *p, *v;
++    ngx_int_t              fd;
++    ngx_uint_t             nfd, nglob;
++    ngx_addr_t             tmp;
++    ngx_quic_bpf_conf_t   *bcf;
++    ngx_quic_bpf_group_t  *grp;
+ 
+-    inherited = (u_char *) getenv(NGX_QUIC_BPF_VARNAME);
++    bcf = ngx_quic_bpf_get_conf(cycle);
++
++    inherited = bcf->env;
+ 
+     if (inherited == NULL) {
+         return NGX_OK;
+     }
+ 
+-    bcf = ngx_quic_bpf_get_conf(cycle);
++    ngx_log_error(NGX_LOG_NOTICE, cycle->log, 0,
++                  "quic bpf using inherited maps from \"%s\"",
++                  inherited);
+ 
+-#if (NGX_SUPPRESS_WARN)
+-    s = -1;
+-#endif
+ 
+-    in_fd = 1;
++    /* first, parse globals, they must be set before inheriting groups */
++
++    nglob = 0;
+ 
+     for (p = inherited, v = p; *p; p++) {
+ 
+         switch (*p) {
+ 
++        case NGX_QUIC_BPF_GSEP:
++
++            if (nglob > 1) {
++                goto failed;
++            }
++
++            fd = ngx_atoi(v, p - v);
++            if (fd == NGX_ERROR) {
++                goto failed;
++            }
++
++            globs[nglob++] = fd;
++            v = p + 1;
++
++            if (nglob == 2) {
++                goto done;
++            }
++
++            break;
++
++        default:
++            break;
++        }
++    }
++
++    if (nglob < 2) {
++        goto failed;
++    }
++
++done:
++
++    ngx_log_debug2(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "quic bpf inherited globals: master_index:%d "
++                   "master_state_map fd:%d", globs[0], globs[1]);
++
++    bcf->master_index = globs[0];
++    bcf->master_state_map = globs[1];
++
++    /* now, continue with reuseport groups */
++
++    nfd = 0;
++
++    for (/* void */; *p; p++) {
++
++        switch (*p) {
++
+         case NGX_QUIC_BPF_ADDRSEP:
+ 
+-            if (!in_fd) {
+-                ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
+-                              "quic bpf failed to parse inherited env");
+-                return NGX_ERROR;
++            if (nfd > 1) {
++                goto failed;
+             }
+-            in_fd = 0;
+ 
+-            s = ngx_atoi(v, p - v);
+-            if (s == NGX_ERROR) {
+-                ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
+-                              "quic bpf failed to parse inherited map fd");
+-                return NGX_ERROR;
++            fd = ngx_atoi(v, p - v);
++            if (fd == NGX_ERROR) {
++                goto failed;
+             }
+ 
++            fds[nfd++] = fd;
+             v = p + 1;
+             break;
+ 
+         case NGX_QUIC_BPF_VARSEP:
+ 
+-            if (in_fd) {
+-                ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
+-                              "quic bpf failed to parse inherited env");
+-                return NGX_ERROR;
++            if (nfd != 2) {
++                goto failed;
++            }
++
++            if (ngx_parse_addr_port(cycle->pool, &tmp, v, p - v) != NGX_OK) {
++                goto failed;
+             }
+-            in_fd = 1;
+ 
+-            grp = ngx_pcalloc(cycle->pool,
+-                              sizeof(ngx_quic_sock_group_t));
++            grp = ngx_quic_bpf_create_group(cycle, NGX_QUIC_BPF_GROUP_INHERIT,
++                                            tmp.sockaddr, tmp.socklen,
++                                            fds[0], fds[1]);
+             if (grp == NULL) {
+                 return NGX_ERROR;
+             }
+ 
+-            grp->map_fd = s;
++            nfd = 0;
++            v = p + 1;
++            break;
+ 
+-            if (ngx_parse_addr_port(cycle->pool, &tmp, v, p - v)
+-                != NGX_OK)
+-            {
+-                ngx_log_error(NGX_LOG_EMERG, cycle->log, 0,
+-                              "quic bpf failed to parse inherited"
+-                              " address '%*s'", p - v , v);
++        default:
++            break;
++        }
++    }
++
++    return NGX_OK;
+ 
+-                ngx_quic_bpf_close(cycle->log, s, "inherited map");
++failed:
++    ngx_log_error(NGX_LOG_WARN, cycle->log, 0,
++            "quic bpf failed to parse inherited variable \"%s\"",
++            NGX_QUIC_BPF_VARNAME);
+ 
+-                return NGX_ERROR;
+-            }
++    return NGX_ERROR;
++}
+ 
+-            grp->sockaddr = tmp.sockaddr;
+-            grp->socklen = tmp.socklen;
+ 
+-            grp->unused = 1;
++ngx_int_t
++ngx_quic_bpf_get_client_connection(ngx_connection_t *lc, ngx_connection_t **pc)
++{
++    ngx_event_t               *rev;
++    ngx_connection_t          *c;
++    ngx_quic_bpf_group_t      *grp;
++    ngx_quic_bpf_listening_t  *bpf_listening, *bls;
+ 
+-            ngx_queue_insert_tail(&bcf->groups, &grp->queue);
++    grp = ngx_quic_bpf_find_group((ngx_cycle_t *) ngx_cycle, lc->listening);
+ 
+-            ngx_log_debug3(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
+-                           "quic bpf sockmap inherited with "
+-                           "fd:%d address:%*s",
+-                           grp->map_fd, p - v, v);
+-            v = p + 1;
+-            break;
++    if (grp == NULL || ngx_worker >= grp->listening.nelts) {
++        return NGX_OK;
++    }
+ 
+-        default:
+-            break;
++    bpf_listening = grp->listening.elts;
++    bls = &bpf_listening[ngx_worker];
++
++    if (bls->fd == (ngx_socket_t) -1) {
++        return NGX_OK;
++    }
++
++    if (bls->connection == NULL) {
++        c = ngx_get_connection(bls->fd, lc->log);
++        if (c == NULL) {
++            return NGX_ERROR;
+         }
++
++        c->type = SOCK_DGRAM;
++        c->log = lc->log;
++        c->listening = bls->listening;
++
++        rev = c->read;
++        rev->quic = 1;
++        rev->log = c->log;
++        rev->handler = ngx_quic_recvmsg;
++
++        if (ngx_add_event(rev, NGX_READ_EVENT, 0) == NGX_ERROR) {
++            ngx_free_connection(c);
++            return NGX_ERROR;
++        }
++
++        bls->connection = c;
++
++        ngx_log_debug1(NGX_LOG_DEBUG_EVENT, lc->log, 0,
++                       "quic bpf worker socket connection fd:%d", bls->fd);
++    }
++
++    *pc = ngx_get_connection(bls->fd, lc->log);
++    if (*pc == NULL) {
++        return NGX_ERROR;
++    }
++
++    (*pc)->shared = 1;
++
++    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, lc->log, 0,
++                   "quic bpf client connection fd:%d", bls->fd);
++
++    return NGX_OK;
++}
++
++
++ngx_int_t
++ngx_quic_bpf_insert(ngx_connection_t *c, ngx_quic_connection_t *qc,
++    ngx_quic_socket_t *qsock)
++{
++    ngx_quic_bpf_group_t  *grp;
++
++    if (qsock->sid.len != NGX_QUIC_SERVER_CID_LEN) {
++        /* route by address */
++        return NGX_OK;
++    }
++
++    grp = ngx_quic_bpf_find_group((ngx_cycle_t *) ngx_cycle, c->listening);
++    if (grp == NULL) {
++        return NGX_OK;
++    }
++
++    if (ngx_bpf_map_update(grp->connection_map, qsock->sid.id, &c->fd, BPF_ANY)
++        == -1)
++    {
++        ngx_log_error(NGX_LOG_ALERT, c->log, ngx_errno,
++                      "quic bpf failed to update connections map");
++        return NGX_ERROR;
++    }
++
++    return NGX_OK;
++}
++
++
++ngx_int_t
++ngx_quic_bpf_delete(ngx_connection_t *c, ngx_quic_connection_t *qc,
++    ngx_quic_socket_t *qsock)
++{
++    ngx_quic_bpf_group_t  *grp;
++
++    if (qsock->sid.len != NGX_QUIC_SERVER_CID_LEN) {
++        /* route by address */
++        return NGX_OK;
++    }
++
++    grp = ngx_quic_bpf_find_group((ngx_cycle_t *) ngx_cycle, c->listening);
++    if (grp == NULL) {
++        return NGX_OK;
++    }
++
++    if (ngx_bpf_map_delete(grp->connection_map, qsock->sid.id) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, c->log, ngx_errno,
++                      "quic bpf failed to update connections map");
++        return NGX_ERROR;
+     }
+ 
+     return NGX_OK;
+diff --git a/src/event/quic/ngx_event_quic_bpf.h b/src/event/quic/ngx_event_quic_bpf.h
+new file mode 100644
+index 00000000..444bb93b
+--- /dev/null
++++ b/src/event/quic/ngx_event_quic_bpf.h
+@@ -0,0 +1,23 @@
++
++/*
++ * Copyright (C) Nginx, Inc.
++ */
++
++
++#ifndef _NGX_EVENT_QUIC_BPF_H_INCLUDED_
++#define _NGX_EVENT_QUIC_BPF_H_INCLUDED_
++
++
++#include <ngx_config.h>
++#include <ngx_core.h>
++
++
++ngx_int_t ngx_quic_bpf_get_client_connection(ngx_connection_t *lc,
++    ngx_connection_t **pc);
++ngx_int_t ngx_quic_bpf_insert(ngx_connection_t *c, ngx_quic_connection_t *qc,
++    ngx_quic_socket_t *qsock);
++ngx_int_t ngx_quic_bpf_delete(ngx_connection_t *c, ngx_quic_connection_t *qc,
++    ngx_quic_socket_t *qsock);
++
++
++#endif /* _NGX_EVENT_QUIC_BPF_H_INCLUDED_ */
+diff --git a/src/event/quic/ngx_event_quic_bpf_code.c b/src/event/quic/ngx_event_quic_bpf_code.c
+--- a/src/event/quic/ngx_event_quic_bpf_code.c
++++ b/src/event/quic/ngx_event_quic_bpf_code.c
+@@ -1,93 +1,219 @@
+-/* AUTO-GENERATED, DO NOT EDIT. */
+-
+-#include <stddef.h>
+-#include <stdint.h>
+-
+-#include "ngx_bpf.h"
+-
+-
+-static ngx_bpf_reloc_t bpf_reloc_prog_ngx_quic_reuseport_helper[] = {
+-    { "ngx_quic_sockmap", 59 },
+-};
+-
+-static struct bpf_insn bpf_insn_prog_ngx_quic_reuseport_helper[] = {
+-    /* opcode dst          src         offset imm */
+-    { 0x79,   BPF_REG_2,   BPF_REG_1, (int16_t)      0,        0x0 },
+-    { 0x79,   BPF_REG_3,   BPF_REG_1, (int16_t)      8,        0x0 },
+-    { 0xbf,   BPF_REG_6,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,        0x8 },
+-    { 0x2d,   BPF_REG_6,   BPF_REG_3, (int16_t)     58,        0x0 },
+-    { 0xbf,   BPF_REG_4,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x9 },
+-    { 0x2d,   BPF_REG_4,   BPF_REG_3, (int16_t)     55,        0x0 },
+-    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x8 },
+-    { 0xb7,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,       0x14 },
+-    { 0xb7,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x9 },
+-    { 0x71,   BPF_REG_6,   BPF_REG_6, (int16_t)      0,        0x0 },
+-    { 0x67,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,       0x38 },
+-    { 0xc7,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,       0x38 },
+-    { 0x65,   BPF_REG_6,   BPF_REG_0, (int16_t)     11, 0xffffffff },
+-    { 0xbf,   BPF_REG_5,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_5,   BPF_REG_0, (int16_t)      0,        0xd },
+-    { 0x2d,   BPF_REG_5,   BPF_REG_3, (int16_t)     45,        0x0 },
+-    { 0xbf,   BPF_REG_4,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0xe },
+-    { 0x2d,   BPF_REG_4,   BPF_REG_3, (int16_t)     42,        0x0 },
+-    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0xd },
+-    { 0xb7,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0xe },
+-    { 0x71,   BPF_REG_5,   BPF_REG_5, (int16_t)      0,        0x0 },
+-    { 0xb7,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,        0x8 },
+-    { 0x2d,   BPF_REG_6,   BPF_REG_5, (int16_t)     37,        0x0 },
+-    { 0xbf,   BPF_REG_6,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    {  0xf,   BPF_REG_6,   BPF_REG_0, (int16_t)      0,        0x0 },
+-    {  0xf,   BPF_REG_6,   BPF_REG_5, (int16_t)      0,        0x0 },
+-    { 0x2d,   BPF_REG_6,   BPF_REG_3, (int16_t)     33,        0x0 },
+-    {  0xf,   BPF_REG_2,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0xbf,   BPF_REG_4,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x9 },
+-    { 0x2d,   BPF_REG_4,   BPF_REG_3, (int16_t)     29,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      1,        0x0 },
+-    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x38 },
+-    { 0x71,   BPF_REG_3,   BPF_REG_2, (int16_t)      2,        0x0 },
+-    { 0x67,   BPF_REG_3,   BPF_REG_0, (int16_t)      0,       0x30 },
+-    { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      3,        0x0 },
+-    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x28 },
+-    { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      4,        0x0 },
+-    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x20 },
+-    { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      5,        0x0 },
+-    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x18 },
+-    { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      6,        0x0 },
+-    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x10 },
+-    { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_4,   BPF_REG_2, (int16_t)      7,        0x0 },
+-    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x8 },
+-    { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
+-    { 0x71,   BPF_REG_2,   BPF_REG_2, (int16_t)      8,        0x0 },
+-    { 0x4f,   BPF_REG_3,   BPF_REG_2, (int16_t)      0,        0x0 },
+-    { 0x7b,  BPF_REG_10,   BPF_REG_3, (int16_t)  65528,        0x0 },
+-    { 0xbf,   BPF_REG_3,  BPF_REG_10, (int16_t)      0,        0x0 },
+-    {  0x7,   BPF_REG_3,   BPF_REG_0, (int16_t)      0, 0xfffffff8 },
+-    { 0x18,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x0 },
+-    {  0x0,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
+-    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x0 },
+-    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x52 },
+-    { 0xb7,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x1 },
+-    { 0x95,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
+-};
+-
+-
+-ngx_bpf_program_t ngx_quic_reuseport_helper = {
+-    .relocs = bpf_reloc_prog_ngx_quic_reuseport_helper,
+-    .nrelocs = sizeof(bpf_reloc_prog_ngx_quic_reuseport_helper)
+-               / sizeof(bpf_reloc_prog_ngx_quic_reuseport_helper[0]),
+-    .ins = bpf_insn_prog_ngx_quic_reuseport_helper,
+-    .nins = sizeof(bpf_insn_prog_ngx_quic_reuseport_helper)
+-            / sizeof(bpf_insn_prog_ngx_quic_reuseport_helper[0]),
+-    .license = "BSD",
+-    .type = BPF_PROG_TYPE_SK_REUSEPORT,
+-};
+-
++/* AUTO-GENERATED, DO NOT EDIT. */
++
++#include <stddef.h>
++#include <stdint.h>
++
++#include "ngx_bpf.h"
++
++
++static ngx_bpf_reloc_t bpf_reloc_prog_ngx_quic_reuseport_helper[] = {
++    { "ngx_quic_connections", 119 },
++    { "ngx_quic_master_state", 135 },
++    { "ngx_quic_master_state", 149 },
++    { "ngx_quic_master_state", 157 },
++    { "ngx_quic_listen_maps", 164 },
++};
++
++static struct bpf_insn bpf_insn_prog_ngx_quic_reuseport_helper[] = {
++    /* opcode dst          src         offset imm */
++    { 0xbf,   BPF_REG_6,   BPF_REG_1, (int16_t)      0,        0x0 },
++    { 0x79,   BPF_REG_9,   BPF_REG_6, (int16_t)      8,        0x0 },
++    { 0x79,   BPF_REG_8,   BPF_REG_6, (int16_t)      0,        0x0 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_8, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x9 },
++    { 0x3d,   BPF_REG_9,   BPF_REG_1, (int16_t)     13,        0x0 },
++    { 0xb7,   BPF_REG_7,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x61,   BPF_REG_1,   BPF_REG_6, (int16_t)     16,        0x0 },
++    { 0xb7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0xa },
++    { 0x2d,   BPF_REG_2,   BPF_REG_1, (int16_t)    176,        0x0 },
++    { 0xbf,   BPF_REG_3,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_3,   BPF_REG_0, (int16_t)      0, 0xffffffe0 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_6, (int16_t)      0,        0x0 },
++    { 0xb7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x1a },
++    { 0x55,   BPF_REG_0,   BPF_REG_0, (int16_t)    169,        0x0 },
++    { 0x71,   BPF_REG_1,  BPF_REG_10, (int16_t)  65504,        0x0 },
++    {  0x5,   BPF_REG_0,   BPF_REG_0, (int16_t)      1,        0x0 },
++    { 0x71,   BPF_REG_1,   BPF_REG_8, (int16_t)      8,        0x0 },
++    { 0xb7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x9 },
++    { 0x67,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,       0x38 },
++    { 0xc7,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,       0x38 },
++    { 0x65,   BPF_REG_1,   BPF_REG_0, (int16_t)     19, 0xffffffff },
++    { 0xbf,   BPF_REG_1,   BPF_REG_8, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0xe },
++    { 0x3d,   BPF_REG_9,   BPF_REG_1, (int16_t)     13,        0x0 },
++    { 0xb7,   BPF_REG_7,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x61,   BPF_REG_1,   BPF_REG_6, (int16_t)     16,        0x0 },
++    { 0xb7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0xf },
++    { 0x2d,   BPF_REG_2,   BPF_REG_1, (int16_t)    155,        0x0 },
++    { 0xbf,   BPF_REG_3,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_3,   BPF_REG_0, (int16_t)      0, 0xffffffe0 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_6, (int16_t)      0,        0x0 },
++    { 0xb7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0xd },
++    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x1a },
++    { 0x55,   BPF_REG_0,   BPF_REG_0, (int16_t)    148,        0x0 },
++    { 0x71,   BPF_REG_1,  BPF_REG_10, (int16_t)  65504,        0x0 },
++    {  0x5,   BPF_REG_0,   BPF_REG_0, (int16_t)      1,        0x0 },
++    { 0x71,   BPF_REG_1,   BPF_REG_8, (int16_t)     13,        0x0 },
++    { 0xb7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0xe },
++    { 0x55,   BPF_REG_1,   BPF_REG_0, (int16_t)     88,       0x14 },
++    {  0xf,   BPF_REG_8,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_8, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,       0x14 },
++    { 0x3d,   BPF_REG_9,   BPF_REG_1, (int16_t)     12,        0x0 },
++    { 0xb7,   BPF_REG_7,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x61,   BPF_REG_1,   BPF_REG_6, (int16_t)     16,        0x0 },
++    { 0xbf,   BPF_REG_3,   BPF_REG_2, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_3,   BPF_REG_0, (int16_t)      0,       0x14 },
++    { 0x3d,   BPF_REG_3,   BPF_REG_1, (int16_t)    134,        0x0 },
++    { 0xbf,   BPF_REG_3,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_3,   BPF_REG_0, (int16_t)      0, 0xffffffe0 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_6, (int16_t)      0,        0x0 },
++    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x14 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x1a },
++    { 0x15,   BPF_REG_0,   BPF_REG_0, (int16_t)     58,        0x0 },
++    {  0x5,   BPF_REG_0,   BPF_REG_0, (int16_t)    127,        0x0 },
++    { 0x71,   BPF_REG_2,   BPF_REG_8, (int16_t)     13,        0x0 },
++    { 0x67,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_1,   BPF_REG_8, (int16_t)     12,        0x0 },
++    { 0x4f,   BPF_REG_2,   BPF_REG_1, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_1,   BPF_REG_8, (int16_t)     15,        0x0 },
++    { 0x67,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_3,   BPF_REG_8, (int16_t)     14,        0x0 },
++    { 0x4f,   BPF_REG_1,   BPF_REG_3, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_8, (int16_t)      9,        0x0 },
++    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_3,   BPF_REG_8, (int16_t)      8,        0x0 },
++    { 0x4f,   BPF_REG_4,   BPF_REG_3, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_3,   BPF_REG_8, (int16_t)     11,        0x0 },
++    { 0x67,   BPF_REG_3,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_5,   BPF_REG_8, (int16_t)     10,        0x0 },
++    { 0x4f,   BPF_REG_3,   BPF_REG_5, (int16_t)      0,        0x0 },
++    { 0x67,   BPF_REG_3,   BPF_REG_0, (int16_t)      0,       0x10 },
++    { 0x4f,   BPF_REG_3,   BPF_REG_4, (int16_t)      0,        0x0 },
++    { 0x67,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,       0x10 },
++    { 0x4f,   BPF_REG_1,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_2,   BPF_REG_8, (int16_t)     17,        0x0 },
++    { 0x67,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_4,   BPF_REG_8, (int16_t)     16,        0x0 },
++    { 0x4f,   BPF_REG_2,   BPF_REG_4, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_8, (int16_t)     19,        0x0 },
++    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_5,   BPF_REG_8, (int16_t)     18,        0x0 },
++    { 0x4f,   BPF_REG_4,   BPF_REG_5, (int16_t)      0,        0x0 },
++    { 0x67,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,       0x20 },
++    { 0x4f,   BPF_REG_1,   BPF_REG_3, (int16_t)      0,        0x0 },
++    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x10 },
++    { 0x4f,   BPF_REG_4,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_3,   BPF_REG_8, (int16_t)      1,        0x0 },
++    { 0x67,   BPF_REG_3,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_2,   BPF_REG_8, (int16_t)      0,        0x0 },
++    { 0x4f,   BPF_REG_3,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_2,   BPF_REG_8, (int16_t)      3,        0x0 },
++    { 0x67,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_5,   BPF_REG_8, (int16_t)      2,        0x0 },
++    { 0x4f,   BPF_REG_2,   BPF_REG_5, (int16_t)      0,        0x0 },
++    { 0x63,  BPF_REG_10,   BPF_REG_4, (int16_t)  65520,        0x0 },
++    { 0x7b,  BPF_REG_10,   BPF_REG_1, (int16_t)  65512,        0x0 },
++    { 0x67,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,       0x10 },
++    { 0x4f,   BPF_REG_2,   BPF_REG_3, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_1,   BPF_REG_8, (int16_t)      5,        0x0 },
++    { 0x67,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x71,   BPF_REG_3,   BPF_REG_8, (int16_t)      4,        0x0 },
++    { 0x4f,   BPF_REG_1,   BPF_REG_3, (int16_t)      0,        0x0 },
++    { 0x71,   BPF_REG_3,   BPF_REG_8, (int16_t)      6,        0x0 },
++    { 0x71,   BPF_REG_4,   BPF_REG_8, (int16_t)      7,        0x0 },
++    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x8 },
++    { 0x4f,   BPF_REG_4,   BPF_REG_3, (int16_t)      0,        0x0 },
++    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x10 },
++    { 0x4f,   BPF_REG_4,   BPF_REG_1, (int16_t)      0,        0x0 },
++    { 0x67,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,       0x20 },
++    { 0x4f,   BPF_REG_4,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0x7b,  BPF_REG_10,   BPF_REG_4, (int16_t)  65504,        0x0 },
++    { 0xbf,   BPF_REG_3,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_3,   BPF_REG_0, (int16_t)      0, 0xffffffe0 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_6, (int16_t)      0,        0x0 },
++    { 0x18,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x0 },
++    {  0x0,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x52 },
++    { 0xb7,   BPF_REG_7,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x67,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x20 },
++    { 0x77,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x20 },
++    { 0x15,   BPF_REG_0,   BPF_REG_0, (int16_t)     59,        0x0 },
++    { 0x18,   BPF_REG_1,   BPF_REG_0, (int16_t)      0, 0xfffffffe },
++    {  0x0,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x1d,   BPF_REG_0,   BPF_REG_1, (int16_t)      1,        0x0 },
++    {  0x5,   BPF_REG_0,   BPF_REG_0, (int16_t)     54,        0x0 },
++    { 0xb7,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x2 },
++    { 0x63,  BPF_REG_10,   BPF_REG_1, (int16_t)  65532,        0x0 },
++    { 0xbf,   BPF_REG_2,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0, 0xfffffffc },
++    { 0x18,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x0 },
++    {  0x0,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0xb7,   BPF_REG_7,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x15,   BPF_REG_0,   BPF_REG_0, (int16_t)     46,        0x0 },
++    { 0x61,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x55,   BPF_REG_1,   BPF_REG_0, (int16_t)      3,        0x2 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x7 },
++    { 0x57,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x1 },
++    {  0x5,   BPF_REG_0,   BPF_REG_0, (int16_t)      9,        0x0 },
++    { 0xb7,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x3 },
++    { 0x63,  BPF_REG_10,   BPF_REG_1, (int16_t)  65532,        0x0 },
++    { 0xbf,   BPF_REG_2,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0, 0xfffffffc },
++    { 0x18,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x0 },
++    {  0x0,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x15,   BPF_REG_0,   BPF_REG_0, (int16_t)     33,        0x0 },
++    { 0x61,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x63,  BPF_REG_10,   BPF_REG_0, (int16_t)  65524,        0x0 },
++    { 0xbf,   BPF_REG_2,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0, 0xfffffff4 },
++    { 0x18,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x0 },
++    {  0x0,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x15,   BPF_REG_0,   BPF_REG_0, (int16_t)     25,        0x0 },
++    { 0x61,   BPF_REG_8,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0xbf,   BPF_REG_2,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_2,   BPF_REG_0, (int16_t)      0, 0xfffffff4 },
++    { 0x18,   BPF_REG_1,   BPF_REG_0, (int16_t)      0,        0x0 },
++    {  0x0,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x15,   BPF_REG_0,   BPF_REG_0, (int16_t)     18,        0x0 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_8, (int16_t)      0,        0x0 },
++    { 0x61,   BPF_REG_2,   BPF_REG_6, (int16_t)     32,        0x0 },
++    { 0xbf,   BPF_REG_3,   BPF_REG_2, (int16_t)      0,        0x0 },
++    { 0x3f,   BPF_REG_3,   BPF_REG_1, (int16_t)      0,        0x0 },
++    { 0x2f,   BPF_REG_3,   BPF_REG_8, (int16_t)      0,        0x0 },
++    { 0x1f,   BPF_REG_2,   BPF_REG_3, (int16_t)      0,        0x0 },
++    { 0x63,  BPF_REG_10,   BPF_REG_2, (int16_t)  65528,        0x0 },
++    { 0xbf,   BPF_REG_3,  BPF_REG_10, (int16_t)      0,        0x0 },
++    {  0x7,   BPF_REG_3,   BPF_REG_0, (int16_t)      0, 0xfffffff8 },
++    { 0xbf,   BPF_REG_1,   BPF_REG_6, (int16_t)      0,        0x0 },
++    { 0xbf,   BPF_REG_2,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0xb7,   BPF_REG_4,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0x85,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x52 },
++    { 0x67,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x20 },
++    { 0x77,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,       0x20 },
++    { 0xb7,   BPF_REG_7,   BPF_REG_0, (int16_t)      0,        0x1 },
++    { 0x15,   BPF_REG_0,   BPF_REG_0, (int16_t)      1,        0x0 },
++    { 0xb7,   BPF_REG_7,   BPF_REG_0, (int16_t)      0,        0x0 },
++    { 0xbf,   BPF_REG_0,   BPF_REG_7, (int16_t)      0,        0x0 },
++    { 0x95,   BPF_REG_0,   BPF_REG_0, (int16_t)      0,        0x0 },
++};
++
++
++ngx_bpf_program_t ngx_quic_reuseport_helper = {
++    .relocs = bpf_reloc_prog_ngx_quic_reuseport_helper,
++    .nrelocs = sizeof(bpf_reloc_prog_ngx_quic_reuseport_helper)
++               / sizeof(bpf_reloc_prog_ngx_quic_reuseport_helper[0]),
++    .ins = bpf_insn_prog_ngx_quic_reuseport_helper,
++    .nins = sizeof(bpf_insn_prog_ngx_quic_reuseport_helper)
++            / sizeof(bpf_insn_prog_ngx_quic_reuseport_helper[0]),
++    .license = "BSD",
++    .type = BPF_PROG_TYPE_SK_REUSEPORT,
++};
+diff --git a/src/event/quic/ngx_event_quic_connection.h b/src/event/quic/ngx_event_quic_connection.h
+index 824c92b5..a87d91a1 100644
+--- a/src/event/quic/ngx_event_quic_connection.h
++++ b/src/event/quic/ngx_event_quic_connection.h
+@@ -39,6 +39,9 @@ typedef struct ngx_quic_keys_s        ngx_quic_keys_t;
+ #include <ngx_event_quic_ack.h>
+ #include <ngx_event_quic_output.h>
+ #include <ngx_event_quic_socket.h>
++#if (NGX_QUIC_BPF)
++#include <ngx_event_quic_bpf.h>
++#endif
+ 
+ 
+ /* RFC 9002, 6.2.2.  Handshakes and New Paths: kInitialRtt */
+@@ -47,4 +50,6 @@ typedef struct ngx_quic_keys_s        ngx_quic_keys_t;
+ #define NGX_QUIC_UNSET_PN                    (uint64_t) -1
++
++#define NGX_QUIC_MAX_SERVER_IDS              8
+ 
+ /*  0-RTT and 1-RTT data exist in the same packet number space,
+  *  so we have 3 packet number spaces:
+@@ -286,6 +290,7 @@ struct ngx_quic_connection_s {
+     unsigned                          key_phase:1;
+     unsigned                          validated:1;
+     unsigned                          client_tp_done:1;
++    unsigned                          listen_bound:1;
+ 
+ #if (NGX_QUIC_OPENSSL_API)
+     unsigned                          read_level:2;
+diff --git a/src/event/quic/ngx_event_quic_connid.c b/src/event/quic/ngx_event_quic_connid.c
+index f5086820..21f32e44 100644
+--- a/src/event/quic/ngx_event_quic_connid.c
++++ b/src/event/quic/ngx_event_quic_connid.c
+@@ -9,12 +9,7 @@
+ #include <ngx_event.h>
+ #include <ngx_event_quic_connection.h>
+ 
+-#define NGX_QUIC_MAX_SERVER_IDS   8
+ 
+-
+-#if (NGX_QUIC_BPF)
+-static ngx_int_t ngx_quic_bpf_attach_id(ngx_connection_t *c, u_char *id);
+-#endif
+ static ngx_int_t ngx_quic_retire_client_id(ngx_connection_t *c,
+     ngx_quic_client_id_t *cid);
+ static ngx_quic_client_id_t *ngx_quic_alloc_client_id(ngx_connection_t *c,
+@@ -30,46 +25,10 @@ ngx_quic_create_server_id(ngx_connection_t *c, u_char *id)
+         return NGX_ERROR;
+     }
+ 
+-#if (NGX_QUIC_BPF)
+-    if (ngx_quic_bpf_attach_id(c, id) != NGX_OK) {
+-        ngx_log_error(NGX_LOG_ERR, c->log, 0,
+-                      "quic bpf failed to generate socket key");
+-        /* ignore error, things still may work */
+-    }
+-#endif
+-
+     return NGX_OK;
+ }
+ 
+ 
+-#if (NGX_QUIC_BPF)
+-
+-static ngx_int_t
+-ngx_quic_bpf_attach_id(ngx_connection_t *c, u_char *id)
+-{
+-    int        fd;
+-    uint64_t   cookie;
+-    socklen_t  optlen;
+-
+-    fd = c->listening->fd;
+-
+-    optlen = sizeof(cookie);
+-
+-    if (getsockopt(fd, SOL_SOCKET, SO_COOKIE, &cookie, &optlen) == -1) {
+-        ngx_log_error(NGX_LOG_ERR, c->log, ngx_socket_errno,
+-                      "quic getsockopt(SO_COOKIE) failed");
+-
+-        return NGX_ERROR;
+-    }
+-
+-    ngx_quic_dcid_encode_key(id, cookie);
+-
+-    return NGX_OK;
+-}
+-
+-#endif
+-
+-
+ ngx_int_t
+ ngx_quic_handle_new_connection_id_frame(ngx_connection_t *c,
+     ngx_quic_new_conn_id_frame_t *f)
+diff --git a/src/event/quic/ngx_event_quic_output.c b/src/event/quic/ngx_event_quic_output.c
+index ce6aaab2..a1aa0b8b 100644
+--- a/src/event/quic/ngx_event_quic_output.c
++++ b/src/event/quic/ngx_event_quic_output.c
+@@ -73,6 +73,10 @@ ngx_quic_output(ngx_connection_t *c)
+     ngx_quic_congestion_t  *cg;
+     ngx_quic_connection_t  *qc;
+ 
++    if (c->fd == (ngx_socket_t) -1) {
++        return NGX_ERROR;
++    }
++
+     c->log->action = "sending frames";
+ 
+     qc = ngx_quic_get_connection(c);
+@@ -998,7 +1002,6 @@ ngx_quic_send_retry(ngx_connection_t *c, ngx_quic_conf_t *conf,
+     pkt.odcid = inpkt->dcid;
+     pkt.dcid = inpkt->scid;
+ 
+-    /* TODO: generate routable dcid */
+     if (RAND_bytes(dcid, NGX_QUIC_SERVER_CID_LEN) != 1) {
+         return NGX_ERROR;
+     }
+diff --git a/src/event/quic/ngx_event_quic_socket.c b/src/event/quic/ngx_event_quic_socket.c
+index c2bc822a..3fd83b98 100644
+--- a/src/event/quic/ngx_event_quic_socket.c
++++ b/src/event/quic/ngx_event_quic_socket.c
+@@ -105,6 +105,11 @@ ngx_quic_open_sockets(ngx_connection_t *c, ngx_quic_connection_t *qc,
+ failed:
+ 
+     ngx_rbtree_delete(&c->listening->rbtree, &qsock->udp.node);
++#if (NGX_QUIC_BPF)
++    if (ngx_quic_bpf_delete(c, qc, qsock) != NGX_OK) {
++        return NGX_ERROR;
++    }
++#endif
+     c->udp = NULL;
+ 
+     return NGX_ERROR;
+@@ -156,6 +161,11 @@ ngx_quic_close_socket(ngx_connection_t *c, ngx_quic_socket_t *qsock)
+     ngx_queue_insert_head(&qc->free_sockets, &qsock->queue);
+ 
+     ngx_rbtree_delete(&c->listening->rbtree, &qsock->udp.node);
++#if (NGX_QUIC_BPF)
++    if (ngx_quic_bpf_delete(c, qc, qsock) != NGX_OK) {
++        return;
++    }
++#endif
+     qc->nsockets--;
+ 
+     ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0,
+@@ -180,6 +190,12 @@ ngx_quic_listen(ngx_connection_t *c, ngx_quic_connection_t *qc,
+     qsock->udp.node.key = ngx_crc32_long(id.data, id.len);
+     qsock->udp.key = id;
+ 
++#if (NGX_QUIC_BPF)
++    if (ngx_quic_bpf_insert(c, qc, qsock) != NGX_OK) {
++        return NGX_ERROR;
++    }
++#endif
++
+     ngx_rbtree_insert(&c->listening->rbtree, &qsock->udp.node);
+ 
+     ngx_queue_insert_tail(&qc->sockets, &qsock->queue);
+diff --git a/src/event/quic/ngx_event_quic_udp.c b/src/event/quic/ngx_event_quic_udp.c
+index 15b54bc8..2e903fad 100644
+--- a/src/event/quic/ngx_event_quic_udp.c
++++ b/src/event/quic/ngx_event_quic_udp.c
+@@ -168,7 +168,7 @@ ngx_quic_recvmsg(ngx_event_t *ev)
+                 c->log->handler = NULL;
+ 
+                 ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0,
+-                               "quic recvmsg: fd:%d n:%z", c->fd, n);
++                               "quic recvmsg: fd:%d n:%z", lc->fd, n);
+ 
+                 c->log->handler = handler;
+             }
+@@ -211,12 +211,23 @@ ngx_quic_recvmsg(ngx_event_t *ev)
+         ngx_accept_disabled = ngx_cycle->connection_n / 8
+                               - ngx_cycle->free_connection_n;
+ 
+-        c = ngx_get_connection(lc->fd, ev->log);
+-        if (c == NULL) {
++        c = NULL;
++
++#if (NGX_QUIC_BPF)
++        if (ngx_quic_bpf_get_client_connection(lc, &c) != NGX_OK) {
+             return;
+         }
++#endif
++
++        if (c == NULL) {
++            c = ngx_get_connection(lc->fd, ev->log);
++            if (c == NULL) {
++                return;
++            }
++
++            c->shared = 1;
++        }
+ 
+-        c->shared = 1;
+         c->type = SOCK_DGRAM;
+         c->socklen = socklen;
+ 
+@@ -327,7 +338,7 @@ ngx_quic_recvmsg(ngx_event_t *ev)
+ 
+             ngx_log_debug4(NGX_LOG_DEBUG_EVENT, log, 0,
+                            "*%uA quic recvmsg: %V fd:%d n:%z",
+-                           c->number, &addr, c->fd, n);
++                           c->number, &addr, lc->fd, n);
+         }
+ 
+         }
+diff --git a/src/os/unix/ngx_process_cycle.c b/src/os/unix/ngx_process_cycle.c
+index 5bc5ce97..e2af0ac4 100644
+--- a/src/os/unix/ngx_process_cycle.c
++++ b/src/os/unix/ngx_process_cycle.c
+@@ -958,7 +958,8 @@ ngx_worker_process_exit(ngx_cycle_t *cycle)
+ #endif
+                 && !c[i].read->accept
+                 && !c[i].read->channel
+-                && !c[i].read->resolver)
++                && !c[i].read->resolver
++                && !c[i].read->quic)
+             {
+                 ngx_log_error(NGX_LOG_ALERT, cycle->log, 0,
+                               "*%uA open socket #%d left in connection %ui",

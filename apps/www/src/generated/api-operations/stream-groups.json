@@ -1,0 +1,448 @@
+{
+ "id": "stream-groups",
+ "prefix": "/v1/stream-groups",
+ "operations": [
+  {
+   "operation_id": "listStreamGroups",
+   "method": "GET",
+   "path": "/v1/stream-groups",
+   "summary": "List layer-four forwarding groups",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Tenant principals see only groups owned by their current user and tenant. Platform principals can list tenant groups after streams.read authorization.",
+   "permissions": [
+    "streams.read"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page ordered newest first; stream_count counts live member rules.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<StreamGroup>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  },
+  {
+   "operation_id": "createStreamGroup",
+   "method": "POST",
+   "path": "/v1/stream-groups",
+   "summary": "Create a layer-four forwarding group",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Tenant principals are fixed to their current scope and user. Platform principals must provide target_scope_id and owner_id. Group membership alone never advances the edge configuration revision.",
+   "permissions": [
+    "streams.manage"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Reuse is accepted only for the exact same actor, operation, and normalized input."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string"
+     },
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)",
+      "description": "Required for platform principals; tenant principals may omit it or use their current scope."
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)",
+      "description": "Required for platform principals; tenant principals may omit it or use their current user."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Group committed, or an exact idempotent replay returned.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "StreamOwner | null",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "stream_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or listener-port conflict."
+    },
+    {
+     "status": "415",
+     "description": "Exactly one Content-Type field parsing as application/json is required."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateStreamGroup",
+   "method": "PATCH",
+   "path": "/v1/stream-groups/{id}",
+   "summary": "Rename a layer-four forwarding group",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "streams.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact forward group identity."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Reuse is accepted only for the exact same actor, operation, and normalized input."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive current resource revision."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string"
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "Must exactly equal the quoted If-Match revision."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Group updated, or an exact idempotent replay returned.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "StreamOwner | null",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "stream_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "404",
+     "description": "No visible stream matches the exact immutable stream identity."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or listener-port conflict."
+    },
+    {
+     "status": "415",
+     "description": "Exactly one Content-Type field parsing as application/json is required."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteStreamGroup",
+   "method": "DELETE",
+   "path": "/v1/stream-groups/{id}",
+   "summary": "Delete an unreferenced layer-four forwarding group",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "streams.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact forward group identity."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Reuse is accepted only for the exact same actor, operation, and normalized input."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive current resource revision."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Group deleted after detaching nothing; still-referenced groups conflict."
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "404",
+     "description": "No visible stream matches the exact immutable stream identity."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or listener-port conflict."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  }
+ ]
+}

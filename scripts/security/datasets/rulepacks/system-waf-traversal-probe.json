@@ -1,0 +1,62 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/waf-traversal-probe",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "参数目录穿越探测",
+ "description": "参数值含 ../ 或系统敏感文件路径即记录。自有写法；思路来源 wargio/naxsi naxsi_core.rules（GPL-3.0，未复制规则文本）",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "traversal-probe"
+ ],
+ "rules": [
+  {
+   "id": "traversal-probe",
+   "name": "参数含目录穿越/系统文件",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "contains",
+       "values": [
+        "../",
+        "..\\",
+        "/etc/passwd",
+        "/etc/shadow",
+        "/proc/self/",
+        "boot.ini",
+        "c:\\windows",
+        "win.ini"
+       ],
+       "filters": [
+        "unicode_decode",
+        "lowercase"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

@@ -1,0 +1,60 @@
+{
+  "api_version": "marketplace.cdnca.io/v1",
+  "kind": "ExtensionCatalog",
+  "catalog_id": "cdnca-official",
+  "events": [
+    {
+      "type": "io.cdnca.site.v1.updated",
+      "status": "available",
+      "description": {"zh-CN": "站点配置发生变更", "en-US": "Site configuration changed"},
+      "required_permission": "events.site.read"
+    },
+    {
+      "type": "io.cdnca.deployment.v1.status_changed",
+      "status": "available",
+      "description": {"zh-CN": "边缘配置发布状态发生变更", "en-US": "Edge deployment status changed"},
+      "required_permission": "events.deployment.read"
+    },
+    {
+      "type": "io.cdnca.node.v1.status_changed",
+      "status": "available",
+      "description": {"zh-CN": "节点在线或管理状态发生变更", "en-US": "Node presence or administrative status changed"},
+      "required_permission": "events.node.read"
+    },
+    {
+      "type": "io.cdnca.certificate.v1.status_changed",
+      "status": "available",
+      "description": {"zh-CN": "证书签发或续期状态发生变更", "en-US": "Certificate issuance or renewal status changed"},
+      "required_permission": "events.certificate.read"
+    },
+    {
+      "type": "io.cdnca.certificate.v1.expiry_reached",
+      "status": "available",
+      "description": {"zh-CN": "正在使用的证书临近到期或已过期", "en-US": "A certificate in use is about to expire or has expired"},
+      "required_permission": "events.certificate.read"
+    },
+    {
+      "type": "io.cdnca.usage.v1.threshold_reached",
+      "status": "available",
+      "description": {"zh-CN": "用量达到套餐或授权阈值", "en-US": "Usage reached a package or entitlement threshold"},
+      "required_permission": "events.usage.read"
+    },
+    {
+      "type": "io.cdnca.security.v1.incident_detected",
+      "status": "available",
+      "description": {"zh-CN": "安全策略检测到需通知的事件", "en-US": "A security policy detected a reportable incident"},
+      "required_permission": "events.security.read"
+    }
+  ],
+  "permissions": [
+    {"name": "events.site.read", "status": "available", "description": {"zh-CN": "接收站点事件", "en-US": "Receive site events"}, "risk": "medium"},
+    {"name": "events.deployment.read", "status": "available", "description": {"zh-CN": "接收发布状态事件", "en-US": "Receive deployment status events"}, "risk": "medium"},
+    {"name": "events.node.read", "status": "available", "description": {"zh-CN": "接收节点状态事件", "en-US": "Receive node status events"}, "risk": "medium"},
+    {"name": "events.certificate.read", "status": "available", "description": {"zh-CN": "接收证书状态事件", "en-US": "Receive certificate status events"}, "risk": "high"},
+    {"name": "events.usage.read", "status": "available", "description": {"zh-CN": "接收用量阈值事件", "en-US": "Receive usage threshold events"}, "risk": "medium"},
+    {"name": "events.security.read", "status": "available", "description": {"zh-CN": "接收脱敏安全事件", "en-US": "Receive redacted security events"}, "risk": "high"},
+    {"name": "dns.records.read", "status": "reserved", "description": {"zh-CN": "读取插件授权范围内的 DNS 记录", "en-US": "Read DNS records within the granted scope"}, "risk": "medium"},
+    {"name": "dns.records.write", "status": "reserved", "description": {"zh-CN": "修改插件授权范围内的 DNS 记录", "en-US": "Write DNS records within the granted scope"}, "risk": "high"},
+    {"name": "notifications.send", "status": "reserved", "description": {"zh-CN": "代表控制面发送通知", "en-US": "Send notifications for the control plane"}, "risk": "high"}
+  ]
+}

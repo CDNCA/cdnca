@@ -1,0 +1,111 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Entitlement Refresh
+  version: 1.0.0
+servers:
+  - url: /
+paths:
+  /v1/admin/entitlement/refresh:
+    post:
+      tags: [Entitlements]
+      operationId: refreshAdminEntitlement
+      summary: Refresh the locally verified entitlement lease
+      description: >-
+        Requires a live platform administrator session. The control plane
+        contacts the configured license service, verifies the signed lease,
+        and atomically installs it locally. Existing edge traffic does not
+        depend on this request or on license-service availability.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '200':
+          description: The signed lease was verified and installed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshResponse'
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '502':
+          $ref: '#/components/responses/Error'
+          description: >-
+            entitlement_refresh_failed (outcome not_applied): the lease was not
+            refreshed. entitlement_refresh_unknown (outcome unknown): the local
+            COMMIT answer was lost, the lease may be installed; re-read the
+            dashboard before retrying.
+        '503':
+          $ref: '#/components/responses/Error'
+          description: >-
+            entitlement_refresh_audit_failed: the audit record could not be
+            written; outcome applied (the lease was installed) or unknown.
+            Re-read the dashboard before retrying.
+        '504':
+          $ref: '#/components/responses/Error'
+          description: entitlement_refresh_timeout, result unknown; re-read the dashboard before retrying.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+  schemas:
+    RefreshResponse:
+      type: object
+      required: [schema, request_id, snapshot]
+      additionalProperties: false
+      properties:
+        schema: {type: string, const: cdnca.entitlement-refresh/v1}
+        request_id: {type: string}
+        snapshot:
+          type: object
+          required: [installation_id, serial, key_id, status, verified_at]
+          additionalProperties: false
+          properties:
+            installation_id: {type: string}
+            serial: {type: integer, minimum: 1}
+            key_id: {type: string}
+            status: {type: string, enum: [uninstalled, valid, grace, expired, revoked, invalid]}
+            verified_at: {type: string, format: date-time}
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            outcome:
+              type: string
+              enum: [not_applied, unknown, applied]
+              description: Refresh errors only; whether the new lease was installed.
+  responses:
+    Error:
+      description: Stable API error.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

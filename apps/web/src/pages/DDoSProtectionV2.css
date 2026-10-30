@@ -1,0 +1,341 @@
+/* redesign-b ④: 节点管理 → 连接防护 (DESIGN-ddos-protection.md).
+   Every rule sits under .ddos-v2, so the base look of other pages stays
+   (DefaultLookLock). Colors come from the shared --cdnca-* variables only.
+   The summary strip and save bar reuse the site edit classes
+   (.site-tab-summary, .site-edit-savebar, SiteEditV4.css). */
+
+.ddos-v2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+/* ---- header: title + revision state on one line ---- */
+.ddos-v2 .ddos-v2-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+
+.ddos-v2 .ddos-v2-head h4.ant-typography {
+  margin: 0;
+}
+
+.ddos-v2 .ddos-v2-head .ant-typography-secondary {
+  display: block;
+  max-width: 880px;
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.ddos-v2 .ddos-v2-revision {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.ddos-v2 .ddos-v2-revision .ant-tag {
+  margin: 0;
+}
+
+.ddos-v2 .site-tab-summary {
+  margin: 0;
+}
+
+/* eight values: one row from 1280px */
+.ddos-v2 .site-tab-summary > ul {
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+}
+
+.ddos-v2 .site-tab-summary li > button {
+  padding-inline: 14px;
+}
+
+/* ---- one layer: heading with the page's single accent bar ---- */
+.ddos-v2 .ddos-v2-layer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.ddos-v2 .ddos-v2-layer > header > h2 {
+  margin: 0;
+  padding-left: 10px;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+  border-left: 3px solid var(--cdnca-color-primary);
+  scroll-margin-top: 16px;
+}
+
+.ddos-v2 .ddos-v2-layer > header > h2:focus {
+  outline: none;
+}
+
+.ddos-v2 .ddos-v2-layer > header > p {
+  margin: 4px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+/* ---- baseline section cards: two columns from 1200px (fix-ddoslayout) ----
+   Each column is a stack of cards; the columns stretch to one height and the
+   last card of each column takes the rest, so both columns end on one line. */
+.ddos-v2 .ddos-v2-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (min-width: 1200px) {
+  .ddos-v2 .ddos-v2-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.ddos-v2 .ddos-v2-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.ddos-v2 .ddos-v2-col > .ddos-v2-section:last-child {
+  flex: 1 1 auto;
+}
+
+.ddos-v2 .ddos-v2-section {
+  min-width: 0;
+  padding: 16px 20px 4px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.ddos-v2 .ddos-v2-section > h3 {
+  margin: 0 0 12px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+  scroll-margin-top: 16px;
+}
+
+.ddos-v2 .ddos-v2-section > h3:focus {
+  outline: none;
+}
+
+/* number fields side by side */
+.ddos-v2 .ddos-v2-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0 12px;
+}
+
+/* fix-ddoscompact / fix-ddoscompact2: four fields in one row from 900px
+   (labels one row, inputs one row), short labels with the full name in the
+   help tooltip; two per row below 900px */
+.ddos-v2 .ddos-v2-fields.is-four {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 900px) {
+  .ddos-v2 .ddos-v2-fields.is-four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* the two-column grid at 1200–1439px leaves about 95px a field: tighter gap
+   and input padding so a six-digit value and its unit still show in full */
+@media (min-width: 1200px) and (max-width: 1439px) {
+  .ddos-v2 .ddos-v2-fields.is-four {
+    gap: 0 8px;
+  }
+
+  .ddos-v2 .ddos-v2-fields.is-four .ant-input-number-affix-wrapper {
+    padding-inline: 8px;
+  }
+
+  .ddos-v2 .ddos-v2-fields.is-four .ant-input-number-input {
+    padding-inline: 8px;
+  }
+
+  /* with a unit suffix the wrapper already pads the text */
+  .ddos-v2 .ddos-v2-fields.is-four .ant-input-number-affix-wrapper .ant-input-number-input {
+    padding-inline: 0;
+  }
+}
+
+.ddos-v2 .ddos-v2-fields .ant-input-number,
+.ddos-v2 .ddos-v2-fields .ant-input-number-affix-wrapper {
+  width: 100%;
+}
+
+/* compact form text, as on the site edit page: labels, inputs and help at 13px */
+.ddos-v2 .ddos-v2-section .ant-form-item {
+  margin-bottom: 12px;
+}
+
+.ddos-v2 .ddos-v2-section .ant-form-item-label {
+  padding-bottom: 4px;
+}
+
+.ddos-v2 .ddos-v2-section .ant-form-item-label > label,
+.ddos-v2 .ddos-v2-section .ant-input-number-input,
+.ddos-v2 .ddos-v2-section .ant-input-number-suffix,
+.ddos-v2 .ddos-v2-section .ant-select,
+.ddos-v2 .ddos-v2-section .ant-input,
+.ddos-v2 .ddos-v2-section .ant-checkbox-wrapper,
+.ddos-v2 .ddos-v2-section .ant-form-item-extra {
+  font-size: 13px;
+}
+
+.ddos-v2 .ddos-v2-fields .ant-form-item-label > label {
+  white-space: nowrap;
+}
+
+.ddos-v2 .ddos-v2-fields .ant-input-number-suffix {
+  color: var(--cdnca-color-text-secondary);
+}
+
+/* a switch and its label on one row, the help under both. antd's vertical
+   layout gives .ant-form-item-control width: 100%, which wrapped the switch
+   under its label; the control box is dropped so its input sits next to the
+   label and its help/error spans the row. */
+.ddos-v2 .ddos-v2-switch .ant-form-item-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.ddos-v2 .ddos-v2-switch .ant-form-item-label {
+  padding: 0 12px 0 0;
+}
+
+.ddos-v2 .ddos-v2-switch .ant-form-item-control {
+  display: contents;
+}
+
+.ddos-v2 .ddos-v2-switch .ant-form-item-additional {
+  grid-column: 1 / -1;
+}
+
+.ddos-v2 .ddos-v2-switch .ant-form-item-extra {
+  padding-top: 2px;
+}
+
+.ddos-v2 .ddos-v2-section .ant-checkbox-group {
+  row-gap: 8px;
+}
+
+/* ---- save bar: the three-step state next to the buttons ---- */
+.ddos-v2 .site-edit-savebar {
+  margin-top: 16px;
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+  transition: background-color 150ms ease, border-color 150ms ease;
+}
+
+.ddos-v2 .site-edit-savebar.is-dirty {
+  border-color: var(--cdnca-color-warning);
+}
+
+.ddos-v2 .ddos-v2-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ddos-v2 .ddos-v2-steps > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.ddos-v2 .ddos-v2-steps > li + li::before {
+  width: 16px;
+  height: 1px;
+  margin-right: 4px;
+  background: var(--cdnca-color-border-secondary);
+  content: '';
+}
+
+.ddos-v2 .ddos-v2-step-mark {
+  display: inline-grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 50%;
+}
+
+.ddos-v2 .ddos-v2-steps > li.is-done {
+  color: var(--cdnca-color-text);
+}
+
+.ddos-v2 .ddos-v2-steps > li.is-done .ddos-v2-step-mark {
+  color: var(--cdnca-color-success);
+  border-color: var(--cdnca-color-success);
+}
+
+.ddos-v2 .ddos-v2-steps > li.is-current {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+.ddos-v2 .ddos-v2-steps > li.is-current .ddos-v2-step-mark {
+  color: var(--cdnca-color-bg-container);
+  background: var(--cdnca-color-primary);
+  border-color: var(--cdnca-color-primary);
+}
+
+.ddos-v2 .ddos-v2-savebar-left {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  align-items: center;
+  gap: 8px 20px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ddos-v2 .site-edit-savebar {
+    transition: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .ddos-v2 .ddos-v2-section {
+    padding: 12px 12px 0;
+  }
+
+  .ddos-v2 .site-edit-savebar {
+    flex-wrap: wrap;
+  }
+}
+
+/* the two layers after the baseline keep their cards; their titles get the same bar as the layer headings */
+.ddos-v2 > .ant-card > .ant-card-head .ant-card-head-title {
+  padding-left: 10px;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  border-left: 3px solid var(--cdnca-color-primary);
+}
+
+.ddos-v2 .ddos-v2-note {
+  margin: -4px 0 16px;
+  font-size: 13px;
+}

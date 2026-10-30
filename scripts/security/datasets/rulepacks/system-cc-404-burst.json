@@ -1,0 +1,53 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/cc-404-burst",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "cc_v2",
+ "engine_min_version": 3,
+ "name": "404 扫描行为",
+ "description": "同一 IP 60 秒内 404 达 10 次后记录其请求（达到后第 1 个请求只计数：fixed_window 判定超过 requests=1 才算命中，第 2 个起每次记录），可改为 429 拒绝或挑战。自有写法；思路来源 bunkerity/bunkerweb badbehavior（AGPL-3.0，未复制代码）",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "reject_429",
+    "challenge"
+   ],
+   "bind": {
+    "target": "cc.action.kind",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "status-404-burst"
+ ],
+ "rules": [
+  {
+   "id": "status-404-burst",
+   "name": "单 IP 一分钟 10 次 404",
+   "cc": {
+    "rule_id": "",
+    "priority": 0,
+    "flow": "continue",
+    "dimension": "client_ip",
+    "match": {
+     "status_404_count": 10
+    },
+    "limit": {
+     "algorithm": "fixed_window",
+     "requests": 1,
+     "window_seconds": 60
+    },
+    "action": {
+     "kind": "log"
+    }
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

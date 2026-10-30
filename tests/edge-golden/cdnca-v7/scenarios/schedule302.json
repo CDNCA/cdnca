@@ -1,0 +1,320 @@
+{
+  "name": "schedule302",
+  "description": "HTTP 302 调度（r136 sched302）：大文件按客户端分到不同节点 302（保留路径与参数、签名落地路径、Cache-Control no-store），跟随跳转落地后由该节点服务、源站收到原始 Host 与 URI 且不带调度头；非大文件扩展名、POST、未开调度的站点不跳转，伪造落地签名、伪造调度头被拒。",
+  "covers": [
+    "302 调度",
+    "落地签名",
+    "防循环",
+    "大文件过滤"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b2018-0000-4000-8000-000000000001",
+      "source_revision": 3,
+      "config_version_id": "0a1b2018-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "sched302",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 6
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b2018-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "dl.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18096",
+              "position": 0,
+              "address_family": "ipv4",
+              "port": 18096,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o1",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19371,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          },
+          "schedule302": {
+            "target": "address",
+            "keep_path": true,
+            "keep_query": true,
+            "signature_ttl_seconds": 60,
+            "https_to_http": false,
+            "extensions": [
+              "bin",
+              "mp4"
+            ],
+            "path_prefixes": [],
+            "min_size_bytes": 0
+          }
+        },
+        {
+          "id": "0a1b2018-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "www.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18096",
+              "position": 0,
+              "address_family": "ipv4",
+              "port": 18096,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o1",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19371,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        }
+      ]
+    },
+    "node": {
+      "id": "0a1b2018-0000-4000-8000-0000000000a0",
+      "health_port": 18916,
+      "schedule302_table": {
+        "schema": "cdnca.edge.sched302-table/v1",
+        "node_id": "0a1b2018-0000-4000-8000-0000000000a0",
+        "revision": 0,
+        "generated_at": 0,
+        "sites": [
+          {
+            "site_id": "0a1b2018-0000-4000-8000-000000000101",
+            "hosts": [
+              "dl.example.test"
+            ],
+            "key": "ZGV0ZXJtaW5pc3RpYy1nb2xkZW4ta2V5LTMyYnl0ZXM",
+            "candidates": [
+              {
+                "node_id": "0a1b2018-0000-4000-8000-0000000000a1",
+                "host": "127.0.0.2",
+                "http_port": 18096,
+                "carrier": "",
+                "country": "",
+                "province": 0,
+                "weight": 10,
+                "available": true,
+                "load": 0
+              },
+              {
+                "node_id": "0a1b2018-0000-4000-8000-0000000000a2",
+                "host": "127.0.0.3",
+                "http_port": 18096,
+                "carrier": "",
+                "country": "",
+                "province": 0,
+                "weight": 10,
+                "available": true,
+                "load": 0
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "origins": [
+    {
+      "name": "dl",
+      "address": "127.0.0.1:19371",
+      "routes": [
+        {
+          "path": "/v/a.mp4",
+          "body": "video-bytes",
+          "headers": {
+            "Content-Type": "video/mp4"
+          }
+        },
+        {
+          "path": "/index.html",
+          "body": "<html>page</html>",
+          "headers": {
+            "Content-Type": "text/html"
+          }
+        },
+        {
+          "path": "/upload.bin",
+          "body": "posted"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "redirect-client-a",
+      "port": 18096,
+      "host": "dl.example.test",
+      "path": "/v/a.mp4?t=1",
+      "source": "127.0.1.6",
+      "follow_location": true
+    },
+    {
+      "id": "redirect-client-b",
+      "port": 18096,
+      "host": "dl.example.test",
+      "path": "/v/a.mp4?t=1",
+      "source": "127.0.1.5",
+      "follow_location": true
+    },
+    {
+      "id": "page-served-here",
+      "port": 18096,
+      "host": "dl.example.test",
+      "path": "/index.html",
+      "source": "127.0.1.6"
+    },
+    {
+      "id": "post-served-here",
+      "method": "POST",
+      "port": 18096,
+      "host": "dl.example.test",
+      "path": "/upload.bin",
+      "body": "x=1",
+      "source": "127.0.1.6"
+    },
+    {
+      "id": "unscheduled-site",
+      "port": 18096,
+      "host": "www.example.test",
+      "path": "/v/a.mp4",
+      "source": "127.0.1.6"
+    },
+    {
+      "id": "forged-landing",
+      "port": 18096,
+      "address": "127.0.0.2",
+      "host": "127.0.0.2:18096",
+      "path": "/_cdnca302/4102444800.AAAAAAAAAAAAAAAAAAAAAA/dl.example.test/v/a.mp4",
+      "source": "127.0.1.6"
+    },
+    {
+      "id": "forged-token-header",
+      "port": 18096,
+      "host": "dl.example.test",
+      "path": "/v/a.mp4",
+      "source": "127.0.1.6",
+      "headers": {
+        "X-Cdnca-S302": "4102444800.AAAAAAAAAAAAAAAAAAAAAA"
+      }
+    }
+  ],
+  "mask": {
+    "patterns": [
+      "/_cdnca302/[0-9]+\\.[A-Za-z0-9_-]{22}/"
+    ]
+  }
+}

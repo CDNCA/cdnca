@@ -1,0 +1,5645 @@
+{
+ "id": "admin-security",
+ "prefix": "/v1/admin/security",
+ "operations": [
+  {
+   "operation_id": "adminListAutoDefenseBlocks",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/blocks",
+   "summary": "Ban list entries with source autodefense",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Admin list routes only; filters the list to one tenant scope. Without it the platform administrator reads every tenant of this control plane (each row carries tenant_scope_id); the limit caps still apply."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "ip",
+     "in": "query",
+     "type": "any | any"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Ban list entries with source autodefense.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BlockEntry>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminReleaseAutoDefenseBlock",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/blocks/{block_id}/release",
+   "summary": "Unblock (Lua and kernel), optionally whitelist and report a false positive",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "block_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "whitelist",
+      "type": "boolean",
+      "description": "解除并加白 (IP"
+     },
+     {
+      "name": "allow_until",
+      "type": "object",
+      "description": "When the 解除并加白 entry expires (absent = permanent; only with whitelist; after now and within 365 days). An entry already listed keeps the longer expiry."
+     },
+     {
+      "name": "false_positive",
+      "type": "boolean",
+      "description": "标记误判; reason is then required and a false_positive_report is audited."
+     },
+     {
+      "name": "reason",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "What the release undid.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "released_targets",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "shadowed_signatures",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "whitelisted",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "allows",
+       "type": "array<SiteAllow>",
+       "required": true,
+       "description": "The stored 解除并加白 entries with the expiry in force."
+      },
+      {
+       "name": "observe_until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "false_positive_id",
+       "type": "string(uuid)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseEvents",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/events",
+   "summary": "Attack event timeline, newest first",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Attack events.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Event>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseFalsePositives",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/false-positives",
+   "summary": "False positive reports",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Admin list routes only; filters the list to one tenant scope. Without it the platform administrator reads every tenant of this control plane (each row carries tenant_scope_id); the limit caps still apply."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "False positive reports.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<FalsePositive>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminReportAutoDefenseFalsePositive",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/false-positives",
+   "summary": "Report a verdict or signature as a false positive (the signature is withdrawn at once)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "verdict_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "signature_id",
+      "type": "string"
+     },
+     {
+      "name": "reason",
+      "type": "object",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "The recorded report.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The tenant scope owning the row (the platform view lists every tenant)."
+      },
+      {
+       "name": "verdict_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "block_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "signature_id",
+       "type": "string"
+      },
+      {
+       "name": "target",
+       "type": "string"
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "reported_by",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseSiteMetrics",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/metrics",
+   "summary": "Per site report figures of the last 30 days (mitigations, false positive reports, attack events)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Admin list routes only; filters the list to one tenant scope. Without it the platform administrator reads every tenant of this control plane (each row carries tenant_scope_id); the limit caps still apply."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Report figures per live site of the tenant (at most 500).",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SiteMetrics>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAutoDefensePortGroups",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups",
+   "summary": "Layer 4 port groups the control plane derives for a node (website TCP ports, one per forward)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The node's derived port groups in ID order.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PortGroup>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAutoDefensePortGroupModules",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules",
+   "summary": "Layer 4 overlay of one node port group (platform only)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Modules with their items.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Module>",
+       "required": true
+      },
+      {
+       "name": "auto_mitigation_granted",
+       "type": "boolean",
+       "required": true,
+       "description": "false = the page shows 需开通自动处置 and every item runs on its manual value."
+      },
+      {
+       "name": "overlay",
+       "type": "string: active / frozen / inactive",
+       "required": true,
+       "description": "Automatic overlay of the modules: active; frozen = an agent_fault circuit is open, mitigations held where they are and attacked sites keep defending, the overlay still runs on the nodes; inactive = effective values are the manual ones."
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAutoDefensePortGroupModuleHistory",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/history",
+   "summary": "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: l4",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Item changes, newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<HistoryEntry>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "lockAutoDefensePortGroupItem",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}",
+   "summary": "A person sets an l4 item (manual until resumed)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: l4",
+     "required": true
+    },
+    {
+     "name": "field",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "A field of the frozen registry of the module; waf.group:<slug> per rule group."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "value",
+      "type": "integer",
+      "required": true,
+      "description": "Within the field platform range; enum fields take the ordinal, bool 0 or 1."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The locked item.",
+     "fields": [
+      {
+       "name": "field",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: int / enum / bool",
+       "required": true
+      },
+      {
+       "name": "unit",
+       "type": "string"
+      },
+      {
+       "name": "enum",
+       "type": "array<string>"
+      },
+      {
+       "name": "state",
+       "type": "string: auto / manual",
+       "required": true
+      },
+      {
+       "name": "manual",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "auto",
+       "type": "integer"
+      },
+      {
+       "name": "min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "effective",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "suggestion",
+       "type": "integer",
+       "description": "suggest mode only."
+      },
+      {
+       "name": "locked_by",
+       "type": "string",
+       "description": "user:<id> who locked the item (state manual)."
+      },
+      {
+       "name": "locked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "resumed_by",
+       "type": "string",
+       "description": "user:<id> who last chose 恢复自动 (state auto)."
+      },
+      {
+       "name": "resumed_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "frozen_until",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "setAutoDefensePortGroupItemRange",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/range",
+   "summary": "Narrow the item's automatic range (上下限); state and manual value unchanged",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: l4",
+     "required": true
+    },
+    {
+     "name": "field",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "A field of the frozen registry of the module; waf.group:<slug> per rule group."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "min",
+      "type": "integer",
+      "required": true,
+      "description": "Within the field platform range, min <= max; bound to the manual value as the field requires."
+     },
+     {
+      "name": "max",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The locked item.",
+     "fields": [
+      {
+       "name": "field",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: int / enum / bool",
+       "required": true
+      },
+      {
+       "name": "unit",
+       "type": "string"
+      },
+      {
+       "name": "enum",
+       "type": "array<string>"
+      },
+      {
+       "name": "state",
+       "type": "string: auto / manual",
+       "required": true
+      },
+      {
+       "name": "manual",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "auto",
+       "type": "integer"
+      },
+      {
+       "name": "min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "effective",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "suggestion",
+       "type": "integer",
+       "description": "suggest mode only."
+      },
+      {
+       "name": "locked_by",
+       "type": "string",
+       "description": "user:<id> who locked the item (state manual)."
+      },
+      {
+       "name": "locked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "resumed_by",
+       "type": "string",
+       "description": "user:<id> who last chose 恢复自动 (state auto)."
+      },
+      {
+       "name": "resumed_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "frozen_until",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "resumeAutoDefensePortGroupItem",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/resume",
+   "summary": "恢复自动 for one l4 item",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: l4",
+     "required": true
+    },
+    {
+     "name": "field",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "A field of the frozen registry of the module; waf.group:<slug> per rule group."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Items that changed (empty when nothing was manual).",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Item>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "setAutoDefensePortGroupModuleMode",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/mode",
+   "summary": "manual / auto / suggest of l4; auto needs module.autodefense.auto",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: l4",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "mode",
+      "type": "string: manual / auto / suggest",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The module mode now in force.",
+     "fields": [
+      {
+       "name": "module",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "mode",
+       "type": "string: manual / auto / suggest",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "resumeAutoDefensePortGroupModule",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/resume",
+   "summary": "全部恢复自动 of l4",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: l4",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Items that changed (empty when nothing was manual).",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Item>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAutoDefensePortGroupModuleValues",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/values",
+   "summary": "Each node's newest value of every item (in force or suggested) and its reason",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "node_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "port_group_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: l4",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Each node's newest value per item.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<NodeValue>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAutoDefensePlatformSettings",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/platform-settings",
+   "summary": "Platform defaults, budgets and breaker thresholds (platform.admin)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform settings.",
+     "fields": [
+      {
+       "name": "default_mode",
+       "type": "string: off / learning / observe / protect",
+       "required": true,
+       "description": "Mode of every site that follows the platform. protect needs module.autodefense.auto; sites still on the prior or short of samples mitigate within their maturity cap (prior <= L1, immature <= L2)."
+      },
+      {
+       "name": "default_sensitivity",
+       "type": "string: low / medium / high",
+       "required": true
+      },
+      {
+       "name": "following_sites",
+       "type": "integer",
+       "required": true,
+       "description": "Live sites following the platform default_mode (ignored on PUT)."
+      },
+      {
+       "name": "admin_login_whitelist_days",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_sites_per_node",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "ban_l3_per_site_minute",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "ban_l4_per_site_minute",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "circuit_resume_minutes",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "circuit_manual_after_breaks",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "waf_adapt_shadow_hours",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "waf_adapt_active_days",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "waf_grey_challenge",
+       "type": "boolean",
+       "required": true,
+       "description": "Grey zone challenge of sites that inherit it (default true)."
+      },
+      {
+       "name": "waf_exclusion_latency_us",
+       "type": "integer",
+       "required": true,
+       "description": "waf-exclcap2: extra time one request may pay for its site's automatic exclusions on a node (default 500 us); each node applies floor(95% of the budget / its measured per exclusion cost) of a site's ranked exclusions (5% headroom)."
+      },
+      {
+       "name": "waf_exclusion_memory_percent",
+       "type": "integer",
+       "required": true,
+       "description": "waf-exclcap2: share of node memory all automatic exclusions of a node may take (default 5); beyond it the lowest traffic sites lose their lowest ranked exclusions first."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "putAutoDefensePlatformSettings",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/platform-settings",
+   "summary": "Replace the platform settings (revision guarded, platform.admin); default_mode protect needs module.autodefense.auto and applies to every following site",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "default_mode",
+      "type": "string: off / learning / observe / protect",
+      "required": true,
+      "description": "Mode of every site that follows the platform. protect needs module.autodefense.auto; sites still on the prior or short of samples mitigate within their maturity cap (prior <= L1, immature <= L2)."
+     },
+     {
+      "name": "default_sensitivity",
+      "type": "string: low / medium / high",
+      "required": true
+     },
+     {
+      "name": "following_sites",
+      "type": "integer",
+      "description": "Live sites following the platform default_mode (ignored on PUT)."
+     },
+     {
+      "name": "admin_login_whitelist_days",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "max_sites_per_node",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "ban_l3_per_site_minute",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "ban_l4_per_site_minute",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "circuit_resume_minutes",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "circuit_manual_after_breaks",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "waf_adapt_shadow_hours",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "waf_adapt_active_days",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "waf_grey_challenge",
+      "type": "boolean",
+      "required": true,
+      "description": "Grey zone challenge of sites that inherit it (default true)."
+     },
+     {
+      "name": "waf_exclusion_latency_us",
+      "type": "integer",
+      "required": true,
+      "description": "waf-exclcap2: extra time one request may pay for its site's automatic exclusions on a node (default 500 us); each node applies floor(95% of the budget / its measured per exclusion cost) of a site's ranked exclusions (5% headroom)."
+     },
+     {
+      "name": "waf_exclusion_memory_percent",
+      "type": "integer",
+      "required": true,
+      "description": "waf-exclcap2: share of node memory all automatic exclusions of a node may take (default 5); beyond it the lowest traffic sites lose their lowest ranked exclusions first."
+     },
+     {
+      "name": "revision",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "updated_at",
+      "type": "string(date-time)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform settings.",
+     "fields": [
+      {
+       "name": "default_mode",
+       "type": "string: off / learning / observe / protect",
+       "required": true,
+       "description": "Mode of every site that follows the platform. protect needs module.autodefense.auto; sites still on the prior or short of samples mitigate within their maturity cap (prior <= L1, immature <= L2)."
+      },
+      {
+       "name": "default_sensitivity",
+       "type": "string: low / medium / high",
+       "required": true
+      },
+      {
+       "name": "following_sites",
+       "type": "integer",
+       "required": true,
+       "description": "Live sites following the platform default_mode (ignored on PUT)."
+      },
+      {
+       "name": "admin_login_whitelist_days",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_sites_per_node",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "ban_l3_per_site_minute",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "ban_l4_per_site_minute",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "circuit_resume_minutes",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "circuit_manual_after_breaks",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "waf_adapt_shadow_hours",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "waf_adapt_active_days",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "waf_grey_challenge",
+       "type": "boolean",
+       "required": true,
+       "description": "Grey zone challenge of sites that inherit it (default true)."
+      },
+      {
+       "name": "waf_exclusion_latency_us",
+       "type": "integer",
+       "required": true,
+       "description": "waf-exclcap2: extra time one request may pay for its site's automatic exclusions on a node (default 500 us); each node applies floor(95% of the budget / its measured per exclusion cost) of a site's ranked exclusions (5% headroom)."
+      },
+      {
+       "name": "waf_exclusion_memory_percent",
+       "type": "integer",
+       "required": true,
+       "description": "waf-exclcap2: share of node memory all automatic exclusions of a node may take (default 5); beyond it the lowest traffic sites lose their lowest ranked exclusions first."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseSignatures",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/signatures",
+   "summary": "Automatic rules (signatures)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Admin list routes only; filters the list to one tenant scope. Without it the platform administrator reads every tenant of this control plane (each row carries tenant_scope_id); the limit caps still apply."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Automatic rules.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Signature>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminRevokeAutoDefenseSignature",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/signatures/{signature_id}/revoke",
+   "summary": "禁用此签名",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "signature_id",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "SHA-256 of the canonical conditions, first 16 hex digits (contract 3.4)."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "One automatic rule.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The tenant scope owning the row (the platform view lists every tenant)."
+      },
+      {
+       "name": "conditions",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "stage",
+       "type": "string: shadow / challenge / block / standby",
+       "required": true
+      },
+      {
+       "name": "cover_permille",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "fpr_ppm",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "hits",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "managed",
+       "type": "boolean",
+       "required": true,
+       "description": "false after 固化为我的规则."
+      },
+      {
+       "name": "solidified_kind",
+       "type": "string: waf / cc"
+      },
+      {
+       "name": "solidified_rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "solidified_pack_id",
+       "type": "string",
+       "description": "The user rule pack the signature became."
+      },
+      {
+       "name": "solidified_version",
+       "type": "string"
+      },
+      {
+       "name": "revoked",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "origin",
+       "type": "string: node / control",
+       "required": true,
+       "description": "node = mined by origin_node_id."
+      },
+      {
+       "name": "origin_node_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "evaluation",
+       "type": "object",
+       "required": true,
+       "description": "Control plane evaluation over every node and site that reported the signature."
+      },
+      {
+       "name": "scope",
+       "type": "string: site / tenant / none",
+       "required": true,
+       "description": "Where it is in force: site (this site's nodes), tenant (broadcast to the tenant's other sites too), none (withdrawn, rejected, disabled or solidified)."
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminSolidifyAutoDefenseSignature",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/signatures/{signature_id}/solidify",
+   "summary": "固化为我的规则 is the tenant's own decision: platform administrators get 403 autodefense_permission_denied",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "signature_id",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "SHA-256 of the canonical conditions, first 16 hex digits (contract 3.4)."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "kind",
+      "type": "string: waf / cc",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "One automatic rule.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The tenant scope owning the row (the platform view lists every tenant)."
+      },
+      {
+       "name": "conditions",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "stage",
+       "type": "string: shadow / challenge / block / standby",
+       "required": true
+      },
+      {
+       "name": "cover_permille",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "fpr_ppm",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "hits",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "managed",
+       "type": "boolean",
+       "required": true,
+       "description": "false after 固化为我的规则."
+      },
+      {
+       "name": "solidified_kind",
+       "type": "string: waf / cc"
+      },
+      {
+       "name": "solidified_rule_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "solidified_pack_id",
+       "type": "string",
+       "description": "The user rule pack the signature became."
+      },
+      {
+       "name": "solidified_version",
+       "type": "string"
+      },
+      {
+       "name": "revoked",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "origin",
+       "type": "string: node / control",
+       "required": true,
+       "description": "node = mined by origin_node_id."
+      },
+      {
+       "name": "origin_node_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "evaluation",
+       "type": "object",
+       "required": true,
+       "description": "Control plane evaluation over every node and site that reported the signature."
+      },
+      {
+       "name": "scope",
+       "type": "string: site / tenant / none",
+       "required": true,
+       "description": "Where it is in force: site (this site's nodes), tenant (broadcast to the tenant's other sites too), none (withdrawn, rejected, disabled or solidified)."
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseSites",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites",
+   "summary": "Sites with mode, baseline maturity, circuit, overlay and the auto-mitigation grant",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Admin list routes only; filters the list to one tenant scope. Without it the platform administrator reads every tenant of this control plane (each row carries tenant_scope_id); the limit caps still apply."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sites of the tenant.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Site>",
+       "required": true
+      },
+      {
+       "name": "auto_mitigation_granted",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminSetAutoDefenseSiteModes",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/mode",
+   "summary": "Batch 开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台 (follow); protect needs module.autodefense.auto; one audit event per site",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "mode",
+      "type": "string: off / learning / observe / protect / follow",
+      "required": true,
+      "description": "The site's own mode; follow = 跟随平台 (the site takes the platform default_mode and changes with it)."
+     },
+     {
+      "name": "confirm",
+      "type": "boolean",
+      "required": true,
+      "description": "Batch operations need an explicit confirmation."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The sites and their mode before and after.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminGetAutoDefenseSite",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}",
+   "summary": "One site with its overlay",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One site with the snapshot delivery state of every node serving it.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The tenant scope owning the row (the platform view lists every tenant)."
+      },
+      {
+       "name": "domain",
+       "type": "string",
+       "required": true,
+       "description": "As Site."
+      },
+      {
+       "name": "tenant_name",
+       "type": "string",
+       "required": true,
+       "description": "As Site."
+      },
+      {
+       "name": "state",
+       "type": "string: normal / surge / protect_origin / attack / cooldown / circuit_open / baseline_stale",
+       "required": true,
+       "description": "As Site."
+      },
+      {
+       "name": "current_level",
+       "type": "integer",
+       "required": true,
+       "description": "As Site."
+      },
+      {
+       "name": "last_event_reason",
+       "type": "string",
+       "description": "As Site."
+      },
+      {
+       "name": "mode",
+       "type": "string: off / learning / observe / protect",
+       "required": true,
+       "description": "off is absent from the node snapshot; learning only learns; observe judges and suggests; protect mitigates (module.autodefense.auto)."
+      },
+      {
+       "name": "follow_platform",
+       "type": "boolean",
+       "required": true,
+       "description": "As Site."
+      },
+      {
+       "name": "sensitivity",
+       "type": "string: low / medium / high",
+       "required": true
+      },
+      {
+       "name": "maturity",
+       "type": "string: prior / hour / day / week",
+       "required": true
+      },
+      {
+       "name": "cross_site",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "circuit",
+       "type": "Circuit",
+       "required": true
+      },
+      {
+       "name": "observe_until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_event_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "auto_mitigation_granted",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "overlay",
+       "type": "string: active / frozen / inactive",
+       "required": true,
+       "description": "Automatic overlay of the modules: active; frozen = an agent_fault circuit is open, mitigations held where they are and attacked sites keep defending, the overlay still runs on the nodes; inactive = effective values are the manual ones."
+      },
+      {
+       "name": "max_level",
+       "type": "Item",
+       "required": true,
+       "description": "effective = state manual ? manual : clamp(auto, min, max), and manual whenever the overlay is inactive (module not auto, site not protecting, module.autodefense.auto not granted, circuit open, observe-only hold)."
+      },
+      {
+       "name": "modules",
+       "type": "array<Module>",
+       "required": true
+      },
+      {
+       "name": "drifts",
+       "type": "array<Drift>"
+      },
+      {
+       "name": "nodes",
+       "type": "array<SiteNode>",
+       "required": true
+      },
+      {
+       "name": "unsupported_nodes",
+       "type": "array<string>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminUpdateAutoDefenseSite",
+   "method": "PATCH",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}",
+   "summary": "Sensitivity and cross-site federation (revision guarded)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "sensitivity",
+      "type": "string: low / medium / high"
+     },
+     {
+      "name": "cross_site",
+      "type": "boolean"
+     },
+     {
+      "name": "revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "One site.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The tenant scope owning the row (the platform view lists every tenant)."
+      },
+      {
+       "name": "domain",
+       "type": "string",
+       "required": true,
+       "description": "The site's primary domain (derived"
+      },
+      {
+       "name": "tenant_name",
+       "type": "string",
+       "required": true,
+       "description": "Display name of the site's tenant (derived"
+      },
+      {
+       "name": "state",
+       "type": "string: normal / surge / protect_origin / attack / cooldown / circuit_open / baseline_stale",
+       "required": true,
+       "description": "Derived: circuit_open while the breaker is open, else the most severe state its nodes report (normal without reports)."
+      },
+      {
+       "name": "current_level",
+       "type": "integer",
+       "required": true,
+       "description": "Derived: the highest disposition level its nodes report."
+      },
+      {
+       "name": "last_event_reason",
+       "type": "string",
+       "description": "Derived: reason of the newest step of the newest event."
+      },
+      {
+       "name": "mode",
+       "type": "string: off / learning / observe / protect",
+       "required": true,
+       "description": "The mode in force (the platform default_mode while follow_platform)."
+      },
+      {
+       "name": "follow_platform",
+       "type": "boolean",
+       "required": true,
+       "description": "The site has no mode of its own and follows the platform default_mode."
+      },
+      {
+       "name": "sensitivity",
+       "type": "string: low / medium / high",
+       "required": true
+      },
+      {
+       "name": "maturity",
+       "type": "string: prior / hour / day / week",
+       "required": true
+      },
+      {
+       "name": "cross_site",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "circuit",
+       "type": "Circuit",
+       "required": true
+      },
+      {
+       "name": "observe_until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_event_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "auto_mitigation_granted",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "overlay",
+       "type": "string: active / frozen / inactive",
+       "required": true,
+       "description": "Automatic overlay of the modules: active; frozen = an agent_fault circuit is open, mitigations held where they are and attacked sites keep defending, the overlay still runs on the nodes; inactive = effective values are the manual ones."
+      },
+      {
+       "name": "max_level",
+       "type": "Item",
+       "required": true,
+       "description": "effective = state manual ? manual : clamp(auto, min, max), and manual whenever the overlay is inactive (module not auto, site not protecting, module.autodefense.auto not granted, circuit open, observe-only hold)."
+      },
+      {
+       "name": "modules",
+       "type": "array<Module>",
+       "required": true
+      },
+      {
+       "name": "drifts",
+       "type": "array<Drift>",
+       "description": "Baseline drifts of the site per node."
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseSiteAllows",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/allows",
+   "summary": "白名单: the site's allow list as the nodes get it (ACL allow rules = user, 解除并加白 = release, admin sign-in sources = admin_login); never mitigated",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's allow list in CIDR order.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SiteAllow>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminRemoveAutoDefenseSiteAllow",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/allows/remove",
+   "summary": "移出白名单: remove one 解除并加白 entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "cidr",
+      "type": "string",
+      "description": "The 解除并加白 entry (IP address or network)."
+     },
+     {
+      "name": "ja4",
+      "type": "string",
+      "description": "The 解除并加白 entry (JA4 fingerprint)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The removed allow list entry.",
+     "fields": [
+      {
+       "name": "cidr",
+       "type": "string"
+      },
+      {
+       "name": "ja4",
+       "type": "string"
+      },
+      {
+       "name": "source",
+       "type": "string: user / release / admin_login",
+       "required": true
+      },
+      {
+       "name": "until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_by",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminResumeAutoDefenseSiteCircuit",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/circuit/resume",
+   "summary": "恢复自动防护: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "One site.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The tenant scope owning the row (the platform view lists every tenant)."
+      },
+      {
+       "name": "domain",
+       "type": "string",
+       "required": true,
+       "description": "The site's primary domain (derived"
+      },
+      {
+       "name": "tenant_name",
+       "type": "string",
+       "required": true,
+       "description": "Display name of the site's tenant (derived"
+      },
+      {
+       "name": "state",
+       "type": "string: normal / surge / protect_origin / attack / cooldown / circuit_open / baseline_stale",
+       "required": true,
+       "description": "Derived: circuit_open while the breaker is open, else the most severe state its nodes report (normal without reports)."
+      },
+      {
+       "name": "current_level",
+       "type": "integer",
+       "required": true,
+       "description": "Derived: the highest disposition level its nodes report."
+      },
+      {
+       "name": "last_event_reason",
+       "type": "string",
+       "description": "Derived: reason of the newest step of the newest event."
+      },
+      {
+       "name": "mode",
+       "type": "string: off / learning / observe / protect",
+       "required": true,
+       "description": "The mode in force (the platform default_mode while follow_platform)."
+      },
+      {
+       "name": "follow_platform",
+       "type": "boolean",
+       "required": true,
+       "description": "The site has no mode of its own and follows the platform default_mode."
+      },
+      {
+       "name": "sensitivity",
+       "type": "string: low / medium / high",
+       "required": true
+      },
+      {
+       "name": "maturity",
+       "type": "string: prior / hour / day / week",
+       "required": true
+      },
+      {
+       "name": "cross_site",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "circuit",
+       "type": "Circuit",
+       "required": true
+      },
+      {
+       "name": "observe_until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_event_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "auto_mitigation_granted",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "overlay",
+       "type": "string: active / frozen / inactive",
+       "required": true,
+       "description": "Automatic overlay of the modules: active; frozen = an agent_fault circuit is open, mitigations held where they are and attacked sites keep defending, the overlay still runs on the nodes; inactive = effective values are the manual ones."
+      },
+      {
+       "name": "max_level",
+       "type": "Item",
+       "required": true,
+       "description": "effective = state manual ? manual : clamp(auto, min, max), and manual whenever the overlay is inactive (module not auto, site not protecting, module.autodefense.auto not granted, circuit open, observe-only hold)."
+      },
+      {
+       "name": "modules",
+       "type": "array<Module>",
+       "required": true
+      },
+      {
+       "name": "drifts",
+       "type": "array<Drift>",
+       "description": "Baseline drifts of the site per node."
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminConfirmAutoDefenseSiteDrifts",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/drifts/confirm",
+   "summary": "确认基线漂移: confirm the site's pending baseline drifts (node baselines are not changed)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The drifts the confirmation changed (empty when none was pending).",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Drift>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseSiteModules",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules",
+   "summary": "Modules site (site.max_level), bot, cc, scan, waf with every item state 自动/人工",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Modules with their items.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Module>",
+       "required": true
+      },
+      {
+       "name": "auto_mitigation_granted",
+       "type": "boolean",
+       "required": true,
+       "description": "false = the page shows 需开通自动处置 and every item runs on its manual value."
+      },
+      {
+       "name": "overlay",
+       "type": "string: active / frozen / inactive",
+       "required": true,
+       "description": "Automatic overlay of the modules: active; frozen = an agent_fault circuit is open, mitigations held where they are and attacked sites keep defending, the overlay still runs on the nodes; inactive = effective values are the manual ones."
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseSiteModuleHistory",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/history",
+   "summary": "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: site / bot / cc / scan / waf",
+     "required": true,
+     "description": "site holds the single item site.max_level (no module mode)."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Item changes, newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<HistoryEntry>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminLockAutoDefenseSiteItem",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}",
+   "summary": "A person sets the item: it becomes manual and runs on this value until resumed (Q3)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: site / bot / cc / scan / waf",
+     "required": true,
+     "description": "site holds the single item site.max_level (no module mode)."
+    },
+    {
+     "name": "field",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "A field of the frozen registry of the module; waf.group:<slug> per rule group."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "value",
+      "type": "integer",
+      "required": true,
+      "description": "Within the field platform range; enum fields take the ordinal, bool 0 or 1."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The locked item.",
+     "fields": [
+      {
+       "name": "field",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: int / enum / bool",
+       "required": true
+      },
+      {
+       "name": "unit",
+       "type": "string"
+      },
+      {
+       "name": "enum",
+       "type": "array<string>"
+      },
+      {
+       "name": "state",
+       "type": "string: auto / manual",
+       "required": true
+      },
+      {
+       "name": "manual",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "auto",
+       "type": "integer"
+      },
+      {
+       "name": "min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "effective",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "suggestion",
+       "type": "integer",
+       "description": "suggest mode only."
+      },
+      {
+       "name": "locked_by",
+       "type": "string",
+       "description": "user:<id> who locked the item (state manual)."
+      },
+      {
+       "name": "locked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "resumed_by",
+       "type": "string",
+       "description": "user:<id> who last chose 恢复自动 (state auto)."
+      },
+      {
+       "name": "resumed_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "frozen_until",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminSetAutoDefenseSiteItemRange",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range",
+   "summary": "Narrow the item's automatic range (上下限); state and manual value unchanged",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: site / bot / cc / scan / waf",
+     "required": true,
+     "description": "site holds the single item site.max_level (no module mode)."
+    },
+    {
+     "name": "field",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "A field of the frozen registry of the module; waf.group:<slug> per rule group."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "min",
+      "type": "integer",
+      "required": true,
+      "description": "Within the field platform range, min <= max; bound to the manual value as the field requires."
+     },
+     {
+      "name": "max",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The locked item.",
+     "fields": [
+      {
+       "name": "field",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: int / enum / bool",
+       "required": true
+      },
+      {
+       "name": "unit",
+       "type": "string"
+      },
+      {
+       "name": "enum",
+       "type": "array<string>"
+      },
+      {
+       "name": "state",
+       "type": "string: auto / manual",
+       "required": true
+      },
+      {
+       "name": "manual",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "auto",
+       "type": "integer"
+      },
+      {
+       "name": "min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_min",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "platform_max",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "effective",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "suggestion",
+       "type": "integer",
+       "description": "suggest mode only."
+      },
+      {
+       "name": "locked_by",
+       "type": "string",
+       "description": "user:<id> who locked the item (state manual)."
+      },
+      {
+       "name": "locked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "resumed_by",
+       "type": "string",
+       "description": "user:<id> who last chose 恢复自动 (state auto)."
+      },
+      {
+       "name": "resumed_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "frozen_until",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminResumeAutoDefenseSiteItem",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume",
+   "summary": "恢复自动 for one item",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: site / bot / cc / scan / waf",
+     "required": true,
+     "description": "site holds the single item site.max_level (no module mode)."
+    },
+    {
+     "name": "field",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "A field of the frozen registry of the module; waf.group:<slug> per rule group."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Items that changed (empty when nothing was manual).",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Item>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminSetAutoDefenseSiteModuleMode",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/mode",
+   "summary": "manual / auto / suggest; auto needs module.autodefense.auto",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: site / bot / cc / scan / waf",
+     "required": true,
+     "description": "site holds the single item site.max_level (no module mode)."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "mode",
+      "type": "string: manual / auto / suggest",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The module mode now in force.",
+     "fields": [
+      {
+       "name": "module",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "mode",
+       "type": "string: manual / auto / suggest",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminResumeAutoDefenseSiteModule",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/resume",
+   "summary": "全部恢复自动: every manual item of the module returns to automatic",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense",
+    "module.autodefense.auto"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: site / bot / cc / scan / waf",
+     "required": true,
+     "description": "site holds the single item site.max_level (no module mode)."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Items that changed (empty when nothing was manual).",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Item>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseSiteModuleValues",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/values",
+   "summary": "Each node's newest value of every item (in force or suggested) and its reason",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "module",
+     "in": "path",
+     "type": "string: site / bot / cc / scan / waf",
+     "required": true,
+     "description": "site holds the single item site.max_level (no module mode)."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Each node's newest value per item.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<NodeValue>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminReleaseAutoDefenseSite",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/release",
+   "summary": "一键解除: undo every automatic mitigation and hold the site in observe only (default 30 minutes)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "observe_minutes",
+      "type": "integer",
+      "description": "0 = no observe-only hold."
+     },
+     {
+      "name": "reason",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "What the release undid.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "released_targets",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "shadowed_signatures",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "whitelisted",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "allows",
+       "type": "array<SiteAllow>",
+       "required": true,
+       "description": "The stored 解除并加白 entries with the expiry in force."
+      },
+      {
+       "name": "observe_until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "false_positive_id",
+       "type": "string(uuid)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminRetryAutoDefenseRelease",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/releases/retry",
+   "summary": "重试: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "kind",
+      "type": "string: ip / cidr / ja4",
+      "required": true
+     },
+     {
+      "name": "target",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The per node delivery of a single release.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: ip / cidr / ja4",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "released_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "retry",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / applied / partial_failed / no_nodes",
+       "required": true,
+       "description": "pending = 待节点, applied = 全部节点已生效, partial_failed = 部分失败"
+      },
+      {
+       "name": "nodes",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminGetAutoDefenseReleaseStatus",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/releases/status",
+   "summary": "解除状态: per node delivery of the site's single release of one target (已保存 → 待节点 → 全部节点已生效 / 部分失败)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    },
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string: ip / cidr / ja4",
+     "required": true
+    },
+    {
+     "name": "target",
+     "in": "query",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The per node delivery of a single release.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: ip / cidr / ja4",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "released_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "retry",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / applied / partial_failed / no_nodes",
+       "required": true,
+       "description": "pending = 待节点, applied = 全部节点已生效, partial_failed = 部分失败"
+      },
+      {
+       "name": "nodes",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminGetAutoDefenseSiteWAFAdapt",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt",
+   "summary": "Adaptive WAF (智能自动): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "waf_adapt.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's adaptive WAF state.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "runtime",
+       "type": "object",
+       "required": true,
+       "description": "The site runtime; only the dynamic routing runtime runs the adaptive WAF, the page hides the area otherwise."
+      },
+      {
+       "name": "automatic",
+       "type": "boolean",
+       "required": true,
+       "description": "module.autodefense.auto granted and the waf module auto; otherwise exclusions stop at suggested."
+      },
+      {
+       "name": "auto_granted",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "waf_mode",
+       "type": "string: manual / auto / suggest",
+       "required": true
+      },
+      {
+       "name": "frozen",
+       "type": "boolean",
+       "required": true,
+       "description": "Under attack"
+      },
+      {
+       "name": "grey_challenge",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "grey_repeat",
+       "type": "object",
+       "required": true,
+       "description": "Repeated grey zone source setting; value null = the node defaults. Nodes without CAPABILITY_NAME_WAF_REPEAT_SITE keep the defaults."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "evaluated_at",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "exclusions",
+       "type": "array<WAFExclusion>",
+       "required": true
+      },
+      {
+       "name": "typed_params",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "rule_advice",
+       "type": "array<object>",
+       "required": true,
+       "description": "Rules proposed on more than limits.site_rule_params parameters; only \"站点级关闭该规则\" is suggested."
+      },
+      {
+       "name": "limits",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "node_limits",
+       "type": "array<object>",
+       "required": true,
+       "description": "waf-exclcap2: per node, how many of the site's delivered active exclusions it applies (the first by rank, from its own measured cost and the platform budgets); the newest report per node, node name order."
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminDecideAutoDefenseSiteWAFExclusion",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}",
+   "summary": "A person's decision: adopt (采纳, a manual exclusion), reject (驳回), revoke (撤销), manual (设为人工), resume (恢复自动); module.autodefense only",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "waf_adapt.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "exclusion_id",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "WAFExclusionID (SHA-256 of \"<rule>:<loc>:<name>\", first 16 hex digits)."
+    },
+    {
+     "name": "action",
+     "in": "path",
+     "type": "string: adopt / reject / revoke / manual / resume",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The exclusion after the decision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "rule",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "rule_set",
+       "type": "string",
+       "required": true,
+       "description": "The site profile's rule set of the rule, key without waf_set: (crs_sqli); \"\" when none."
+      },
+      {
+       "name": "rule_set_name",
+       "type": "string",
+       "required": true,
+       "description": "The set's display name (SQL注入); \"\" when none."
+      },
+      {
+       "name": "param",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "stage",
+       "type": "string: candidate / shadow / suggested / active / rejected",
+       "required": true
+      },
+      {
+       "name": "stage_since",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "until",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "manual",
+       "type": "string: none / exclude / keep",
+       "required": true
+      },
+      {
+       "name": "manual_by",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "manual_at",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "rejections",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reject_reason",
+       "type": "string: false_positive / attack / unneeded | null",
+       "required": true,
+       "description": "The reason code of the last person's rejection or revocation (rejected rows)."
+      },
+      {
+       "name": "permanent",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "cooldown_until",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "value_type",
+       "type": "string: number / ident / text / json / binary / url",
+       "required": true
+      },
+      {
+       "name": "len_bucket",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "evidence",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "flipped",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "flipped_attack",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "first_seen",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "last_seen",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminSetAutoDefenseSiteGreyChallenge",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge",
+   "summary": "Grey zone challenge inherit / on / off (only 严格 / 极严格 tiers challenge)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "waf_adapt.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "value",
+      "type": "string: inherit / on / off",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The grey zone challenge before and after.",
+     "fields": [
+      {
+       "name": "before",
+       "type": "string: inherit / on / off",
+       "required": true
+      },
+      {
+       "name": "value",
+       "type": "string: inherit / on / off",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminSetAutoDefenseSiteGreyRepeat",
+   "method": "PUT",
+   "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat",
+   "summary": "Repeated grey zone source threshold / window of the site (null = node defaults 20 / 60 s)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only nodes declaring CAPABILITY_NAME_WAF_REPEAT_SITE use the site value; other nodes keep the defaults.",
+   "permissions": [
+    "platform.admin",
+    "waf_adapt.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "value",
+      "type": "GreyRepeat | null",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The repeat setting before and after (null = node defaults).",
+     "fields": [
+      {
+       "name": "before",
+       "type": "GreyRepeat | null",
+       "required": true
+      },
+      {
+       "name": "value",
+       "type": "GreyRepeat | null",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminListAutoDefenseVerdicts",
+   "method": "GET",
+   "path": "/v1/admin/security/autodefense/verdicts",
+   "summary": "Recent individual verdicts",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Admin list routes only; filters the list to one tenant scope. Without it the platform administrator reads every tenant of this control plane (each row carries tenant_scope_id); the limit caps still apply."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "ip",
+     "in": "query",
+     "type": "any | any"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Verdicts.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Verdict>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminReleaseAutoDefenseVerdict",
+   "method": "POST",
+   "path": "/v1/admin/security/autodefense/verdicts/{verdict_id}/release",
+   "summary": "解除 / 解除并加白 / 标记误判",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "features": [
+    "module.autodefense"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Echoed in X-Request-ID and error.request_id; generated when absent."
+    },
+    {
+     "name": "verdict_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Admin routes only; the tenant scope the platform administrator acts on."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "whitelist",
+      "type": "boolean",
+      "description": "解除并加白 (IP"
+     },
+     {
+      "name": "allow_until",
+      "type": "object",
+      "description": "When the 解除并加白 entry expires (absent = permanent; only with whitelist; after now and within 365 days). An entry already listed keeps the longer expiry."
+     },
+     {
+      "name": "false_positive",
+      "type": "boolean",
+      "description": "标记误判; reason is then required and a false_positive_report is audited."
+     },
+     {
+      "name": "reason",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "What the release undid.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "released_targets",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "shadowed_signatures",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "whitelisted",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "allows",
+       "type": "array<SiteAllow>",
+       "required": true,
+       "description": "The stored 解除并加白 entries with the expiry in force."
+      },
+      {
+       "name": "observe_until",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "false_positive_id",
+       "type": "string(uuid)"
+      }
+     ]
+    },
+    {
+     "status": "default",
+     "description": "ErrorEnvelope; entitlement_feature_denied carries error.capability.feature."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminSiteCCStats",
+   "method": "GET",
+   "path": "/v1/admin/security/cc-stats",
+   "summary": "Read the CC rule statistics of a site of any tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "range",
+     "in": "query",
+     "type": "string: 1h / 6h / 24h",
+     "description": "1h (1 minute steps, default), 6h (5 minutes) or 24h (15 minutes)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's CC rule statistics.",
+     "fields": [
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "range",
+       "type": "string: 1h / 6h / 24h",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "from",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "to",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "step_seconds",
+       "type": "integer: 60 / 300 / 900",
+       "required": true
+      },
+      {
+       "name": "series",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "rules",
+       "type": "array<object>",
+       "required": true,
+       "description": "Totals per CC rule, most triggered first; rule_id null is the site level count (a challenge ban outside any rule)."
+      },
+      {
+       "name": "top_clients",
+       "type": "array<Top>",
+       "required": true
+      },
+      {
+       "name": "top_paths",
+       "type": "array<Top>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "405",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSecurityCoordinationMetrics",
+   "method": "GET",
+   "path": "/v1/admin/security/coordination/metrics",
+   "summary": "Read bounded cross-node CC and global firewall coordination counters",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns fixed-cardinality process counters. Node, tenant, policy, subject, address, and message labels are never exposed.",
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Fixed-cardinality in-process security coordination counters.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "cc",
+       "type": "CCMetrics",
+       "required": true
+      },
+      {
+       "name": "firewall",
+       "type": "FirewallMetrics",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error code without identity or dependency detail."
+    },
+    {
+     "status": "401",
+     "description": "Stable error code without identity or dependency detail."
+    },
+    {
+     "status": "403",
+     "description": "Stable error code without identity or dependency detail."
+    },
+    {
+     "status": "405",
+     "description": "Stable error code without identity or dependency detail."
+    },
+    {
+     "status": "503",
+     "description": "Stable error code without identity or dependency detail."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminEscalateSite",
+   "method": "GET",
+   "path": "/v1/admin/security/escalate/sites/{site_id}",
+   "summary": "Read a site of any tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's settings, its package's ranges, the thresholds in force and its state.",
+     "fields": [
+      {
+       "name": "settings",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "policy",
+       "type": "Policy",
+       "required": true
+      },
+      {
+       "name": "effective",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "State",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAdminEscalateSiteEvents",
+   "method": "GET",
+   "path": "/v1/admin/security/escalate/sites/{site_id}/events",
+   "summary": "List the level history of a site of any tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Level history, newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Event>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "lockEscalateSite",
+   "method": "POST",
+   "path": "/v1/admin/security/escalate/sites/{site_id}/lock",
+   "summary": "Hold a site at a level (管理员锁定) until unlocked",
+   "auth": [
+    "bearer"
+   ],
+   "description": "422 escalate_level_unavailable when the site's package cannot put the level in force (B/C without a line group, C via Cloudflare not bound and synced, D with the blackhole off, or no policy).",
+   "permissions": [
+    "platform.admin"
+   ],
+   "features": [
+    "module.escalate"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "level",
+      "type": "string: A / B / C / D",
+      "required": true
+     },
+     {
+      "name": "revision",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "The state revision read (0 when the site was never stepped)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's state after the write.",
+     "fields": [
+      {
+       "name": "level",
+       "type": "string: A / B / C / D",
+       "required": true
+      },
+      {
+       "name": "applied_level",
+       "type": "string: A / B / C / D",
+       "required": true
+      },
+      {
+       "name": "c_via",
+       "type": "string:  / line_group / cloudflare / unlimited",
+       "required": true,
+       "description": "unlimited — level D in force on the administrator's unlimited line group (fallback chain last level, not the blackhole)."
+      },
+      {
+       "name": "pending_reason",
+       "type": "string",
+       "required": true,
+       "description": "Why level is not in force yet ('' when it is): publishing, dns_pending, dns_failed, line_group_empty, cname_splitting, cname_change_required, cname_not_settled, cloudflare_unavailable, level_unavailable, observation_missing (no traffic observation for the window: not every node of the site is ingested past it, the level is held), apply_failed."
+      },
+      {
+       "name": "entered_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_qps",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "last_bps",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "attacked",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "locked_level",
+       "type": "string: A / B / C / D"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "The state revision read (0 when the site was never stepped)."
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "dns_ttl",
+       "type": "integer(int32)",
+       "description": "TTL the site CNAME's latest retarget carries at the DNS provider; absent when the CNAME was never retargeted."
+      },
+      {
+       "name": "ttl_clamped",
+       "type": "boolean",
+       "description": "The provider's TTL floor raised the requested TTL (name.com writes the level D blackhole's 60 seconds as 300)."
+      },
+      {
+       "name": "dropped_packets_5m",
+       "type": "integer(int64)",
+       "description": "Packets the nodes dropped for the site (level D, XDP / nftables) in the last 5 minutes of node telemetry; absent below level D."
+      },
+      {
+       "name": "drop_shared",
+       "type": "boolean",
+       "description": "A node's drop counters are not per site: some of dropped_packets_5m were counted for several level D sites of one node together."
+      },
+      {
+       "name": "platform_dns_hosted",
+       "type": "boolean",
+       "description": "Every active domain of the site lies in a zone of a verified DNS provider of the site's tenant. A split site that is hosted (and has no wildcard or zone apex domain) has its domains' default-line records pointed at split_cname by the control plane (cname_auto); otherwise it stays cname_change_required until POST cname-changed."
+      },
+      {
+       "name": "split_cname",
+       "type": "string",
+       "description": "The site's own CNAME hostname once the split for attack escalation (A->B, package mode CNAME) has settled: the target the site's domains must point at. Absent before that."
+      },
+      {
+       "name": "cname_auto",
+       "type": "object",
+       "description": "Latest automatic change of the domains' records after the split; absent before any. changed: every domain points at split_cname (counts as confirmed). failed: code says why (dns_record_conflict, dns_record_unconfirmed, dns_provider_*), retried automatically every 10 minutes, the owner may change the record and POST cname-changed. manual: not changed automatically (wildcard_domain, apex_domain, zone_not_hosted, auto_change_unavailable), the owner is told."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    },
+    {
+     "status": "422",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "resetEscalateSite",
+   "method": "POST",
+   "path": "/v1/admin/security/escalate/sites/{site_id}/reset",
+   "summary": "Send a site back to level A now (一键回切), unlocking it",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "features": [
+    "module.escalate"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "revision",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "The state revision read (0 when the site was never stepped)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's state after the write.",
+     "fields": [
+      {
+       "name": "level",
+       "type": "string: A / B / C / D",
+       "required": true
+      },
+      {
+       "name": "applied_level",
+       "type": "string: A / B / C / D",
+       "required": true
+      },
+      {
+       "name": "c_via",
+       "type": "string:  / line_group / cloudflare / unlimited",
+       "required": true,
+       "description": "unlimited — level D in force on the administrator's unlimited line group (fallback chain last level, not the blackhole)."
+      },
+      {
+       "name": "pending_reason",
+       "type": "string",
+       "required": true,
+       "description": "Why level is not in force yet ('' when it is): publishing, dns_pending, dns_failed, line_group_empty, cname_splitting, cname_change_required, cname_not_settled, cloudflare_unavailable, level_unavailable, observation_missing (no traffic observation for the window: not every node of the site is ingested past it, the level is held), apply_failed."
+      },
+      {
+       "name": "entered_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_qps",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "last_bps",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "attacked",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "locked_level",
+       "type": "string: A / B / C / D"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "The state revision read (0 when the site was never stepped)."
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "dns_ttl",
+       "type": "integer(int32)",
+       "description": "TTL the site CNAME's latest retarget carries at the DNS provider; absent when the CNAME was never retargeted."
+      },
+      {
+       "name": "ttl_clamped",
+       "type": "boolean",
+       "description": "The provider's TTL floor raised the requested TTL (name.com writes the level D blackhole's 60 seconds as 300)."
+      },
+      {
+       "name": "dropped_packets_5m",
+       "type": "integer(int64)",
+       "description": "Packets the nodes dropped for the site (level D, XDP / nftables) in the last 5 minutes of node telemetry; absent below level D."
+      },
+      {
+       "name": "drop_shared",
+       "type": "boolean",
+       "description": "A node's drop counters are not per site: some of dropped_packets_5m were counted for several level D sites of one node together."
+      },
+      {
+       "name": "platform_dns_hosted",
+       "type": "boolean",
+       "description": "Every active domain of the site lies in a zone of a verified DNS provider of the site's tenant. A split site that is hosted (and has no wildcard or zone apex domain) has its domains' default-line records pointed at split_cname by the control plane (cname_auto); otherwise it stays cname_change_required until POST cname-changed."
+      },
+      {
+       "name": "split_cname",
+       "type": "string",
+       "description": "The site's own CNAME hostname once the split for attack escalation (A->B, package mode CNAME) has settled: the target the site's domains must point at. Absent before that."
+      },
+      {
+       "name": "cname_auto",
+       "type": "object",
+       "description": "Latest automatic change of the domains' records after the split; absent before any. changed: every domain points at split_cname (counts as confirmed). failed: code says why (dns_record_conflict, dns_record_unconfirmed, dns_provider_*), retried automatically every 10 minutes, the owner may change the record and POST cname-changed. manual: not changed automatically (wildcard_domain, apex_domain, zone_not_hosted, auto_change_unavailable), the owner is told."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "unlockEscalateSite",
+   "method": "POST",
+   "path": "/v1/admin/security/escalate/sites/{site_id}/unlock",
+   "summary": "Release a site's lock (automatic levels resume)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "features": [
+    "module.escalate"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "revision",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "The state revision read (0 when the site was never stepped)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's state after the write.",
+     "fields": [
+      {
+       "name": "level",
+       "type": "string: A / B / C / D",
+       "required": true
+      },
+      {
+       "name": "applied_level",
+       "type": "string: A / B / C / D",
+       "required": true
+      },
+      {
+       "name": "c_via",
+       "type": "string:  / line_group / cloudflare / unlimited",
+       "required": true,
+       "description": "unlimited — level D in force on the administrator's unlimited line group (fallback chain last level, not the blackhole)."
+      },
+      {
+       "name": "pending_reason",
+       "type": "string",
+       "required": true,
+       "description": "Why level is not in force yet ('' when it is): publishing, dns_pending, dns_failed, line_group_empty, cname_splitting, cname_change_required, cname_not_settled, cloudflare_unavailable, level_unavailable, observation_missing (no traffic observation for the window: not every node of the site is ingested past it, the level is held), apply_failed."
+      },
+      {
+       "name": "entered_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_qps",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "last_bps",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "attacked",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "locked_level",
+       "type": "string: A / B / C / D"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "The state revision read (0 when the site was never stepped)."
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "dns_ttl",
+       "type": "integer(int32)",
+       "description": "TTL the site CNAME's latest retarget carries at the DNS provider; absent when the CNAME was never retargeted."
+      },
+      {
+       "name": "ttl_clamped",
+       "type": "boolean",
+       "description": "The provider's TTL floor raised the requested TTL (name.com writes the level D blackhole's 60 seconds as 300)."
+      },
+      {
+       "name": "dropped_packets_5m",
+       "type": "integer(int64)",
+       "description": "Packets the nodes dropped for the site (level D, XDP / nftables) in the last 5 minutes of node telemetry; absent below level D."
+      },
+      {
+       "name": "drop_shared",
+       "type": "boolean",
+       "description": "A node's drop counters are not per site: some of dropped_packets_5m were counted for several level D sites of one node together."
+      },
+      {
+       "name": "platform_dns_hosted",
+       "type": "boolean",
+       "description": "Every active domain of the site lies in a zone of a verified DNS provider of the site's tenant. A split site that is hosted (and has no wildcard or zone apex domain) has its domains' default-line records pointed at split_cname by the control plane (cname_auto); otherwise it stays cname_change_required until POST cname-changed."
+      },
+      {
+       "name": "split_cname",
+       "type": "string",
+       "description": "The site's own CNAME hostname once the split for attack escalation (A->B, package mode CNAME) has settled: the target the site's domains must point at. Absent before that."
+      },
+      {
+       "name": "cname_auto",
+       "type": "object",
+       "description": "Latest automatic change of the domains' records after the split; absent before any. changed: every domain points at split_cname (counts as confirmed). failed: code says why (dns_record_conflict, dns_record_unconfirmed, dns_provider_*), retried automatically every 10 minutes, the owner may change the record and POST cname-changed. manual: not changed automatically (wildcard_domain, apex_domain, zone_not_hosted, auto_change_unavailable), the owner is told."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "createAdminJA4BlockWorkflow",
+   "method": "POST",
+   "path": "/v1/admin/security/ja4-blocks",
+   "summary": "Create a tenant/site-scoped JA4 block as a platform administrator",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Token",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Single-use proof consumed by the configured step-up verifier; never persisted."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "ja4",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "snapshot_at",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "duration_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "tenant_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Durable workflow created or exact idempotent replay returned.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "ja4_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "duration_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "phase",
+       "type": "string: queued / policy_ready / edge_pending / active / failed / expired",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "policy_revision",
+       "type": "integer"
+      },
+      {
+       "name": "binding_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "binding_revision",
+       "type": "integer"
+      },
+      {
+       "name": "edge_publication_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rollout_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "edge_state",
+       "type": "string:  / pending / active / failed / rolled_back",
+       "required": true
+      },
+      {
+       "name": "attempt_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "last_error_code",
+       "type": "string"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error response."
+    },
+    {
+     "status": "401",
+     "description": "Stable error response."
+    },
+    {
+     "status": "403",
+     "description": "Stable error response."
+    },
+    {
+     "status": "409",
+     "description": "Stable error response."
+    },
+    {
+     "status": "412",
+     "description": "Stable error response."
+    },
+    {
+     "status": "428",
+     "description": "Stable error response."
+    },
+    {
+     "status": "503",
+     "description": "Stable error response."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminJA4BlockWorkflow",
+   "method": "GET",
+   "path": "/v1/admin/security/ja4-blocks/{workflow_id}",
+   "summary": "Get one exact tenant JA4 block workflow without raw access events",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "security_policies.read"
+   ],
+   "params": [
+    {
+     "name": "workflow_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Fixed workflow state; raw access events are never returned.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "ja4_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "duration_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "phase",
+       "type": "string: queued / policy_ready / edge_pending / active / failed / expired",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "policy_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "policy_revision",
+       "type": "integer"
+      },
+      {
+       "name": "binding_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "binding_revision",
+       "type": "integer"
+      },
+      {
+       "name": "edge_publication_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "rollout_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "edge_state",
+       "type": "string:  / pending / active / failed / rolled_back",
+       "required": true
+      },
+      {
+       "name": "attempt_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "last_error_code",
+       "type": "string"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error response."
+    },
+    {
+     "status": "401",
+     "description": "Stable error response."
+    },
+    {
+     "status": "403",
+     "description": "Stable error response."
+    },
+    {
+     "status": "404",
+     "description": "Stable error response."
+    },
+    {
+     "status": "503",
+     "description": "Stable error response."
+    }
+   ]
+  }
+ ]
+}

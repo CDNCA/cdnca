@@ -1,0 +1,168 @@
+{
+ "id": "monitor",
+ "prefix": "/v1/monitor",
+ "operations": [
+  {
+   "operation_id": "getNodeRealtimeSeries",
+   "method": "GET",
+   "path": "/v1/monitor/node/realtime",
+   "summary": "Read per-interface or per-resource metric series",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read or platform.admin in a platform scope. Node ownership is checked server-side. Unknown automatic selections produce no bandwidth points, never aggregate fallback values.",
+   "params": [
+    {
+     "name": "node",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string: bandwidth / connections / load / disk"
+    },
+    {
+     "name": "external_only",
+     "in": "query",
+     "type": "boolean",
+     "description": "Literal true or false, at most once. Default false preserves old API callers. The management UI explicitly sends true by default. Filters bandwidth/traffic by each sample's reported network_selection; missing or unavailable selection never means all interfaces. Other metric types are unchanged. False exposes all original NIC facts for manual diagnostics."
+    },
+    {
+     "name": "start",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Start of a window no longer than 31 days; defaults to one hour ago for realtime and one day ago for traffic."
+    },
+    {
+     "name": "end",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Defaults to now; must not precede start."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Series grouped by NIC or resource; data pairs are UTC epoch milliseconds and values.",
+     "fields": [
+      {
+       "name": "msg",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "code",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "data",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid parameters; validation_error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Platform scope and nodes.read or platform.admin required."
+    },
+    {
+     "status": "404",
+     "description": "Node absent from the caller scope; node_metrics_not_found."
+    },
+    {
+     "status": "503",
+     "description": "Metrics runtime unavailable; node_metrics_unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeRealtimeTop",
+   "method": "GET",
+   "path": "/v1/monitor/node/top",
+   "summary": "Rank node resource metrics",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read or platform.admin in a platform scope. Filters precede the limit. No metrics are invented for unknown samples.",
+   "params": [
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string: bandwidth / connections / load / disk"
+    },
+    {
+     "name": "external_only",
+     "in": "query",
+     "type": "boolean",
+     "description": "Literal true or false, at most once. Default false preserves old API callers. The management UI explicitly sends true by default. Filters bandwidth/traffic by each sample's reported network_selection; missing or unavailable selection never means all interfaces. Other metric types are unchanged. False exposes all original NIC facts for manual diagnostics."
+    },
+    {
+     "name": "recent_time",
+     "in": "query",
+     "type": "string",
+     "description": "Must not exceed 31 days."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Rows sorted by the sum of inbound and outbound resource values, then node name and NIC.",
+     "fields": [
+      {
+       "name": "msg",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "code",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "data",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid parameters; validation_error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Platform scope and nodes.read or platform.admin required."
+    },
+    {
+     "status": "503",
+     "description": "Metrics runtime unavailable; node_metrics_unavailable."
+    }
+   ]
+  }
+ ]
+}

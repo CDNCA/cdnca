@@ -1,0 +1,253 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Platform Region Catalog API
+  version: 1.1.0
+  description: Platform-scoped region management for the administrator node inventory. The platform scope is derived only from the authenticated session.
+servers: [{url: /}]
+security: [{bearerAuth: []}]
+paths:
+  /v1/regions:
+    get:
+      operationId: listPlatformRegions
+      summary: List platform regions
+      x-required-permissions: [regions.read]
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 0, maximum: 300, default: 50}
+          description: Legacy selector mode. Zero returns the complete platform catalog and cannot be combined with page or page_size.
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, default: 1}
+          description: Table page number. Enables paginated mode together with page_size.
+        - name: page_size
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 300, default: 10}
+          description: Table page size. Enables paginated mode together with page.
+        - name: search
+          in: query
+          schema: {type: string, maxLength: 128}
+          description: Literal case-insensitive match against name and description.
+      responses:
+        '200':
+          description: Stable list ordered by sort value and immutable short ID
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RegionList'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      operationId: createPlatformRegion
+      summary: Create a platform region
+      x-required-permissions: [regions.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegionInput'}
+      responses:
+        '201':
+          description: Region created or an exact completed request replayed
+          headers:
+            Location: {$ref: '#/components/headers/Location'}
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Region'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/regions/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/RegionID'}
+    get:
+      operationId: getPlatformRegion
+      summary: Get a platform region
+      x-required-permissions: [regions.read]
+      responses:
+        '200':
+          description: Current region
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Region'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch: &updateRegion
+      operationId: updatePlatformRegion
+      summary: Replace the editable fields of a platform region
+      x-required-permissions: [regions.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RegionInput'}
+      responses:
+        '200':
+          description: Region updated or an exact completed request replayed
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Region'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '428': {$ref: '#/components/responses/PreconditionRequired'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      <<: *updateRegion
+      operationId: replacePlatformRegion
+    delete:
+      operationId: deletePlatformRegion
+      summary: Delete an unused platform region
+      x-required-permissions: [regions.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      responses:
+        '204':
+          description: Region deleted or an exact completed request replayed
+          headers:
+            Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '428': {$ref: '#/components/responses/PreconditionRequired'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    RegionID:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/PositiveDisplayID'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Exact strong ETag revision read from the current region.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+  headers:
+    ETag:
+      description: Current immutable region revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    Location:
+      description: Canonical path of the region.
+      schema: {type: string, pattern: '^/v1/regions/[1-9][0-9]*$'}
+    IdempotentReplay:
+      description: Present with value true only when a completed request was replayed.
+      schema: {type: string, const: 'true'}
+  schemas:
+    PositiveDisplayID:
+      type: string
+      pattern: '^[1-9][0-9]{0,18}$'
+      readOnly: true
+    RegionInput:
+      type: object
+      additionalProperties: false
+      required: [name, description, l2_check_port, sort]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        country_code:
+          type: string
+          default: ""
+          pattern: '^(?:[A-Z]{2})?$'
+          description: ISO 3166-1 alpha-2 country code, "" = not set (market conditional origins map node regions by it).
+        province_code:
+          type: string
+          default: ""
+          pattern: '^(?:[1-8][0-9]0000)?$'
+          description: GB/T 2260 province-level code, only with country_code CN; "" = whole country / not set.
+        description: {type: string, maxLength: 1024}
+        l2_check_port: {type: integer, minimum: 1, maximum: 65535, default: 80}
+        sort: {type: integer, minimum: 0, maximum: 999999, default: 100}
+    Region:
+      type: object
+      additionalProperties: false
+      required: [id, name, code, country_code, province_code, description, l2_check_port, sort, revision, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        code:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]{0,62}$'
+          description: >-
+            Stable lower-case ASCII code of the region, generated when the region is created and never
+            changed (renaming keeps it): the lower-cased name when it fits the pattern and is free,
+            "default" for 默认, else region-<id>. Nodes learn their region by it from the control plane;
+            error page region overrides and origin routes' node_regions match on it.
+        country_code:
+          type: string
+          pattern: '^(?:[A-Z]{2})?$'
+          description: ISO 3166-1 alpha-2 country code, "" = not set (market conditional origins map node regions by it).
+        province_code:
+          type: string
+          pattern: '^(?:[1-8][0-9]0000)?$'
+          description: GB/T 2260 province-level code, only with country_code CN; "" = whole country / not set.
+        description: {type: string, maxLength: 1024}
+        l2_check_port: {type: integer, minimum: 1, maximum: 65535}
+        sort: {type: integer, minimum: 0, maximum: 999999}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    RegionList:
+      type: object
+      additionalProperties: false
+      required: [count, data]
+      properties:
+        count: {type: integer, format: int64, minimum: 0, description: Total number of regions matching search before pagination or limit is applied.}
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/Region'}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: {type: string}
+        message: {type: string}
+        request_id: {type: string}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {$ref: '#/components/schemas/Error'}
+  responses:
+    BadRequest: {description: Request validation failed (regions_validation_error), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Unauthorized: {description: Authentication is required (regions_unauthenticated), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Forbidden: {description: Required region permission is missing (regions_permission_denied), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    NotFound: {description: Region does not exist (regions_not_found), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Conflict: {description: Region name, reference, or idempotency conflict (regions_name_conflict, regions_in_use, regions_idempotency_conflict), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    PreconditionFailed: {description: Region revision changed (regions_revision_conflict), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    PreconditionRequired: {description: If-Match is required (regions_precondition_required), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}
+    Unavailable: {description: Region catalog is unavailable (regions_unavailable), content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}}

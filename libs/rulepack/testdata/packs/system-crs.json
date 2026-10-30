@@ -1,0 +1,17 @@
+{
+  "schema": "cdnca.rule-pack/v1",
+  "pack_id": "system/crs-pl1",
+  "version": "4.10.0",
+  "layer": "system",
+  "engine": "modsecurity",
+  "engine_min_version": 1,
+  "name": "CRS 档位 1",
+  "description": "OWASP CRS paranoia 1",
+  "license_spdx": "Apache-2.0",
+  "params_schema": {},
+  "exports": ["942100", "942110"],
+  "rules": [
+    {"id": "sqli", "name": "SQL 注入", "crs": {"engine": "owasp_crs", "files": ["REQUEST-942"], "include_ids": [], "exclude_ids": [], "action": "block", "paranoia": 1, "threshold": 5}}
+  ],
+  "defaults": {}
+}

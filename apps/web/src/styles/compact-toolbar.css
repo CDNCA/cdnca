@@ -1,0 +1,263 @@
+/* Canonical compact toolbar controls.
+ *
+ * The reference UI uses one 32px control rhythm across list and analytics
+ * pages.  Page styles still own widths and ordering; this shared layer only
+ * keeps arrows, buttons and flex items aligned so a refresh/search action
+ * cannot cover the adjacent selector at narrow widths.
+ */
+.app-shell .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selector,
+.ant-modal-root .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selector {
+  height: 32px !important;
+  min-height: 32px;
+  padding: 0 !important;
+  border-color: var(--cdnca-color-border);
+}
+
+/* fix-fielderr-be5: the neutral border above outranks antd's error state, so a
+ * select refused on save (status="error") kept a grey border with only the red
+ * text below it. Page rules that set a neutral select border lose to this too. */
+.app-shell .ant-select-single.ant-select-status-error:not(.ant-select-customize-input) .ant-select-selector[class],
+.ant-modal-root .ant-select-single.ant-select-status-error:not(.ant-select-customize-input) .ant-select-selector[class] {
+  border-color: var(--cdnca-color-error);
+}
+
+.app-shell .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selection-item,
+.app-shell .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selection-placeholder,
+.ant-modal-root .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selection-item,
+.ant-modal-root .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selection-placeholder {
+  padding-inline: 8px 24px !important;
+}
+
+.app-shell .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selection-search,
+.ant-modal-root .ant-select-single:not(.ant-select-sm):not(.ant-select-customize-input) .ant-select-selection-search {
+  inset-inline: 8px 24px;
+}
+
+.app-shell .ant-select[class] .ant-select-arrow,
+.ant-modal-root .ant-select[class] .ant-select-arrow {
+  top: 50% !important;
+  right: 9px !important;
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin-top: 0 !important;
+  color: var(--cdnca-color-text-secondary);
+  font-family: 'CdnBaselineIcons';
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 14px;
+  text-align: center;
+  transform: translateY(-50%) !important;
+  transform-origin: 7px 7px;
+  transition: transform 0.2s ease;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-shell .ant-select[class] .ant-select-arrow > *,
+.ant-modal-root .ant-select[class] .ant-select-arrow > * {
+  display: none !important;
+}
+
+.app-shell .ant-select[class] .ant-select-arrow::before,
+.ant-modal-root .ant-select[class] .ant-select-arrow::before {
+  display: block;
+  width: 14px;
+  height: 14px;
+  content: '\f116';
+}
+
+.app-shell .ant-select.ant-select-open[class] .ant-select-arrow,
+.ant-modal-root .ant-select.ant-select-open[class] .ant-select-arrow {
+  transform: translateY(-50%) rotate(180deg) !important;
+}
+
+.app-shell .ant-dropdown-trigger.ant-btn > .lucide-chevron-down,
+.ant-modal-root .ant-dropdown-trigger.ant-btn > .lucide-chevron-down {
+  display: none;
+}
+
+.app-shell .ant-dropdown-trigger.ant-btn:has(> .lucide-chevron-down)::after,
+.ant-modal-root .ant-dropdown-trigger.ant-btn:has(> .lucide-chevron-down)::after {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  color: currentcolor;
+  font-family: 'CdnBaselineIcons';
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 14px;
+  text-align: center;
+  content: '\f116';
+  flex: 0 0 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.site-toolbar,
+.identity-toolbar,
+.analytics-filter-bar,
+.node-toolbar,
+.node-scheduling-toolbar,
+.monitor-attack-log-search-toolbar,
+.waf-rule-search-row,
+.waf-rule-toolbar-actions,
+.identity-filter-bar {
+  min-width: 0;
+  row-gap: 8px;
+}
+
+.site-toolbar .ant-select-selector,
+.site-toolbar .ant-input,
+.site-toolbar .ant-input-affix-wrapper,
+.site-toolbar .ant-input-group-wrapper,
+.site-toolbar .ant-btn,
+.identity-toolbar .ant-select-selector,
+.identity-toolbar .ant-input,
+.identity-toolbar .ant-input-affix-wrapper,
+.identity-toolbar .ant-input-group-wrapper,
+.identity-toolbar .ant-btn,
+.analytics-filter-bar .ant-select-selector,
+.analytics-filter-bar .ant-input,
+.analytics-filter-bar .ant-input-affix-wrapper,
+.analytics-filter-bar .ant-input-group-wrapper,
+.analytics-filter-bar .ant-btn,
+.node-toolbar .ant-select-selector,
+.node-toolbar .ant-input,
+.node-toolbar .ant-input-affix-wrapper,
+.node-toolbar .ant-input-group-wrapper,
+.node-toolbar .ant-btn,
+.node-scheduling-toolbar .ant-select-selector,
+.node-scheduling-toolbar .ant-input,
+.node-scheduling-toolbar .ant-input-affix-wrapper,
+.node-scheduling-toolbar .ant-input-group-wrapper,
+.node-scheduling-toolbar .ant-btn,
+.monitor-attack-log-search-toolbar .ant-input-group-wrapper,
+.monitor-attack-log-search-toolbar .ant-btn,
+.waf-rule-search-row .ant-select-selector,
+.waf-rule-search-row .ant-input-group-wrapper,
+.waf-rule-search-row .ant-btn,
+.waf-rule-toolbar-actions .ant-btn,
+.identity-filter-bar .ant-select-selector,
+.identity-filter-bar .ant-input-group-wrapper,
+.identity-filter-bar .ant-btn {
+  box-sizing: border-box;
+  min-height: 32px;
+  max-width: 100%;
+}
+
+.site-toolbar .ant-select-selector,
+.identity-toolbar .ant-select-selector,
+.analytics-filter-bar .ant-select-selector,
+.node-toolbar .ant-select-selector,
+.node-scheduling-toolbar .ant-select-selector,
+.waf-rule-search-row .ant-select-selector,
+.identity-filter-bar .ant-select-selector {
+  display: inline-flex;
+  height: 32px !important;
+  align-items: center;
+}
+
+.site-toolbar .ant-btn,
+.identity-toolbar .ant-btn,
+.analytics-filter-bar .ant-btn,
+.node-toolbar .ant-btn,
+.node-scheduling-toolbar .ant-btn,
+.monitor-attack-log-search-toolbar .ant-btn,
+.waf-rule-search-row .ant-btn,
+.waf-rule-toolbar-actions .ant-btn,
+.identity-filter-bar .ant-btn {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.site-toolbar .site-quick-search,
+.stream-page .identity-search,
+.identity-toolbar .identity-search,
+.analytics-filter-bar .analytics-domain-control,
+.node-toolbar .node-search,
+.node-scheduling-toolbar .node-scheduling-search,
+.monitor-attack-log-search-toolbar .monitor-attack-log-quick-search,
+.waf-rule-search-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Match the reference dropdown menu geometry across every Select surface. */
+.ant-select-dropdown[class][class] {
+  padding: 5px 0 !important;
+  box-shadow: var(--cdnca-shadow-popup, 0 1px 6px rgb(0 0 0 / 20%));
+}
+
+.ant-select-dropdown[class] .ant-select-item[class] {
+  box-sizing: border-box;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 7px 16px !important;
+  align-items: center;
+  line-height: normal !important;
+  border-radius: 0 !important;
+}
+
+.ant-select-dropdown[class] .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: color-mix(in srgb, var(--cdnca-color-bg-hover, #f3f3f3) 48%, transparent) !important;
+}
+
+.ant-select-dropdown[class] .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  color: var(--cdnca-color-primary) !important;
+  font-weight: 400 !important;
+  background: var(--cdnca-color-bg-container, #fff) !important;
+}
+
+/* Ant's default 22px line-height and 11px input inset are visibly wider than
+ * the 14px/21px, 7px-inset controls used by the reference application. */
+.app-shell .ant-btn {
+  line-height: 21px;
+}
+
+.app-shell input.ant-input,
+.ant-modal-root input.ant-input {
+  padding-inline: 7px;
+  line-height: 21px;
+}
+
+.app-shell .ant-input-affix-wrapper,
+.ant-modal-root .ant-input-affix-wrapper {
+  padding-inline: 7px;
+}
+
+.app-shell .ant-input-affix-wrapper > input.ant-input,
+.ant-modal-root .ant-input-affix-wrapper > input.ant-input {
+  padding-inline: 0;
+}
+
+@media (max-width: 767px) {
+  .site-toolbar > *,
+  .identity-toolbar > *,
+  .analytics-filter-bar > *,
+  .node-toolbar > *,
+  .node-scheduling-toolbar > *,
+  .monitor-attack-log-search-toolbar > *,
+  .waf-rule-search-row > *,
+  .waf-rule-toolbar-actions > *,
+  .identity-filter-bar > * {
+    max-width: 100%;
+  }
+}
+
+/* ui-density：工具栏搜索框原来 flex: 1 1 420px 不封顶，工具栏一宽就拉满整行（中间一大片空输入框）；
+   桌面宽度下封顶 520px，单个输入框封顶 360px。窄屏仍按上面的 100% 规则。 */
+@media (min-width: 768px) {
+  .identity-toolbar .identity-search {
+    max-width: 520px;
+  }
+
+  .identity-toolbar > .ant-input,
+  .identity-toolbar > .ant-input-affix-wrapper {
+    max-width: 360px;
+  }
+}

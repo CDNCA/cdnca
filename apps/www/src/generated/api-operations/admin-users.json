@@ -1,0 +1,1801 @@
+{
+ "id": "admin-users",
+ "prefix": "/v1/admin/users",
+ "operations": [
+  {
+   "operation_id": "listManagedUsers",
+   "method": "GET",
+   "path": "/v1/admin/users",
+   "summary": "List tenant users in the customer control plane",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires identity.users.manage in a platform scope. Platform identities are never returned.",
+   "params": [
+    {
+     "name": "include",
+     "in": "query",
+     "type": "array<string: user_metadata / user_verification / platform_admins / reseller>",
+     "description": "Optional comma-separated unique projections. user_metadata adds remark and QQ; user_verification adds only current personal/company verification flags; platform_admins also lists platform-scope administrators (tenant_id null); Omission preserves the original fifteen-field representation. Empty, unknown, duplicate items and repeated parameters are rejected. user_verification, platform_admins and reseller are accepted only on this list endpoint."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "display_id",
+     "in": "query",
+     "type": "string",
+     "description": "Exact positive-decimal user display ID. Internal UUID identity and write paths are unchanged."
+    },
+    {
+     "name": "username",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive literal substring of username only. Trim boundary whitespace, reject raw C0/C1 controls, and allow at most 128 Unicode code points after trimming. Empty means no filter; all supplied filters intersect using AND."
+    },
+    {
+     "name": "display_name",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive literal substring of display name only, with the same trimming, control-character rejection, length and AND semantics as username. Percent and underscore are literal characters."
+    },
+    {
+     "name": "email",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive literal substring of email only, with the same trimming, control-character rejection, length and AND semantics as username. Partial addresses are allowed; NULL email does not match a nonempty filter."
+    },
+    {
+     "name": "phone",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive literal substring of phone only, with the same trimming, control-character rejection, length and AND semantics as username. Leading zeroes and plus signs are significant; NULL phone does not match a nonempty filter."
+    },
+    {
+     "name": "remark",
+     "in": "query",
+     "type": "string",
+     "description": "Trimmed case-insensitive literal substring of the administrator remark. Empty means no filter; combined with every other filter using AND."
+    },
+    {
+     "name": "qq",
+     "in": "query",
+     "type": "string",
+     "description": "Trimmed case-insensitive literal substring of the QQ contact text. Leading zeroes are significant; empty means no filter and all filters intersect."
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / disabled"
+    },
+    {
+     "name": "real_name_status",
+     "in": "query",
+     "type": "string: verified / unverified",
+     "description": "Optional current verification filter, intersected with all other filters before pagination in the same snapshot as the returned flags. verified means personal_verified OR company_verified; unverified means neither. Omit for all users. Empty or unknown values are invalid. Each flag requires the latest application of that kind to be approved, its authoritative identity binding to match, and its evidence settlement to be settled. Reads never create or approve identity records."
+    },
+    {
+     "name": "role",
+     "in": "query",
+     "type": "string: tenant_owner / tenant_viewer"
+    },
+    {
+     "name": "group_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string: reseller / customer / direct",
+     "description": "reseller = the tenant has a reseller profile (active or suspended); customer = the tenant belongs to a reseller; direct = neither. Any value excludes platform administrators. Omit for all users."
+    },
+    {
+     "name": "parent",
+     "in": "query",
+     "type": "string",
+     "description": "Owning reseller filter, applied before pagination and intersected with type. none = tenants without a reseller (platform customers, including resellers themselves); a lowercase reseller scope UUID = that reseller's customers. Excludes platform administrators. Omit for all users."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable tenant user page ordered newest first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ManagedUser>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createManagedUser",
+   "method": "POST",
+   "path": "/v1/admin/users",
+   "summary": "Create an isolated tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Creates the tenant, tenant scope, system roles, membership, and Argon2id credential atomically.",
+   "params": [
+    {
+     "name": "include",
+     "in": "query",
+     "type": "string: user_metadata",
+     "description": "Set to user_metadata to include administrator-only remark and QQ fields. Omission preserves the original fifteen-field representation. Unknown or repeated values are rejected. This representation choice does not change mutation idempotency; a historical receipt may omit metadata, in which case read the current resource before editing these fields."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "username",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "password",
+      "type": "string(password)",
+      "required": true,
+      "description": "8 to 1024 printable ASCII characters (no space) with at least two of upper case, lower case, digits and symbols; otherwise password_policy_unmet."
+     },
+     {
+      "name": "display_name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "email",
+      "type": "string(email) | null(email)"
+     },
+     {
+      "name": "phone",
+      "type": "string | null"
+     },
+     {
+      "name": "remark",
+      "type": "string | null",
+      "description": "Administrator-only remark, trimmed at both ends. Internal tabs and line breaks are preserved; other control characters are rejected. Null or whitespace-only input clears the stored value. Length counts Unicode code points."
+     },
+     {
+      "name": "qq",
+      "type": "string | null",
+      "description": "Trimmed QQ contact text, preserving leading zeroes. Not a login identifier and not unique. Control characters are rejected; null or whitespace-only input clears the stored value. Length counts Unicode code points."
+     },
+     {
+      "name": "role",
+      "type": "string: tenant_owner / tenant_viewer",
+      "required": true
+     },
+     {
+      "name": "group_id",
+      "type": "string(uuid) | null(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Tenant user created, or an identical idempotent request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string(email) | null(email)",
+       "required": true
+      },
+      {
+       "name": "phone",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string: tenant_owner / tenant_viewer",
+       "required": true
+      },
+      {
+       "name": "group_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "group_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "metadata",
+       "type": "ManagedUserMetadata",
+       "description": "Returned only with include=user_metadata on administrator user endpoints. Never included in self-service profile or authentication responses. Historical idempotency receipts without this projection omit the entire object."
+      },
+      {
+       "name": "verification",
+       "type": "ManagedUserVerification",
+       "description": "Present only when user_verification is requested on the administrator user list. Flags belong to the returned user and tenant scope, match current approved identity bindings and settled evidence, and do not disclose names, document numbers, fingerprints, materials or provider data. Detail, mutation, self-service and authentication responses never include this projection."
+      },
+      {
+       "name": "reseller",
+       "type": "ManagedUserReseller",
+       "description": "Present only when reseller is requested on the administrator user list. Reseller identity and owning reseller belong to the user's tenant, so every member of a tenant carries the same values. Platform administrators carry is_reseller false and null fields."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "batchUpdateManagedUsers",
+   "method": "PATCH",
+   "path": "/v1/admin/users",
+   "summary": "Atomically update tenant users",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Applies the complete array or no changes. Disabling a user revokes every refresh family and invalidates existing access sessions immediately.",
+   "params": [
+    {
+     "name": "include",
+     "in": "query",
+     "type": "string: user_metadata",
+     "description": "Set to user_metadata to include administrator-only remark and QQ fields. Omission preserves the original fifteen-field representation. Unknown or repeated values are rejected. This representation choice does not change mutation idempotency; a historical receipt may omit metadata, in which case read the current resource before editing these fields."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Users updated in request order, or an identical idempotent request replayed.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ManagedUser>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getManagedUser",
+   "method": "GET",
+   "path": "/v1/admin/users/{id}",
+   "summary": "Get one tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A platform identity or an unknown tenant user produces the same 404 response.",
+   "params": [
+    {
+     "name": "include",
+     "in": "query",
+     "type": "string: user_metadata",
+     "description": "Set to user_metadata to include administrator-only remark and QQ fields. Omission preserves the original fifteen-field representation. Unknown or repeated values are rejected. This representation choice does not change mutation idempotency; a historical receipt may omit metadata, in which case read the current resource before editing these fields."
+    },
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Tenant user details.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string(email) | null(email)",
+       "required": true
+      },
+      {
+       "name": "phone",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string: tenant_owner / tenant_viewer",
+       "required": true
+      },
+      {
+       "name": "group_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "group_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "metadata",
+       "type": "ManagedUserMetadata",
+       "description": "Returned only with include=user_metadata on administrator user endpoints. Never included in self-service profile or authentication responses. Historical idempotency receipts without this projection omit the entire object."
+      },
+      {
+       "name": "verification",
+       "type": "ManagedUserVerification",
+       "description": "Present only when user_verification is requested on the administrator user list. Flags belong to the returned user and tenant scope, match current approved identity bindings and settled evidence, and do not disclose names, document numbers, fingerprints, materials or provider data. Detail, mutation, self-service and authentication responses never include this projection."
+      },
+      {
+       "name": "reseller",
+       "type": "ManagedUserReseller",
+       "description": "Present only when reseller is requested on the administrator user list. Reseller identity and owning reseller belong to the user's tenant, so every member of a tenant carries the same values. Platform administrators carry is_reseller false and null fields."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateManagedUser",
+   "method": "PATCH",
+   "path": "/v1/admin/users/{id}",
+   "summary": "Update tenant user profile, status, and role",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Disabling a user revokes every refresh family and invalidates existing access sessions immediately.",
+   "params": [
+    {
+     "name": "include",
+     "in": "query",
+     "type": "string: user_metadata",
+     "description": "Set to user_metadata to include administrator-only remark and QQ fields. Omission preserves the original fifteen-field representation. Unknown or repeated values are rejected. This representation choice does not change mutation idempotency; a historical receipt may omit metadata, in which case read the current resource before editing these fields."
+    },
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "display_name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "email",
+      "type": "string(email) | null(email)",
+      "required": true
+     },
+     {
+      "name": "phone",
+      "type": "string | null",
+      "required": true
+     },
+     {
+      "name": "status",
+      "type": "string: active / disabled",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string | null",
+      "description": "Administrator-only remark, trimmed at both ends. Internal tabs and line breaks are preserved; other control characters are rejected. Null or whitespace-only input clears the stored value. Length counts Unicode code points."
+     },
+     {
+      "name": "qq",
+      "type": "string | null",
+      "description": "Trimmed QQ contact text, preserving leading zeroes. Not a login identifier and not unique. Control characters are rejected; null or whitespace-only input clears the stored value. Length counts Unicode code points."
+     },
+     {
+      "name": "role",
+      "type": "string: tenant_owner / tenant_viewer",
+      "required": true
+     },
+     {
+      "name": "group_id",
+      "type": "string(uuid) | null(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "User updated, or an identical idempotent request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string(email) | null(email)",
+       "required": true
+      },
+      {
+       "name": "phone",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / disabled",
+       "required": true
+      },
+      {
+       "name": "role",
+       "type": "string: tenant_owner / tenant_viewer",
+       "required": true
+      },
+      {
+       "name": "group_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "group_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "metadata",
+       "type": "ManagedUserMetadata",
+       "description": "Returned only with include=user_metadata on administrator user endpoints. Never included in self-service profile or authentication responses. Historical idempotency receipts without this projection omit the entire object."
+      },
+      {
+       "name": "verification",
+       "type": "ManagedUserVerification",
+       "description": "Present only when user_verification is requested on the administrator user list. Flags belong to the returned user and tenant scope, match current approved identity bindings and settled evidence, and do not disclose names, document numbers, fingerprints, materials or provider data. Detail, mutation, self-service and authentication responses never include this projection."
+      },
+      {
+       "name": "reseller",
+       "type": "ManagedUserReseller",
+       "description": "Present only when reseller is requested on the administrator user list. Reseller identity and owning reseller belong to the user's tenant, so every member of a tenant carries the same values. Platform administrators carry is_reseller false and null fields."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getManagedUserLoginSecurity",
+   "method": "GET",
+   "path": "/v1/admin/users/{id}/login-security",
+   "summary": "Read the selected tenant user's login security policy",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires an active primary platform bearer session and identity.users.manage. API keys and impersonation sessions are rejected. A missing policy returns revision 0, none, and an empty allowlist.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant membership scope. Duplicate or unknown query parameters are rejected."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Independent policy, without user profile or contact information.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "login_verification",
+       "type": "string: none / sms / email",
+       "required": true
+      },
+      {
+       "name": "login_allowlist",
+       "type": "array<string>",
+       "required": true,
+       "description": "IPv4/IPv6 addresses or CIDR prefixes (for example 203.0.113.0/24). Ports, zones and empty entries are rejected. The service unmaps IPv4-mapped IPv6, masks prefixes to their network, collapses full-length prefixes to the address, deduplicates and sorts. Empty clears the restriction."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateManagedUserLoginSecurity",
+   "method": "PUT",
+   "path": "/v1/admin/users/{id}/login-security",
+   "summary": "Replace a tenant user's login security policy",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Same primary-session authorization as GET. The policy uses its own revision, receipt and audit; it does not change users.revision or existing user-write receipts. All fields are required. Empty allowlist disables the source restriction; none disables the additional login code. Email/SMS require a bound contact and a configured enabled channel. Source restrictions apply to new password and code logins, not existing sessions, refresh or API keys. Once a policy is enabled, rolling back to a binary without the login gate is unsafe. The service never silently clears a policy to permit rollback.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant membership scope. Duplicate or unknown query parameters are rejected."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "login_verification",
+      "type": "string: none / sms / email",
+      "required": true
+     },
+     {
+      "name": "login_allowlist",
+      "type": "array<string>",
+      "required": true,
+      "description": "IPv4/IPv6 addresses or CIDR prefixes (for example 203.0.113.0/24). Ports, zones and empty entries are rejected. The service unmaps IPv4-mapped IPv6, masks prefixes to their network, collapses full-length prefixes to the address, deduplicates and sorts. Empty clears the restriction."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved policy or exact original receipt on replay. Clearing retains and increments its revision.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "login_verification",
+       "type": "string: none / sms / email",
+       "required": true
+      },
+      {
+       "name": "login_allowlist",
+       "type": "array<string>",
+       "required": true,
+       "description": "IPv4/IPv6 addresses or CIDR prefixes (for example 203.0.113.0/24). Ports, zones and empty entries are rejected. The service unmaps IPv4-mapped IPv6, masks prefixes to their network, collapses full-length prefixes to the address, deduplicates and sorts. Empty clears the restriction."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "login_security_contact_required; the selected channel has no bound contact."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getManagedUserSecondaryVerification",
+   "method": "GET",
+   "path": "/v1/admin/users/{id}/secondary-verification",
+   "summary": "Read the selected tenant user's secondary identity verification request",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Same primary-session authorization as login-security. A missing request returns revision 0, disabled, expiry_action none.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant membership scope. Duplicate or unknown query parameters are rejected."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Request with derived completion state.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "deadline",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "expiry_action",
+       "type": "string: none / lock_sites",
+       "required": true
+      },
+      {
+       "name": "requested_at",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "completed",
+       "type": "boolean",
+       "required": true,
+       "description": "An approved and settled personal_reverification exists after requested_at."
+      },
+      {
+       "name": "enforced_at",
+       "type": "string(date-time) | null",
+       "required": true,
+       "description": "When the deadline action ran."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateManagedUserSecondaryVerification",
+   "method": "PUT",
+   "path": "/v1/admin/users/{id}/secondary-verification",
+   "summary": "Replace a tenant user's secondary identity verification request",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Own revision, receipt and audit; users.revision is unchanged. Switching it on records requested_at and enqueues the identity.secondary_verification email/SMS notice in the same transaction; editing an active request does not notify again. The user completes it with an approved personal_reverification created after requested_at. expiry_action lock_sites requires a deadline; when the deadline passes without completion the control plane stops the user's sites (disables and locks them, then republishes so the nodes stop serving them). Once the reverification is approved, or the request is switched off or its deadline moved into the future, exactly the changes it made are undone and the scope is republished; sites stopped or locked for other reasons are left as they are. Disabling requires deadline null and expiry_action none.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant membership scope. Duplicate or unknown query parameters are rejected."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable write attempt identifier. Reuse it only with the same idempotency key and body."
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "description": "W3C trace context preserved across an exact retry."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "deadline",
+      "type": "string(date-time) | null"
+     },
+     {
+      "name": "expiry_action",
+      "type": "string: none / lock_sites",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved request or exact original receipt on replay.",
+     "fields": [
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "deadline",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "expiry_action",
+       "type": "string: none / lock_sites",
+       "required": true
+      },
+      {
+       "name": "requested_at",
+       "type": "string(date-time) | null",
+       "required": true
+      },
+      {
+       "name": "completed",
+       "type": "boolean",
+       "required": true,
+       "description": "An approved and settled personal_reverification exists after requested_at."
+      },
+      {
+       "name": "enforced_at",
+       "type": "string(date-time) | null",
+       "required": true,
+       "description": "When the deadline action ran."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listManagedUserAPIKeys",
+   "method": "GET",
+   "path": "/v1/admin/users/{user_id}/api-keys",
+   "summary": "List a tenant user's API key metadata",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform session-only endpoint requiring api_keys.admin.manage. Each item includes the exact persisted IP allowlist; secrets are never returned.",
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant scope selected by the platform administrator."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: pending_activation / active / revoked"
+    },
+    {
+     "name": "name",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "key_id",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "offset",
+     "in": "query",
+     "type": "integer",
+     "description": "Page-number access (canonical non-negative integer, 0-10000). Cannot be combined with cursor; an offset past the end returns empty items with total."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Target user's API key metadata.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<APIKey>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true,
+       "description": "Empty on the terminal page; otherwise pass unchanged as cursor to the next request."
+      },
+      {
+       "name": "has_more",
+       "type": "boolean",
+       "required": true,
+       "description": "True exactly when next_cursor is non-empty."
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "description": "Exact filtered key count at the page snapshot. Present on the first page and on offset pages; omitted on cursor continuation pages."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createPendingManagedUserAPIKey",
+   "method": "POST",
+   "path": "/v1/admin/users/{user_id}/api-keys",
+   "summary": "Create pending API key metadata for a tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform session-only endpoint requiring api_keys.admin.manage. No secret is created or returned. The target user must activate the key with their own bearer session before it can authenticate. An unknown result must be retried with the unchanged body, If-Match revision, and Idempotency-Key.",
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant scope selected by the platform administrator."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Collection creation precondition. Must be the quoted revision zero value."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "scopes",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+     },
+     {
+      "name": "expires_at",
+      "type": "string(date-time)",
+      "description": "Must be in the future and no more than 366 days from the server clock."
+     },
+     {
+      "name": "pending_ttl_seconds",
+      "type": "integer(int64)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Pending API key metadata without secret material.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "key_prefix",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
+      },
+      {
+       "name": "ip_allowlist",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+      },
+      {
+       "name": "status",
+       "type": "string: pending_activation / active / revoked",
+       "required": true,
+       "description": "pending_activation becomes active only through owner activation; revoked is terminal."
+      },
+      {
+       "name": "pending_expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_used_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "activated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "revokeManagedUserAPIKey",
+   "method": "POST",
+   "path": "/v1/admin/users/{user_id}/api-keys/{key_id}/revoke",
+   "summary": "Revoke a tenant user's API key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform session-only endpoint. Administrators cannot activate, rotate, or read key secrets. The body carries the exact persisted IP allowlist. An unknown result must be retried with the unchanged body, If-Match revision, and Idempotency-Key.",
+   "params": [
+    {
+     "name": "user_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "key_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant scope selected by the platform administrator."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "required": true,
+      "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+     },
+     {
+      "name": "grant_all_scopes",
+      "type": "boolean",
+      "description": "Rotate only. When true, the rotation also replaces the key scopes with every permission the current session may grant to an API key (the simple-mode \"reset key\"). It is part of the idempotency binding. Other operations reject true with 400 invalid_request."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Revoked key metadata.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "key_prefix",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
+      },
+      {
+       "name": "ip_allowlist",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+      },
+      {
+       "name": "status",
+       "type": "string: pending_activation / active / revoked",
+       "required": true,
+       "description": "pending_activation becomes active only through owner activation; revoked is terminal."
+      },
+      {
+       "name": "pending_expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_used_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "activated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

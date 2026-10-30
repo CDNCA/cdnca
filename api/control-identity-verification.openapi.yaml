@@ -1,0 +1,875 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Identity Verification API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable IAM-10/11 HTTP contract over migration 037 and the
+    identityverification core service. Actor, tenant scope, applicant, and
+    reviewer are derived only from the authenticated request. Draft creation
+    accepts only an opaque evidence_token issued to a trusted server-side
+    TrustedEvidenceResolver. The public contract never accepts or returns a
+    document number, person name, organization name, subject fingerprint,
+    ciphertext envelope, full hash, key identifier, or object reference.
+
+    Migration 169 adds durable KYC provider sessions and a private object store
+    upload workflow. Presigned PUTs are bound to exact tenant/user/session,
+    object digest, size, content type, object version, and encryption_key_id.
+    Provider callback signature, timestamp, nonce, event, and session bindings
+    are verified before monotonic state application; raw callback payloads and
+    material bodies are never stored in PostgreSQL. The current case core
+    allows only the applicant to expire their own due case. Reviewer,
+    administrator, and scheduler expiration are deliberately absent until a
+    trusted workload Actor and migration/audit semantics are specified.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: My identity verification
+    description: Applicant-owned draft and state transitions in the authenticated tenant.
+  - name: Identity verification review
+    description: Live-RBAC tenant review queue, assignment, and decisions.
+  - name: Identity verification provider
+    description: Durable provider session, private upload and signed callback workflow.
+paths:
+  /v1/identity-verification/status:
+    get:
+      tags: [My identity verification]
+      operationId: getMyIdentityVerificationStatus
+      summary: Read the authenticated user's own verification status
+      description: >-
+        Read-only profile badge source for the authenticated tenant user. An
+        approved initial personal identity keeps status verified; otherwise a
+        submitted or reviewing latest case is pending, a rejected latest case is
+        rejected, and no case, draft, withdrawn, or expired is unverified. The
+        response never carries a document number, name, organization,
+        fingerprint, material, or reviewer identity. Requires the same live
+        identity_verification.self.manage check as reading an owned case.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      responses:
+        '200': {$ref: '#/components/responses/StatusOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/cases:
+    post:
+      tags: [My identity verification]
+      operationId: createMyIdentityVerificationDraft
+      summary: Create a draft from trusted server-resolved evidence
+      description: >-
+        Requires identity_verification.self.manage. The evidence token must be
+        bound by the resolver to the authenticated tenant and user. A missing
+        resolver fails service construction; client-supplied fingerprint or
+        material metadata is rejected as an unknown field. Live IAM is checked
+        without business writes before reserving evidence, then checked again
+        inside the create transaction before idempotency, locks, DML, or audit.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateDraftRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/CaseCreated'}
+        '200': {$ref: '#/components/responses/CaseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/cases/{case_id}:
+    get:
+      tags: [My identity verification]
+      operationId: getMyIdentityVerificationCase
+      summary: Read a case owned by the authenticated user
+      description: A different-user or different-tenant case returns the same 404 as an unknown case.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters: [{$ref: '#/components/parameters/CaseID'}]
+      responses:
+        '200': {$ref: '#/components/responses/CaseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/cases/{case_id}/submit:
+    post:
+      tags: [My identity verification]
+      operationId: submitMyIdentityVerificationCase
+      summary: Submit an owned draft for review
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters:
+        - $ref: '#/components/parameters/CaseID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+      responses: &mutationResponses
+        '200': {$ref: '#/components/responses/CaseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/cases/{case_id}/withdraw:
+    post:
+      tags: [My identity verification]
+      operationId: withdrawMyIdentityVerificationCase
+      summary: Withdraw an owned draft or submitted case
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters:
+        - $ref: '#/components/parameters/CaseID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+      responses: *mutationResponses
+  /v1/identity-verification/cases/{case_id}/expire:
+    post:
+      tags: [My identity verification]
+      operationId: expireMyIdentityVerificationCase
+      summary: Expire an owned submitted or reviewing case after its deadline
+      description: >-
+        This is the narrow applicant-only operation authorized by the current
+        core and migration 037. It is not a reviewer, administrator, or
+        scheduler endpoint and cannot substitute another actor.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters:
+        - $ref: '#/components/parameters/CaseID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+      responses: *mutationResponses
+  /v1/identity-verification/reviewer/cases:
+    get:
+      tags: [Identity verification review]
+      operationId: listTenantIdentityVerificationCases
+      summary: List the authenticated tenant's review cases
+      description: >-
+        Requires live active membership, active user, identity_verification.read,
+        and identity_verification.review. The HMAC cursor is bound to the
+        authenticated tenant and exact kind/status filters. tenant_id,
+        applicant_id, and reviewer_id query parameters are rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions:
+        - identity_verification.read
+        - identity_verification.review
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/KindFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+        - $ref: '#/components/parameters/ReviewTenantScope'
+      responses:
+        '200': {$ref: '#/components/responses/CasePageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/reviewer/cases/{case_id}:
+    get:
+      tags: [Identity verification review]
+      operationId: getTenantIdentityVerificationCase
+      summary: Read one case in the authenticated reviewer tenant
+      description: A different-tenant case returns the same 404 as an unknown case.
+      security: [{bearerAuth: []}]
+      x-required-permissions:
+        - identity_verification.read
+        - identity_verification.review
+      parameters: [{$ref: '#/components/parameters/CaseID'}, {$ref: '#/components/parameters/ReviewTenantScope'}]
+      responses:
+        '200': {$ref: '#/components/responses/CaseOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/reviewer/cases/{case_id}/claim:
+    post:
+      tags: [Identity verification review]
+      operationId: claimTenantIdentityVerificationCase
+      summary: Atomically claim a submitted case as the authenticated reviewer
+      security: [{bearerAuth: []}]
+      x-required-permissions:
+        - identity_verification.read
+        - identity_verification.review
+      parameters:
+        - $ref: '#/components/parameters/CaseID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/ReviewTenantScope'
+      responses: *mutationResponses
+  /v1/identity-verification/reviewer/cases/{case_id}/decision:
+    post:
+      tags: [Identity verification review]
+      operationId: decideTenantIdentityVerificationCase
+      summary: Approve or reject a case assigned to the authenticated reviewer
+      description: Free-text review notes are not accepted. Only stable decision and reason codes are persisted.
+      security: [{bearerAuth: []}]
+      x-required-permissions:
+        - identity_verification.read
+        - identity_verification.review
+      parameters:
+        - $ref: '#/components/parameters/CaseID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/ReviewTenantScope'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DecisionRequest'}
+      responses: *mutationResponses
+  /v1/identity-verification/admin/cases:
+    get:
+      tags: [Identity verification review]
+      operationId: listPlatformIdentityVerificationCases
+      summary: List every tenant's identity verification cases (platform administrator)
+      description: >-
+        Admin console identity review entry. Platform sessions only, and
+        the administrator must hold platform.admin in the platform scope (tenantaccess rule); tenant
+        sessions and other platform members get 403. Rows carry the tenant scope, tenant display name
+        and applicant username; reviewing one case uses the reviewer routes with tenant_scope_id.
+        The HMAC cursor is bound to the platform scope and exact kind/status filters;
+        tenant_scope_id is rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions:
+        - platform.admin
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/KindFilter'
+        - $ref: '#/components/parameters/StatusFilter'
+      responses:
+        '200': {$ref: '#/components/responses/AdminCasePageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/provider-sessions:
+    post:
+      tags: [Identity verification provider]
+      operationId: startIdentityVerificationProviderSession
+      summary: Start or retry a durable KYC provider session
+      description: >-
+        Requires a live tenant session and identity_verification.self.manage.
+        The durable local intent is committed before the HTTPS provider call;
+        an unknown provider outcome is retried with the exact provider request identity.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderSessionRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/ProviderSessionOK'}
+        '200': {$ref: '#/components/responses/ProviderSessionOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/provider-sessions/{session_id}/uploads:
+    post:
+      tags: [Identity verification provider]
+      operationId: createIdentityVerificationPrivateUpload
+      summary: Create a bound private object store upload
+      description: >-
+        Returns a short-lived presigned PUT whose signed headers bind the exact
+        digest, size, content type, KMS encryption_key_id and private object key.
+        Material bytes never pass through or enter the control database.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProviderSessionID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderUploadRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/ProviderUploadOK'}
+        '200': {$ref: '#/components/responses/ProviderUploadOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/provider-sessions/{session_id}/uploads/{upload_id}/finalize:
+    post:
+      tags: [Identity verification provider]
+      operationId: finalizeIdentityVerificationPrivateUpload
+      summary: Finalize exact immutable private object facts
+      description: >-
+        HEAD verification must return the expected object_version, SHA-256,
+        size, content type and encryption_key_id before the upload is finalized.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity_verification.self.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProviderSessionID'
+        - $ref: '#/components/parameters/ProviderUploadID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/ProviderUploadOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/identity-verification/provider-callbacks/{provider}:
+    post:
+      tags: [Identity verification provider]
+      operationId: acceptIdentityVerificationProviderCallback
+      summary: Accept a signed replay-safe provider callback
+      description: >-
+        Bearer and actor headers are rejected. The callback signature covers
+        timestamp, nonce and the exact body. Timestamp freshness, unique nonce,
+        unique event, local session ID and external provider session ID are all
+        checked before monotonic state application. The stable replay conflict
+        code is identity_verification_provider_callback_replay_conflict.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/ProviderName'
+        - $ref: '#/components/parameters/CallbackTimestamp'
+        - $ref: '#/components/parameters/CallbackNonce'
+        - $ref: '#/components/parameters/CallbackKeyID'
+        - $ref: '#/components/parameters/CallbackSignature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, description: Strict provider-specific signed payload; raw payload is not persisted.}
+      responses:
+        '200': {$ref: '#/components/responses/ProviderCallbackOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api-session
+      description: >-
+        Exactly one Authorization header carrying a canonical Bearer control-api session.
+        API keys and client-supplied actor headers are rejected. The package runtime first uses
+        identity.AuthenticateSession. Draft creation performs a live no-business-write IAM preflight
+        before reserving external evidence; that preflight is not final authority. Every write,
+        including draft creation, revalidates the raw session with iamlock.AuthorizeSession inside the same business PostgreSQL transaction
+        before idempotency, business row locks, DML, or audit append.
+  parameters:
+    CaseID:
+      name: case_id
+      in: path
+      required: true
+      description: Canonical lower-case UUID of the identity verification case.
+      schema: {type: string, format: uuid}
+    ProviderSessionID:
+      name: session_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ProviderUploadID:
+      name: upload_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    ProviderName:
+      name: provider
+      in: path
+      required: true
+      schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+    CallbackTimestamp:
+      name: X-KYC-Timestamp
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[1-9][0-9]{9}$'}
+    CallbackNonce:
+      name: X-KYC-Nonce
+      in: header
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 128}
+    CallbackKeyID:
+      name: X-KYC-Key-ID
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    CallbackSignature:
+      name: X-KYC-Signature
+      in: header
+      required: true
+      schema: {type: string, minLength: 44, maxLength: 44}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive decimal current case revision, for example `"2"`.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$', maxLength: 22}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    WriteRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Tenant- and filter-bound HMAC cursor returned by the preceding page.
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    KindFilter:
+      name: kind
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/CaseKind'}
+    StatusFilter:
+      name: status
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/CaseStatus'}
+    ReviewTenantScope:
+      name: tenant_scope_id
+      in: query
+      required: false
+      description: >-
+        Platform administrator sessions only: the tenant scope
+        whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant
+        session. The administrator must hold platform.admin and the tenant must be active; the
+        administrator acts and is audited as themself (payload actor_scope_kind=platform).
+      schema: {type: string, format: uuid}
+  schemas:
+    CaseKind:
+      type: string
+      enum: [personal_initial, personal_reverification, enterprise]
+    CaseStatus:
+      type: string
+      enum: [draft, submitted, reviewing, approved, rejected, withdrawn, expired]
+    CreateDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, evidence_token]
+      properties:
+        kind: {$ref: '#/components/schemas/CaseKind'}
+        evidence_token:
+          type: string
+          minLength: 32
+          maxLength: 512
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._~-]{31,511}$'
+          description: Opaque one-time trusted resolver handle; never a fingerprint or document value.
+    ProviderSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, provider]
+      properties:
+        kind: {$ref: '#/components/schemas/CaseKind'}
+        provider: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+    ProviderSessionView:
+      type: object
+      additionalProperties: false
+      required: [id, kind, provider, state, revision, expires_at, updated_at, replayed]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/CaseKind'}
+        provider: {type: string}
+        state: {type: string, enum: [creating, pending, processing, succeeded, failed, canceled, expired, unknown]}
+        revision: {type: integer, format: int64, minimum: 1}
+        evidence_token: {type: string, description: Opaque session-bound handle; material facts are never exposed.}
+        expires_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    ProviderUploadRequest:
+      type: object
+      additionalProperties: false
+      required: [material_kind, content_type, size_bytes, sha256]
+      properties:
+        material_kind:
+          type: string
+          enum: [identity_document, liveness_evidence, business_license, legal_person_identity, agent_identity, authorization_letter, supplementary]
+        content_type: {type: string, enum: [image/jpeg, image/png, application/pdf, video/mp4]}
+        size_bytes: {type: integer, format: int64, minimum: 1, maximum: 20971520}
+        sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+    ProviderUploadView:
+      type: object
+      additionalProperties: false
+      required: [id, session_id, material_kind, state, revision, expires_at, replayed]
+      properties:
+        id: {type: string, format: uuid}
+        session_id: {type: string, format: uuid}
+        material_kind: {type: string}
+        state: {type: string, enum: [issued, finalized, erase_pending, erased]}
+        revision: {type: integer, format: int64, minimum: 1}
+        upload_url: {type: string, format: uri, description: Short-lived private object store PUT URL.}
+        required_headers: {type: object, additionalProperties: {type: string}}
+        expires_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    ProviderCallbackResult:
+      type: object
+      additionalProperties: false
+      required: [session_id, state, revision, applied, replayed]
+      properties:
+        session_id: {type: string, format: uuid}
+        state: {type: string}
+        revision: {type: integer, format: int64, minimum: 1}
+        applied: {type: boolean}
+        replayed: {type: boolean}
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [decision, reason_code]
+      properties:
+        decision: {type: string, enum: [approved, rejected]}
+        reason_code:
+          type: string
+          enum:
+            - evidence_verified
+            - identity_mismatch
+            - evidence_incomplete
+            - evidence_unreadable
+            - organization_mismatch
+            - authorization_invalid
+            - suspected_fraud
+    MaterialView:
+      type: object
+      additionalProperties: false
+      required: [id, kind, encrypted_envelope_present, mime_type, size_bytes, created_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind:
+          type: string
+          enum: [identity_document, liveness_evidence, business_license, legal_person_identity, agent_identity, authorization_letter, supplementary]
+        encrypted_envelope_present: {type: boolean}
+        mime_type: {type: string, enum: [image/jpeg, image/png, application/pdf]}
+        size_bytes: {type: integer, format: int64, minimum: 1, maximum: 20971520}
+        created_at: {type: string, format: date-time}
+    RetentionView:
+      type: object
+      additionalProperties: false
+      required: [eligible, eligible_at, reason_code]
+      properties:
+        eligible: {type: boolean}
+        eligible_at: {type: string, format: date-time}
+        reason_code:
+          type: string
+          enum: [case_not_terminal, retention_period_active, eligible_for_evidence_erasure]
+    CaseView:
+      type: object
+      additionalProperties: false
+      required: [id, applicant_user_id, kind, status, revision, created_at, state_changed_at, retention, materials, replayed]
+      allOf:
+        - oneOf:
+            - properties:
+                status: {const: approved}
+                decision_reason_code: {const: evidence_verified}
+              required: [decision_reason_code]
+            - properties:
+                status: {const: rejected}
+                decision_reason_code:
+                  enum: [identity_mismatch, evidence_incomplete, evidence_unreadable, organization_mismatch, authorization_invalid, suspected_fraud]
+              required: [decision_reason_code]
+            - properties:
+                status: {enum: [draft, submitted, reviewing, withdrawn, expired]}
+              not: {required: [decision_reason_code]}
+      properties:
+        id: {type: string, format: uuid}
+        applicant_user_id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/CaseKind'}
+        status: {$ref: '#/components/schemas/CaseStatus'}
+        decision_reason_code:
+          type: string
+          enum: [evidence_verified, identity_mismatch, evidence_incomplete, evidence_unreadable, organization_mismatch, authorization_invalid, suspected_fraud]
+          description: Stable review fact reason. Present only for approved or rejected cases.
+        agent_relationship:
+          type: string
+          enum: [legal_person, employee, authorized_representative]
+        reviewer_user_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        state_changed_at: {type: string, format: date-time}
+        submitted_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        terminal_at: {type: string, format: date-time}
+        retention: {$ref: '#/components/schemas/RetentionView'}
+        materials:
+          type: array
+          maxItems: 16
+          items: {$ref: '#/components/schemas/MaterialView'}
+        replayed: {type: boolean}
+    CaseSummary:
+      type: object
+      additionalProperties: false
+      required: [id, applicant_user_id, kind, status, revision, created_at, state_changed_at]
+      properties:
+        id: {type: string, format: uuid}
+        applicant_user_id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/CaseKind'}
+        status: {$ref: '#/components/schemas/CaseStatus'}
+        reviewer_user_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        state_changed_at: {type: string, format: date-time}
+        submitted_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+    StatusCase:
+      type: object
+      additionalProperties: false
+      required: [id, kind, status, revision, created_at, state_changed_at]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/CaseKind'}
+        status: {$ref: '#/components/schemas/CaseStatus'}
+        decision_reason_code:
+          type: string
+          enum: [evidence_verified, identity_mismatch, evidence_incomplete, evidence_unreadable, organization_mismatch, authorization_invalid, suspected_fraud]
+          description: Present only for approved or rejected cases.
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        state_changed_at: {type: string, format: date-time}
+        submitted_at: {type: string, format: date-time}
+    SelfStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {type: string, enum: [unverified, pending, verified, rejected]}
+        verified_at:
+          type: string
+          format: date-time
+          description: Approval time of the initial personal identity; present only when verified by it.
+        latest_case: {$ref: '#/components/schemas/StatusCase'}
+    CasePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/CaseSummary'}
+        next_cursor: {type: string, maxLength: 4096}
+    AdminCaseSummary:
+      type: object
+      additionalProperties: false
+      required: [id, applicant_user_id, kind, status, revision, created_at, state_changed_at,
+        tenant_scope_id, tenant_name, applicant_username]
+      properties:
+        id: {type: string, format: uuid}
+        applicant_user_id: {type: string, format: uuid}
+        kind: {$ref: '#/components/schemas/CaseKind'}
+        status: {$ref: '#/components/schemas/CaseStatus'}
+        reviewer_user_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        state_changed_at: {type: string, format: date-time}
+        submitted_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        tenant_scope_id: {type: string, format: uuid}
+        tenant_name: {type: string, minLength: 1}
+        applicant_username: {type: string, minLength: 1}
+    AdminCasePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/AdminCaseSummary'}
+        next_cursor: {type: string, maxLength: 4096}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: {type: string, pattern: '^identity_verification_[a-z0-9_]+$'}
+        message: {type: string}
+        request_id: {type: string}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {$ref: '#/components/schemas/Error'}
+  headers:
+    Allow:
+      description: The single method supported by the matched identity-verification path.
+      schema: {type: string, enum: [GET, POST]}
+    ETag:
+      description: Quoted positive decimal case revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    RequestID:
+      description: Stable request identifier used by the response error or audit correlation.
+      schema: {type: string}
+  responses:
+    ProviderSessionOK:
+      description: Durable provider session projection.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ProviderSessionView'}}}
+    ProviderUploadOK:
+      description: Private upload projection; object key and object_version remain server-side facts.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ProviderUploadView'}}}
+    ProviderCallbackOK:
+      description: Signed callback application result.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ProviderCallbackResult'}}}
+    CaseCreated:
+      description: Draft created.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CaseView'}
+    CaseOK:
+      description: Sanitized case projection. A replayed write returns replayed=true.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CaseView'}
+    StatusOK:
+      description: The authenticated user's own verification status.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SelfStatus'}
+    CasePageOK:
+      description: Stable reviewer queue page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CasePage'}
+    AdminCasePageOK:
+      description: Platform administrator cross-tenant case page.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AdminCasePage'}
+    BadRequest:
+      description: Strict header, query, path, body, or trusted material validation failed.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Unauthorized:
+      description: Authentication failed or did not produce a tenant Actor.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Forbidden:
+      description: Live tenant membership/RBAC, self-review, or assignment check denied the operation.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    MethodNotAllowed:
+      description: The path exists but the HTTP method is not supported; the response includes Allow.
+      headers:
+        Allow: {$ref: '#/components/headers/Allow'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    NotFound:
+      description: Case is missing or outside the actor's user/tenant visibility boundary.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Conflict:
+      description: Revision, idempotency payload, active review, or state transition conflict.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Unprocessable:
+      description: Trusted evidence does not match the previously approved stable identity.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    RequestCancelled:
+      description: Request context was canceled.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    ServiceUnavailable:
+      description: Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    GatewayTimeout:
+      description: Bounded command or query timeout elapsed.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}

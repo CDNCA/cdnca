@@ -1,0 +1,663 @@
+--- /dev/null
++++ b/cdnca-ja4/config
+@@ -0,0 +1,10 @@
++ngx_addon_name=ngx_http_cdnca_ja4_module
++
++ngx_module_type=HTTP
++ngx_module_name=ngx_http_cdnca_ja4_module
++ngx_module_incs="$ngx_addon_dir"
++ngx_module_deps="$ngx_addon_dir/cdnca_ja4.h"
++ngx_module_srcs="$ngx_addon_dir/ngx_http_cdnca_ja4_module.c $ngx_addon_dir/cdnca_ja4.c"
++ngx_module_libs=
++
++. auto/module
+--- /dev/null
++++ b/cdnca-ja4/cdnca_ja4.h
+@@ -0,0 +1,30 @@
++/*
++ * JA4 TLS client fingerprint of one ClientHello (cdnca).
++ *
++ * Implements only JA4 (the TLS client fingerprint) as specified by FoxIO in
++ * https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4.md, which
++ * is licensed under the BSD 3-Clause license (see THIRD_PARTY.md next to this
++ * file). JA4+ (JA4S, JA4H, JA4L, JA4X, JA4SSH, ...) are under the FoxIO
++ * License 1.1 and are deliberately not implemented here.
++ */
++
++#ifndef CDNCA_JA4_H
++#define CDNCA_JA4_H
++
++#include <stddef.h>
++
++/* "t13d1516h2_8daaf6152771_e5627efa2ab1": 10 + 1 + 12 + 1 + 12 characters. */
++#define CDNCA_JA4_LEN 36
++
++/*
++ * Computes JA4 from a ClientHello handshake body (the bytes after the 4-byte
++ * handshake header: legacy_version, random, session id, cipher suites,
++ * compression methods, extensions). protocol is 't' (TLS over TCP), 'q'
++ * (QUIC) or 'd' (DTLS). On success writes CDNCA_JA4_LEN characters and a
++ * terminating NUL into out and returns 0; on a malformed or oversized message
++ * returns -1 and leaves out as an empty string.
++ */
++int cdnca_ja4_from_client_hello(const unsigned char *body, size_t len,
++    char protocol, char out[CDNCA_JA4_LEN + 1]);
++
++#endif
+--- /dev/null
++++ b/cdnca-ja4/cdnca_ja4.c
+@@ -0,0 +1,364 @@
++/*
++ * JA4 TLS client fingerprint (cdnca). See cdnca_ja4.h for the scope and
++ * THIRD_PARTY.md for the specification source and license.
++ *
++ * Rules (FoxIO JA4.md):
++ *  a: protocol, TLS version (highest non-GREASE supported_versions entry,
++ *     otherwise legacy_version), 'd' when server_name is present else 'i',
++ *     cipher and extension counts without GREASE capped at 99 (SNI and ALPN
++ *     are counted), first and last characters of the first ALPN value.
++ *  b: first 12 hex characters of SHA-256 over the sorted 4-digit lowercase
++ *     cipher list joined by ',' (GREASE removed); 000000000000 when empty.
++ *  c: same over the sorted extension list without GREASE, server_name and
++ *     ALPN, followed by '_' and the signature algorithms in wire order
++ *     (GREASE removed; no '_' when there are none); 000000000000 when the
++ *     whole string is empty.
++ * Sorting makes JA4 independent of the extension order randomisation that
++ * Chrome 110+ and other clients apply to every connection.
++ */
++
++#include "cdnca_ja4.h"
++
++#include <stdint.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include <openssl/evp.h>
++
++#define CDNCA_JA4_MAX_CIPHERS     1024
++#define CDNCA_JA4_MAX_EXTENSIONS  256
++#define CDNCA_JA4_MAX_SIGALGS     256
++
++#define CDNCA_JA4_EXT_SERVER_NAME         0x0000
++#define CDNCA_JA4_EXT_SIGNATURE_ALGS      0x000d
++#define CDNCA_JA4_EXT_ALPN                0x0010
++#define CDNCA_JA4_EXT_SUPPORTED_VERSIONS  0x002b
++
++typedef struct {
++    const unsigned char  *pos;
++    size_t                left;
++} cdnca_ja4_reader;
++
++
++static int
++cdnca_ja4_u8(cdnca_ja4_reader *r, unsigned *value)
++{
++    if (r->left < 1) {
++        return -1;
++    }
++    *value = r->pos[0];
++    r->pos++;
++    r->left--;
++    return 0;
++}
++
++
++static int
++cdnca_ja4_u16(cdnca_ja4_reader *r, unsigned *value)
++{
++    if (r->left < 2) {
++        return -1;
++    }
++    *value = ((unsigned) r->pos[0] << 8) | r->pos[1];
++    r->pos += 2;
++    r->left -= 2;
++    return 0;
++}
++
++
++/* Splits off a length-prefixed sub-block (length of width 1 or 2 bytes). */
++static int
++cdnca_ja4_block(cdnca_ja4_reader *r, int width, cdnca_ja4_reader *block)
++{
++    unsigned  n;
++
++    if ((width == 1 ? cdnca_ja4_u8(r, &n) : cdnca_ja4_u16(r, &n)) != 0
++        || n > r->left)
++    {
++        return -1;
++    }
++    block->pos = r->pos;
++    block->left = n;
++    r->pos += n;
++    r->left -= n;
++    return 0;
++}
++
++
++/* RFC 8701: 0x0a0a, 0x1a1a, ..., 0xfafa. */
++static int
++cdnca_ja4_grease(unsigned value)
++{
++    return (value & 0x0f0f) == 0x0a0a && (value >> 8) == (value & 0xff);
++}
++
++
++static int
++cdnca_ja4_compare(const void *left, const void *right)
++{
++    unsigned  a = *(const uint16_t *) left, b = *(const uint16_t *) right;
++
++    return (a > b) - (a < b);
++}
++
++
++static const char *
++cdnca_ja4_version(unsigned version)
++{
++    switch (version) {
++    case 0x0304: return "13";
++    case 0x0303: return "12";
++    case 0x0302: return "11";
++    case 0x0301: return "10";
++    case 0x0300: return "s3";
++    case 0x0002: return "s2";
++    case 0xfeff: return "d1";
++    case 0xfefd: return "d2";
++    case 0xfefc: return "d3";
++    default:     return "00";
++    }
++}
++
++
++static int
++cdnca_ja4_alnum(unsigned char c)
++{
++    return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z')
++           || (c >= 'a' && c <= 'z');
++}
++
++
++/*
++ * First and last character of the first ALPN value; when either end byte is
++ * not ASCII alphanumeric, the first and last characters of the value's hex
++ * representation instead (JA4.md: 0xAB 0xCD -> "ad", 0x30 0xAB -> "3b").
++ */
++static void
++cdnca_ja4_alpn(const unsigned char *value, size_t len, char out[2])
++{
++    static const char  hex[] = "0123456789abcdef";
++
++    if (len == 0) {
++        out[0] = '0';
++        out[1] = '0';
++        return;
++    }
++    if (cdnca_ja4_alnum(value[0]) && cdnca_ja4_alnum(value[len - 1])) {
++        out[0] = (char) value[0];
++        out[1] = (char) value[len - 1];
++        return;
++    }
++    out[0] = hex[value[0] >> 4];
++    out[1] = hex[value[len - 1] & 0x0f];
++}
++
++
++static size_t
++cdnca_ja4_hex_list(const uint16_t *values, size_t n, char *out)
++{
++    static const char  hex[] = "0123456789abcdef";
++    size_t             i, len = 0;
++
++    for (i = 0; i < n; i++) {
++        if (i > 0) {
++            out[len++] = ',';
++        }
++        out[len++] = hex[(values[i] >> 12) & 0x0f];
++        out[len++] = hex[(values[i] >> 8) & 0x0f];
++        out[len++] = hex[(values[i] >> 4) & 0x0f];
++        out[len++] = hex[values[i] & 0x0f];
++    }
++    return len;
++}
++
++
++static int
++cdnca_ja4_hash12(const char *input, size_t len, char out[12])
++{
++    static const char  hex[] = "0123456789abcdef";
++    unsigned char      digest[EVP_MAX_MD_SIZE];
++    unsigned int       digest_len = 0;
++    int                i;
++
++    if (len == 0) {
++        memset(out, '0', 12);
++        return 0;
++    }
++    if (EVP_Digest(input, len, digest, &digest_len, EVP_sha256(), NULL) != 1
++        || digest_len < 6)
++    {
++        return -1;
++    }
++    for (i = 0; i < 6; i++) {
++        out[2 * i] = hex[digest[i] >> 4];
++        out[2 * i + 1] = hex[digest[i] & 0x0f];
++    }
++    return 0;
++}
++
++
++int
++cdnca_ja4_from_client_hello(const unsigned char *body, size_t len,
++    char protocol, char out[CDNCA_JA4_LEN + 1])
++{
++    uint16_t           ciphers[CDNCA_JA4_MAX_CIPHERS];
++    uint16_t           extensions[CDNCA_JA4_MAX_EXTENSIONS];
++    uint16_t           sigalgs[CDNCA_JA4_MAX_SIGALGS];
++    char               text[(CDNCA_JA4_MAX_EXTENSIONS + CDNCA_JA4_MAX_SIGALGS) * 5
++                            + CDNCA_JA4_MAX_CIPHERS * 5];
++    char               alpn[2] = { '0', '0' };
++    size_t             ncipher = 0, nextension = 0, nsigalg = 0, nsorted, n, i;
++    unsigned           legacy = 0, value = 0, kind = 0, highest = 0, sni = 0,
++                       cipher_count, extension_count;
++    cdnca_ja4_reader  r = { body, len }, block, list, data, name;
++
++    out[0] = '\0';
++    if (protocol != 't' && protocol != 'q' && protocol != 'd') {
++        return -1;
++    }
++
++    /* legacy_version, random[32], legacy_session_id<0..32> */
++    if (cdnca_ja4_u16(&r, &legacy) != 0 || r.left < 32) {
++        return -1;
++    }
++    r.pos += 32;
++    r.left -= 32;
++    if (cdnca_ja4_block(&r, 1, &block) != 0 || block.left > 32) {
++        return -1;
++    }
++
++    /* cipher_suites<2..2^16-2> */
++    if (cdnca_ja4_block(&r, 2, &block) != 0 || block.left == 0
++        || block.left % 2 != 0)
++    {
++        return -1;
++    }
++    while (block.left > 0) {
++        (void) cdnca_ja4_u16(&block, &value);
++        if (cdnca_ja4_grease(value)) {
++            continue;
++        }
++        if (ncipher == CDNCA_JA4_MAX_CIPHERS) {
++            return -1;
++        }
++        ciphers[ncipher++] = (uint16_t) value;
++    }
++
++    /* legacy_compression_methods<1..2^8-1> */
++    if (cdnca_ja4_block(&r, 1, &block) != 0 || block.left == 0) {
++        return -1;
++    }
++
++    /* extensions<8..2^16-1>, optional before TLS 1.3 */
++    if (r.left > 0) {
++        if (cdnca_ja4_block(&r, 2, &block) != 0 || r.left != 0) {
++            return -1;
++        }
++        while (block.left > 0) {
++            if (cdnca_ja4_u16(&block, &kind) != 0
++                || cdnca_ja4_block(&block, 2, &data) != 0)
++            {
++                return -1;
++            }
++            if (cdnca_ja4_grease(kind)) {
++                continue;
++            }
++            if (nextension == CDNCA_JA4_MAX_EXTENSIONS) {
++                return -1;
++            }
++            extensions[nextension++] = (uint16_t) kind;
++
++            switch (kind) {
++            case CDNCA_JA4_EXT_SERVER_NAME:
++                sni = 1;
++                break;
++
++            case CDNCA_JA4_EXT_SUPPORTED_VERSIONS:
++                if (cdnca_ja4_block(&data, 1, &list) != 0 || data.left != 0
++                    || list.left % 2 != 0)
++                {
++                    return -1;
++                }
++                while (list.left > 0) {
++                    (void) cdnca_ja4_u16(&list, &value);
++                    if (!cdnca_ja4_grease(value) && value > highest) {
++                        highest = value;
++                    }
++                }
++                break;
++
++            case CDNCA_JA4_EXT_ALPN:
++                if (cdnca_ja4_block(&data, 2, &list) != 0 || data.left != 0) {
++                    return -1;
++                }
++                if (list.left > 0) {
++                    if (cdnca_ja4_block(&list, 1, &name) != 0) {
++                        return -1;
++                    }
++                    cdnca_ja4_alpn(name.pos, name.left, alpn);
++                }
++                break;
++
++            case CDNCA_JA4_EXT_SIGNATURE_ALGS:
++                if (cdnca_ja4_block(&data, 2, &list) != 0 || data.left != 0
++                    || list.left % 2 != 0)
++                {
++                    return -1;
++                }
++                while (list.left > 0) {
++                    (void) cdnca_ja4_u16(&list, &value);
++                    if (cdnca_ja4_grease(value)) {
++                        continue;
++                    }
++                    if (nsigalg == CDNCA_JA4_MAX_SIGALGS) {
++                        return -1;
++                    }
++                    sigalgs[nsigalg++] = (uint16_t) value;
++                }
++                break;
++            }
++        }
++    }
++
++    cipher_count = ncipher > 99 ? 99 : (unsigned) ncipher;
++    extension_count = nextension > 99 ? 99 : (unsigned) nextension;
++    out[0] = protocol;
++    memcpy(out + 1, cdnca_ja4_version(highest != 0 ? highest : legacy), 2);
++    out[3] = sni ? 'd' : 'i';
++    out[4] = (char) ('0' + cipher_count / 10);
++    out[5] = (char) ('0' + cipher_count % 10);
++    out[6] = (char) ('0' + extension_count / 10);
++    out[7] = (char) ('0' + extension_count % 10);
++    out[8] = alpn[0];
++    out[9] = alpn[1];
++    out[10] = '_';
++    out[23] = '_';
++
++    qsort(ciphers, ncipher, sizeof(ciphers[0]), cdnca_ja4_compare);
++    n = cdnca_ja4_hex_list(ciphers, ncipher, text);
++    if (cdnca_ja4_hash12(text, n, out + 11) != 0) {
++        out[0] = '\0';
++        return -1;
++    }
++
++    nsorted = 0;
++    for (i = 0; i < nextension; i++) {
++        if (extensions[i] != CDNCA_JA4_EXT_SERVER_NAME
++            && extensions[i] != CDNCA_JA4_EXT_ALPN)
++        {
++            extensions[nsorted++] = extensions[i];
++        }
++    }
++    qsort(extensions, nsorted, sizeof(extensions[0]), cdnca_ja4_compare);
++    n = cdnca_ja4_hex_list(extensions, nsorted, text);
++    if (nsigalg > 0) {
++        text[n++] = '_';
++        n += cdnca_ja4_hex_list(sigalgs, nsigalg, text + n);
++    }
++    if (cdnca_ja4_hash12(text, n, out + 24) != 0) {
++        out[0] = '\0';
++        return -1;
++    }
++    out[CDNCA_JA4_LEN] = '\0';
++    return 0;
++}
+--- /dev/null
++++ b/cdnca-ja4/ngx_http_cdnca_ja4_module.c
+@@ -0,0 +1,200 @@
++/*
++ * ngx_http_cdnca_ja4_module: exposes the JA4 TLS client fingerprint of the
++ * connection's first ClientHello as $cdnca_ja4 (cdnca).
++ *
++ * OpenSSL's client_hello callback exposes neither unknown extensions nor
++ * their wire order, so the module registers an SSL message callback on every
++ * HTTPS server context and fingerprints the raw ClientHello the moment the
++ * handshake layer has reassembled it (before SNI selection and the client
++ * hello callback run). The 36-byte result is kept in SSL ex_data, allocated
++ * from the connection pool; a HelloRetryRequest's second ClientHello keeps
++ * the first fingerprint. HTTP/2 streams share the connection's SSL object.
++ *
++ * HTTP/3 (QUIC) is not fingerprinted: the variable is not found there and on
++ * plain-text connections, so logs and rules see an empty value.
++ */
++
++#include <ngx_config.h>
++#include <ngx_core.h>
++#include <ngx_http.h>
++
++#include "cdnca_ja4.h"
++
++#if !(NGX_HTTP_SSL)
++#error ngx_http_cdnca_ja4_module requires --with-http_ssl_module
++#endif
++
++
++static ngx_int_t ngx_http_cdnca_ja4_add_variables(ngx_conf_t *cf);
++static ngx_int_t ngx_http_cdnca_ja4_init(ngx_conf_t *cf);
++static ngx_int_t ngx_http_cdnca_ja4_variable(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data);
++static void ngx_http_cdnca_ja4_message(int write_p, int version,
++    int content_type, const void *buf, size_t len, ngx_ssl_conn_t *ssl_conn,
++    void *arg);
++
++
++static int  ngx_http_cdnca_ja4_index = -1;
++static u_char  ngx_http_cdnca_ja4_failed[] = "";
++
++
++static ngx_http_module_t  ngx_http_cdnca_ja4_module_ctx = {
++    ngx_http_cdnca_ja4_add_variables,     /* preconfiguration */
++    ngx_http_cdnca_ja4_init,              /* postconfiguration */
++    NULL,                                  /* create main configuration */
++    NULL,                                  /* init main configuration */
++    NULL,                                  /* create server configuration */
++    NULL,                                  /* merge server configuration */
++    NULL,                                  /* create location configuration */
++    NULL                                   /* merge location configuration */
++};
++
++
++ngx_module_t  ngx_http_cdnca_ja4_module = {
++    NGX_MODULE_V1,
++    &ngx_http_cdnca_ja4_module_ctx,       /* module context */
++    NULL,                                  /* module directives */
++    NGX_HTTP_MODULE,                       /* module type */
++    NULL,                                  /* init master */
++    NULL,                                  /* init module */
++    NULL,                                  /* init process */
++    NULL,                                  /* init thread */
++    NULL,                                  /* exit thread */
++    NULL,                                  /* exit process */
++    NULL,                                  /* exit master */
++    NGX_MODULE_V1_PADDING
++};
++
++
++static ngx_http_variable_t  ngx_http_cdnca_ja4_variables[] = {
++    { ngx_string("cdnca_ja4"), NULL, ngx_http_cdnca_ja4_variable, 0,
++      NGX_HTTP_VAR_NOCACHEABLE, 0 },
++      ngx_http_null_variable
++};
++
++
++static ngx_int_t
++ngx_http_cdnca_ja4_add_variables(ngx_conf_t *cf)
++{
++    ngx_http_variable_t  *var, *v;
++
++    for (v = ngx_http_cdnca_ja4_variables; v->name.len; v++) {
++        var = ngx_http_add_variable(cf, &v->name, v->flags);
++        if (var == NULL) {
++            return NGX_ERROR;
++        }
++        var->get_handler = v->get_handler;
++        var->data = v->data;
++    }
++
++    return NGX_OK;
++}
++
++
++static ngx_int_t
++ngx_http_cdnca_ja4_init(ngx_conf_t *cf)
++{
++    ngx_uint_t                   s;
++    ngx_http_ssl_srv_conf_t     *sscf;
++    ngx_http_core_srv_conf_t   **cscfp;
++    ngx_http_core_main_conf_t   *cmcf;
++
++    if (ngx_http_cdnca_ja4_index == -1) {
++        ngx_http_cdnca_ja4_index = SSL_get_ex_new_index(0, NULL, NULL, NULL,
++                                                         NULL);
++        if (ngx_http_cdnca_ja4_index == -1) {
++            ngx_ssl_error(NGX_LOG_EMERG, cf->log, 0,
++                          "SSL_get_ex_new_index() failed");
++            return NGX_ERROR;
++        }
++    }
++
++    /* Every server context: the handshake starts on the listen default
++     * server's context and SNI may switch it only after the ClientHello. */
++    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
++    cscfp = cmcf->servers.elts;
++
++    for (s = 0; s < cmcf->servers.nelts; s++) {
++        sscf = cscfp[s]->ctx->srv_conf[ngx_http_ssl_module.ctx_index];
++        if (sscf != NULL && sscf->ssl.ctx != NULL) {
++            SSL_CTX_set_msg_callback(sscf->ssl.ctx,
++                                     ngx_http_cdnca_ja4_message);
++        }
++    }
++
++    return NGX_OK;
++}
++
++
++static void
++ngx_http_cdnca_ja4_message(int write_p, int version, int content_type,
++    const void *buf, size_t len, ngx_ssl_conn_t *ssl_conn, void *arg)
++{
++    u_char            *ja4;
++    const u_char      *message = buf;
++    ngx_connection_t  *c;
++
++    if (write_p || content_type != SSL3_RT_HANDSHAKE || len < 4
++        || message[0] != SSL3_MT_CLIENT_HELLO
++        || SSL_get_ex_data(ssl_conn, ngx_http_cdnca_ja4_index) != NULL)
++    {
++        return;
++    }
++
++    c = ngx_ssl_get_connection(ssl_conn);
++    if (c == NULL || c->type != SOCK_STREAM
++        || (((size_t) message[1] << 16) | ((size_t) message[2] << 8)
++            | message[3]) != len - 4)
++    {
++        return;
++    }
++
++    ja4 = ngx_pnalloc(c->pool, CDNCA_JA4_LEN + 1);
++    if (ja4 == NULL
++        || cdnca_ja4_from_client_hello(message + 4, len - 4, 't',
++                                        (char *) ja4)
++           != 0)
++    {
++        ja4 = ngx_http_cdnca_ja4_failed;
++    }
++
++    if (SSL_set_ex_data(ssl_conn, ngx_http_cdnca_ja4_index, ja4) == 0) {
++        ngx_log_error(NGX_LOG_INFO, c->log, 0, "cdnca ja4: ex_data failed");
++    }
++}
++
++
++static ngx_int_t
++ngx_http_cdnca_ja4_variable(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data)
++{
++    u_char            *ja4;
++    ngx_connection_t  *c = r->connection;
++
++    v->not_found = 1;
++
++#if (NGX_QUIC)
++    if (c->quic) {
++        return NGX_OK;
++    }
++#endif
++
++    if (c->ssl == NULL || c->ssl->connection == NULL
++        || ngx_http_cdnca_ja4_index == -1)
++    {
++        return NGX_OK;
++    }
++
++    ja4 = SSL_get_ex_data(c->ssl->connection, ngx_http_cdnca_ja4_index);
++    if (ja4 == NULL || ja4[0] == '\0') {
++        return NGX_OK;
++    }
++
++    v->data = ja4;
++    v->len = CDNCA_JA4_LEN;
++    v->valid = 1;
++    v->no_cacheable = 0;
++    v->not_found = 0;
++
++    return NGX_OK;
++}
+--- /dev/null
++++ b/cdnca-ja4/THIRD_PARTY.md
+@@ -0,0 +1,44 @@
++# ngx_http_cdnca_ja4_module: third-party notice
++
++`cdnca_ja4.c` is an independent C implementation of **JA4** (TLS client
++fingerprinting) written from the FoxIO specification
++[`technical_details/JA4.md`](https://github.com/FoxIO-LLC/ja4/blob/main/technical_details/JA4.md)
++(checked 2026-10-17). No FoxIO source code is copied. The unit test uses the
++specification's worked example (`t13d1516h2_8daaf6152771_e5627efa2ab1`) and
++its no-signature-algorithm variant (`..._6d807ffa2a79`) as test vectors.
++
++JA4 is licensed by FoxIO under the BSD 3-Clause license (`LICENSE-JA4` in the
++FoxIO repository); FoxIO states it has no patent claims and does not plan to
++pursue patent coverage for JA4 TLS client fingerprinting. JA4 and JA4+ are
++FoxIO trademarks.
++
++**Only JA4 is implemented.** JA4+ methods (JA4S, JA4H, JA4L, JA4LS, JA4X,
++JA4SSH, JA4T, JA4TS, JA4D, JA4N and later ones) are patent-pending and
++licensed under the FoxIO License 1.1, which does not permit monetization
++without an OEM license. Do not add them to this module or to cdnca products
++without a separate license decision.
++
++Specification choices: the ALPN marker follows JA4.md (hex of the first and
++last byte when either end is not ASCII alphanumeric); FoxIO's Rust tool
++instead maps non-ASCII characters to `9`. Both agree for every ALPN value in
++practical use (`h2`, `http/1.1`, `h3`). QUIC ClientHellos are not
++fingerprinted (HTTP/3 requests see an empty `$cdnca_ja4`).
++
++```
++THIS LICENSE IS FOR JA4 ONLY (TLS CLIENT FINGERPRINTING) AND NOT FOR THE REST OF JA4+ (JA4PLUS). THE JA4+ LICENSE IS HERE: https://github.com/FoxIO-LLC/ja4/blob/main/LICENSE
++THE JA4+ LICENSE FAQ IS HERE: https://github.com/FoxIO-LLC/ja4/blob/main/License%20FAQ.md
++
++Copyright (c) 2026 FoxIO
++All rights reserved.
++Software: JA4 (TLS client fingerprinting)
++
++Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
++
++* Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
++
++* Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
++
++* Neither the name of FoxIO nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++```

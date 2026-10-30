@@ -1,0 +1,354 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/bot-dd-service",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "搜索/监控/服务类 Bot（device-detector）",
+ "description": "UA 含搜索引擎（已知良性爬虫已剔除）、站点监控、服务代理、订阅抓取、链接预览、校验器等 Bot 标识即记录；多为正常自动化访问，建议只记录或按需挑战。",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "dd-service-00",
+  "dd-service-01",
+  "dd-service-02",
+  "dd-service-r00",
+  "dd-service-r01",
+  "dd-service-r02",
+  "dd-service-r03"
+ ],
+ "rules": [
+  {
+   "id": "dd-service-00",
+   "name": "搜索/监控/服务类 Bot 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "2gdpr",
+        "360jk yunjiankong",
+        "acme.sectigo.com",
+        "addthis.com",
+        "adsbot-naver",
+        "alexa site audit",
+        "apache/",
+        "appsignalbot",
+        "ask jeeves/teoma",
+        "barracuda sentinel",
+        "bazqux",
+        "bbc-forge-url-monitor-twisted",
+        "bbc.co.uk/display/men/page+monitor",
+        "blackbox exporter",
+        "bloglovin",
+        "blogtrottr",
+        "bluesky",
+        "bountiibot",
+        "browsershots",
+        "castro 2, episode duration lookup",
+        "catchpoint",
+        "centurybot",
+        "chatwork linkpreview",
+        "check_http/v",
+        "checkhost",
+        "chrome privacy preserving prefetch proxy",
+        "cl0q-crawler",
+        "cloudflare-alwaysonline",
+        "cloudflare-smart-transit",
+        "cloudflareobservatory",
+        "coccoc.com",
+        "collectd",
+        "commafeed",
+        "comodo dcv",
+        "convertify",
+        "csscheck",
+        "cybaaagent",
+        "dataxu",
+        "dvbot",
+        "dynatracesynthetic",
+        "elastic/synthetics",
+        "elb-healthchecker",
+        "exactseek crawler",
+        "eyemonit",
+        "ezgif",
+        "fedilist agent/",
+        "feed wrangler",
+        "feedbin",
+        "feedburner",
+        "feedly",
+        "feedspot",
+        "fever/",
+        "findisebot",
+        "flipboardproxy",
+        "flipboardrss",
+        "forwardqr",
+        "freewebmonitoring sitechecker",
+        "freshrss",
+        "friendica",
+        "ghost inspector",
+        "gigablastopensource",
+        "google page speed insights",
+        "google-apps-script",
+        "google-document-conversion"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-service-01",
+   "name": "搜索/监控/服务类 Bot 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "google-structured-data-testing-tool",
+        "google-transparency-report",
+        "google-xrawler",
+        "google_partner_monitoring",
+        "googledocs;",
+        "googledocs; apps-presentations",
+        "googledocs; apps-spreadsheets",
+        "googlestackdrivermonitoring",
+        "grammarly",
+        "gregarius",
+        "hackermention",
+        "heartrails_capture",
+        "heexybot",
+        "httpmon",
+        "https://whatis.contentkingapp.com",
+        "ia_archiver",
+        "ichiro",
+        "inoreader.com",
+        "jigsaw",
+        "keybasebot",
+        "keycdn-tools/",
+        "keycdn-tools:",
+        "kiwitcms-gitops",
+        "kouio",
+        "last-modified.com",
+        "let's encrypt validation server",
+        "linkdex.com",
+        "linkpreview",
+        "livejournal.com",
+        "magpierss",
+        "mail.ru",
+        "mastodon/",
+        "meta-externalads",
+        "microsoft-flow/",
+        "miniature.io",
+        "mnogosearch",
+        "monitoring360bot",
+        "montastic-monitor",
+        "moodlebot-linkchecker",
+        "munin",
+        "naverjapan",
+        "neevabot",
+        "newsgatoronline",
+        "nodeping",
+        "ohdear.app",
+        "omtrbot",
+        "onlineornot.com_bot",
+        "orlightbot",
+        "p3p validator",
+        "page modified pinger",
+        "paperlibot",
+        "paypal ipn",
+        "phantomas/",
+        "phpmyadmin",
+        "phpservermon",
+        "pingadmin.ru",
+        "plesk screenshot bot",
+        "poduptime/",
+        "prometheus",
+        "prtg network monitor",
+        "ptst/",
+        "redditbot",
+        "ruxitsynthetic",
+        "sectigo dcv"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-service-02",
+   "name": "搜索/监控/服务类 Bot 第 3 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "serpreputationmanagementagent",
+        "seznam screenshot-generator",
+        "seznambot",
+        "sffeedreader",
+        "silverreader",
+        "simplepie",
+        "sixy.ch",
+        "sklikbot",
+        "skypeuripreview",
+        "snap url preview service",
+        "ssl labs",
+        "startpagina-linkchecker",
+        "steamchaturllookup",
+        "superfeedr bot",
+        "tarmotgezgin",
+        "theoldreader.com",
+        "thousandeyes",
+        "tineye-bot",
+        "tiny tiny rss",
+        "trackable/0.1",
+        "universalfeedparser",
+        "uptime-kuma",
+        "uptimia",
+        "urlinspectorbot",
+        "urlsuma",
+        "validator.nu",
+        "valimail",
+        "vercelbot",
+        "verifybot",
+        "viberurldownloader",
+        "w3c-checklink",
+        "w3c-mobileok",
+        "w3c_i18n-checker",
+        "w3c_unicorn",
+        "w3c_validator",
+        "wdg_validator",
+        "webmon/",
+        "webmoney advisor",
+        "weborama-fetcher",
+        "whatsmyip.org",
+        "wikido",
+        "wirereaderbot",
+        "woorankreview",
+        "wordpress",
+        "wordpress.com mshots",
+        "wp.com feedbot",
+        "www.monitor.us",
+        "xenforo",
+        "yacybot",
+        "yahoo! slurp",
+        "yahoo!-adcrawler",
+        "yahoomailproxy",
+        "yeti",
+        "yioopbot",
+        "yoozbot",
+        "yottaamonitor",
+        "zelist.ro feed parser",
+        "zoterotranslationserver"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-service-r00",
+   "name": "搜索/监控/服务类 Bot 正则第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:(360Spider(?:-Image|-Video)?)|Baidu.*spider|baidu Transcoder|Cloudflare-?Diagnostics|Datadog Agent|Datadog/?Synthetics|^Google$|vuhuv(?:Bot|RBT)|[A-z0-9]*-Lighthouse|Netcraft(?: Web Server Survey| SSL Server Survey|SurveyAgent)|NewsBlur .*(?:Fetcher|Finder)|Pocket(?:ImageCache|Parser)|Pingdom(?:\\.com|TMS)|Sogou[ -](?:head|inst|Orion|Pic|Test|web)[ -]spider|New-Sogou-Spider|Uptime(?:bot)?/|websitepulse[+ ]checker)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-service-r01",
+   "name": "搜索/监控/服务类 Bot 正则第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:(Yandex(?:(?:\\.Gazeta |Accessibility|Com|Mobile|MobileScreenShot|RenderResources|Screenshot|Sprav)?Bot|(?:AdNet|Antivirus|Blogs|Calendar|Catalog|Dialogs|Direct(?:Dyn)?|Favicons|ForDomain|ImageResizer|Images|Market|Media(?:naBot)?|Metrika|News(?:links)?|OntoDB(?:API)?|Pagechecker|Partner|RCA|SearchShop|(?:News|Site)links|Tracker|Turbo|Userproxy|Verticals|Vertis|Video(?:Parser)?|Webmaster))|YaDirectFetcher)|.*Site24x7|.* HLB|Awario(?:Smart)?Bot)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-service-r02",
+   "name": "搜索/监控/服务类 Bot 正则第 3 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:presearch[._]com|ias-(?:va|sg).*admantx.*service-fetcher|admantx\\.com.*service-fetcher|notifyninja.+monitoring|rocketmonitor(?:bot)?|DMBrowser|DMBrowser-[UB]V)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-service-r03",
+   "name": "搜索/监控/服务类 Bot 正则第 4 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:Overcast/.+Podcast Sync|^Verity|Matomo/[\\d.]+|Grafana/(\\d+\\.[.\\d]+))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

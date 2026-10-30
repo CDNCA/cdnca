@@ -1,0 +1,768 @@
+.cache-operations-page {
+  min-width: 0;
+}
+
+.cache-operations-page > .site-cache-tabs {
+  margin-bottom: 0;
+}
+
+.cache-baseline-layout {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) 268px;
+  gap: 16px;
+  padding: 16px 16px 16px 0;
+  color: var(--cdnca-color-text);
+}
+
+.cache-baseline-main {
+  min-width: 0;
+}
+
+.cache-baseline-section,
+.cache-baseline-status-panel {
+  min-width: 0;
+  padding: 14px 16px 16px;
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 8px;
+}
+
+.cache-baseline-section-mode {
+  min-height: 120px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+}
+
+.cache-baseline-section-input {
+  min-height: 385px;
+  margin-top: 14px;
+}
+
+.cache-baseline-section-head,
+.cache-baseline-input-head,
+.cache-baseline-footer,
+.cache-baseline-quota-value,
+.cache-baseline-quota-facts {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cache-baseline-section-head {
+  margin-bottom: 12px;
+}
+
+.cache-baseline-input-head {
+  margin-bottom: 10px;
+}
+
+.cache-baseline-title-wrap {
+  min-width: 0;
+}
+
+.cache-baseline-title-wrap h2,
+.cache-baseline-status-panel h2 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.cache-baseline-section-mode .cache-baseline-title-wrap h2::before {
+  display: inline-block;
+  width: 3px;
+  height: 16px;
+  margin-right: 8px;
+  vertical-align: -3px;
+  background: var(--cdnca-color-primary);
+  border-radius: 2px;
+  content: '';
+}
+
+.cache-baseline-title-wrap p,
+.cache-baseline-status-panel p {
+  margin: 1px 0 0;
+  color: var(--cdnca-color-neutral52, #a0a5b1);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cache-baseline-current {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  color: var(--cdnca-color-primary);
+  font-size: 12px;
+  line-height: 20px;
+  background: var(--cdnca-color-primary-bg, #eaf4ff);
+  border: 1px solid var(--cdnca-color-blue24, #d5eaff);
+  border-radius: 12px;
+}
+
+.cache-baseline-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cache-baseline-mode-actions .ant-btn,
+.cache-baseline-footer-actions .ant-btn {
+  height: 32px;
+  padding-inline: 15px;
+}
+
+.cache-baseline-mode-actions .ant-btn-primary {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-bg-container, #fff);
+  border-color: var(--cdnca-color-primary);
+  box-shadow: none;
+}
+
+.cache-baseline-count {
+  flex: 0 0 auto;
+  color: var(--cdnca-color-neutral52, #a0a5b1);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cache-baseline-count strong {
+  margin: 0 3px;
+  color: var(--cdnca-color-primary);
+  font-size: 14px;
+}
+
+.cache-baseline-section-input textarea {
+  display: block;
+  width: 100%;
+  height: 212px;
+  padding: 4px 7px;
+  resize: vertical;
+  color: var(--cdnca-color-text);
+  font: inherit;
+  line-height: 22.4px;
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 4px;
+  outline: none;
+}
+
+.cache-baseline-section-input textarea:focus {
+  border-color: var(--cdnca-color-link-hover);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 14%, transparent);
+}
+
+.cache-baseline-section-input textarea::placeholder {
+  color: var(--cdnca-color-placeholder);
+}
+
+.cache-baseline-paste-hint,
+.cache-baseline-error {
+  min-height: 20px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cache-baseline-paste-hint {
+  position: relative;
+  padding: 7px 10px 7px 26px;
+  color: var(--cdnca-color-neutral52, #a0a5b1);
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 4px;
+}
+
+.cache-baseline-paste-hint::before {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  width: 6px;
+  height: 6px;
+  background: var(--cdnca-color-primary);
+  border-radius: 50%;
+  content: '';
+  transform: translateY(-50%);
+}
+
+.cache-baseline-error {
+  color: var(--cdnca-color-error);
+}
+
+.cache-baseline-footer {
+  align-items: center;
+  margin-top: 12px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.cache-baseline-footer strong {
+  margin: 0 3px;
+  color: var(--cdnca-color-title);
+}
+
+.cache-baseline-footer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.cache-baseline-side {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.cache-baseline-status-panel {
+  padding: 14px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+}
+
+.cache-baseline-status-panel h2 {
+  margin-bottom: 10px;
+}
+
+.cache-baseline-quota-value {
+  align-items: baseline;
+}
+
+.cache-baseline-quota-value strong {
+  color: var(--cdnca-color-title);
+  font-size: 26px;
+  font-weight: 600;
+  line-height: 32px;
+}
+
+.cache-baseline-quota-value span,
+.cache-baseline-quota-facts {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cache-baseline-quota-facts {
+  padding-top: 6px;
+  margin-top: 6px;
+}
+
+.cache-baseline-quota-track {
+  height: 6px;
+  margin-top: 6px;
+  background: var(--cdnca-color-neutral21, #e9edf5);
+  border-radius: 3px;
+}
+
+.cache-baseline-submit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 22px;
+  background: var(--cdnca-color-bg-soft, #f5f7fa);
+  border-radius: 12px;
+}
+
+.cache-baseline-submit-status::before {
+  width: 6px;
+  height: 6px;
+  background: var(--cdnca-color-neutral44, #b9c0cc);
+  border-radius: 50%;
+  content: '';
+}
+
+/* Full task facts remain mounted so the existing real query/write workflow and
+ * direct controls keep their permission and retry semantics. */
+.cache-operations-management {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.cache-operations-management.cache-operations-management-admin {
+  position: static;
+  display: grid;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  overflow: visible;
+  gap: 12px;
+  opacity: 1;
+}
+
+.cache-operations-page > h1 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.cache-operations-toolbar {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  grid-template-columns: repeat(2, minmax(190px, 1fr)) repeat(3, minmax(132px, 0.7fr)) repeat(3, max-content);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.cache-operations-toolbar .ant-input,
+.cache-operations-toolbar .ant-select,
+.cache-operations-toolbar .ant-select-selector,
+.cache-operations-toolbar .ant-btn {
+  height: 32px !important;
+}
+
+.cache-operations-table .ant-table-thead > tr > th {
+  height: 41px;
+  padding: 8px 12px;
+  color: var(--cdnca-color-text);
+  font-weight: 600;
+  background: var(--cdnca-color-table-header);
+}
+
+.cache-operations-table .ant-table-tbody > tr > td {
+  height: 46px;
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+
+.cache-operations-pagination {
+  display: flex;
+  min-width: max-content;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.cache-operations-pagination > .ant-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.cache-operation-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.cache-operation-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.cache-operation-drawer .ant-drawer-body,
+.cache-operation-modal .ant-modal-body {
+  min-width: 0;
+}
+
+.cache-operation-drawer .ant-descriptions-item-content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cache-operation-detail-section {
+  min-width: 0;
+  margin-top: 20px;
+}
+
+.cache-operation-detail-section > h2 {
+  margin: 0 0 10px;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.cache-operation-progress-facts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--cdnca-color-text);
+  font-size: 13px;
+}
+
+.cache-operation-target-list {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.cache-operation-target-list code,
+.cache-operation-target-list span {
+  min-width: 0;
+  padding: 7px 9px;
+  overflow-wrap: anywhere;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-table-header);
+  border: 1px solid var(--cdnca-color-border-secondary);
+}
+
+@media (max-width: 900px) {
+  .cache-baseline-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cache-baseline-side {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cache-operations-toolbar {
+    align-items: stretch;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cache-operations-toolbar > .ant-btn {
+    width: max-content;
+  }
+
+  .cache-operations-table .ant-table-cell-fix-right {
+    position: static !important;
+  }
+
+  .cache-operations-table .ant-table-cell-fix-right-first::after,
+  .cache-operations-table .ant-table-cell-fix-right-last::after {
+    box-shadow: none !important;
+  }
+
+  .cache-operations-pagination {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .cache-operation-form-grid,
+  .cache-operation-progress-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cache-operation-drawer .ant-drawer-content-wrapper {
+    max-width: 100vw;
+  }
+}
+
+@media (max-width: 560px) {
+  .app-main > .cache-operations-page {
+    margin: 24px;
+  }
+
+  .cache-baseline-layout {
+    gap: 12px;
+    padding: 12px 12px 12px 0;
+  }
+
+  .cache-baseline-section,
+  .cache-baseline-status-panel {
+    padding: 12px;
+  }
+
+  .cache-baseline-section-head,
+  .cache-baseline-input-head {
+    align-items: flex-start;
+  }
+
+  .cache-baseline-current,
+  .cache-baseline-count {
+    max-width: 44%;
+    text-align: right;
+  }
+
+  .cache-baseline-section-input textarea {
+    height: 220px;
+  }
+
+  .cache-baseline-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cache-baseline-footer-actions {
+    justify-content: flex-end;
+  }
+
+  .cache-baseline-side {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* fix-cachedlg：已输入 N 条 / 涉及 M 个网站 / 本次将提交 K 个任务；未匹配的 URL 逐条列出。 */
+.cache-target-summary {
+  min-width: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 21px;
+}
+
+.cache-operation-modal .cache-target-summary {
+  margin: -8px 0 16px;
+}
+
+.cache-target-unmatched {
+  max-height: 160px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+  overflow-y: auto;
+  color: var(--cdnca-color-error);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cache-target-unmatched code {
+  overflow-wrap: anywhere;
+}
+
+/* fix-cachereplica：错误计数（红色数字）、就地错误条（浅红底红点）、本次将提交 N 个任务（红色数字）。 */
+.cache-replica-error-count,
+.cache-replica-task-count {
+  margin: 0 3px;
+  color: var(--cdnca-color-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 有错误时「已输入 / 错误 / 本次将提交」的数字都变红。 */
+.cache-replica-error-count,
+.cache-replica-task-count.is-error,
+.cache-replica-page .cache-baseline-count.is-error strong {
+  color: var(--cdnca-color-error);
+}
+
+/* 选中的操作类型为蓝色描边蓝字（悬停、聚焦不填充）。 */
+.cache-replica-mode.ant-btn.is-selected,
+.cache-replica-mode.ant-btn.is-selected:hover,
+.cache-replica-mode.ant-btn.is-selected:focus-visible {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-bg-container, #fff);
+  border-color: var(--cdnca-color-primary);
+}
+
+/* 页签文字中粗、选中项加粗；操作类型按钮等宽（约 100px）、13px，选中加粗。 */
+.cache-replica-page .site-cache-tab {
+  font-weight: 500;
+}
+
+.cache-replica-page .site-cache-tab.is-active {
+  font-weight: 600;
+}
+
+.cache-replica-mode.ant-btn {
+  min-width: 100px;
+  font-size: 13px;
+}
+
+.cache-replica-mode.ant-btn.is-selected {
+  font-weight: 600;
+}
+
+/* 计数、右栏说明为 13px 次要文字色；提交状态胶囊 13px 常规字重。 */
+.cache-replica-page .cache-baseline-count,
+.cache-replica-page .cache-baseline-status-panel p {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.cache-replica-page .cache-baseline-submit-status {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+/* 大号剩余数字后紧跟「剩余 / 总量」。 */
+.cache-replica-page .cache-baseline-quota-value {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.cache-replica-error-bar {
+  position: relative;
+  min-height: 34px;
+  padding: 7px 10px 7px 26px;
+  margin: 10px 0 0;
+  color: var(--cdnca-color-error);
+  font-size: 13px;
+  line-height: 20px;
+  background: var(--cdnca-color-error-bg);
+  border: 1px solid color-mix(in srgb, var(--cdnca-color-error) 24%, transparent);
+  border-radius: 4px;
+}
+
+.cache-replica-error-bar::before {
+  position: absolute;
+  top: 14px;
+  left: 10px;
+  width: 6px;
+  height: 6px;
+  background: var(--cdnca-color-error);
+  border-radius: 50%;
+  content: '';
+}
+
+.cache-replica-error-bar p,
+.cache-replica-error-bar ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cache-replica-error-bar ul {
+  max-height: 160px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.cache-replica-site-count {
+  margin-left: 4px;
+  color: var(--cdnca-color-neutral52, #a0a5b1);
+  font-size: 12px;
+}
+
+.cache-replica-site-select {
+  width: 100%;
+}
+
+.cache-replica-results {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 20px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 4px;
+}
+
+.cache-replica-results ul {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cache-replica-results li {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
+.cache-replica-result-site {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.cache-replica-result-count {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.cache-replica-result-state.is-failed {
+  color: var(--cdnca-color-error);
+}
+
+.cache-replica-result-state.is-unknown {
+  color: var(--cdnca-color-warning);
+}
+
+.cache-replica-advanced {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 4px;
+}
+
+.cache-replica-field {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: var(--cdnca-color-text);
+  font-size: 13px;
+}
+
+.cache-replica-field small {
+  color: var(--cdnca-color-neutral52, #a0a5b1);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cache-replica-tenant,
+.cache-replica-field .ant-select {
+  width: 100%;
+}
+
+.cache-replica-advanced-toggle.ant-btn {
+  padding-inline: 4px;
+}
+
+.cache-replica-status-fix::before,
+.cache-replica-status-unknown::before {
+  background: var(--cdnca-color-error);
+}
+
+.cache-replica-status-fix,
+.cache-replica-status-unknown {
+  color: var(--cdnca-color-error);
+  background: var(--cdnca-color-error-bg);
+}
+
+.cache-replica-status-submitted::before {
+  background: var(--cdnca-color-success);
+}
+
+.cache-replica-status-submitting::before {
+  background: var(--cdnca-color-primary);
+}
+
+@media (max-width: 560px) {
+  .cache-replica-advanced-toggle.ant-btn {
+    align-self: center;
+  }
+}
+
+/* fix-cachereplica：窄屏时操作类型按钮与底部按钮整行竖排。 */
+@media (max-width: 560px) {
+  .cache-replica-page .cache-baseline-section-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .cache-replica-page .cache-baseline-current {
+    max-width: none;
+    text-align: left;
+  }
+
+  .cache-replica-page .cache-baseline-input-head {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cache-replica-page .cache-baseline-count {
+    max-width: none;
+    text-align: left;
+  }
+
+  .cache-replica-page .cache-baseline-mode-actions,
+  .cache-replica-page .cache-baseline-footer-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cache-replica-page .cache-baseline-mode-actions .ant-btn,
+  .cache-replica-page .cache-baseline-footer-actions .ant-btn {
+    width: 100%;
+  }
+}

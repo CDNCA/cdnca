@@ -1,0 +1,10 @@
+# Engine RelevantOnly (as today). Phase 5 (runs before the audit decision,
+# transaction.cc:1312-1339): a grey-zone transaction (score > 0, below the
+# threshold) not in the sample is taken out of the audit log; the sampled
+# 1/16 keep only parts A and H (no request headers: cookies, auth).
+SecRule TX:blocking_inbound_anomaly_score "@gt 0" "id:51200,phase:5,pass,nolog,t:none,chain"
+  SecRule TX:blocking_inbound_anomaly_score "@lt %{tx.inbound_anomaly_score_threshold}" "t:none,chain"
+  SecRule UNIQUE_ID "!@rx 0$" "t:none,ctl:auditEngine=Off"
+SecRule TX:blocking_inbound_anomaly_score "@gt 0" "id:51201,phase:5,pass,nolog,t:none,chain"
+  SecRule TX:blocking_inbound_anomaly_score "@lt %{tx.inbound_anomaly_score_threshold}" "t:none,chain"
+  SecRule UNIQUE_ID "@rx 0$" "t:none,ctl:auditLogParts=-B"

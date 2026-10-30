@@ -1,0 +1,599 @@
+/* Access-only overrides: block and WAF pages reuse AnalyticsLogPage. */
+.app-main:has(.site-access-log-page) {
+  background: var(--cdnca-color-bg-page);
+}
+
+.analytics-log-page.site-access-log-page > .analytics-panel {
+  padding: 0 16px 16px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 6%, transparent), 0 16px 34px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 8%, transparent);
+}
+
+.analytics-log-page.site-access-log-page > .analytics-panel.access-view-exports {
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 4%, transparent), 0 12px 28px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 6%, transparent);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-nav {
+  margin: 0 0 14px;
+  padding-top: 16px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-nav::before {
+  border-bottom: 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-tab {
+  margin: 0 6px 0 0 !important;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-tab-active {
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 12%, transparent);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+.analytics-log-page.site-access-log-page .analytics-filter-bar {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-domain-control {
+  display: flex;
+  flex: 0 0 438px;
+  width: 438px;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  order: 1;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-quick-filter {
+  flex: 0 0 108px;
+  width: 108px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-quick-filter .ant-select-selector {
+  height: 32px !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-quick-filter .ant-select-selection-item {
+  line-height: 30px !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-domain-control > .analytics-log-site-filter,
+.analytics-log-page.site-access-log-page .analytics-log-domain-control > .analytics-log-site-filter .ant-input-search {
+  position: relative;
+  display: block;
+  flex: 0 0 320px;
+  width: 320px;
+  min-width: 0;
+  height: 32px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-domain-control .analytics-log-site-filter > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-domain-control .analytics-log-site-filter .ant-input {
+  padding-inline: 7px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-domain-control .ant-input-search,
+.analytics-log-page.site-access-log-page .analytics-log-domain-control .ant-input-group,
+.analytics-log-page.site-access-log-page .analytics-log-domain-control .ant-input,
+.analytics-log-page.site-access-log-page .analytics-log-domain-control .ant-input-search-button,
+.analytics-log-page.site-access-log-page .analytics-log-domain-control .analytics-log-site-filter .ant-select-selector {
+  height: 32px;
+  min-height: 32px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-cache-status-search {
+  display: flex;
+  height: 32px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-cache-status-search .ant-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-cache-status-search .ant-select-selector {
+  border-radius: 4px 0 0 4px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-cache-status-search .ant-btn {
+  height: 32px;
+  border-radius: 0 4px 4px 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-export-action {
+  position: static;
+  width: max-content;
+  height: 32px;
+  overflow: visible;
+  clip: auto;
+  white-space: nowrap;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-export-action {
+  margin: 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  order: 2;
+  margin-left: auto;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-advanced-action {
+  height: 32px;
+  padding-inline: 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tags {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -6px;
+  margin-bottom: 10px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tag {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 3px;
+  background: var(--cdnca-color-bg-container, #fff);
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tag-label {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tag-value {
+  color: var(--cdnca-color-neutral77, #333);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-tags-clear {
+  height: 24px;
+  padding: 0;
+  line-height: 22px;
+}
+
+.analytics-block-log-page .analytics-log-search-form { display: contents; }
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form {
+  display: none;
+  flex: 0 0 100%;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  order: 4;
+  gap: 0 12px;
+  margin: 10px 2px;
+  padding: 16px 16px 0;
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 8px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form:hover {
+  border-color: var(--cdnca-color-border-muted, #dfe4ec);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open {
+  display: flex;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-baseline-filter,
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-advanced-filter,
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-reset {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 0 16px !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  clip: auto !important;
+  white-space: normal !important;
+  border: 0 !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-baseline-filter .ant-input,
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-advanced-filter .ant-input,
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-baseline-filter .ant-select,
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-advanced-filter .ant-select {
+  width: 300px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-query {
+  width: 100px;
+  margin-bottom: 16px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-reset {
+  width: 80px !important;
+  height: 32px !important;
+  margin-left: 0 !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-break { display: none; }
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range {
+  position: relative;
+  display: none;
+  flex: 0 0 300px;
+  width: 300px;
+  min-width: 0;
+  min-height: 24px;
+  align-items: center;
+  order: 0;
+  gap: 0;
+  margin-top: -4px;
+  padding: 0 8px;
+  overflow: visible;
+  box-sizing: border-box;
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 4px;
+  background: var(--cdnca-color-bg-container, #fff);
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range-label {
+  position: static;
+  flex: 0 0 60px;
+  width: 60px;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip: auto;
+  line-height: 22px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range-label::after {
+  margin-inline-start: 2px;
+  content: ':';
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range .analytics-log-time-field-start {
+  position: static !important;
+  display: block !important;
+  flex: 1 1 0;
+  width: auto !important;
+  height: 22px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  clip: auto !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range .analytics-log-time-field > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range .analytics-log-time-field .ant-input {
+  width: 100%;
+  height: 22px;
+  min-width: 0;
+  padding: 0 20px 0 3px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  font-size: 11px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range .analytics-log-time-field-end {
+  position: static !important;
+  display: block !important;
+  flex: 1 1 0;
+  width: auto !important;
+  min-width: 0;
+  height: 22px !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  clip: auto !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-time-range .analytics-log-time-separator {
+  display: block !important;
+  flex: 0 0 12px;
+  width: 12px;
+  color: var(--cdnca-color-placeholder);
+  line-height: 22px;
+  text-align: center;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-clear-action {
+  display: none;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-time-range {
+  display: flex;
+  flex: 0 0 300px;
+  margin: 0 0 16px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-search-form:not(.is-open) .analytics-log-reset,
+.analytics-log-page.site-access-log-page .analytics-log-search-form:not(.is-open) .analytics-log-baseline-filter,
+.analytics-log-page.site-access-log-page .analytics-log-search-form:not(.is-open) .analytics-log-advanced-filter {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table {
+  max-width: 100%;
+  margin-bottom: -5px;
+  border: 0;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+  scrollbar-width: none;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table .ant-table-content {
+  scrollbar-width: auto;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table .ant-table-content::-webkit-scrollbar {
+  height: 12px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table .ant-table-tbody > tr.ant-table-placeholder > td.ant-table-cell {
+  height: 48px !important;
+  padding: 0 !important;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table .ant-table-expanded-row-fixed {
+  position: static !important;
+  width: 100% !important;
+  height: 48px;
+  padding: 13px 16px;
+  box-sizing: border-box;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table .ant-table-thead > tr > th {
+  height: 40px;
+  padding: 9px 16px !important;
+  color: var(--cdnca-color-neutral75, #344054);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 21px;
+  background: var(--cdnca-color-table-header);
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table .ant-table-tbody > tr > td {
+  height: 48px;
+  padding: 13px 16px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-table .ant-table-tbody > tr:hover > td {
+  background: var(--cdnca-color-bg-field, #f7f9fc);
+}
+
+.analytics-log-page .analytics-log-opaque-id {
+  display: inline-block;
+  min-width: 1ch;
+  color: var(--cdnca-color-neutral52, #a0a5b1);
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+
+/* P14: a site / rule cell shows its name (or a short ID) and copies the full ID. */
+.analytics-log-page .analytics-log-reference {
+  max-width: 100%;
+  font-size: 14px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-pagination {
+  min-width: max-content;
+  min-height: 34px;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 20px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-pagination > .ant-btn,
+.analytics-log-page.site-access-log-page .analytics-log-pagination > span:nth-of-type(2) {
+  width: 34px;
+  height: 34px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-pagination > span:nth-of-type(2) {
+  display: inline-grid;
+  place-items: center;
+  color: var(--cdnca-color-primary);
+  border: 1px solid var(--cdnca-color-primary);
+  border-radius: 4px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-pagination > span:last-child {
+  min-width: 86px;
+  height: 34px;
+  margin-left: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 4px;
+  line-height: 20px;
+}
+
+@media (max-width: 600px) {
+  .analytics-log-page.site-access-log-page .analytics-log-time-break { display: none; }
+
+  .analytics-log-page.site-access-log-page .analytics-log-domain-control {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-quick-filter {
+    flex: 0 0 108px;
+    width: 108px;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-domain-control .analytics-log-site-filter,
+  .analytics-log-page.site-access-log-page .analytics-log-domain-control .analytics-log-site-filter .ant-input-search {
+    flex: 1 1 0;
+    width: auto;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-time-range {
+    flex: 0 0 100%;
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-time-range-label {
+    flex-basis: 54px;
+    width: 54px;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-time-range .analytics-log-time-field .ant-input {
+    padding-inline: 2px 18px;
+    font-size: 10px;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-search-form {
+    margin-inline: 0;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-toolbar-actions {
+    margin-left: 0;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-baseline-filter,
+  .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-advanced-filter,
+  .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-time-range {
+    flex: 0 0 100%;
+    width: 100%;
+  }
+
+  .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-baseline-filter .ant-input,
+  .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-advanced-filter .ant-input,
+  .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-baseline-filter .ant-select,
+  .analytics-log-page.site-access-log-page .analytics-log-search-form.is-open .analytics-log-advanced-filter .ant-select {
+    width: 100%;
+  }
+}
+
+/* IDC tag next to the client carrier (IP intelligence library). */
+.analytics-log-idc-tag {
+  display: inline-block;
+  margin-inline-start: 6px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--ant-color-warning-bg, var(--cdnca-color-orange1, #fff7e6));
+  color: var(--ant-color-warning-text, var(--cdnca-color-orange10, #ad6800));
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* LOG-01：日志视图就地显示当前条件的下载申请 */
+.analytics-log-page.site-access-log-page .analytics-log-scope-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 0 0 100%;
+  order: 3;
+  gap: 4px 12px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-scope-export .analytics-log-export-reason {
+  margin-left: 8px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-export-hint {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* LOG-02：申请记录的原查询条件，条件在上、时间窗在下，长条件换行不撑宽表格。 */
+.analytics-log-page.site-access-log-page .analytics-log-export-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 360px;
+  overflow-wrap: anywhere;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-export-filter small {
+  color: var(--cdnca-color-text-secondary);
+}
+
+/* The access log's own from/to box sits in the advanced panel (unchanged control). */
+.analytics-log-page.site-access-log-page .cdnca-adv-filters-panel .analytics-log-time-range {
+  display: flex;
+  flex: 0 0 auto;
+  width: 300px;
+  max-width: 100%;
+  margin: 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-advfilters .analytics-log-domain-control {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+}
+
+.analytics-log-page .analytics-log-advfilters {
+  width: 100%;
+  min-width: 0;
+}
+
+.analytics-log-page.site-access-log-page .analytics-log-advfilters .analytics-log-domain-control,
+.analytics-log-page.site-access-log-page .analytics-log-advfilters .analytics-log-toolbar-actions {
+  order: 0;
+}

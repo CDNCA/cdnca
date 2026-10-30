@@ -1,0 +1,525 @@
+services:
+  postgres-bootstrap:
+    image: postgres:17.5-bookworm
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - |
+        export PGPASSWORD="$${POSTGRES_PASSWORD}"
+        psql -v ON_ERROR_STOP=1 -X -h postgres -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}" <<'SQL'
+        SELECT 'CREATE ROLE cdnca_control_app NOLOGIN'
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cdnca_control_app') \gexec
+        ALTER ROLE cdnca_control_app NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+        SELECT 'CREATE ROLE cdnca_plugin_webhook_runtime NOLOGIN'
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cdnca_plugin_webhook_runtime') \gexec
+        ALTER ROLE cdnca_plugin_webhook_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+        SELECT 'CREATE ROLE cdnca_control_runtime NOLOGIN'
+        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cdnca_control_runtime') \gexec
+        ALTER ROLE cdnca_control_runtime NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+        CREATE SCHEMA IF NOT EXISTS control AUTHORIZATION CURRENT_USER;
+        ALTER SCHEMA control OWNER TO CURRENT_USER;
+        SQL
+    networks:
+      - control
+
+  local-secrets-install:
+    image: alpine:3.22.0
+    restart: "no"
+    user: "0:0"
+    labels:
+      io.cdnca.local.transport-revision: "2"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        find /target -mindepth 1 -maxdepth 1 -exec rm -f {} +
+        cp -p /source/* /target/
+        chown -R 65532:65532 /target
+        find /target -type f -name '*-cert.pem' -exec chmod 0644 {} +
+        chmod 0644 /target/root-ca-cert.pem /target/gateway-client-ca-cert.pem /target/node-ca-cert.pem
+        chmod 0644 /target/analytics-nats-haproxy.cfg /target/clickhouse-haproxy.cfg
+        chmod 0644 /target/edge-command-stream.json /target/edge-status-stream.json /target/edge-status-consumer.json \
+          /target/edge-node-monitoring-status-stream.json /target/edge-node-monitoring-consumer.json
+        find /target -type f ! -perm -004 -exec chmod 0600 {} +
+    volumes:
+      - ${LOCAL_STACK_STATE_DIR:?generated local stack state is missing}/secrets:/source:ro
+      - local_secrets:/target
+    networks:
+      - control
+
+  gateway-secrets-install:
+    image: alpine:3.22.0
+    restart: "no"
+    user: "0:0"
+    network_mode: "none"
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        find /target -mindepth 1 -maxdepth 1 -exec rm -f {} +
+        for file in gateway-server-cert.pem gateway-server-key.pem node-ca-cert.pem \
+          gateway-control-client-cert.pem gateway-control-client-key.pem root-ca-cert.pem; do
+          test -s "/source/$${file}"
+          cp -p "/source/$${file}" "/target/$${file}"
+        done
+        chown -R 65532:65532 /target
+        chmod 0644 /target/gateway-server-cert.pem /target/node-ca-cert.pem \
+          /target/gateway-control-client-cert.pem /target/root-ca-cert.pem
+        chmod 0600 /target/gateway-server-key.pem /target/gateway-control-client-key.pem
+    volumes:
+      - ${LOCAL_STACK_STATE_DIR:?generated local stack state is missing}/secrets:/source:ro
+      - gateway_secrets:/target
+
+  control-migrate:
+    build:
+      context: .
+      dockerfile: services/control-api/Dockerfile
+      args:
+        CONTROL_VERSION: 0.1.0
+    image: cdnca/control-api:local
+    restart: "no"
+    command: ["migrate", "up"]
+    depends_on:
+      postgres-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}?sslmode=disable&options=-c%20search_path%3Dcontrol
+    networks:
+      - control
+
+  analytics-nats-tls:
+    image: haproxy:3.1.8-alpine
+    restart: unless-stopped
+    user: "65532:65532"
+    labels:
+      io.cdnca.local.transport-revision: "2"
+    depends_on:
+      local-secrets-install:
+        condition: service_completed_successfully
+      nats:
+        condition: service_healthy
+    command: ["haproxy", "-W", "-db", "-f", "/run/local-secrets/analytics-nats-haproxy.cfg"]
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 4222"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - local_secrets:/run/local-secrets:ro
+    networks:
+      - control
+
+  clickhouse-tls:
+    image: haproxy:3.1.8-alpine
+    restart: unless-stopped
+    user: "65532:65532"
+    labels:
+      io.cdnca.local.transport-revision: "2"
+    depends_on:
+      local-secrets-install:
+        condition: service_completed_successfully
+      clickhouse:
+        condition: service_healthy
+    command: ["haproxy", "-W", "-db", "-f", "/run/local-secrets/clickhouse-haproxy.cfg"]
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 8443"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    volumes:
+      - local_secrets:/run/local-secrets:ro
+    networks:
+      - control
+
+  edge-nats:
+    image: nats:2.11.4-alpine
+    restart: unless-stopped
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - --user=${EDGE_NATS_USERNAME:?generated edge NATS username is missing}
+      - --pass=${EDGE_NATS_PASSWORD:?generated edge NATS password is missing}
+      - --http_port=8222
+    ports:
+      - "127.0.0.1:${EDGE_NATS_PORT:-4223}:4222"
+    volumes:
+      - edge_nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:8222/healthz?js-enabled-only=true' | grep -q '\"status\":\"ok\"'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - control
+
+  edge-nats-preprovision:
+    image: natsio/nats-box:0.19.1
+    restart: "no"
+    depends_on:
+      edge-nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://edge-nats:4222
+      EDGE_NATS_USERNAME: ${EDGE_NATS_USERNAME:?generated edge NATS username is missing}
+      EDGE_NATS_PASSWORD: ${EDGE_NATS_PASSWORD:?generated edge NATS password is missing}
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        request() {
+          subject=$$1
+          payload=$$2
+          response="$$(nats --server "$${NATS_URL}" --user "$${EDGE_NATS_USERNAME}" \
+            --password "$${EDGE_NATS_PASSWORD}" request --raw --timeout 5s "$${subject}" "$${payload}")"
+        }
+        ensure_stream() {
+          request "\$$JS.API.STREAM.INFO.$$1" '{}'
+          if [ "$$(printf '%s' "$${response}" | jq -r '.error.err_code // 0')" = 10059 ]; then
+            request "\$$JS.API.STREAM.CREATE.$$1" "$$(cat "$$2")"
+          fi
+          printf '%s' "$${response}" | jq -e '.error == null' >/dev/null
+          request "\$$JS.API.STREAM.INFO.$$1" '{}'
+          printf '%s' "$${response}" | jq -e --arg name "$$1" '
+            .config.name == $$name and .config.storage == "file" and .config.num_replicas >= 1 and
+            .config.duplicate_window > 0 and .config.max_msg_size >= 1048576' >/dev/null
+        }
+        ensure_stream AGENT_COMMANDS /run/local-secrets/edge-command-stream.json
+        ensure_stream AGENT_DEPLOYMENT_STATUS /run/local-secrets/edge-status-stream.json
+        ensure_stream NODE_MONITORING_STATUS /run/local-secrets/edge-node-monitoring-status-stream.json
+        ensure_stream AGENT_HEARTBEATS /run/local-secrets/edge-heartbeat-stream.json
+        request '$$JS.API.CONSUMER.INFO.AGENT_DEPLOYMENT_STATUS.control_api_cache_status' '{}'
+        if [ "$$(printf '%s' "$${response}" | jq -r '.error.err_code // 0')" = 10014 ]; then
+          request '$$JS.API.CONSUMER.CREATE.AGENT_DEPLOYMENT_STATUS.control_api_cache_status' \
+            "$$(cat /run/local-secrets/edge-cache-status-consumer.json)"
+        fi
+        request '$$JS.API.CONSUMER.INFO.AGENT_DEPLOYMENT_STATUS.control_api_cache_status' '{}'
+        printf '%s' "$${response}" | jq -e '
+          .config.durable_name == "control_api_cache_status" and
+          .config.filter_subject == "cdnca.agent.deployment-status.cache.*" and
+          .config.max_deliver == 5 and .config.max_ack_pending == 64 and
+          .config.max_waiting == 16 and .config.max_expires == 2000000000' >/dev/null
+        request '$$JS.API.CONSUMER.INFO.AGENT_DEPLOYMENT_STATUS.control_api_edge_status' '{}'
+        if [ "$$(printf '%s' "$${response}" | jq -r '.error.err_code // 0')" = 10014 ]; then
+          request '$$JS.API.CONSUMER.CREATE.AGENT_DEPLOYMENT_STATUS.control_api_edge_status' \
+            "$$(cat /run/local-secrets/edge-status-consumer.json)"
+        fi
+        request '$$JS.API.CONSUMER.INFO.AGENT_DEPLOYMENT_STATUS.control_api_edge_status' '{}'
+        printf '%s' "$${response}" | jq -e '
+          .config.durable_name == "control_api_edge_status" and
+          .config.filter_subjects == ["cdnca.agent.deployment-status.*","cdnca.agent.deployment-status.generic-v2.*.*"] and
+          .config.deliver_policy == "all" and .config.ack_policy == "explicit" and
+          .config.ack_wait == 120000000000 and .config.max_deliver == -1 and
+          .config.replay_policy == "instant" and .config.max_ack_pending == 256 and
+          .config.max_waiting == 32 and .config.max_batch == 1 and .config.max_expires == 5000000000' >/dev/null
+        request '$$JS.API.CONSUMER.INFO.NODE_MONITORING_STATUS.control_api_node_metrics' '{}'
+        if [ "$$(printf '%s' "$${response}" | jq -r '.error.err_code // 0')" = 10014 ]; then
+          request '$$JS.API.CONSUMER.CREATE.NODE_MONITORING_STATUS.control_api_node_metrics' \
+            "$$(cat /run/local-secrets/edge-node-monitoring-consumer.json)"
+        fi
+        request '$$JS.API.CONSUMER.INFO.NODE_MONITORING_STATUS.control_api_node_metrics' '{}'
+        printf '%s' "$${response}" | jq -e '
+          .config.durable_name == "control_api_node_metrics" and
+          .config.deliver_policy == "all" and .config.ack_policy == "explicit" and
+          .config.ack_wait == 120000000000 and .config.max_deliver == -1 and
+          .config.filter_subject == "cdnca.agent.node-monitoring.status.*" and
+          .config.replay_policy == "instant" and .config.max_ack_pending == 256 and
+          .config.max_waiting == 32 and .config.max_batch == 1 and .config.max_expires == 5000000000' >/dev/null
+    volumes:
+      - local_secrets:/run/local-secrets:ro
+    networks:
+      - control
+
+  mailpit:
+    image: axllent/mailpit:v1.30.7
+    restart: unless-stopped
+    user: "65532:65532"
+    depends_on:
+      local-secrets-install:
+        condition: service_completed_successfully
+    environment:
+      MP_UI_BIND_ADDR: 0.0.0.0:8025
+      MP_SMTP_BIND_ADDR: 0.0.0.0:1025
+      MP_SMTP_TLS_CERT: /run/local-secrets/mailpit-cert.pem
+      MP_SMTP_TLS_KEY: /run/local-secrets/mailpit-key.pem
+      MP_SMTP_REQUIRE_STARTTLS: "true"
+      MP_SMTP_AUTH: "${LOCAL_SMTP_USERNAME:?generated local SMTP username is missing}:${LOCAL_SMTP_PASSWORD:?generated local SMTP password is missing}"
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+    volumes:
+      - local_secrets:/run/local-secrets:ro
+    networks:
+      - control
+
+  control-api:
+    build:
+      context: .
+      dockerfile: services/control-api/Dockerfile
+      args:
+        CONTROL_VERSION: 0.1.0
+    image: cdnca/control-api:local
+    restart: unless-stopped
+    stop_grace_period: 30s
+    command: ["serve"]
+    depends_on:
+      control-migrate:
+        condition: service_completed_successfully
+      clickhouse-migrate:
+        condition: service_completed_successfully
+      edge-nats-preprovision:
+        condition: service_completed_successfully
+      nats-analytics-preprovision:
+        condition: service_completed_successfully
+      local-secrets-install:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      analytics-nats-tls:
+        condition: service_healthy
+      clickhouse-tls:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:?set POSTGRES_USER}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB}?sslmode=disable&options=-c%20search_path%3Dcontrol
+      HTTP_ADDR: :8080
+      CONTROL_INTERNAL_GRPC_ADDR: 0.0.0.0:9090
+      ACCESS_TOKEN_SECRET: ${CONTROL_ACCESS_TOKEN_SECRET:?generated control access secret is missing}
+      OPENRESTY_SECURITY_SECRET_KEY_BASE64: ${OPENRESTY_SECURITY_SECRET_KEY_BASE64:?generated OpenResty security secret is missing}
+      ACCESS_TOKEN_TTL: 10m
+      REFRESH_TOKEN_TTL: 720h
+      COOKIE_SECURE: "false"
+      API_KEY_PEPPER_VERSION: local-v1
+      API_KEY_PEPPER_BASE64: ${CONTROL_API_KEY_PEPPER_BASE64:?generated API key pepper is missing}
+      DNS_CREDENTIAL_KEY_ID: local-v1
+      DNS_CREDENTIAL_KEY_BASE64: ${CONTROL_DNS_CREDENTIAL_KEY_BASE64:?generated DNS key is missing}
+      IMPERSONATION_HMAC_KEY_BASE64: ${CONTROL_IMPERSONATION_HMAC_KEY_BASE64:?generated impersonation key is missing}
+      OBSERVABILITY_LOG_CURSOR_KEY_BASE64: ${CONTROL_OBSERVABILITY_LOG_CURSOR_KEY_BASE64:?generated observability cursor key is missing}
+      ANALYTICS_LOGS_CURSOR_ACTIVE_KEY_ID: local-v1
+      ANALYTICS_LOGS_CURSOR_KEYS_JSON: '{"local-v1":"${CONTROL_ANALYTICS_LOGS_CURSOR_KEY_BASE64:?generated analytics logs cursor key is missing}"}'
+      # The license service is external (not part of this repository). Empty
+      # LICENSE_SERVICE_URL disables entitlement sync; until a community lease
+      # is imported with `scripts/local-stack.sh install-entitlement`, feature
+      # gates deny requests. See infra/env/development.env.
+      LICENSE_SERVICE_URL: ${LICENSE_SERVICE_URL:-}
+      ENTITLEMENT_TRUSTED_KEYS_FILE: ${ENTITLEMENT_TRUSTED_KEYS_FILE:-}
+      CONTROL_INSTALLATION_ID: ${CONTROL_INSTALLATION_ID:-70000000-0000-4000-8000-000000000001}
+      CONTROL_INSTALLATION_NAME: ${CONTROL_INSTALLATION_NAME:-cdnca-local-control}
+      CONTROL_INSTALLATION_PRIVATE_KEY_FILE: /run/local-secrets/control-installation-key.pem
+      CONTROL_VERSION: 0.1.0
+      CONTROL_INTERNAL_SERVER_CERT_FILE: /run/local-secrets/control-server-cert.pem
+      CONTROL_INTERNAL_SERVER_PRIVATE_KEY_FILE: /run/local-secrets/control-server-key.pem
+      CONTROL_INTERNAL_GATEWAY_CLIENT_CA_FILE: /run/local-secrets/gateway-client-ca-cert.pem
+      CONTROL_INTERNAL_GATEWAY_WORKLOAD_URI_SAN: spiffe://cdnca/local/agent-gateway
+      NODE_CA_CERTIFICATE_CHAIN_FILE: /run/local-secrets/node-ca-cert.pem
+      NODE_CA_PRIVATE_KEY_FILE: /run/local-secrets/node-ca-key.pem
+      EDGE_DEPLOYMENT_NATS_URL: nats://${EDGE_NATS_USERNAME:?generated edge NATS username is missing}:${EDGE_NATS_PASSWORD:?generated edge NATS password is missing}@edge-nats:4222
+      ANALYTICS_QUERY_ENABLED: ${ANALYTICS_QUERY_ENABLED:-true}
+      CLICKHOUSE_URL: https://clickhouse-tls:8443
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:?set CLICKHOUSE_DB}
+      CLICKHOUSE_USERNAME: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+      ANALYTICS_INGEST_ENABLED: ${ANALYTICS_INGEST_ENABLED:-true}
+      ANALYTICS_INGEST_NATS_URL: tls://analytics-nats-tls:4222
+      ANALYTICS_INGEST_NATS_USER: ${NATS_CONTROL_CONSUMER_USERNAME:?generated analytics Control consumer username is missing}
+      ANALYTICS_INGEST_NATS_PASSWORD: ${NATS_CONTROL_CONSUMER_PASSWORD:?generated analytics Control consumer password is missing}
+      ANALYTICS_INGEST_CLICKHOUSE_URL: https://clickhouse-tls:8443
+      ANALYTICS_INGEST_CLICKHOUSE_DATABASE: ${CLICKHOUSE_DB:?set CLICKHOUSE_DB}
+      ANALYTICS_INGEST_CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      ANALYTICS_INGEST_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+      ANALYTICS_INGEST_ISOLATION_WRAPPING_KEY_ID: local-v1
+      ANALYTICS_INGEST_ISOLATION_WRAPPING_KEY_BASE64: ${CONTROL_ANALYTICS_ISOLATION_KEY_BASE64:?generated analytics isolation key is missing}
+      ANALYTICS_CONNECTIONS_RUNTIME_ENABLED: ${ANALYTICS_CONNECTIONS_RUNTIME_ENABLED:-true}
+      ANALYTICS_CONNECTIONS_NATS_URL: tls://analytics-nats-tls:4222
+      ANALYTICS_CONNECTIONS_NATS_USER: ${NATS_CONTROL_CONSUMER_USERNAME:?generated analytics Control consumer username is missing}
+      ANALYTICS_CONNECTIONS_NATS_PASSWORD: ${NATS_CONTROL_CONSUMER_PASSWORD:?generated analytics Control consumer password is missing}
+      ANALYTICS_CONNECTIONS_STREAM: ${ANALYTICS_CONNECTIONS_STREAM:-CONNECTIONS_INGEST_V1}
+      ANALYTICS_CONNECTIONS_DURABLE: ${ANALYTICS_CONNECTIONS_DURABLE:-control_api_connections}
+      ANALYTICS_CONNECTIONS_SUBJECT: cdnca.connections.v1.*.*
+      ANALYTICS_CONNECTIONS_OPERATION_TIMEOUT: 5s
+      ANALYTICS_CONNECTIONS_CONNECT_TIMEOUT: 3s
+      ACCOUNT_RECOVERY_ENABLED: "false"
+      ACCOUNT_REGISTRATION_ENABLED: "false"
+      ACME_RUNTIME_ENABLED: "false"
+      ANNOUNCEMENT_ENABLED: "false"
+      CACHE_CONTROL_RUNTIME_ENABLED: "true"
+      CACHE_CONTROL_RUNTIME_NATS_URL: nats://${EDGE_NATS_USERNAME:?generated edge NATS username is missing}:${EDGE_NATS_PASSWORD:?generated edge NATS password is missing}@edge-nats:4222
+      CACHE_CONTROL_RUNTIME_NATS_NAME: cdnca-control-api-cache-control
+      CACHE_CONTROL_RUNTIME_CURSOR_KEY_BASE64: ${CONTROL_CACHE_CONTROL_CURSOR_KEY_BASE64:?generated cache control cursor key is missing}
+      CACHE_CONTROL_RUNTIME_COMMAND_STREAM: AGENT_COMMANDS
+      CACHE_CONTROL_RUNTIME_STATUS_STREAM: AGENT_DEPLOYMENT_STATUS
+      CACHE_CONTROL_RUNTIME_COMMAND_SUBJECT_PREFIX: cdnca.agent.commands.cache
+      CACHE_CONTROL_RUNTIME_STATUS_SUBJECT_PREFIX: cdnca.agent.deployment-status.cache
+      CACHE_CONTROL_RUNTIME_DLQ_SUBJECT_PREFIX: cdnca.agent.deployment-status.cache-dlq
+      CACHE_CONTROL_RUNTIME_DURABLE: control_api_cache_status
+      CACHE_CONTROL_RUNTIME_WORKER_ID: control-api-cache-runtime
+      CACHE_CONTROL_RUNTIME_STREAM_REPLICAS: ${CACHE_CONTROL_RUNTIME_STREAM_REPLICAS:-1}
+      CHALLENGE_POLICY_RUNTIME_ENABLED: "false"
+      CONTROL_UPGRADE_PLAN_WRITER_ENABLED: "false"
+      CONTROL_UPGRADE_RUNTIME_ENABLED: "false"
+      CONTROL_UPGRADE_SYSTEMD_PLAN_SOURCE_ENABLED: "false"
+      CUSTOM_RBAC_RUNTIME_ENABLED: "false"
+      DNS_RECONCILE_ENABLED: "false"
+      EDGE_AUTOMATIC_PUBLICATION_ENABLED: "false"
+      EDGE_PUBLISH_RUNTIME_ENABLED: "false"
+      CDNCA_SECURITY_ACTIVATION_ENABLED: "false"
+      ERROR_PAGE_RUNTIME_ENABLED: "false"
+      HTTP_POLICY_RUNTIME_ENABLED: "false"
+      IDENTITY_VERIFICATION_RUNTIME_ENABLED: "false"
+      JA4_BLOCK_RUNTIME_ENABLED: "false"
+      JOB_QUERY_ENABLED: "false"
+      MFA_ENABLED: "true"
+      MFA_ENCRYPTION_ACTIVE_KEY_ID: local-v1
+      MFA_ENCRYPTION_KEYS_JSON: '{"local-v1":"${CONTROL_MFA_ENCRYPTION_KEY_BASE64:?generated MFA key is missing}"}'
+      NODE_PORT_TRANSITION_RUNTIME_ENABLED: "false"
+      # Cache control dispatches only to nodes with a live presence lease.
+      NODE_PRESENCE_NATS_URL: nats://${EDGE_NATS_USERNAME:?generated edge NATS username is missing}:${EDGE_NATS_PASSWORD:?generated edge NATS password is missing}@edge-nats:4222
+      NODE_PRESENCE_REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      NOTIFICATION_RUNTIME_ENABLED: ${NOTIFICATION_RUNTIME_ENABLED:-false}
+      NOTIFICATION_WORKER_BATCH_SIZE: 16
+      NOTIFICATION_WORKER_LEASE_DURATION: 30s
+      NOTIFICATION_WORKER_LEASE_SAFETY_MARGIN: 5s
+      NOTIFICATION_WORKER_MAX_ATTEMPTS: 5
+      NOTIFICATION_WORKER_BASE_DELAY: 1s
+      NOTIFICATION_WORKER_MAX_DELAY: 1m
+      NOTIFICATION_RUNTIME_IDLE_WAIT: 250ms
+      NOTIFICATION_RUNTIME_ERROR_BACKOFF_BASE: 500ms
+      NOTIFICATION_RUNTIME_ERROR_BACKOFF_MAX: 5s
+      NOTIFICATION_RUNTIME_MAX_CONSECUTIVE_FAILURES: 5
+      NOTIFICATION_RUNTIME_SEND_TIMEOUT: 10s
+      NOTIFICATION_RUNTIME_STARTUP_TIMEOUT: 20s
+      NOTIFICATION_RUNTIME_SHUTDOWN_TIMEOUT: 10s
+      ACCOUNT_RECOVERY_EMAIL_TEMPLATE_ID: ${ACCOUNT_RECOVERY_EMAIL_TEMPLATE_ID:-account_recovery_email}
+      ACCOUNT_RECOVERY_EMAIL_TEMPLATE_VERSION: ${ACCOUNT_RECOVERY_EMAIL_TEMPLATE_VERSION:-1}
+      NOTIFICATION_EMAIL_PROVIDER: smtp_starttls
+      NOTIFICATION_SMTP_ADDRESS: mailpit:1025
+      NOTIFICATION_SMTP_SERVER_NAME: mailpit
+      NOTIFICATION_SMTP_USERNAME: ${LOCAL_SMTP_USERNAME:?generated local SMTP username is missing}
+      NOTIFICATION_SMTP_PASSWORD: ${LOCAL_SMTP_PASSWORD:?generated local SMTP password is missing}
+      NOTIFICATION_SMTP_FROM: cdnca-local@example.test
+      NOTIFICATION_SMTP_CA_FILE: /run/local-secrets/root-ca-cert.pem
+      ORIGIN_AUTH_RUNTIME_ENABLED: "false"
+      PACKAGE_COMMERCE_RUNTIME_ENABLED: "false"
+      PACKAGE_COMMERCE_WORKER_ENABLED: "false"
+      PACKAGE_CYCLE_RUNTIME_ENABLED: "false"
+      PACKAGE_MONITOR_HTTP_ENABLED: "false"
+      PACKAGE_MONITOR_RUNTIME_ENABLED: "false"
+      PACKAGE_PERIOD_RESET_RUNTIME_ENABLED: "false"
+      PACKAGE_USAGE_RUNTIME_ENABLED: "false"
+      PAYMENT_CHANNELS_ENABLED: "false"
+      PLUGIN_WEBHOOK_RUNTIME_ENABLED: "false"
+      # Generated by scripts/local-stack.sh so enabling the runtime never starts without a key.
+      PLUGIN_WEBHOOK_ATTESTATION_KEY_ID: local-plugin-webhook-attestation-v1
+      PLUGIN_WEBHOOK_ATTESTATION_PRIVATE_KEY_FILE: /run/local-secrets/plugin-webhook-attestation-key.pem
+      PROMOTION_HTTP_ENABLED: "false"
+      SIGNER_REVOCATION_CONSUMER_ENABLED: "false"
+      SITE_STATUS_RECOVERY_RUNTIME_ENABLED: "false"
+      SYSTEM_CONFIGURATION_RUNTIME_ENABLED: "false"
+      TRAFFIC_PACKAGE_RUNTIME_ENABLED: "false"
+      TRAFFIC_PACKAGE_WORKLOAD_RUNTIME_ENABLED: "false"
+      URL_AUTH_POLICY_RUNTIME_ENABLED: "false"
+      SSL_CERT_FILE: /run/local-secrets/root-ca-cert.pem
+    ports:
+      - "127.0.0.1:${CONTROL_API_PORT:-8080}:8080"
+    volumes:
+      - local_secrets:/run/local-secrets:ro
+    networks:
+      - control
+
+  control-ready:
+    image: curlimages/curl:8.14.1
+    restart: "no"
+    depends_on:
+      control-api:
+        condition: service_started
+    command: ["--fail", "--silent", "--show-error", "--retry", "30", "--retry-all-errors", "--retry-delay", "1", "http://control-api:8080/health/ready"]
+    networks:
+      - control
+
+  agent-gateway:
+    build:
+      context: .
+      dockerfile: services/agent-gateway/Dockerfile
+    image: cdnca/agent-gateway:local
+    restart: unless-stopped
+    depends_on:
+      gateway-secrets-install:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      edge-nats-preprovision:
+        condition: service_completed_successfully
+      nats-analytics-preprovision:
+        condition: service_completed_successfully
+      analytics-nats-tls:
+        condition: service_healthy
+      control-ready:
+        condition: service_completed_successfully
+    environment:
+      CDNCA_GATEWAY_ENROLLMENT_ADDR: :19443
+      CDNCA_GATEWAY_AGENT_ADDR: :19444
+      CDNCA_GATEWAY_AGENT_PUBLIC_ENDPOINT: ${AGENT_GATEWAY_PUBLIC_ENDPOINT:-localhost:19444}
+      CDNCA_GATEWAY_HEALTH_ADDR: :8082
+      CDNCA_GATEWAY_INSTANCE_ID: 70000000-0000-4000-8000-000000000002
+      CDNCA_GATEWAY_VERSION: 0.1.0
+      CDNCA_GATEWAY_TLS_CERT_FILE: /run/gateway-secrets/gateway-server-cert.pem
+      CDNCA_GATEWAY_TLS_KEY_FILE: /run/gateway-secrets/gateway-server-key.pem
+      CDNCA_GATEWAY_AGENT_CLIENT_CA_FILE: /run/gateway-secrets/node-ca-cert.pem
+      CDNCA_CONTROL_ADDRESS: control-api:9090
+      CDNCA_CONTROL_SERVER_NAME: control-api
+      CDNCA_CONTROL_CLIENT_CERT_FILE: /run/gateway-secrets/gateway-control-client-cert.pem
+      CDNCA_CONTROL_CLIENT_KEY_FILE: /run/gateway-secrets/gateway-control-client-key.pem
+      CDNCA_CONTROL_SERVER_CA_FILE: /run/gateway-secrets/root-ca-cert.pem
+      CDNCA_CONTROL_CLIENT_WORKLOAD_URI_SAN: spiffe://cdnca/local/agent-gateway
+      CDNCA_REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379/0
+      CDNCA_NATS_URL: nats://${EDGE_NATS_USERNAME:?generated edge NATS username is missing}:${EDGE_NATS_PASSWORD:?generated edge NATS password is missing}@edge-nats:4222
+      CDNCA_TELEMETRY_NATS_URL: tls://analytics-nats-tls:4222
+      CDNCA_TELEMETRY_NATS_USER: ${NATS_GATEWAY_PUBLISHER_USERNAME:?generated analytics Gateway publisher username is missing}
+      CDNCA_TELEMETRY_NATS_PASSWORD: ${NATS_GATEWAY_PUBLISHER_PASSWORD:?generated analytics Gateway publisher password is missing}
+      SSL_CERT_FILE: /run/gateway-secrets/root-ca-cert.pem
+    ports:
+      - "127.0.0.1:${AGENT_GATEWAY_AGENT_PORT:-19444}:19444"
+      - "127.0.0.1:${AGENT_GATEWAY_ENROLLMENT_PORT:-19443}:19443"
+    healthcheck:
+      test: ["CMD", "/healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+    volumes:
+      - gateway_secrets:/run/gateway-secrets:ro
+    networks:
+      - control
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
+    image: cdnca/web:local
+    restart: unless-stopped
+    depends_on:
+      control-ready:
+        condition: service_completed_successfully
+      gateway-secrets-install:
+        condition: service_completed_successfully
+      agent-gateway:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:8080"
+    tmpfs:
+      - /var/cache/nginx:uid=65532,gid=65532,mode=0755
+      - /var/run:uid=65532,gid=65532,mode=0755
+    volumes:
+      - gateway_secrets:/run/cdnca-gateway:ro
+    networks:
+      - control
+
+volumes:
+  edge_nats_data:
+  gateway_secrets:
+  local_secrets:

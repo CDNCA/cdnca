@@ -1,0 +1,10 @@
+PASS BROWSER-5S-1 expected=delay(503) actual=delay(503) 无头浏览器首次访问看到 5秒盾
+PASS BROWSER-5S-2 expected=true actual=true 浏览器自动完成 PoW 并等满 5 秒后进入原页面（用时 13.3 秒）
+PASS BROWSER-5S-3 expected=true actual=true 拿到 v2 通行 Cookie（HMAC-SHA256）
+PASS BROWSER-5S-4 expected=200 origin-ok actual=200 origin-ok 带 Cookie 的后续请求直接放行
+PASS BROWSER-IP expected=503 actual=503 浏览器拿到的 Cookie 换到其它网段（容器内 127.0.0.1）后失效
+PASS BROWSER-JS-1 expected=js(503) actual=js(503) 无感 JS 验证页
+PASS BROWSER-JS-2 expected=200 actual=200 浏览器自动完成 PoW 后放行（用时 5.2 秒）
+PASS BROWSER-CLICK expected=200 actual=200 “点击继续访问”由真人点击后放行
+PASS BROWSER-SHAPE expected=200 actual=200 点击页面要求的图形后放行
+PASS BROWSER-SLIDER expected=200 actual=200 滑块拖到页面要求的位置后放行

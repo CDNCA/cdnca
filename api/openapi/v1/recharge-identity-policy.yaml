@@ -1,0 +1,171 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Recharge Identity Policy API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Tenant and platform administrator API for the per-tenant policy that requires
+    a current settled personal identity before creating a recharge order.
+servers:
+  - url: /
+paths:
+  /v1/recharge-identity-policy:
+    get:
+      operationId: getTenantRechargeIdentityPolicy
+      summary: Read the current tenant recharge identity policy
+      security: [{bearerSession: []}]
+      x-session-only: true
+      x-live-permission-check: true
+      x-required-permissions: [identity_verification.review]
+      responses: &policyResponses
+        '200': {$ref: '#/components/responses/PolicyResponse'}
+        '400': {$ref: '#/components/responses/ErrorResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '405': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+    put:
+      operationId: updateTenantRechargeIdentityPolicy
+      summary: CAS update the current tenant recharge identity policy
+      security: [{bearerSession: []}]
+      x-session-only: true
+      x-live-permission-check: true
+      x-required-permissions: [identity_verification.review]
+      x-durable-idempotency-authority: audit_events
+      parameters: &writeParameters
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody: &policyUpdateBody
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PolicyUpdateRequest'}
+      responses: *policyResponses
+  /v1/admin/recharge-identity-policy/{tenant_scope_id}:
+    get:
+      operationId: getPlatformRechargeIdentityPolicy
+      summary: Read a tenant recharge identity policy as a platform administrator
+      security: [{bearerSession: []}]
+      x-session-only: true
+      x-live-permission-check: true
+      x-required-any-permission: [billing.recharges.manage, platform.admin]
+      parameters:
+        - {$ref: '#/components/parameters/TenantScopeID'}
+      responses: *policyResponses
+    put:
+      operationId: updatePlatformRechargeIdentityPolicy
+      summary: CAS update a tenant recharge identity policy as a platform administrator
+      security: [{bearerSession: []}]
+      x-session-only: true
+      x-live-permission-check: true
+      x-required-any-permission: [billing.recharges.manage, platform.admin]
+      x-durable-idempotency-authority: audit_events
+      parameters:
+        - {$ref: '#/components/parameters/TenantScopeID'}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody: *policyUpdateBody
+      responses: *policyResponses
+components:
+  securitySchemes:
+    bearerSession:
+      type: http
+      scheme: bearer
+      bearerFormat: session
+  parameters:
+    TenantScopeID:
+      name: tenant_scope_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong quoted current revision; use "0" while no explicit policy exists.
+      schema: {type: string, pattern: '^"(0|[1-9][0-9]*)"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+  headers:
+    ETag:
+      description: Strong current policy revision.
+      schema: {type: string, pattern: '^"(0|[1-9][0-9]*)"$'}
+    IdempotencyReplayed:
+      description: Whether PUT returned the completed durable result of the exact original request.
+      schema: {type: string, enum: ['true', 'false']}
+    NoStore:
+      schema: {type: string, const: no-store}
+    NoSniff:
+      schema: {type: string, const: nosniff}
+  responses:
+    PolicyResponse:
+      description: Current policy or exact completed replay.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+        X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Policy'}
+    ErrorResponse:
+      description: Stable error without raw service messages.
+      headers:
+        Cache-Control: {$ref: '#/components/headers/NoStore'}
+        X-Content-Type-Options: {$ref: '#/components/headers/NoSniff'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    PolicyUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [require_real_name]
+      properties:
+        require_real_name: {type: boolean}
+    Policy:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, revision, require_real_name, updated_at, replayed]
+      properties:
+        tenant_scope_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 0}
+        require_real_name: {type: boolean}
+        updated_at: {type: [string, 'null'], format: date-time}
+        replayed: {type: boolean}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - recharge_identity_policy_validation_error
+                - recharge_identity_policy_unauthenticated
+                - recharge_identity_policy_permission_denied
+                - recharge_identity_policy_not_found
+                - recharge_identity_policy_method_not_allowed
+                - recharge_identity_policy_revision_conflict
+                - recharge_identity_policy_idempotency_conflict
+                - recharge_identity_policy_unavailable
+            message: {type: string, minLength: 1}
+            request_id: {type: string, minLength: 1, maxLength: 128}

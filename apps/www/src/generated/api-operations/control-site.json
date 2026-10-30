@@ -1,0 +1,131 @@
+{
+ "id": "control-site",
+ "prefix": "/v1/control-site",
+ "operations": [
+  {
+   "operation_id": "readControlSiteAsset",
+   "method": "GET",
+   "path": "/v1/control-site/assets/{sha256}",
+   "summary": "",
+   "auth": [
+    "none"
+   ],
+   "description": "An uploaded image, a built-in illustration or a website theme plugin image; immutable, served with a sandboxing CSP.",
+   "params": [
+    {
+     "name": "sha256",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Image bytes"
+    },
+    {
+     "status": "304",
+     "description": "Not modified"
+    },
+    {
+     "status": "404",
+     "description": "Not found"
+    }
+   ]
+  },
+  {
+   "operation_id": "readControlSiteContent",
+   "method": "GET",
+   "path": "/v1/control-site/content",
+   "summary": "",
+   "auth": [
+    "none"
+   ],
+   "description": "The published website as the active plugin lays it out; {schema, enabled:false} while nothing is published.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Published view",
+     "fields": [
+      {
+       "name": "nav",
+       "type": "array<object> | null"
+      },
+      {
+       "name": "actions",
+       "type": "array<Link> | null"
+      },
+      {
+       "name": "footer",
+       "type": "object"
+      },
+      {
+       "name": "pages",
+       "type": "array<object> | null"
+      },
+      {
+       "name": "schema",
+       "type": "const cdnca.control-site/v1"
+      },
+      {
+       "name": "enabled",
+       "type": "boolean"
+      },
+      {
+       "name": "layout",
+       "type": "string: jidun / xmf"
+      },
+      {
+       "name": "theme",
+       "type": "ThemeView"
+      },
+      {
+       "name": "brand",
+       "type": "Brand"
+      },
+      {
+       "name": "contact",
+       "type": "Contact"
+      }
+     ]
+    },
+    {
+     "status": "304",
+     "description": "Not modified"
+    },
+    {
+     "status": "503",
+     "description": "Unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "listControlSitePackages",
+   "method": "GET",
+   "path": "/v1/control-site/packages",
+   "summary": "",
+   "auth": [
+    "none"
+   ],
+   "description": "The platform's purchasable packages for the website's plan blocks: published, enabled, in visible groups and on sale, in package sort order, at most 24. Display fields only (no product ID, CNAME, region or purchase policy); -1 limits mean unlimited, prices are minor units of prices.currency. Empty when none are on sale.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Package list",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "503",
+     "description": "Unavailable"
+    }
+   ]
+  }
+ ]
+}

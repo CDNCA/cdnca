@@ -1,0 +1,186 @@
+openapi: 3.1.0
+info:
+  title: Installation upgrade candidate read API
+  version: 1.0.0
+  description: Installation-authenticated release policy snapshots; never executable upgrade grants.
+servers:
+  - url: /
+paths:
+  /activation/v1/installations/{installation_id}/upgrade-candidates:resolve:
+    post:
+      operationId: resolveInstallationUpgradeCandidate
+      summary: Read the installation's authoritative release target
+      description: |
+        A pure read using a REPEATABLE READ, READ ONLY transaction. No grant,
+        plan, task, idempotency reservation, audit ledger or repository fetch is
+        created. Operator cookies never substitute for installation PoP.
+        The component target follows the installation pin or its licensed
+        release channel, using the same resolver as grant preparation/commit.
+        Even pinned selection requires an existing channel target and channel
+        artifact membership. Published status, license range, protocol, manifest
+        signatures, size attestation and repository verification are required.
+        The unchanged grant policy horizon is min(now + 15 minutes, license expiry).
+        Candidate freshness is at most 60 seconds. Starting an upgrade separately
+        rechecks current authority and obtains real execution authorization.
+
+        Canonical body order is schema, component, current_version, protocol_version,
+        encoded as compact UTF-8 JSON without whitespace or trailing newline.
+        Reject duplicate/unknown/mis-cased fields, query parameters, empty query
+        markers and Content-Encoding. Maximum request body is 4096 bytes.
+        Each required header must occur exactly once. Request IDs are random
+        canonical nonzero UUIDs, with a new ID on every fresh read.
+        Requested-at must be within inclusive ±300 seconds of the server clock.
+
+        Sign the SHA-256 of concatenated four-byte big-endian length-prefixed UTF-8
+        fields: cdnca-upgrade-candidate-request-proof/v1, POST, exact resolved
+        path, X-Request-ID, installation UUID, decimal requested-at, unpadded
+        base64url SHA-256 of the canonical body. request_sha256 in the response
+        is unpadded base64url of this complete 32-byte proof-message digest.
+        Repeating a request performs a fresh read; it does not replay stored data.
+      security:
+        - InstallationProof: []
+      parameters:
+        - name: installation_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: X-CDNCA-Installation-ID
+          in: header
+          required: true
+          description: Canonical UUID, equal to the path installation.
+          schema: {type: string, format: uuid}
+        - name: X-Request-ID
+          in: header
+          required: true
+          schema: {type: string, format: uuid}
+        - name: X-CDNCA-Requested-At
+          in: header
+          required: true
+          description: Canonical positive decimal Unix seconds.
+          schema: {type: string, pattern: '^[1-9][0-9]*$'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpgradeCandidateRequest'}
+      responses:
+        '200':
+          description: |
+            A canonical SignedUpgradeCandidate JSON document without a wrapper or
+            trailing newline; Cache-Control no-store. Negative policy results are
+            signed unavailable snapshots with authority and candidate omitted.
+            Maximum response document is 64 KiB.
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignedUpgradeCandidate'}
+        '400':
+          description: invalid_request — malformed or noncanonical body/query/content type.
+        '401':
+          description: invalid_proof (including unknown installation) or request_expired.
+        '403':
+          description: installation_denied — valid PoP for an inactive installation.
+        '503':
+          description: upgrade_candidate_unavailable — database, authorized signer or signing provider unavailable; no raw backend message.
+components:
+  securitySchemes:
+    InstallationProof:
+      type: apiKey
+      in: header
+      name: X-CDNCA-Proof
+      description: Unpadded base64url Ed25519 signature of the candidate-specific request digest.
+  schemas:
+    UpgradeCandidateRequest:
+      type: object
+      additionalProperties: false
+      required: [schema, component, current_version, protocol_version]
+      properties:
+        schema: {type: string, const: cdnca.upgrade.candidate.request/v1}
+        component: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        current_version: {type: string, description: 'Canonical semantic version of the running component, without v prefix or build metadata.'}
+        protocol_version: {type: integer, minimum: 1}
+    CandidateAuthority:
+      type: object
+      additionalProperties: false
+      required: [license_revision, version, target_mode, channel_revision]
+      properties:
+        license_revision: {type: integer, minimum: 1}
+        version: {$ref: './openapi/v1/license.yaml#/components/schemas/VersionRange'}
+        target_mode: {type: string, enum: [follow_channel, pinned]}
+        target_revision:
+          type: integer
+          minimum: 1
+          description: Omitted for the implicit follow_channel default; required when pinned.
+        channel_revision: {type: integer, minimum: 1}
+    CandidateArtifact:
+      type: object
+      additionalProperties: false
+      required: [manifest, signature_algorithm, signature_key_id, manifest_signature, revision, published_at, attested_at, repository_verification_sha256, repository_verified_at, verified_until]
+      properties:
+        manifest: {$ref: './openapi/v1/license.yaml#/components/schemas/ArtifactManifestV2'}
+        signature_algorithm: {type: string, const: Ed25519}
+        signature_key_id: {type: string}
+        manifest_signature: {type: string, description: Unpadded base64url signature of the real V2 size attestation.}
+        revision: {type: integer, minimum: 2}
+        published_at: {type: integer, minimum: 1}
+        attested_at: {type: integer, minimum: 1}
+        repository_verification_sha256:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: SHA-256 of canonical, signature-verified repository receipt bytes, encoded as unpadded base64url.
+        repository_verified_at: {type: integer, minimum: 1}
+        verified_until:
+          type: integer
+          minimum: 1
+          description: Grant-policy evidence verification horizon, at least snapshot expires_at; not permission to execute.
+    CandidateSnapshot:
+      type: object
+      additionalProperties: false
+      required: [schema, audience, purpose, installation_id, request_id, request_sha256, component, current_version, protocol_version, status, reason, issued_at, expires_at]
+      properties:
+        schema: {type: string, const: cdnca.upgrade.candidate-snapshot/v1}
+        audience: {type: string, const: cdnca-control-plane-upgrade-candidate}
+        purpose: {type: string, const: cdnca-upgrade-candidate-read}
+        installation_id: {type: string, format: uuid}
+        request_id: {type: string, format: uuid}
+        request_sha256: {type: string, pattern: '^[A-Za-z0-9_-]{43}$'}
+        component: {type: string}
+        current_version: {type: string}
+        protocol_version: {type: integer, minimum: 1}
+        status: {type: string, enum: [available, up_to_date, rollback_required, unavailable]}
+        reason:
+          type: string
+          enum: [upgrade_available, same_version, target_is_older, target_unset, license_inactive, customer_inactive, channel_inactive, target_not_allowed, artifact_unavailable, artifact_unverified, protocol_incompatible, version_not_allowed, signing_key_unavailable]
+        authority: {$ref: '#/components/schemas/CandidateAuthority'}
+        candidate: {$ref: '#/components/schemas/CandidateArtifact'}
+        issued_at: {type: integer, minimum: 1}
+        expires_at: {type: integer, minimum: 1, description: Greater than issued_at and at most 60 seconds later.}
+      allOf:
+        - if: {properties: {status: {const: unavailable}}}
+          then:
+            not: {anyOf: [{required: [authority]}, {required: [candidate]}]}
+            properties:
+              reason: {enum: [target_unset, license_inactive, customer_inactive, channel_inactive, target_not_allowed, artifact_unavailable, artifact_unverified, protocol_incompatible, version_not_allowed, signing_key_unavailable]}
+          else: {required: [authority, candidate]}
+        - if: {properties: {status: {const: available}}}
+          then: {properties: {reason: {const: upgrade_available}}}
+        - if: {properties: {status: {const: up_to_date}}}
+          then: {properties: {reason: {const: same_version}}}
+        - if: {properties: {status: {const: rollback_required}}}
+          then: {properties: {reason: {const: target_is_older}}}
+    SignedUpgradeCandidate:
+      type: object
+      additionalProperties: false
+      required: [algorithm, key_id, snapshot, signature]
+      description: |
+        Ed25519 signs compact JSON in the order domain, algorithm, key_id, snapshot,
+        with domain cdnca-upgrade-candidate-signature/v1. Use the shared Go contract
+        for exact deterministic encoding. Verify outer and V2 artifact signatures,
+        both key windows, request binding, now less than expires_at and issued_at
+        no later than now plus 5 seconds. No offline freshness extension.
+      properties:
+        algorithm: {type: string, const: Ed25519}
+        key_id: {type: string}
+        snapshot: {$ref: '#/components/schemas/CandidateSnapshot'}
+        signature: {type: string, description: Canonical unpadded base64url 64-byte Ed25519 signature.}

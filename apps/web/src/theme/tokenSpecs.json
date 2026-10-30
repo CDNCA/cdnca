@@ -1,0 +1,2535 @@
+{
+  "colorPrimary": {
+    "kind": "color",
+    "group": "base",
+    "antd": true,
+    "css_variables": [
+      "--setting-primary",
+      "--cdnca-color-primary"
+    ],
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
+      "components/AppShell.css",
+      "components/ResourceID.css",
+      "components/SiteCacheTabs.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountLogPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AdminMessageQueryPage.css",
+      "pages/AdminTasksPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/NodeSchedulingPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SiteBlockLogPage.css",
+      "pages/SiteCreateModal.css",
+      "pages/SiteGroupsPage.css",
+      "pages/SiteRealtimeMonitorPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemLogPage.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/SystemSentLogPanel.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/plugin-webhooks/PluginWebhooksPage.css",
+      "pages/site-edit/BasicSiteTab.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditSyncStatus.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/compact-toolbar.css",
+      "styles/tech-look.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorLink": {
+    "kind": "color",
+    "group": "base",
+    "antd": true
+  },
+  "colorLinkHover": {
+    "kind": "color",
+    "group": "base",
+    "antd": true,
+    "used_in": [
+      "pages/CacheOperationsPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorText": {
+    "kind": "color",
+    "group": "base",
+    "antd": true,
+    "css_variables": [
+      "--cdnca-color-text"
+    ],
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
+      "components/AppShell.css",
+      "components/SiteCacheTabs.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountLogPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AdminMessageQueryPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/CnameAllocationsPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/IdentitySessionsPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeIsolationPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/NodeSchedulingPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SiteCreateModal.css",
+      "pages/SiteGroupsPage.css",
+      "pages/SiteListPage.typography.css",
+      "pages/SitePublicationsPage.css",
+      "pages/SiteRealtimeMonitorPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/plugin-webhooks/PluginWebhooksPage.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorTextSecondary": {
+    "kind": "color",
+    "group": "base",
+    "antd": true,
+    "css_variables": [
+      "--cdnca-color-text-secondary"
+    ],
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
+      "components/AppShell.css",
+      "components/CacheOperationOutcome.css",
+      "components/CertificateFailureReason.css",
+      "components/NodeFrozenTag.css",
+      "components/ResourceID.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountLogPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AdminMessageQueryPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/CnameAllocationsPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/IdentitySessionsPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/LogCenterPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SiteBlockLogPage.css",
+      "pages/SiteGroupsPage.css",
+      "pages/SiteListPage.typography.css",
+      "pages/SitePublicationsPage.css",
+      "pages/SiteRealtimeMonitorPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/plugin-webhooks/PluginWebhooksPage.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditState.css",
+      "pages/site-edit/SiteEditSyncStatus.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteOfficialPacksCard.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "pages/tickets/TicketsChat.css",
+      "pages/users/ResellerPanel.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/compact-toolbar.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBorder": {
+    "kind": "color",
+    "group": "base",
+    "antd": true,
+    "css_variables": [
+      "--setting-border-strong",
+      "--cdnca-color-border"
+    ],
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "components/SiteCacheTabs.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AdminMessageQueryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeSchedulingPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SiteGroupsPage.css",
+      "pages/SiteRealtimeMonitorPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/compact-toolbar.css",
+      "styles/tech-look.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBgLayout": {
+    "kind": "color",
+    "group": "base",
+    "antd": true,
+    "css_variables": [
+      "--cdnca-color-bg-layout"
+    ],
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
+      "styles.css"
+    ]
+  },
+  "colorBgContainer": {
+    "kind": "color",
+    "group": "base",
+    "antd": true,
+    "css_variables": [
+      "--setting-bg",
+      "--cdnca-color-bg-container"
+    ],
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "components/AppShell.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AdminTasksPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/LogCenterPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeIsolationPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/NodeSchedulingPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SiteCreateModal.css",
+      "pages/SiteRealtimeMonitorPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemLogPage.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/plugin-webhooks/PluginWebhooksPage.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteOfficialPacksCard.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/compact-toolbar.css",
+      "styles/tech-look.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "borderRadius": {
+    "kind": "length",
+    "group": "base",
+    "min": 0,
+    "max": 16,
+    "antd": true,
+    "css_variables": [
+      "--cdnca-border-radius"
+    ],
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "styles.css"
+    ]
+  },
+  "controlHeight": {
+    "kind": "length",
+    "group": "base",
+    "min": 24,
+    "max": 48,
+    "antd": true,
+    "used_in": [
+      "@cdnca/ui/styles.css"
+    ]
+  },
+  "fontSize": {
+    "kind": "length",
+    "group": "base",
+    "min": 12,
+    "max": 18,
+    "antd": true,
+    "css_variables": [
+      "--cdnca-font-size"
+    ],
+    "used_in": [
+      "@cdnca/ui/styles.css"
+    ]
+  },
+  "lineHeight": {
+    "kind": "number",
+    "group": "base",
+    "min": 1,
+    "max": 2,
+    "antd": true,
+    "used_in": [
+      "@cdnca/ui/styles.css"
+    ]
+  },
+  "fontFamily": {
+    "kind": "font_family",
+    "group": "base",
+    "antd": true,
+    "css_variables": [
+      "--cdnca-font-family"
+    ],
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css"
+    ]
+  },
+  "colorBorderSecondary": {
+    "kind": "color",
+    "group": "base",
+    "css_variables": [
+      "--setting-border",
+      "--cdnca-color-border-secondary"
+    ],
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
+      "components/AppShell.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AdminMessageQueryPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/IdentitySessionsPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/LogCenterPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeIsolationPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeSchedulingPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SiteCreateModal.css",
+      "pages/SiteGroupsPage.css",
+      "pages/SitePublicationsPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemLogPage.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/site-edit/BasicSiteTab.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteOfficialPacksCard.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/tech-look.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBgPage": {
+    "kind": "color",
+    "group": "base",
+    "css_variables": [
+      "--cdnca-color-bg-page"
+    ],
+    "used_in": [
+      "components/AppShell.css",
+      "pages/NodeListPage.css",
+      "pages/SiteAccessLogPage.css",
+      "styles.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorBgLogin": {
+    "kind": "color",
+    "group": "base",
+    "css_variables": [
+      "--cdnca-color-bg-login"
+    ],
+    "used_in": [
+      "pages/SiteAnalysisPage.css",
+      "styles.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorSidebarDark": {
+    "kind": "color",
+    "group": "base",
+    "css_variables": [
+      "--cdnca-color-sidebar-dark"
+    ],
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "components/AppShell.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "sidebarWidth": {
+    "kind": "length",
+    "group": "base",
+    "min": 200,
+    "max": 320,
+    "css_variables": [
+      "--cdnca-sidebar-width"
+    ],
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorTitle": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/CnameAllocationsPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/IdentitySessionsPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/LogCenterPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/NodeSchedulingPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/site-edit/BasicSiteTab.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/tech-look.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorSuccess": {
+    "kind": "color",
+    "group": "status",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "components/CacheOperationOutcome.css",
+      "pages/AccountUserPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteGroupsPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditSyncStatus.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorWarning": {
+    "kind": "color",
+    "group": "status",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/AccountUserPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/DDoSProtectionV2.css",
+      "pages/LogCenterPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeListPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditSyncStatus.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorError": {
+    "kind": "color",
+    "group": "status",
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
+      "components/CacheOperationOutcome.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountLogPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/LogCenterPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeListPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SiteBlockLogPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditSyncStatus.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/compact-toolbar.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorInfoBg": {
+    "kind": "color",
+    "group": "status",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorSuccessBg": {
+    "kind": "color",
+    "group": "status",
+    "used_in": [
+      "styles/tech-look.css"
+    ]
+  },
+  "colorWarningBg": {
+    "kind": "color",
+    "group": "status",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/tickets/TicketsChat.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorErrorBg": {
+    "kind": "color",
+    "group": "status",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/CacheOperationsPage.css",
+      "pages/site-edit/SiteEditV4.css",
+      "styles.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorTableHeader": {
+    "kind": "color",
+    "group": "table",
+    "used_in": [
+      "@cdnca/ui/console.css",
+      "pages/AdminMessageQueryPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeIsolationPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeSchedulingPage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SiteCreateModal.css",
+      "pages/StreamListPage.css",
+      "pages/SystemSettingsPage.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "styles.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorTableHeaderText": {
+    "kind": "color",
+    "group": "table",
+    "used_in": [
+      "styles/tech-look.css"
+    ]
+  },
+  "colorTableRowHover": {
+    "kind": "color",
+    "group": "table",
+    "used_in": [
+      "styles/tech-look.css"
+    ]
+  },
+  "colorFocusRing": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/NodeRealtimePage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/WafLogsPage.css",
+      "pages/WafLogsV2.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/tickets/TicketsChat.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "colorBgPanel": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AdminMessageQueryPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/IdentitySessionsPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteBlockLogPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "styles.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBorderPanel": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountLogPage.css",
+      "pages/AccountUserPage.css",
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/CnameAllocationsPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsPage.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBorderDivider": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/IdentitySessionsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/StreamListPage.css",
+      "pages/plugin-market/PluginMarketPage.css"
+    ]
+  },
+  "shadowCard": {
+    "kind": "shadow",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/AccountApiKeysPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/NodeListPage.css",
+      "styles.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "shadowPopup": {
+    "kind": "shadow",
+    "group": "base",
+    "used_in": [
+      "components/AppShell.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeListPage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SystemSettingsPage.css",
+      "styles.css",
+      "styles/compact-toolbar.css",
+      "styles/tech-look.css"
+    ]
+  },
+  "buttonShadow": {
+    "kind": "shadow",
+    "group": "base",
+    "used_in": [
+      "styles/tech-look.css"
+    ]
+  },
+  "buttonFontWeight": {
+    "kind": "number",
+    "group": "base",
+    "min": 300,
+    "max": 700,
+    "used_in": [
+      "styles/tech-look.css"
+    ]
+  },
+  "chartColor1": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartColor2": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartColor3": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartColor4": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartColor5": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "colorBgDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorChromeDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "styles.css",
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorSurfaceDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "components/AppShell.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorSurfaceMutedDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBorderDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "components/AppShell.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBorderSoftDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "styles.css",
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorTextDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "components/AppShell.css",
+      "pages/SiteRealtimeMonitorPage.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorTextSecondaryDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorPrimaryDark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "components/AppShell.css",
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "chartColor6": {
+    "kind": "color",
+    "group": "chart",
+    "used_in": [
+      "pages/AccountUserPage.css"
+    ]
+  },
+  "chartColor7": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartColor8": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartColor9": {
+    "kind": "color",
+    "group": "chart",
+    "used_in": [
+      "styles.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "chartColor10": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartTrafficIn": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartTrafficOut": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartBar1": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartBar2": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartBar3": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "chartArea": {
+    "kind": "color",
+    "group": "chart"
+  },
+  "colorStatusPending": {
+    "kind": "color",
+    "group": "status"
+  },
+  "colorBorderLight": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/CacheOperationHistoryPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/site-edit/CacheSiteTab.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBgSubtle": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/AccountIdentityVerificationPage.css",
+      "pages/AccountMessagesPage.css",
+      "pages/AccountSubscriptionsPage.css",
+      "pages/CertificateListPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/IdentitySessionsPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemLogPage.css",
+      "pages/SystemSettingsPage.css",
+      "pages/dns-hub/DnsHubPage.css"
+    ]
+  },
+  "colorBgMuted": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "components/CacheOperationOutcome.css",
+      "pages/StreamDetailPage.css",
+      "pages/plugin-webhooks/PluginWebhooksPage.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css"
+    ]
+  },
+  "colorBgSlate": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/CertificateListPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemSettingsPage.css",
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorBgSoft": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/AnnouncementManagementPage.css",
+      "pages/CacheOperationsPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/WafLogsV2.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/tickets/TicketsChat.css",
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorBgField": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/site-edit/HttpsSiteTab.css",
+      "pages/site-edit/SiteProtectionTabs.css"
+    ]
+  },
+  "colorBgHover": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "components/AppShell.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeListPage.css",
+      "pages/NodeRealtimePage.css",
+      "pages/SiteAnalysisPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/SystemSettingsPage.css",
+      "pages/WafLogsV2.css",
+      "styles/compact-toolbar.css"
+    ]
+  },
+  "colorPrimaryBg": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "components/SiteCacheTabs.css",
+      "pages/CacheOperationsPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/StreamListPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css"
+    ]
+  },
+  "colorPrimaryBgSoft": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/AnnouncementManagementPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/StreamDetailPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/site-edit/SiteProtectionTabs.css"
+    ]
+  },
+  "colorBorderMuted": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorBorderInput": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteCreateModal.css",
+      "pages/StreamListPage.css"
+    ]
+  },
+  "colorBorderCard": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/DDoSProtectionV2.css",
+      "pages/LogCenterPage.css",
+      "pages/SystemGlobalSettingsV2.css",
+      "pages/SystemOtherSettingsV2.css",
+      "pages/WafLogsV2.css",
+      "pages/dns-hub/DnsHubPage.css",
+      "pages/node-market/NodeMarketV2.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/tickets/TicketsChat.css",
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorTextEmphasis": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/SystemLogPage.css",
+      "pages/SystemSentLogPanel.css"
+    ]
+  },
+  "colorTextSubtle": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SystemSettingsPage.css",
+      "pages/plugin-market/PluginMarketPage.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorTextHint": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/ControlUpgradesPage.css",
+      "pages/SystemLogPage.css",
+      "pages/plugin-market/PluginMarketPage.css",
+      "styles.css",
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorTextTertiary": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CertificateListPage.css",
+      "pages/SecurityPoliciesPage.css",
+      "pages/SiteListPage.typography.css",
+      "styles.css"
+    ]
+  },
+  "colorTextFaint": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "pages/ControlUpgradesPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemLogPage.css",
+      "pages/SystemSentLogPanel.css",
+      "styles.css"
+    ]
+  },
+  "colorTextDisabled": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "components/CacheOperationOutcome.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeL2TopologyPage.css",
+      "pages/NodeListPage.css",
+      "pages/WafLogsPage.css",
+      "pages/site-edit/HttpsSiteTab.css",
+      "styles.css"
+    ]
+  },
+  "colorTextInverse": {
+    "kind": "color",
+    "group": "base",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "components/AppShell.css",
+      "pages/AccountUserPage.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeL2TopologyDetailPage.css",
+      "pages/site-edit/SiteAutoDefenseTab.css",
+      "pages/site-edit/SiteEditV4.css",
+      "pages/tickets/TicketsChat.css",
+      "styles.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBlue1": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue2": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBlue3": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue4": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AccountUserPage.css",
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorBlue5": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorBlue6": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorBlue7": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue8": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorBlue9": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeL2TopologyPage.css"
+    ]
+  },
+  "colorBlue10": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CertificateListPage.css",
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorBlue11": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorBlue12": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css",
+      "styles/adminHomeReference.css",
+      "styles/userHomeReference.css"
+    ]
+  },
+  "colorBlue13": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemGlobalSettingsPage.css"
+    ]
+  },
+  "colorBlue14": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css",
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorBlue15": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminMessageQueryPage.css"
+    ]
+  },
+  "colorBlue16": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue17": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminMessageQueryPage.css",
+      "styles.css"
+    ]
+  },
+  "colorBlue18": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue19": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue20": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorBlue21": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AccountUserPage.css"
+    ]
+  },
+  "colorBlue22": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorBlue23": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorBlue24": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CacheOperationsPage.css"
+    ]
+  },
+  "colorBlue25": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemGlobalSettingsPage.css"
+    ]
+  },
+  "colorBlue26": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorBlue27": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CertificateListPage.css"
+    ]
+  },
+  "colorBlue28": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorBlue29": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/StreamDetailPage.css"
+    ]
+  },
+  "colorBlue30": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css"
+    ]
+  },
+  "colorBlue31": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue32": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteAnalysisPage.css"
+    ]
+  },
+  "colorBlue33": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CertificateListPage.css",
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorBlue34": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorBlue35": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorBlue36": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeL2TopologyDetailPage.css"
+    ]
+  },
+  "colorBlue37": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue38": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue39": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue40": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorBlue41": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AnnouncementManagementPage.css"
+    ]
+  },
+  "colorBlue42": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/node-market/NodeMarketPage.css"
+    ]
+  },
+  "colorBlue43": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorBlue44": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorBlue45": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorBlue46": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeL2TopologyDetailPage.css"
+    ]
+  },
+  "colorBlue47": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeListPage.css",
+      "styles.css"
+    ]
+  },
+  "colorBlue48": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorBlue49": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/plugin-webhooks/PluginWebhooksPage.css"
+    ]
+  },
+  "colorBlue50": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AccountUserPage.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SiteBlockLogPage.css",
+      "pages/SystemGlobalSettingsPage.css",
+      "pages/SystemSettingsPage.css",
+      "styles/adminHomeReference.css"
+    ]
+  },
+  "colorBlue51": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral1": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteCreateModal.css"
+    ]
+  },
+  "colorNeutral2": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral3": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CertificateListPage.css"
+    ]
+  },
+  "colorNeutral4": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CertificateListPage.css",
+      "pages/NodeMonitorSettingsPage.css",
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorNeutral5": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorNeutral6": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral7": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral8": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/WafLogsPage.css"
+    ]
+  },
+  "colorNeutral9": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral10": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css"
+    ]
+  },
+  "colorNeutral11": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral12": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral13": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteAnalysisPage.css"
+    ]
+  },
+  "colorNeutral14": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral15": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral16": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorNeutral17": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemLogPage.css",
+      "styles.css"
+    ]
+  },
+  "colorNeutral18": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral19": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css"
+    ]
+  },
+  "colorNeutral20": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral21": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CacheOperationsPage.css"
+    ]
+  },
+  "colorNeutral22": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css",
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorNeutral23": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorNeutral24": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorNeutral25": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral26": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorNeutral27": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/plugin-webhooks/PluginWebhooksPage.css"
+    ]
+  },
+  "colorNeutral28": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral29": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorNeutral30": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral31": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorNeutral32": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteCreateModal.css"
+    ]
+  },
+  "colorNeutral33": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorNeutral34": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css"
+    ]
+  },
+  "colorNeutral35": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/StreamDetailPage.css"
+    ]
+  },
+  "colorNeutral36": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/site-edit/SiteProtectionTabs.css"
+    ]
+  },
+  "colorNeutral37": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral38": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AnnouncementManagementPage.css"
+    ]
+  },
+  "colorNeutral39": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css",
+      "pages/NodeListPage.css"
+    ]
+  },
+  "colorNeutral40": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorNeutral41": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeMonitorSettingsPage.css"
+    ]
+  },
+  "colorNeutral42": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "components/ResourceID.css"
+    ]
+  },
+  "colorNeutral43": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AnnouncementManagementPage.css"
+    ]
+  },
+  "colorNeutral44": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CacheOperationsPage.css"
+    ]
+  },
+  "colorNeutral45": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemSentLogPanel.css"
+    ]
+  },
+  "colorNeutral46": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css"
+    ]
+  },
+  "colorNeutral47": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral48": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteRealtimeMonitorPage.css"
+    ]
+  },
+  "colorNeutral49": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral50": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeMonitorSettingsPage.css"
+    ]
+  },
+  "colorNeutral51": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css",
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorNeutral52": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CacheOperationsPage.css",
+      "pages/SiteAccessLogPage.css"
+    ]
+  },
+  "colorNeutral53": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorNeutral54": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CertificateListPage.css",
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorNeutral55": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteCreateModal.css",
+      "pages/StreamListPage.css"
+    ]
+  },
+  "colorNeutral56": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeRealtimePage.css"
+    ]
+  },
+  "colorNeutral57": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/site-edit/SiteProtectionTabs.css"
+    ]
+  },
+  "colorNeutral58": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css",
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorNeutral59": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/site-edit/HttpsSiteTab.css"
+    ]
+  },
+  "colorNeutral60": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css"
+    ]
+  },
+  "colorNeutral61": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/StreamDetailPage.css"
+    ]
+  },
+  "colorNeutral62": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CacheOperationHistoryPage.css",
+      "pages/L4RealtimeMonitorPage.css",
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorNeutral63": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css"
+    ]
+  },
+  "colorNeutral64": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css"
+    ]
+  },
+  "colorNeutral65": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteCreateModal.css"
+    ]
+  },
+  "colorNeutral66": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/CacheOperationHistoryPage.css",
+      "pages/CertificateListPage.css"
+    ]
+  },
+  "colorNeutral67": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AnnouncementManagementPage.css"
+    ]
+  },
+  "colorNeutral68": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorNeutral69": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css"
+    ]
+  },
+  "colorNeutral70": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css",
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorNeutral71": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css",
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorNeutral72": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/StreamDetailPage.css"
+    ]
+  },
+  "colorNeutral73": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorNeutral74": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminTasksPage.css"
+    ]
+  },
+  "colorNeutral75": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css",
+      "pages/SiteAccessLogPage.css"
+    ]
+  },
+  "colorNeutral76": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeDnsPage.css",
+      "styles.css"
+    ]
+  },
+  "colorNeutral77": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SiteAccessLogPage.css"
+    ]
+  },
+  "colorNeutral78": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/StreamDetailPage.css"
+    ]
+  },
+  "colorNeutral79": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/AdminMessageQueryPage.css"
+    ]
+  },
+  "colorNeutral80": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/ControlUpgradesPage.css",
+      "pages/ErrorPagesPage.css",
+      "pages/FirewallPoliciesPage.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeIsolationPage.css",
+      "pages/NodeLineGroupsPage.css",
+      "pages/NodeListPage.css",
+      "pages/SiteRealtimeMonitorPage.css",
+      "pages/SystemSettingsPage.css",
+      "styles.css"
+    ]
+  },
+  "colorGreen1": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/site-edit/SiteProtectionTabs.css"
+    ]
+  },
+  "colorGreen2": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorGreen3": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorGreen4": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorGreen5": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorGreen6": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorGreen7": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/node-market/NodeMarketPage.css"
+    ]
+  },
+  "colorGreen8": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "styles.css"
+    ]
+  },
+  "colorGreen9": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorGreen10": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SecurityPoliciesPage.css"
+    ]
+  },
+  "colorGreen11": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/ControlUpgradesPage.css"
+    ]
+  },
+  "colorGreen12": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css"
+    ]
+  },
+  "colorGreen13": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorGreen14": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorGreen15": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorGreen16": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css"
+    ]
+  },
+  "colorGreen17": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/NodeDnsPage.css",
+      "pages/NodeMonitorSettingsPage.css"
+    ]
+  },
+  "colorGreen18": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorOrange1": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/SiteAccessLogPage.css"
+    ]
+  },
+  "colorOrange2": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemGlobalSettingsPage.css"
+    ]
+  },
+  "colorOrange3": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorOrange4": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/SystemGlobalSettingsPage.css"
+    ]
+  },
+  "colorOrange5": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeDnsPage.css"
+    ]
+  },
+  "colorOrange6": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorOrange7": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorOrange8": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/FirewallPoliciesPage.css"
+    ]
+  },
+  "colorOrange9": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "styles.css"
+    ]
+  },
+  "colorOrange10": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "@cdnca/ui/styles.css",
+      "pages/SiteAccessLogPage.css",
+      "pages/SystemSettingsPage.css"
+    ]
+  },
+  "colorOrange11": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorRed1": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/NodeListPage.css"
+    ]
+  },
+  "colorRed2": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorRed3": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/node-market/NodeMarketPage.css",
+      "pages/site-edit/SiteProtectionTabs.css",
+      "styles.css"
+    ]
+  },
+  "colorRed4": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/market/MarketStorePage.css"
+    ]
+  },
+  "colorRed5": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorRed6": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "pages/SystemLogPage.css"
+    ]
+  },
+  "colorRed7": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorRed8": {
+    "kind": "color",
+    "group": "scale"
+  },
+  "colorPurple1": {
+    "kind": "color",
+    "group": "scale",
+    "used_in": [
+      "styles.css"
+    ]
+  },
+  "colorScale1Dark": {
+    "kind": "color",
+    "group": "dark"
+  },
+  "colorScale2Dark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "pages/SiteRealtimeMonitorPage.css"
+    ]
+  },
+  "colorScale3Dark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "pages/SiteRealtimeMonitorPage.css"
+    ]
+  },
+  "colorScale4Dark": {
+    "kind": "color",
+    "group": "dark"
+  },
+  "colorScale5Dark": {
+    "kind": "color",
+    "group": "dark"
+  },
+  "colorScale6Dark": {
+    "kind": "color",
+    "group": "dark"
+  },
+  "colorScale7Dark": {
+    "kind": "color",
+    "group": "dark"
+  },
+  "colorScale8Dark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "pages/SiteRealtimeMonitorPage.css"
+    ]
+  },
+  "colorScale9Dark": {
+    "kind": "color",
+    "group": "dark",
+    "used_in": [
+      "styles/adminHomeReference.css"
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "schema_version": "cdnca.edge.waf/v1",
+  "policy_version": 10,
+  "rules": [
+    {"rule_id":"later-never","priority":4,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/ordered"}}},
+    {"rule_id":"allow-ordered","priority":100,"action":"allow","flow":"continue","match":{"path":{"kind":"exact","value":"/ordered"},"source_cidr":"127.0.0.1/32"}},
+    {"rule_id":"allow-stop","priority":101,"action":"allow","flow":"stop","match":{"path":{"kind":"exact","value":"/allow-stop"},"source_cidr":"127.0.0.1/32"}},
+    {"rule_id":"expired-allow","priority":102,"action":"allow","flow":"continue","comment":"expired allow must not suppress the active block","expires_at":"2020-01-02T03:04:05Z","match":{"path":{"kind":"exact","value":"/expired"},"source_cidr":"127.0.0.1/32"}},
+    {"rule_id":"ordered-log","priority":1,"action":"log","flow":"continue","match":{"method":"GET","path":{"kind":"exact","value":"/ordered"}}},
+    {"rule_id":"ordered-block","priority":2,"action":"block","flow":"continue","match":{"path":{"kind":"exact","value":"/ordered"}}},
+    {"rule_id":"ordered-log-stop","priority":3,"action":"log","flow":"stop","match":{"path":{"kind":"exact","value":"/ordered"}}},
+    {"rule_id":"allow-stop-block","priority":5,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/allow-stop"}}},
+    {"rule_id":"expired-active-block","priority":6,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/expired"},"source_cidr":"127.0.0.1/32"}},
+    {"rule_id":"cidr-v4-zero","priority":10,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/cidr-v4-zero"},"source_cidr":"127.0.0.1/0"}},
+    {"rule_id":"cidr-v4-31","priority":11,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/cidr-v4-31"},"source_cidr":"127.0.0.1/31"}},
+    {"rule_id":"cidr-v4-32","priority":12,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/cidr-v4-32"},"source_cidr":"127.0.0.1/32"}},
+    {"rule_id":"cidr-v6-zero","priority":13,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/cidr-v6-zero"},"source_cidr":"::1/0"}},
+    {"rule_id":"cidr-v6-127","priority":14,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/cidr-v6-127"},"source_cidr":"::1/127"}},
+    {"rule_id":"cidr-v6-128","priority":15,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/cidr-v6-128"},"source_cidr":"::1/128"}},
+    {"rule_id":"mapped-request-v4","priority":16,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/mapped-request"},"source_cidr":"127.0.0.1/32"}},
+    {"rule_id":"chain-block","priority":20,"action":"block","flow":"continue","match":{"path":{"kind":"exact","value":"/block-chain"}}},
+    {"rule_id":"chain-log-stop","priority":21,"action":"log","flow":"stop","match":{"path":{"kind":"exact","value":"/block-chain"}}},
+    {"rule_id":"fields","priority":30,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/fields"},"query":{"name":"token","operator":"exact","value":"ok"},"header":{"name":"X-Mode","operator":"exact","value":"strict"}}},
+    {"rule_id":"log-only","priority":40,"action":"log","flow":"stop","match":{"path":{"kind":"exact","value":"/log-only"}}}
+  ]
+}

@@ -1,0 +1,897 @@
+{
+ "id": "admin-themes",
+ "prefix": "/v1/admin/themes",
+ "operations": [
+  {
+   "operation_id": "listThemes",
+   "method": "GET",
+   "path": "/v1/admin/themes",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Catalog themes with download state and the downloaded packages. Requires system_configuration.read.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Catalog",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.theme.catalog/v1",
+       "required": true
+      },
+      {
+       "name": "activation_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "active_package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "user_package_sha256",
+       "type": "string",
+       "required": true,
+       "description": "The package the user console shows (its latest user or all activation); empty before any console activation. A plain cdnca.theme/v1 package chosen for the user console is recognized by this pointer."
+      },
+      {
+       "name": "available",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "packages",
+       "type": "array<Package>",
+       "required": true
+      },
+      {
+       "name": "error_page_republication",
+       "type": "ErrorPageRepublication",
+       "required": true,
+       "description": "The latest activation's automatic error page republication: every tenant scope that has published error pages gets the theme's default error pages through the system republication channel (trigger theme_activation), without a tenant publish. All zero before any activation."
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "downloadTheme",
+   "method": "POST",
+   "path": "/v1/admin/themes/catalog/{theme_id}/download",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Store a catalog theme (downloaded, not active). Requires system_configuration.manage.",
+   "params": [
+    {
+     "name": "theme_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Downloaded package",
+     "fields": [
+      {
+       "name": "package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "object"
+      },
+      {
+       "name": "source",
+       "type": "any",
+       "required": true,
+       "description": "market: a third-party theme bought on the plugin market (id market.<plugin id>), downloaded by artifact sync once the plugin installation is confirmed; it cannot be activated after its authorization ends."
+      },
+      {
+       "name": "requires_feature",
+       "type": "string",
+       "description": "theme.<id>; absent for free themes"
+      },
+      {
+       "name": "downloaded_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "active",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "tokens_url",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "stylesheet_url",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "preview_url",
+       "type": "string",
+       "description": "The screenshot of the theme plugin (cdnca.site-theme) that carries this console theme, the same image as the plugin's card (public, content-addressed, immutable). Absent when no plugin carries the package or it has no preview."
+      },
+      {
+       "name": "derived_from",
+       "type": "object",
+       "description": "A customized theme (custom.*) edited from another package: that package's id, version and digest. Upload refuses a source this installation does not know; activation applies the source's license feature and market authorization to the copy."
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "Unknown catalog theme"
+    }
+   ]
+  },
+  {
+   "operation_id": "uploadTheme",
+   "method": "POST",
+   "path": "/v1/admin/themes/packages",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Upload a custom cdnca.theme/v1 package (id custom.*). Packages with url(), @import, external links, script or undeclared classes are refused.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Downloaded package",
+     "fields": [
+      {
+       "name": "package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "object"
+      },
+      {
+       "name": "source",
+       "type": "any",
+       "required": true,
+       "description": "market: a third-party theme bought on the plugin market (id market.<plugin id>), downloaded by artifact sync once the plugin installation is confirmed; it cannot be activated after its authorization ends."
+      },
+      {
+       "name": "requires_feature",
+       "type": "string",
+       "description": "theme.<id>; absent for free themes"
+      },
+      {
+       "name": "downloaded_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "active",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "tokens_url",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "stylesheet_url",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "preview_url",
+       "type": "string",
+       "description": "The screenshot of the theme plugin (cdnca.site-theme) that carries this console theme, the same image as the plugin's card (public, content-addressed, immutable). Absent when no plugin carries the package or it has no preview."
+      },
+      {
+       "name": "derived_from",
+       "type": "object",
+       "description": "A customized theme (custom.*) edited from another package: that package's id, version and digest. Upload refuses a source this installation does not know; activation applies the source's license feature and market authorization to the copy."
+      }
+     ]
+    },
+    {
+     "status": "413",
+     "description": "Larger than 8 MiB"
+    },
+    {
+     "status": "422",
+     "description": "Refused package"
+    }
+   ]
+  },
+  {
+   "operation_id": "getThemePackage",
+   "method": "GET",
+   "path": "/v1/admin/themes/packages/{sha}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The cdnca.theme/v1 JSON of a package this installation stored (removed ones too) or a catalog theme, byte for byte (its SHA-256 is the path digest). The theme management page edits a copy of it and uploads the copy as a custom.* package whose derived_from names this package. Requires system_configuration.read.",
+   "params": [
+    {
+     "name": "sha",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Package JSON"
+    },
+    {
+     "status": "404",
+     "description": "Never stored and not in the catalog"
+    }
+   ]
+  },
+  {
+   "operation_id": "removeTheme",
+   "method": "DELETE",
+   "path": "/v1/admin/themes/packages/{sha}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "sha",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Removed (can be downloaded again)"
+    },
+    {
+     "status": "409",
+     "description": "The active package, or one a tenant uses (theme_package_selected_by_tenant), cannot be removed"
+    }
+   ]
+  },
+  {
+   "operation_id": "activateTheme",
+   "method": "POST",
+   "path": "/v1/admin/themes/packages/{sha}/activate",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Make a downloaded package the active theme of one console: no body is both consoles as before; {\"slot\":\"admin\"|\"user\"|\"all\"} names one. The admin console (admin, all) takes official themes only (built in, uploads and copies, or the io.cdnca market namespace); a third party's market theme is a user console theme. An admin activation records a new error page publication revision pinned to the theme; node default error pages follow the admin console, so a user activation republishes nothing.",
+   "params": [
+    {
+     "name": "sha",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Activation revision the caller saw (\"0\" before any)."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "fields": [
+     {
+      "name": "slot",
+      "type": "string: all / admin / user"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Activated",
+     "fields": [
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "error_page_publication_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "error_page_republish_scopes",
+       "type": "integer",
+       "required": true,
+       "description": "Tenant scopes whose error pages the system republishes with the new theme."
+      },
+      {
+       "name": "already_active",
+       "type": "boolean",
+       "description": "The package was already the active theme; nothing was activated or republished."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Unknown slot"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Not downloaded"
+    },
+    {
+     "status": "412",
+     "description": "Revision conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantThemePolicy",
+   "method": "GET",
+   "path": "/v1/admin/themes/tenant-policy",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform default",
+     "fields": [
+      {
+       "name": "tenant_selection_allowed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "operation_id": "updateTenantThemePolicy",
+   "method": "PUT",
+   "path": "/v1/admin/themes/tenant-policy",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Whether tenants in inherit mode may choose their theme. Audited as theme.tenant_policy.update.",
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_selection_allowed",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "New policy",
+     "fields": [
+      {
+       "name": "tenant_selection_allowed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "412",
+     "description": "theme_revision_conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantThemeForPlatform",
+   "method": "GET",
+   "path": "/v1/admin/themes/tenants/{tenant_scope_id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Tenant theme",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.theme.tenant/v1",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "selection_mode",
+       "type": "any",
+       "required": true
+      },
+      {
+       "name": "platform_allows",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selection_allowed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selected_package_sha256",
+       "type": "string"
+      },
+      {
+       "name": "assigned_by",
+       "type": "any"
+      },
+      {
+       "name": "effective_package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "effective_theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "follows_platform",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "choices",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "Unknown tenant scope"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateTenantThemeForPlatform",
+   "method": "PUT",
+   "path": "/v1/admin/themes/tenants/{tenant_scope_id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Set the tenant's selection_mode (inherit | allow | deny) and, with assign, the theme the platform assigns it (package_sha256 \"\" clears the assignment). An assigned theme applies whatever the selection mode. Audited as theme.tenant.activate (assign) or theme.tenant.selection_update.",
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "selection_mode",
+      "type": "any",
+      "required": true
+     },
+     {
+      "name": "assign",
+      "type": "boolean"
+     },
+     {
+      "name": "package_sha256",
+      "type": "string",
+      "description": "Required exactly when assign is true"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "New tenant theme",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.theme.tenant/v1",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "selection_mode",
+       "type": "any",
+       "required": true
+      },
+      {
+       "name": "platform_allows",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selection_allowed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selected_package_sha256",
+       "type": "string"
+      },
+      {
+       "name": "assigned_by",
+       "type": "any"
+      },
+      {
+       "name": "effective_package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "effective_theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "follows_platform",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "choices",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "412",
+     "description": "theme_revision_conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "bindTenantThemeDomain",
+   "method": "PUT",
+   "path": "/v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Bind a sign-in hostname to the tenant (its sign-in page shows the tenant theme). Audited as theme.tenant_domain.bind.",
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "hostname",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Tenant theme",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.theme.tenant/v1",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "selection_mode",
+       "type": "any",
+       "required": true
+      },
+      {
+       "name": "platform_allows",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selection_allowed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selected_package_sha256",
+       "type": "string"
+      },
+      {
+       "name": "assigned_by",
+       "type": "any"
+      },
+      {
+       "name": "effective_package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "effective_theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "follows_platform",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "choices",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "409",
+     "description": "theme_domain_conflict (bound to another tenant)"
+    }
+   ]
+  },
+  {
+   "operation_id": "unbindTenantThemeDomain",
+   "method": "DELETE",
+   "path": "/v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "tenant_scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "hostname",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Tenant theme",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.theme.tenant/v1",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "selection_mode",
+       "type": "any",
+       "required": true
+      },
+      {
+       "name": "platform_allows",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selection_allowed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "selected_package_sha256",
+       "type": "string"
+      },
+      {
+       "name": "assigned_by",
+       "type": "any"
+      },
+      {
+       "name": "effective_package_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "effective_theme_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "follows_platform",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "choices",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "Not bound"
+    }
+   ]
+  }
+ ]
+}

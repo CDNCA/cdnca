@@ -1,0 +1,1241 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Node Scheduling API Fragment
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+security:
+  - tenantBearer: []
+  - tenantAPIKey: []
+paths:
+  /v1/nodes/{id}/metrics/latest:
+    get:
+      operationId: getLatestNodeMetrics
+      summary: 查询节点最新探测、负载与恢复证据
+      security:
+        - tenantBearer: []
+      parameters:
+        - $ref: '#/components/parameters/NodeID'
+      responses:
+        '200':
+          description: Latest durable metric record with its separately persisted latest recovery notification.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NodeMetricsLatest'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '429': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups:
+    get:
+      operationId: listNodeLineGroups
+      summary: 查询线路组当前修订列表
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+      responses:
+        '200':
+          description: Current immutable revision of every visible line group.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LineGroupList'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createNodeLineGroup
+      summary: 创建线路组首个不可变修订
+      description: 租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/IfMatchCreate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LineGroupWrite'}
+      responses:
+        '201':
+          description: Revision 1 created. ETag is a quoted decimal revision.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LineGroupWriteResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}:
+    parameters:
+      - $ref: '#/components/parameters/LineGroupID'
+    get:
+      operationId: getNodeLineGroup
+      summary: 查询线路组当前修订
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+      responses:
+        '200':
+          description: Current immutable revision.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LineGroupRevision'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    put:
+      operationId: updateNodeLineGroup
+      summary: 创建线路组下一不可变修订
+      description: 租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/LineGroupWrite'}
+      responses:
+        '200':
+          description: New immutable current revision.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LineGroupWriteResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: deleteNodeLineGroup
+      summary: 软删除线路组并保留不可变修订历史
+      description: 租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。
+      parameters:
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '204':
+          description: Soft deletion completed or the stored result was replayed.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}/revisions/{revision}:
+    get:
+      operationId: getNodeLineGroupRevision
+      summary: 查询线路组历史修订
+      parameters:
+        - $ref: '#/components/parameters/LineGroupID'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/TargetScopeID'
+      responses:
+        '200':
+          description: Historical immutable revision.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LineGroupRevision'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}/decisions:
+    post:
+      operationId: decideNodeLineGroupEndpoint
+      summary: 计算可审计的区域健康调度决策
+      parameters:
+        - $ref: '#/components/parameters/LineGroupID'
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DecisionRequest'}
+      responses:
+        '200':
+          description: Deterministic selection with auditable reason and fallback state.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Decision'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}/target-snapshots:
+    get:
+      operationId: getNodeLineGroupTargetSnapshot
+      summary: 按来源修订查询 L1/L2 拓扑快照
+      parameters:
+        - $ref: '#/components/parameters/LineGroupID'
+        - $ref: '#/components/parameters/SourceRevision'
+        - $ref: '#/components/parameters/TargetScopeID'
+      responses:
+        '200':
+          description: Immutable L1 target set bound to the requested L2 source revision.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TargetSnapshot'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createNodeLineGroupTargetSnapshot
+      summary: 创建 L1 目标与 L2 候选拓扑快照
+      parameters:
+        - $ref: '#/components/parameters/LineGroupID'
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TargetSnapshotRequest'}
+      responses:
+        '201':
+          description: Immutable L1 target set bound to an immutable L2 source revision.
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TargetSnapshot'}
+        '400': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}/rollback:
+    post:
+      operationId: rollbackNodeLineGroup
+      summary: 将历史配置复制为新的当前修订
+      parameters:
+        - $ref: '#/components/parameters/LineGroupID'
+        - $ref: '#/components/parameters/TargetScopeID'
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RollbackRequest'}
+      responses:
+        '200':
+          description: Historical configuration copied into current revision plus one.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LineGroupWriteResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/node-line-groups/{id}/platform-default:
+    post:
+      operationId: setNodeLineGroupPlatformDefault
+      summary: 设为或取消平台默认线路组
+      description: 只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。
+      parameters:
+        - $ref: '#/components/parameters/LineGroupID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [is_platform_default]
+              properties:
+                is_platform_default: {type: boolean}
+      responses:
+        '200':
+          description: Current line group with the new platform default flag.
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [group]
+                properties:
+                  group: {$ref: '#/components/schemas/LineGroupRevision'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        default: {$ref: '#/components/responses/Error'}
+  /v1/l2-configs:
+    parameters:
+      - $ref: '#/components/parameters/TargetScopeID'
+    get:
+      operationId: listL2Configs
+      summary: 查询 L2 配置列表
+      description: 返回当前作用域未删除的全部配置，按 display_id 排序，不分页。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.read]
+      responses:
+        '200':
+          description: L2 配置列表；无数据时 items 为空数组。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2ConfigList'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createL2Config
+      summary: 创建 L2 配置
+      description: 写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，须为单个 UTF-8 JSON 对象，拒绝未知字段。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchCreate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/L2ConfigWrite'}
+      responses:
+        '201':
+          description: 返回修订 1 的配置对象；名称或幂等键冲突返回 409。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+            Location:
+              description: /v1/l2-configs/{id}
+              schema: {type: string, format: uri-reference}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2Config'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/l2-configs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/L2ConfigID'
+      - $ref: '#/components/parameters/TargetScopeID'
+    get:
+      operationId: getL2Config
+      summary: 查询 L2 配置
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.read]
+      responses:
+        '200':
+          description: 返回当前配置对象及其修订。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2Config'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    put:
+      operationId: updateL2Config
+      summary: 替换 L2 配置
+      description: 完整替换可编辑字段并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/L2ConfigWrite'}
+      responses:
+        '200':
+          description: 返回更新后的配置对象或已完成请求的原结果。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2Config'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: deleteL2Config
+      summary: 删除 L2 配置
+      description: 存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '204':
+          description: 软删除完成或已完成请求的结果被重放。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/l2-conds:
+    parameters:
+      - $ref: '#/components/parameters/TargetScopeID'
+    get:
+      operationId: listL2Conditions
+      summary: 查询 L2 匹配条件列表
+      description: 返回当前作用域未删除的全部匹配条件，按 display_id 排序，不分页。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.read]
+      responses:
+        '200':
+          description: L2 匹配条件列表；无数据时 items 为空数组。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2ConditionList'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createL2Condition
+      summary: 创建 L2 匹配条件
+      description: 写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，拒绝非 JSON、无效 UTF-8、未知字段及额外 JSON 值。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchCreate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/L2ConditionWrite'}
+      responses:
+        '201':
+          description: 返回修订 1 的匹配条件对象；名称或幂等键冲突返回 409。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+            Location:
+              description: /v1/l2-conds/{id}
+              schema: {type: string, format: uri-reference}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2Condition'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/l2-conds/{id}:
+    parameters:
+      - $ref: '#/components/parameters/L2ConditionID'
+      - $ref: '#/components/parameters/TargetScopeID'
+    put:
+      operationId: updateL2Condition
+      summary: 替换 L2 匹配条件
+      description: 完整替换名称、备注和规则并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。此单项路径不支持 GET。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/L2ConditionWrite'}
+      responses:
+        '200':
+          description: 返回更新后的匹配条件对象或已完成请求的原结果。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2Condition'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: deleteL2Condition
+      summary: 删除 L2 匹配条件
+      description: 存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '204':
+          description: 软删除完成或已完成请求的结果被重放。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/l2-nodes:
+    parameters:
+      - $ref: '#/components/parameters/TargetScopeID'
+    get:
+      operationId: listL2Nodes
+      summary: 查询 L2 节点成员或可添加节点
+      description: 未指定 available 或值为空时，按 sort、display_id 返回该配置的成员（不存在的配置得到空列表）；available=true 时，配置必须存在，返回本作用域未退役且尚未加入任何 L2 配置的节点，按 display_id 排序。两种模式均不分页；available=false 不合法。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.read]
+      parameters:
+        - name: config_id
+          in: query
+          required: true
+          description: 只允许一个非零配置 UUID。
+          schema: {$ref: '#/components/schemas/L2UUID'}
+        - name: available
+          in: query
+          required: false
+          allowEmptyValue: true
+          description: 最多出现一次；仅 true 或空字符串合法。
+          schema: {type: string, enum: ['true', '']}
+      responses:
+        '200':
+          description: available=true 返回候选节点列表，否则返回成员列表；无数据时 items 为空数组。
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: '#/components/schemas/L2NodeList'
+                  - $ref: '#/components/schemas/L2NodeCandidateList'
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    post:
+      operationId: addL2Nodes
+      summary: 批量添加 L2 节点成员
+      description: 原子添加 1 至 512 个不重复节点；配置、可选条件和未退役节点必须属于自身作用域。已加入任一 L2 配置的节点冲突返回 409。每个成员初始 revision=1、enabled=true、weight=100，node_ids 排序后 sort 从 0 按 10 递增；不返回 ETag 或 Location。写入受实时管理权限和幂等键约束，If-Match 必须为 "0"。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchCreate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/L2NodeAdd'}
+      responses:
+        '201':
+          description: 返回创建的成员列表或已完成请求的原结果。
+          headers:
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2NodeList'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/l2-nodes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/L2MembershipID'
+      - $ref: '#/components/parameters/TargetScopeID'
+    put:
+      operationId: updateL2Node
+      summary: 替换 L2 节点成员设置
+      description: id 为成员 UUID，不是 node_id。完整替换条件、启用状态、权重和排序并递增修订；省略或传 null 的 condition_id 清除条件。enabled、weight、sort 不可省略或为 null；写入受自身作用域、实时管理权限、修订和幂等键约束。此单项路径不支持 GET。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/L2NodeWrite'}
+      responses:
+        '200':
+          description: 返回更新后的成员对象或已完成请求的原结果。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/L2Node'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: deleteL2Node
+      summary: 删除 L2 节点成员
+      description: id 为成员 UUID，只软删除成员关系，不删除节点。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。
+      security: [{tenantBearer: []}, {tenantAPIKey: []}]
+      x-required-permissions: [node_scheduling.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchUpdate'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '204':
+          description: 软删除完成或已完成请求的结果被重放。
+          headers:
+            ETag: {$ref: '#/components/headers/ETag'}
+            Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    tenantBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: access-token
+      description: Tenant session manages its own scope. A platform session without target_scope_id manages the platform scope; an explicit tenant target is read-only.
+    tenantAPIKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "Authorization: CdncaKey <credential>. Tenant only; platform API keys fail closed."
+  parameters:
+    L2ConfigID:
+      name: id
+      in: path
+      required: true
+      description: 非零 L2 配置 UUID。
+      schema: {$ref: '#/components/schemas/L2UUID'}
+    L2ConditionID:
+      name: id
+      in: path
+      required: true
+      description: 非零 L2 匹配条件 UUID。
+      schema: {$ref: '#/components/schemas/L2UUID'}
+    L2MembershipID:
+      name: id
+      in: path
+      required: true
+      description: 非零 L2 节点成员 UUID；不同于节点 node_id。
+      schema: {$ref: '#/components/schemas/L2UUID'}
+    NodeID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    LineGroupID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    Revision:
+      name: revision
+      in: path
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+    SourceRevision:
+      name: source_revision
+      in: query
+      required: true
+      description: Single positive decimal source line-group revision.
+      schema: {type: integer, format: int64, minimum: 1}
+    TargetScopeID:
+      name: target_scope_id
+      in: query
+      required: false
+      description: Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations.
+      schema: {type: string, format: uuid}
+    IfMatchCreate:
+      name: If-Match
+      in: header
+      required: true
+      description: Must be the single exact quoted value "0".
+      schema: {type: string, const: '"0"'}
+    IfMatchUpdate:
+      name: If-Match
+      in: header
+      required: true
+      description: Single quoted positive decimal current revision, for example "3".
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+  headers:
+    ETag:
+      description: Quoted decimal immutable revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyReplayed:
+      description: Present as true only when the stored response was replayed.
+      schema: {type: string, enum: ['true']}
+  responses:
+    Error:
+      description: Stable error envelope; messages are not localization keys.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    L2UUID:
+      type: string
+      format: uuid
+      not: {const: '00000000-0000-0000-0000-000000000000'}
+    L2ConditionReference:
+      description: 同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。
+      anyOf:
+        - $ref: '#/components/schemas/L2UUID'
+        - type: 'null'
+    L2Name:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: 名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。
+    L2Region:
+      type: string
+      minLength: 0
+      maxLength: 64
+      description: 必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。
+    L2Remark:
+      type: string
+      maxLength: 1024
+      description: 备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。
+    L2ConfigWrite:
+      type: object
+      additionalProperties: false
+      required: [name, region, mode, load_method]
+      properties:
+        name: {$ref: '#/components/schemas/L2Name'}
+        region: {$ref: '#/components/schemas/L2Region'}
+        remark: {$ref: '#/components/schemas/L2Remark'}
+        mode: {type: string, enum: [cache, global]}
+        load_method: {type: string, enum: [rr, url_hash]}
+    L2Config:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, revision, name, region, remark, mode, load_method, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/L2UUID'}
+        display_id: {type: string, pattern: '^[1-9][0-9]*$'}
+        tenant_scope_id: {$ref: '#/components/schemas/L2UUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        name: {$ref: '#/components/schemas/L2Name'}
+        region: {$ref: '#/components/schemas/L2Region'}
+        remark: {$ref: '#/components/schemas/L2Remark'}
+        mode: {type: string, enum: [cache, global]}
+        load_method: {type: string, enum: [rr, url_hash]}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    L2ConfigList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/L2Config'}
+    L2Rule:
+      type: object
+      additionalProperties: false
+      required: [field, operator, value]
+      properties:
+        field:
+          type: string
+          enum: [host, request_uri, uri, node_country, node_isp, node_province, node_city, node_id, protocol]
+        operator:
+          type: string
+          enum: [eq, neq, contains, not_contains, prefix, suffix, regex, not_regex]
+        value:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: 写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符；regex/not_regex 的值须是 RE2 正则（不支持零宽断言与反向引用，节点 PCRE 按同义执行），否则 422 l2_condition_invalid_regex，message 为 "rule N"（第 N 条，从 1 起）。
+    L2ConditionWrite:
+      type: object
+      additionalProperties: false
+      required: [name, rules]
+      properties:
+        name: {$ref: '#/components/schemas/L2Name'}
+        remark: {$ref: '#/components/schemas/L2Remark'}
+        rules:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items: {$ref: '#/components/schemas/L2Rule'}
+    L2Condition:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, revision, name, remark, rules, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/L2UUID'}
+        display_id: {type: string, pattern: '^[1-9][0-9]*$'}
+        tenant_scope_id: {$ref: '#/components/schemas/L2UUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        name: {$ref: '#/components/schemas/L2Name'}
+        remark: {$ref: '#/components/schemas/L2Remark'}
+        rules:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items: {$ref: '#/components/schemas/L2Rule'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    L2ConditionList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/L2Condition'}
+    L2NodeAdd:
+      type: object
+      additionalProperties: false
+      required: [config_id, node_ids]
+      properties:
+        config_id: {$ref: '#/components/schemas/L2UUID'}
+        node_ids:
+          type: array
+          minItems: 1
+          maxItems: 512
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/L2UUID'}
+        condition_id: {$ref: '#/components/schemas/L2ConditionReference'}
+    L2NodeWrite:
+      type: object
+      additionalProperties: false
+      required: [enabled, weight, sort]
+      properties:
+        condition_id: {$ref: '#/components/schemas/L2ConditionReference'}
+        enabled: {type: boolean}
+        weight: {type: integer, minimum: 1, maximum: 100}
+        sort: {type: integer, minimum: 0, maximum: 999999}
+    L2Node:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, config_id, node_id, condition_id, condition_name, revision, name, ip_address, admin_state, online_status, enabled, weight, sort]
+      properties:
+        id: {$ref: '#/components/schemas/L2UUID'}
+        display_id: {type: string, pattern: '^[1-9][0-9]*$'}
+        tenant_scope_id: {$ref: '#/components/schemas/L2UUID'}
+        config_id: {$ref: '#/components/schemas/L2UUID'}
+        node_id: {$ref: '#/components/schemas/L2UUID'}
+        condition_id: {$ref: '#/components/schemas/L2ConditionReference'}
+        condition_name: {type: [string, 'null']}
+        revision: {type: integer, format: int64, minimum: 1}
+        name: {type: string}
+        ip_address:
+          type: string
+          description: 优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。
+        admin_state: {type: string, enum: [pending, active, draining, disabled, retired]}
+        online_status: {type: string, enum: [online, offline, unknown]}
+        enabled: {type: boolean}
+        weight: {type: integer, minimum: 1, maximum: 100}
+        sort: {type: integer, minimum: 0, maximum: 999999}
+    L2NodeList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/L2Node'}
+    L2NodeCandidate:
+      type: object
+      additionalProperties: false
+      required: [node_id, display_id, name, ip_address, admin_state, online_status]
+      properties:
+        node_id: {$ref: '#/components/schemas/L2UUID'}
+        display_id: {type: string, pattern: '^[1-9][0-9]*$'}
+        name: {type: string}
+        ip_address:
+          type: string
+          description: 优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。
+        admin_state: {type: string, enum: [pending, active, draining, disabled]}
+        online_status: {type: string, enum: [online, offline, unknown]}
+    L2NodeCandidateList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/L2NodeCandidate'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum: [validation_error, unauthenticated, permission_denied, node_metrics_not_found, node_metrics_unavailable, node_scheduling_invalid_request, node_scheduling_unauthenticated, node_scheduling_permission_denied, node_scheduling_platform_write_forbidden, node_scheduling_not_found, node_scheduling_name_conflict, node_scheduling_revision_conflict, node_scheduling_idempotency_conflict, node_scheduling_reference_conflict, node_scheduling_endpoint_address_not_on_node, node_scheduling_invalid_sort_order, node_scheduling_no_healthy_endpoint, topology_cycle_rejected, node_scheduling_target_snapshot_conflict, node_scheduling_target_snapshot_unavailable, node_scheduling_unavailable]
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: On a 400 node_scheduling_invalid_request that names the refused field (JSON path as sent, endpoints[n] in request order) and a machine reason.
+              x-description-zh: 能定位字段的 400 node_scheduling_invalid_request 附带 field（请求 JSON 路径，endpoints[n] 按请求顺序）与 reason 机器码。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$'}
+                reason: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+              example: {field: 'endpoints[1].port', reason: out_of_range}
+    NodeRecoveryEvidence:
+      type: object
+      additionalProperties: false
+      required: [config_revision, publication_sequence, recovered_at, reason_code, puback_stream, puback_sequence]
+      properties:
+        config_revision: {type: integer, format: int64, minimum: 1}
+        publication_sequence: {type: integer, format: int64, minimum: 1}
+        recovered_at: {type: string, format: date-time}
+        reason_code: {type: string, enum: [probe_recovered]}
+        puback_stream: {type: string, const: NODE_MONITORING_STATUS}
+        puback_sequence: {type: integer, format: int64, minimum: 1}
+    NodeMetricsLatest:
+      type: object
+      additionalProperties: false
+      required: [node_id, node_name, config_revision, active_config_revision, publication_sequence, observed_at, probe_port, healthy, probe_succeeded, consecutive_failures, consecutive_successes, probes_total, probe_failures_total, recovered, recovery_notified, rolled_back, known, cpu_percent, memory_used_bytes, memory_total_bytes, active_connections, rx_bandwidth_bps, tx_bandwidth_bps, puback_stream, puback_sequence, consumer_durable, consumer_sequence, ingested_at]
+      properties:
+        node_id: {type: string, format: uuid}
+        node_name: {type: string, minLength: 1, maxLength: 128}
+        config_revision: {type: integer, format: int64, minimum: 1}
+        active_config_revision: {type: integer, format: int64, minimum: 1}
+        publication_sequence: {type: integer, format: int64, minimum: 1}
+        observed_at: {type: string, format: date-time}
+        probe_port: {type: integer, minimum: 1, maximum: 65535}
+        healthy: {type: boolean}
+        probe_succeeded: {type: boolean}
+        consecutive_failures: {type: integer, minimum: 0, maximum: 20}
+        consecutive_successes: {type: integer, minimum: 0, maximum: 20}
+        probes_total: {type: integer, format: int64, minimum: 0}
+        probe_failures_total: {type: integer, format: int64, minimum: 0}
+        recovered: {type: boolean}
+        recovery_notified: {type: boolean}
+        rolled_back: {type: boolean}
+        known: {type: boolean}
+        cpu_percent: {type: [number, 'null'], minimum: 0, maximum: 100}
+        memory_used_bytes: {type: [integer, 'null'], format: int64, minimum: 0}
+        memory_total_bytes: {type: [integer, 'null'], format: int64, minimum: 1}
+        active_connections: {type: [integer, 'null'], format: int64, minimum: 0}
+        rx_bandwidth_bps: {type: [integer, 'null'], format: int64, minimum: 0}
+        tx_bandwidth_bps: {type: [integer, 'null'], format: int64, minimum: 0}
+        puback_stream: {type: string, const: NODE_MONITORING_STATUS}
+        puback_sequence: {type: integer, format: int64, minimum: 1}
+        consumer_durable: {type: string, const: control_api_node_metrics}
+        consumer_sequence: {type: integer, format: int64, minimum: 1}
+        ingested_at: {type: string, format: date-time}
+        latest_recovery: {$ref: '#/components/schemas/NodeRecoveryEvidence'}
+    HealthPolicy:
+      type: object
+      additionalProperties: false
+      required: [probe_interval_ms, probe_timeout_ms, failure_threshold, recovery_threshold, failure_debounce_ms, recovery_debounce_ms]
+      properties:
+        probe_interval_ms: {type: integer, minimum: 1000, maximum: 300000, default: 10000}
+        probe_timeout_ms: {type: integer, minimum: 100, maximum: 60000, default: 3000}
+        failure_threshold: {type: integer, minimum: 1, maximum: 20, default: 3}
+        recovery_threshold: {type: integer, minimum: 1, maximum: 20, default: 3}
+        failure_debounce_ms: {type: integer, minimum: 0, maximum: 3600000, default: 0}
+        recovery_debounce_ms: {type: integer, minimum: 0, maximum: 3600000, default: 0}
+    HealthState:
+      type: object
+      additionalProperties: false
+      required: [status, consecutive_successes, consecutive_failures, last_sequence, row_revision]
+      properties:
+        status: {type: string, enum: [unknown, healthy, unhealthy]}
+        consecutive_successes: {type: integer, minimum: 0}
+        consecutive_failures: {type: integer, minimum: 0}
+        last_sequence: {type: integer, format: int64, minimum: 0}
+        last_observed_at: {type: [string, 'null'], format: date-time}
+        last_changed_at: {type: string, format: date-time}
+        row_revision: {type: integer, format: int64, minimum: 1}
+    EndpointWrite:
+      type: object
+      additionalProperties: false
+      required: [id, node_id, address, port, region, carrier, priority, sort_order, weight, enabled]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$', readOnly: true, description: Server allocated endpoint identity. Any supplied value is ignored.}
+        node_id: {type: string, format: uuid, description: L2 candidate node identity.}
+        address: {type: string, format: ip}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        region: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        carrier: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        priority: {type: integer, minimum: 0, maximum: 65535, description: Lower priorities are active before ordered standby priorities.}
+        sort_order: {type: integer, minimum: 1, maximum: 999999, default: 100, description: 'Backup addresses are activated in ascending sort order. Omit for the default 100; an explicit 0 is rejected with node_scheduling_invalid_sort_order.'}
+        weight: {type: integer, minimum: 1, maximum: 100}
+        enabled: {type: boolean}
+    Endpoint:
+      type: object
+      additionalProperties: false
+      required: [id, node_id, address, port, region, carrier, priority, sort_order, weight, enabled, health]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$', readOnly: true, description: Immutable server allocated identity for this scope/group/endpoint. Absent only in historical write receipts; never a row number or node ID.}
+        node_id: {type: string, format: uuid}
+        address: {type: string, format: ip}
+        port: {type: integer, minimum: 1, maximum: 65535}
+        region: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        carrier: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        priority: {type: integer, minimum: 0, maximum: 65535}
+        sort_order: {type: integer, minimum: 0, maximum: 999999}
+        weight: {type: integer, minimum: 1, maximum: 100}
+        enabled: {type: boolean}
+        health: {$ref: '#/components/schemas/HealthState'}
+        published: {type: boolean, readOnly: true, description: 'Whether DNS currently publishes this IP (node_line_endpoint_published, per carrier and address family). Returned by line group list/get only; absent when unknown.'}
+    LineGroupWrite:
+      type: object
+      additionalProperties: false
+      required: [name, health_policy, endpoints]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128, pattern: '^[^\u0000-\u001F\u007F-\u009F]*[^\u0000-\u0020\u007F-\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000][^\u0000-\u001F\u007F-\u009F]*$'}
+        region: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        resolved_value:
+          type: string
+          maxLength: 63
+          pattern: '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)?$'
+          description: 留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。
+        ipv4_resolved_value:
+          type: string
+          maxLength: 63
+          pattern: '^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)?$'
+          description: IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。
+        l2_config_id:
+          type: [string, 'null']
+          format: uuid
+          description: 同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。
+        failover_mode:
+          type: string
+          enum: [primary_offline, online_less_than_backup_count]
+          default: primary_offline
+          description: 有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。
+        note: {type: string, maxLength: 512, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        sort_order: {type: integer, format: int32, minimum: 1, default: 100}
+        health_policy: {$ref: '#/components/schemas/HealthPolicy'}
+        endpoints:
+          type: array
+          minItems: 0
+          maxItems: 512
+          items: {$ref: '#/components/schemas/EndpointWrite'}
+    LineGroupRevision:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, revision, name, region, resolved_value, ipv4_resolved_value, l2_config_id, failover_mode, note, sort_order, health_policy, endpoints, configuration_digest, created_by_user_id, created_at, sealed_at]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        tenant_scope_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 128, pattern: '^[^\u0000-\u001F\u007F-\u009F]*[^\u0000-\u0020\u007F-\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000][^\u0000-\u001F\u007F-\u009F]*$'}
+        region: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        resolved_value: {type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'}
+        ipv4_resolved_value: {type: string, minLength: 1, maxLength: 63, pattern: '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'}
+        l2_config_id: {type: [string, 'null'], format: uuid}
+        failover_mode: {type: string, enum: [primary_offline, online_less_than_backup_count]}
+        note: {type: string, maxLength: 512, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        sort_order: {type: integer, format: int32, minimum: 1}
+        health_policy: {$ref: '#/components/schemas/HealthPolicy'}
+        endpoints:
+          type: array
+          items: {$ref: '#/components/schemas/Endpoint'}
+        statistics:
+          $ref: '#/components/schemas/LineGroupStatistics'
+          description: 仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。
+        configuration_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        created_by_user_id: {type: string, format: uuid}
+        created_at: {type: string, format: date-time}
+        sealed_at: {type: string, format: date-time}
+        is_platform_default: {type: boolean, description: 平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。}
+        backup_states:
+          type: array
+          maxItems: 2
+          readOnly: true
+          description: 各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。
+          items: {$ref: '#/components/schemas/LineBackupState'}
+    LineBackupState:
+      type: object
+      additionalProperties: false
+      required: [address_family, state, backup_addresses, changed_at]
+      properties:
+        address_family: {type: integer, enum: [4, 6]}
+        state: {type: string, enum: [normal, backup_active], description: backup_active 表示该地址族主 IP 已被监控摘除、正在解析备用 IP。}
+        backup_addresses: {type: array, maxItems: 512, items: {type: string}, description: 正在解析的备用 IP；normal 时为空。}
+        changed_at: {type: string, format: date-time, description: 最近一次状态迁移时间。}
+    LineGroupList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/LineGroupRevision'}
+    LineGroupStatistics:
+      type: object
+      additionalProperties: false
+      required: [node_count, site_count, forward_count]
+      properties:
+        node_count: {type: integer, format: int64, minimum: 0}
+        site_count: {type: integer, format: int64, minimum: 0}
+        forward_count: {type: integer, format: int64, minimum: 0}
+    LineGroupWriteResult:
+      type: object
+      additionalProperties: false
+      required: [group, replayed]
+      properties:
+        group: {$ref: '#/components/schemas/LineGroupRevision'}
+        replayed: {type: boolean}
+    Selector:
+      type: object
+      additionalProperties: false
+      required: [region, carrier]
+      properties:
+        region: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+        carrier: {type: string, maxLength: 64, pattern: '^[^\u0000-\u001F\u007F-\u009F]*$'}
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [selector, requested_mode, stable_key]
+      properties:
+        selector: {$ref: '#/components/schemas/Selector'}
+        requested_mode: {type: string, enum: [weighted_baseline, weighted_rendezvous, p2c_least_loaded]}
+        stable_key: {type: string, minLength: 1, maxLength: 1024, pattern: '[^\u0009-\u000D\u0020\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000]'}
+    Decision:
+      type: object
+      additionalProperties: false
+      required: [endpoint, requested_mode, effective_mode, reason, fallback, priority, candidates, standby, snapshot]
+      properties:
+        endpoint: {$ref: '#/components/schemas/Endpoint'}
+        requested_mode: {type: string, enum: [weighted_baseline, weighted_rendezvous, p2c_least_loaded]}
+        effective_mode: {type: string, enum: [weighted_baseline, weighted_rendezvous, p2c_least_loaded]}
+        reason: {type: string, enum: [baseline_weighted_selected, weighted_rendezvous_selected, p2c_least_loaded_selected, telemetry_insufficient, telemetry_stale_fallback, telemetry_unavailable_fallback, single_candidate_fallback, no_healthy_endpoint]}
+        fallback: {type: boolean}
+        priority: {type: integer, minimum: 0}
+        candidates:
+          type: array
+          items: {$ref: '#/components/schemas/Endpoint'}
+        standby:
+          type: array
+          items: {$ref: '#/components/schemas/Endpoint'}
+        snapshot: {$ref: '#/components/schemas/DecisionSnapshot'}
+    DecisionSnapshot:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, group_id, revision, configuration_digest, plan_digest, selector, evaluated_at, selected_priority, tier_reason, endpoint_evaluations]
+      properties:
+        tenant_scope_id: {type: string, format: uuid}
+        group_id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        configuration_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        plan_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        selector: {$ref: '#/components/schemas/Selector'}
+        evaluated_at: {type: string, format: date-time}
+        selected_priority: {type: [integer, 'null'], minimum: 0, maximum: 65535}
+        tier_reason: {type: string, enum: [primary_priority_selected, backup_priority_selected, no_healthy_endpoint]}
+        endpoint_evaluations:
+          type: array
+          maxItems: 512
+          items: {$ref: '#/components/schemas/EndpointEvaluation'}
+    EndpointEvaluation:
+      type: object
+      additionalProperties: false
+      required: [endpoint, disposition, health_status, health_row_revision, last_observed_at, last_received_at]
+      properties:
+        endpoint: {$ref: '#/components/schemas/Endpoint'}
+        disposition:
+          type: string
+          enum: [candidate, standby, disabled, selector_mismatch, less_specific, health_unknown, health_unhealthy, health_stale]
+        health_status: {type: string, enum: [unknown, healthy, unhealthy]}
+        health_row_revision: {type: integer, format: int64, minimum: 1}
+        last_observed_at: {type: [string, 'null'], format: date-time}
+        last_received_at: {type: [string, 'null'], format: date-time}
+    TargetSnapshotRequest:
+      type: object
+      additionalProperties: false
+      required: [source_revision, node_ids]
+      properties:
+        source_revision: {type: integer, format: int64, minimum: 1}
+        node_ids:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          uniqueItems: true
+          description: L1 target nodes. Every target has an edge to every L2 endpoint node in the source revision.
+          items: {type: string, format: uuid}
+    TargetSnapshot:
+      type: object
+      additionalProperties: false
+      required: [id, revision, tenant_scope_id, source_line_group_id, source_revision, source_configuration_digest, node_set_digest, node_ids]
+      properties:
+        id: {type: string, format: uuid}
+        revision: {type: integer, format: int64, minimum: 1}
+        tenant_scope_id: {type: string, format: uuid}
+        source_line_group_id: {type: string, format: uuid}
+        source_revision: {type: integer, format: int64, minimum: 1}
+        source_configuration_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        node_set_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        node_ids:
+          type: array
+          items: {type: string, format: uuid}
+    RollbackRequest:
+      type: object
+      additionalProperties: false
+      required: [source_revision]
+      properties:
+        source_revision: {type: integer, format: int64, minimum: 1}

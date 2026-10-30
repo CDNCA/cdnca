@@ -1,0 +1,294 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Account Login Challenge API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Sessionless email and SMS verification for account login. Challenge
+    acceptance never reveals whether an account exists. Human tokens,
+    one-time codes, destinations, refresh tokens, and provider details are not
+    returned in response bodies.
+servers:
+  - url: /
+security: []
+tags:
+  - name: Account login challenge
+    description: Public policy, one-time contact challenge, and verified session issuance.
+paths:
+  /v1/auth/login-methods:
+    get:
+      tags: [Account login challenge]
+      operationId: getAccountLoginMethods
+      security: []
+      summary: Read enabled email and SMS login methods
+      responses:
+        '200':
+          description: Public login method policy for the resolved platform scope.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/MethodsResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/auth/login-challenges:
+    post:
+      tags: [Account login challenge]
+      operationId: createAccountLoginChallenge
+      security: []
+      summary: Queue a login code or the additional code required after password verification
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '#/components/schemas/ChallengeRequest'
+                - $ref: '#/components/schemas/PasswordChallengeRequest'
+      responses:
+        '202':
+          description: Challenge accepted without identifying whether the account exists.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ChallengeResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+  /v1/auth/login-challenge-verifications:
+    post:
+      tags: [Account login challenge]
+      operationId: verifyAccountLoginChallenge
+      security: []
+      summary: Consume one verification code and create a login session
+      description: >-
+        The code and session are committed in the same transaction after the current
+        source policy and bound contact are checked. Accounts requiring password plus
+        a code must finish through /v1/auth/login instead; this endpoint cannot bypass
+        that requirement and returns account_login_verification_invalid.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VerificationRequest'}
+      responses:
+        '200':
+          description: >-
+            Authenticated. The rotating refresh token is returned only as an
+            HttpOnly cookie and the one-time challenge is consumed.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+            Set-Cookie:
+              description: >-
+                HttpOnly SameSite=Strict refresh cookie plus removal of any
+                previous impersonation cookie.
+              schema: {type: string}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AuthResponse'}
+        '401': {$ref: '#/components/responses/ErrorResponse'}
+        '403': {$ref: '#/components/responses/ErrorResponse'}
+        '409': {$ref: '#/components/responses/ErrorResponse'}
+        '422': {$ref: '#/components/responses/ErrorResponse'}
+        '503': {$ref: '#/components/responses/ErrorResponse'}
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+  headers:
+    RequestID:
+      schema: {type: string, minLength: 1, maxLength: 128}
+    RetryAfter:
+      schema: {type: string, pattern: '^[0-9]+$'}
+  responses:
+    ErrorResponse:
+      description: Stable error without provider details or sensitive input.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    RateLimited:
+      description: Bounded retry response without identifying the limiting dimension.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Retry-After: {$ref: '#/components/headers/RetryAfter'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    MethodsResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [registration_enabled, email_enabled, sms_enabled, email_anti_abuse_mode, sms_anti_abuse_mode, captcha_provider, captcha_app_id]
+          properties:
+            registration_enabled:
+              type: boolean
+              description: The registration switch is on and registration is available; the sign-in page shows the sign-up link only when true.
+            email_enabled: {type: boolean}
+            sms_enabled: {type: boolean}
+            email_anti_abuse_mode: {$ref: '#/components/schemas/AntiAbuseMode'}
+            sms_anti_abuse_mode: {$ref: '#/components/schemas/AntiAbuseMode'}
+            captcha_provider:
+              type: string
+              enum: ['', tencent, geetest_v4]
+              description: External CAPTCHA provider; empty unless a channel uses tencent or geetest_v4.
+            captcha_app_id:
+              type: string
+              maxLength: 256
+              description: Public CAPTCHA app id for the widget; empty unless a channel uses an external CAPTCHA.
+    AntiAbuseMode:
+      type: string
+      enum: [none, native, tencent, geetest_v4]
+    ChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [identifier, channel, human_token]
+      properties:
+        identifier:
+          type: string
+          minLength: 3
+          maxLength: 254
+          description: Canonical email address or E.164-compatible phone number selected by channel.
+        channel: {type: string, enum: [email, sms]}
+        human_token:
+          type: string
+          writeOnly: true
+          maxLength: 4096
+          description: Empty only when the published anti-abuse mode is none.
+    PasswordChallengeRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      description: >-
+        Mutually exclusive with identifier/channel. The server verifies the password,
+        resolves the same membership as password login, chooses the current policy's
+        channel and bound destination, and records the policy revision. Do not send a
+        destination or channel. Password and human token are never saved in receipts.
+      properties:
+        username: {type: string, minLength: 3, maxLength: 128}
+        password: {type: string, minLength: 1, maxLength: 1024, writeOnly: true}
+        scope_id: {type: string, format: uuid}
+        human_token: {type: string, maxLength: 4096, writeOnly: true}
+        captcha:
+          type: object
+          additionalProperties: false
+          required: [id, answer]
+          description: Built-in sign-in CAPTCHA, required after login_captcha_required (the password attempt is throttled like POST /v1/auth/login; 429 login_throttled with Retry-After).
+          properties:
+            id: {type: string, format: uuid}
+            answer: {type: string, pattern: '^[A-Za-z0-9]{1,8}$', writeOnly: true}
+    VerificationRequest:
+      type: object
+      additionalProperties: false
+      required: [challenge_id, identifier, channel, otp]
+      properties:
+        challenge_id: {type: string, format: uuid}
+        identifier:
+          type: string
+          minLength: 3
+          maxLength: 254
+        channel: {type: string, enum: [email, sms]}
+        otp:
+          type: string
+          writeOnly: true
+          pattern: '^[0-9]{6}$'
+    ChallengeResponse:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [accepted, challenge_id, expires_at, replayed]
+          properties:
+            accepted: {type: boolean, const: true}
+            challenge_id: {type: string, format: uuid}
+            expires_at: {type: string, format: date-time}
+            replayed: {type: boolean}
+    AuthResponse:
+      type: object
+      additionalProperties: false
+      required: [access_token, token_type, expires_in, principal]
+      properties:
+        access_token: {type: string, minLength: 1}
+        token_type: {type: string, const: Bearer}
+        expires_in: {type: integer, format: int64, minimum: 1}
+        principal: {$ref: '#/components/schemas/Principal'}
+    Principal:
+      type: object
+      additionalProperties: false
+      required: [user_id, display_id, scope_id, scope_kind, username, display_name, roles, permissions]
+      properties:
+        user_id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        scope_id: {type: string, format: uuid}
+        scope_kind: {type: string, enum: [platform, tenant]}
+        tenant_id: {type: [string, 'null'], format: uuid}
+        username: {type: string}
+        display_name: {type: string}
+        roles:
+          type: array
+          items: {type: string}
+        permissions:
+          type: array
+          items: {type: string}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - account_login_invalid_request
+                - account_login_method_disabled
+                - account_login_human_verification_required
+                - account_login_human_verification_invalid
+                - account_login_rate_limited
+                - account_login_idempotency_conflict
+                - account_login_verification_invalid
+                - account_login_unavailable
+                - invalid_credentials
+                - login_source_denied
+                - login_security_unavailable
+            request_id: {type: string, minLength: 1, maxLength: 128}

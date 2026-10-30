@@ -1,0 +1,45 @@
+{
+ "id": "certificate-issuers",
+ "prefix": "/v1/certificate-issuers",
+ "operations": [
+  {
+   "operation_id": "listCertificateIssuers",
+   "method": "GET",
+   "path": "/v1/certificate-issuers",
+   "summary": "List the CAs a new certificate request may name",
+   "auth": [
+    "bearer"
+   ],
+   "description": "lets_encrypt and each EAB CA (zerossl, google_trust) whose platform credentials are configured, with the platform default issuer. A request form offers only these; an unconfigured CA is not shown.",
+   "permissions": [
+    "certificates.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Available issuers.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<string: lets_encrypt / zerossl / google_trust>",
+       "required": true
+      },
+      {
+       "name": "default",
+       "type": "string: lets_encrypt / zerossl / google_trust",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    }
+   ]
+  }
+ ]
+}

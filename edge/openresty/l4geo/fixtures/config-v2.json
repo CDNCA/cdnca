@@ -1,0 +1,33 @@
+{
+  "schema_version": "cdnca.edge.l4/v2",
+  "version_id": "l4-geo-v7",
+  "revision": 7,
+  "listeners": [
+    {
+      "id": "stream-public",
+      "tenant_id": "018f1000-0000-7000-8000-000000000001",
+      "site_id": "018f1000-0000-7000-8000-000000000002",
+      "stream_id": "stream-public",
+      "geo": {
+        "enabled": true,
+        "tenant_id": "018f1000-0000-7000-8000-000000000001",
+        "site_id": "018f1000-0000-7000-8000-000000000002",
+        "stream_id": "stream-public",
+        "revision": 7,
+        "unknown_region_action": "block",
+        "blocked_regions": ["cn-north"],
+        "trusted_proxy_cidrs": ["192.0.2.0/24", "2001:db8:100::/48"],
+        "region_cidrs": [
+          {"region": "global", "cidrs": ["203.0.113.0/24", "2001:db8:200::/48"]},
+          {"region": "cn-north", "cidrs": ["203.0.113.128/25", "2001:db8:200:1::/64"]}
+        ]
+      }
+    },
+    {
+      "id": "stream-private",
+      "tenant_id": "018f1000-0000-7000-8000-000000000001",
+      "site_id": "018f1000-0000-7000-8000-000000000003",
+      "stream_id": "stream-private"
+    }
+  ]
+}

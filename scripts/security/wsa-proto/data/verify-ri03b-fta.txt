@@ -1,0 +1,54 @@
+PASS tiers tiers=5 (pl1 1M, pl2 1M, pl1-log 1M, pl1 64K reject, pl1 64K partial)
+PASS clean clean requests pass
+PASS isolation 54 requests over 9 sites x 6 rounds in random order; mismatches []
+PASS profiles PL2-only probe: PL1 site 200, PL2 site 403
+PASS detector-signal {{7*7}}: PL1 site 200, PL2 site 403; {{name}} on PL2 200
+PASS body-reject 70 KiB body on the 64 KiB reject tier: 403
+PASS body-partial 70 KiB body, attack after 64 KiB on the partial tier: 200 (attack inside: 403)
+PASS body-default the same body on a 1 MiB site is inspected whole: 403
+PASS allow-cidr allowed source on h 200, same source on b 403, other source on h 403
+PASS forged a client header naming another context: 403
+PASS no-leak the context never reaches the origin (headers map[User-Agent:[Go-http-client/1.1] X-Forwarded-For:[127.0.0.1] X-Forwarded-Proto:[http] X-Real-Ip:[127.0.0.1]])
+PASS live-change b excludes 942100 now: 200; a unchanged: 403; nginx pids same: true; WAF files same: true
+PASS fail-closed site of an unknown tier: 500
+PASS error-log no crit/alert/emerg
+PASS tier 仅记录 blocked 0 of 58 attacks (previous tier 0), false positives 0 of 55 []
+PASS tier 仅记录 records only blocked 0
+PASS tier 标准防护 blocked 15 of 58 attacks (previous tier 0), false positives 6 of 55 ["${HOME}" "${user}" "price: ${price}" "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" "${user.address.city}"]
+PASS tier 严格防护 blocked 58 of 58 attacks (previous tier 15), false positives 11 of 55 ["${HOME}" "${user}" "price: ${price}" "{\"user\":{\"name\":\"Tom\",\"email\":\"tom@example.com\"},\"tags\":[\"a\",\"b\"]}" "{\"template\":\"{{title}} - {{site}}\",\"version\":\"2024-10-14\"}" "{\"@type\":\"Person\",\"name\":\"Jane\"}" "{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"Phone\"}" "<h2>Release notes</h2><p>Fixed 3-4 bugs; see {{docs}}.</p>" "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" "${user.address.city}"]
+PASS tier 极严格防护 blocked 58 of 58 attacks (previous tier 58), false positives 14 of 55 ["{{#each items}}{{this}}{{/each}}" "${HOME}" "${user}" "price: ${price}" "{\"a\":1,\"b\":[1,2,3]}" "{\"user\":{\"name\":\"Tom\",\"email\":\"tom@example.com\"},\"tags\":[\"a\",\"b\"]}" "{\"template\":\"{{title}} - {{site}}\",\"version\":\"2024-10-14\"}" "{\"@type\":\"Person\",\"name\":\"Jane\"}" "{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"Phone\"}" "<p>Hello <b>world</b></p><ul><li>one</li><li>two</li></ul>" "<h2>Release notes</h2><p>Fixed 3-4 bugs; see {{docs}}.</p>" "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==" "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" "${user.address.city}"]
+PASS group ssti blocked 18 of 18 (missed []), false positives 0 of 55 []
+PASS group java_deser blocked 16 of 16 (missed []), false positives 0 of 55 []
+PASS group php_deser blocked 16 of 16 (missed []), false positives 0 of 55 []
+TIERS {"attack_samples":58,"benign_samples":55,"groups":[{"attacks":18,"benign":55,"blocked":18,"false_positives":0,"group":"ssti"},{"attacks":16,"benign":55,"blocked":16,"false_positives":0,"group":"java_deser"},{"attacks":16,"benign":55,"blocked":16,"false_positives":0,"group":"php_deser"}],"tiers":[{"benign_rule_hits":{"932130":8,"932160":2,"932235":4,"932260":4,"941130":4,"941170":4},"blocked":0,"false_positive_samples":[],"false_positives":0,"pack":"system/crs-pl1-log","tier":"仅记录"},{"benign_rule_hits":{"932130":8,"932160":2,"932235":4,"932260":4,"941130":4,"941170":4},"blocked":15,"false_positive_samples":["${HOME}","${user}","price: ${price}","data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==","data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7","${user.address.city}"],"false_positives":6,"pack":"system/crs-pl1","tier":"标准防护"},{"benign_rule_hits":{"931130":2,"932130":8,"932160":2,"932200":1,"932235":4,"932236":4,"932260":4,"933135":8,"934180":1,"941130":4,"941170":4,"941320":2,"941380":5,"942120":2,"942131":2,"942200":8,"942300":2,"942340":8,"942370":2,"942430":10},"blocked":58,"false_positive_samples":["${HOME}","${user}","price: ${price}","{\"user\":{\"name\":\"Tom\",\"email\":\"tom@example.com\"},\"tags\":[\"a\",\"b\"]}","{\"template\":\"{{title}} - {{site}}\",\"version\":\"2024-10-14\"}","{\"@type\":\"Person\",\"name\":\"Jane\"}","{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"Phone\"}","\u003ch2\u003eRelease notes\u003c/h2\u003e\u003cp\u003eFixed 3-4 bugs; see {{docs}}.\u003c/p\u003e","data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==","data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7","${user.address.city}"],"false_positives":11,"pack":"system/crs-pl2","tier":"严格防护"},{"benign_rule_hits":{"931130":2,"932130":8,"932160":2,"932235":4,"932236":4,"932260":4,"933135":8,"941130":4,"941170":4,"941320":4,"941380":10,"942120":2,"942131":4,"942200":10,"942300":2,"942340":8,"942370":2,"942430":14,"942431":16,"942440":2,"942460":13,"942490":4},"blocked":58,"false_positive_samples":["{{#each items}}{{this}}{{/each}}","${HOME}","${user}","price: ${price}","{\"a\":1,\"b\":[1,2,3]}","{\"user\":{\"name\":\"Tom\",\"email\":\"tom@example.com\"},\"tags\":[\"a\",\"b\"]}","{\"template\":\"{{title}} - {{site}}\",\"version\":\"2024-10-14\"}","{\"@type\":\"Person\",\"name\":\"Jane\"}","{\"@context\":\"https://schema.org\",\"@type\":\"Product\",\"name\":\"Phone\"}","\u003cp\u003eHello \u003cb\u003eworld\u003c/b\u003e\u003c/p\u003e\u003cul\u003e\u003cli\u003eone\u003c/li\u003e\u003cli\u003etwo\u003c/li\u003e\u003c/ul\u003e","\u003ch2\u003eRelease notes\u003c/h2\u003e\u003cp\u003eFixed 3-4 bugs; see {{docs}}.\u003c/p\u003e","data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==","data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7","${user.address.city}"],"false_positives":14,"pack":"system/crs-pl3","tier":"极严格防护"}]}
+PASS adaptive write POST /waf-adapt/ 204 
+PASS c3 clean s.waf.test clean request 200
+PASS c3 clean o.waf.test clean request 200
+PASS c3 clean p.waf.test clean request 200
+PASS grey GET challenged status 503 header "challenge"
+PASS grey GET verify pass cookie "__cdnca_waf_grey=1792438728.674a960c8e69364d6db6b1c3d85a091dc488d1b31dfaca1f449c58aae6c09b6c"
+PASS grey GET with pass status 200 body "ok s.waf.test\n"
+PASS grey GET forged pass status 503
+PASS strong with pass status 403
+PASS grey POST 307 status 307 location "/form" probe "__cdnca_waf_probe=be1168130cd941744d28a62b1f854efc"
+PASS grey POST probe status 307 pass "__cdnca_waf_grey=1792438728.674a960c8e69364d6db6b1c3d85a091dc488d1b31dfaca1f449c58aae6c09b6c"
+PASS grey POST with pass status 200
+PASS api not challenged xhr status 200
+PASS api not challenged json accept status 200
+PASS api not challenged authorization status 200
+PASS api not challenged json body status 200
+PASS grey passes o.waf.test status 200
+PASS grey passes p.waf.test status 200
+PASS target exclusion excluded target 200
+PASS target exclusion other param other parameter 503
+PASS shape fits status 200
+PASS shape alone passes status 200
+PASS shape alone grey status 503
+PASS shape with weak hit blocks status 403
+PASS shape off on 标准防护 status 200
+PASS audit sample rate 44 of 640 grey zone transactions written
+PASS audit parts A H sampled records without request headers
+PASS audit variable names names map[ARGS:v:true] (values dropped)
+PASS audit blocks 20 of 20 blocks written
+RESULT failures=0
+EXIT=0

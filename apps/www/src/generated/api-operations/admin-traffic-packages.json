@@ -1,0 +1,1295 @@
+{
+ "id": "admin-traffic-packages",
+ "prefix": "/v1/admin/traffic-packages",
+ "operations": [
+  {
+   "operation_id": "listTenantTrafficPackageGrants",
+   "method": "GET",
+   "path": "/v1/admin/traffic-packages/grants",
+   "summary": "List grants for one explicit tenant",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Explicit access-scope UUID of the target tenant."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Grants visible under the derived or explicit tenant scope.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Grant>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "description": "Present only in page-jump mode."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "disableSoldTrafficPackage",
+   "method": "POST",
+   "path": "/v1/admin/traffic-packages/grants/{grant_id}/disable",
+   "summary": "Pause deduction without changing remaining bytes or expiry",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.manage"
+   ],
+   "params": [
+    {
+     "name": "grant_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable audited command receipt; identical retries return the same fact.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "operation",
+       "type": "string: archive_product / enable_grant / disable_grant",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, refund amount, grant-state, or bounded automatic-expiry backlog conflict. For traffic_package_expiry_backlog the original key replays the frozen result and a new caller-generated key advances at most the next 100 due grants."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    }
+   ]
+  },
+  {
+   "operation_id": "enableSoldTrafficPackage",
+   "method": "POST",
+   "path": "/v1/admin/traffic-packages/grants/{grant_id}/enable",
+   "summary": "Resume deduction for an unexpired active grant",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.manage"
+   ],
+   "params": [
+    {
+     "name": "grant_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable audited command receipt; identical retries return the same fact.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "operation",
+       "type": "string: archive_product / enable_grant / disable_grant",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, refund amount, grant-state, or bounded automatic-expiry backlog conflict. For traffic_package_expiry_backlog the original key replays the frozen result and a new caller-generated key advances at most the next 100 due grants."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    }
+   ]
+  },
+  {
+   "operation_id": "reconcileTenantTrafficPackageGrant",
+   "method": "GET",
+   "path": "/v1/admin/traffic-packages/grants/{grant_id}/reconciliation",
+   "summary": "Compare one grant's cached and ledger-recomputed balance",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "grant_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Explicit access-scope UUID of the target tenant."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Cached and recomputed grant balance comparison.",
+     "fields": [
+      {
+       "name": "grant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "cached_remaining",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "recomputed_remaining",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "cached_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "entry_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "consistent",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTrafficPackageManagementOptions",
+   "method": "GET",
+   "path": "/v1/admin/traffic-packages/options",
+   "summary": "Search base or traffic product names for management selectors",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string: base / traffic",
+     "required": true
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Up to 100 matching names; traffic options include archived products for historical sold filters.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    }
+   ]
+  },
+  {
+   "operation_id": "listCurrentTrafficPackageProducts",
+   "method": "GET",
+   "path": "/v1/admin/traffic-packages/products",
+   "summary": "List current product revisions",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current products or immutable revision history.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Product>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "getCurrentTrafficPackageProduct",
+   "method": "GET",
+   "path": "/v1/admin/traffic-packages/products/{product_id}",
+   "summary": "Get the current revision of one product",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current product revision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "audience",
+       "type": "string: global / tenant",
+       "required": true
+      },
+      {
+       "name": "owner_tenant_scope_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "Maximum 1024 UTF-8 bytes; no control characters."
+      },
+      {
+       "name": "allowed_package_ids",
+       "type": "array<string(uuid)>",
+       "description": "Empty means all base packages. Restrictions are captured per immutable revision and checked for purchase and consumption."
+      },
+      {
+       "name": "quota_bytes",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "validity_days",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "expiry_timezone",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "priority",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "price_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "metering_scope",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "metering_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "archiveTrafficPackageProduct",
+   "method": "POST",
+   "path": "/v1/admin/traffic-packages/products/{product_id}/archive",
+   "summary": "Remove a product from sale while preserving sold entitlements and history",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.manage"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable audited command receipt; identical retries return the same fact.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "target_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "operation",
+       "type": "string: archive_product / enable_grant / disable_grant",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, refund amount, grant-state, or bounded automatic-expiry backlog conflict. For traffic_package_expiry_backlog the original key replays the frozen result and a new caller-generated key advances at most the next 100 due grants."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    }
+   ]
+  },
+  {
+   "operation_id": "disableTrafficPackageProduct",
+   "method": "POST",
+   "path": "/v1/admin/traffic-packages/products/{product_id}/disable",
+   "summary": "Disable a product",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Appends a disabled lifecycle fact. Disabled products disappear from tenant current-product lists and cannot receive new grants; immutable revision history remains readable.",
+   "permissions": [
+    "traffic_packages.manage"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Appended lifecycle fact or identical committed replay.",
+     "fields": [
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, refund amount, grant-state, or bounded automatic-expiry backlog conflict. For traffic_package_expiry_backlog the original key replays the frozen result and a new caller-generated key advances at most the next 100 due grants."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    }
+   ]
+  },
+  {
+   "operation_id": "enableTrafficPackageProduct",
+   "method": "POST",
+   "path": "/v1/admin/traffic-packages/products/{product_id}/enable",
+   "summary": "Enable a product",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Appends an enabled lifecycle fact. Reusing the same idempotency key and payload returns the original receipt; a changed payload returns 409.",
+   "permissions": [
+    "traffic_packages.manage"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Appended lifecycle fact or identical committed replay.",
+     "fields": [
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, refund amount, grant-state, or bounded automatic-expiry backlog conflict. For traffic_package_expiry_backlog the original key replays the frozen result and a new caller-generated key advances at most the next 100 due grants."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTrafficPackageProductRevisions",
+   "method": "GET",
+   "path": "/v1/admin/traffic-packages/products/{product_id}/revisions",
+   "summary": "List immutable product revision history",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque HMAC-signed cursor bound to endpoint, principal scope, target tenant, owner user, UTC-microsecond snapshot_at, and the applicable migration-066 catalog/usage snapshot_version or grant-state watermark."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current products or immutable revision history.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Product>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "408",
+     "description": "Read context was cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Stored or core facts did not satisfy the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Read storage is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read deadline expired."
+    }
+   ]
+  },
+  {
+   "operation_id": "createTrafficPackageProductRevision",
+   "method": "POST",
+   "path": "/v1/admin/traffic-packages/products/{product_id}/revisions",
+   "summary": "Create an immutable product revision",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Publishes the next immutable revision with transactional platform IAM. The quoted If-Match value is the expected current revision (zero creates a new product). Reusing the same Idempotency-Key with the same canonical payload returns the original 201 receipt and Idempotency-Replayed: true; different input returns 409 and a stale expected revision returns 412.",
+   "permissions": [
+    "traffic_packages.manage"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "audience",
+      "type": "string: global / tenant",
+      "required": true
+     },
+     {
+      "name": "owner_tenant_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "Maximum 1024 UTF-8 bytes; no control characters."
+     },
+     {
+      "name": "allowed_package_ids",
+      "type": "array<string(uuid)>",
+      "description": "Empty means all base packages. Restrictions are captured per immutable revision and checked for purchase and consumption."
+     },
+     {
+      "name": "quota_bytes",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "validity_days",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "expiry_timezone",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "priority",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "currency",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "price_minor",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "metering_scope",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "metering_version",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "description": "Omit to retain current status; defaults to enabled for new products."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "New immutable revision or the identical committed replay.",
+     "fields": [
+      {
+       "name": "product_snapshot_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or not visible in the authorized scope."
+    },
+    {
+     "status": "408",
+     "description": "Write result is unknown. Retry only with the same Idempotency-Key and identical payload."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, refund amount, grant-state, or bounded automatic-expiry backlog conflict. For traffic_package_expiry_backlog the original key replays the frozen result and a new caller-generated key advances at most the next 100 due grants."
+    },
+    {
+     "status": "412",
+     "description": "The quoted If-Match revision is stale."
+    },
+    {
+     "status": "502",
+     "description": "The command committed but its bounded receipt could not be delivered. Recover only by retrying the same Idempotency-Key and identical payload."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    },
+    {
+     "status": "504",
+     "description": "Write result is unknown. Retry only with the same Idempotency-Key and identical payload."
+    }
+   ]
+  },
+  {
+   "operation_id": "listSoldTrafficPackages",
+   "method": "GET",
+   "path": "/v1/admin/traffic-packages/sold",
+   "summary": "List sold grants across tenants with server-side filters and count",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "traffic_packages.read"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "User name"
+    },
+    {
+     "name": "product_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / disabled / exhausted / expired / reversed"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Count and items use one database statement snapshot; pages reflect live state.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SoldItem>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed headers, query, JSON, UUID, cursor, unit, or range."
+    },
+    {
+     "status": "401",
+     "description": "Ordinary session authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Principal scope or required permission is absent."
+    },
+    {
+     "status": "503",
+     "description": "The stable error code distinguishes an unavailable dependency or authenticator (no write attempted) from an unknown or committed result. Unknown results require same-key, identical-payload recovery."
+    }
+   ]
+  }
+ ]
+}

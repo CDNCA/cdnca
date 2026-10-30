@@ -1,0 +1,179 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Identity Session Device API
+  version: 1.0.0
+  description: >-
+    当前登录用户查看自己的设备会话族并撤销当前或其他设备。PostgreSQL auth_sessions 是事实源；
+    列表游标绑定当前 scope/user 与快照边界。响应只返回归类后的设备标签和 IP 网段，禁止返回
+    access/refresh token、token hash、完整 IP 或原始 User-Agent。该 fragment 不代表共享 server 已挂载。
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/identity/sessions:
+    get:
+      operationId: listCurrentIdentitySessionFamilies
+      summary: 按设备会话族列出当前用户的登录会话
+      x-required-permissions: []
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+        - name: cursor
+          in: query
+          required: false
+          description: 绑定当前 scope/user 和首次请求快照的稳定不透明游标
+          schema: {type: string, minLength: 1, maxLength: 2048}
+      responses:
+        '200':
+          description: 当前 principal 的会话族，按最新会话创建时间和 family_id 稳定倒序
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SessionFamilyList'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/identity/session-families/{family_id}:
+    delete:
+      operationId: revokeCurrentIdentitySessionFamily
+      summary: 撤销当前用户的一个设备会话族
+      description: >-
+        目标必须属于当前已认证 principal 的同一 scope/user。服务端在同一事务中重新锁定并校验
+        caller session、账户、membership 和 scope 后锁定整个 family。原 caller 仍有效时，精确重试
+        返回原响应；相同 Idempotency-Key 改变 family、revision、caller 或 request identity 返回 409。
+        撤销当前会话时，本次响应成功后当前 Bearer token 立即失效，后续请求先返回 401，不能绕过
+        caller 认证读取幂等收据。
+      x-required-permissions: []
+      parameters:
+        - {$ref: '#/components/parameters/FamilyID'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      responses:
+        '200':
+          description: 已撤销或精确幂等重放
+          headers:
+            ETag:
+              description: 撤销后的强 revision
+              schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RevokeResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '405': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '500': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      x-cdnca-single-value: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      x-cdnca-single-value: true
+      description: 列表返回的当前 family revision，必须使用强 ETag 形式
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      x-cdnca-single-value: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    FamilyID:
+      name: family_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+  responses:
+    Error:
+      description: 稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    SessionFamily:
+      type: object
+      additionalProperties: false
+      required: [family_id, device_label, created_at, last_used_at, expires_at, current, active, session_count, revision]
+      properties:
+        family_id: {$ref: '#/components/schemas/UUID'}
+        device_label: {type: string, minLength: 1, maxLength: 64}
+        ip_prefix:
+          type: string
+          maxLength: 64
+          description: IPv4 /24 或 IPv6 /64；源地址缺失或无效时省略
+        created_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time}
+        current: {type: boolean}
+        active: {type: boolean}
+        session_count: {type: integer, format: int64, minimum: 1}
+        revision:
+          type: integer
+          format: int64
+          minimum: 1
+          description: family 会话数量加撤销状态版本；旋转或撤销均单调增加
+    SessionFamilyList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/SessionFamily'}
+        next_cursor: {type: string, minLength: 1, maxLength: 2048}
+    RevokeResult:
+      type: object
+      additionalProperties: false
+      required: [family_id, revision, revoked_at, current]
+      properties:
+        family_id: {$ref: '#/components/schemas/UUID'}
+        revision: {type: integer, format: int64, minimum: 2}
+        revoked_at: {type: string, format: date-time}
+        current: {type: boolean}
+        replayed: {type: boolean}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - identity_session_validation_error
+                - identity_session_unauthenticated
+                - identity_session_not_found
+                - identity_session_revision_conflict
+                - identity_session_idempotency_conflict
+                - identity_session_already_revoked
+                - identity_session_method_not_allowed
+                - identity_session_unavailable
+                - identity_session_internal_error
+            message: {type: string, minLength: 1, maxLength: 128}
+            request_id: {$ref: '#/components/schemas/UUID'}

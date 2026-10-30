@@ -1,0 +1,9 @@
+{
+  "verification_id": "018cc251-f400-7def-8000-000000000023",
+  "approved_scopes": [
+    "cache.purge",
+    "sites.read"
+  ],
+  "sensitive_permissions_confirmed": true,
+  "new_permissions_confirmed": true
+}

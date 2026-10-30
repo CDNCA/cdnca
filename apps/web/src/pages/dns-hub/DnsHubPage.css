@@ -1,0 +1,276 @@
+.dns-hub-page {
+  min-width: 0;
+}
+
+.dns-hub-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+}
+
+.dns-hub-header .ant-typography {
+  margin: 0;
+}
+
+.dns-hub-header .ant-typography-title {
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.dns-hub-header .ant-typography-paragraph {
+  max-width: 720px;
+  margin-top: 4px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.dns-hub-alert {
+  margin-bottom: 12px;
+}
+
+.dns-hub-muted {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.dns-hub-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.dns-hub-layout {
+  display: grid;
+  grid-template-columns: 200px minmax(240px, 300px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.dns-hub-accounts,
+.dns-hub-domains,
+.dns-hub-records {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--cdnca-color-border-card, #e5eaf3);
+  border-radius: var(--cdnca-border-radius, 4px);
+  background: var(--cdnca-color-bg-container);
+}
+
+.dns-hub-pane-title {
+  margin: 0 4px 8px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dns-hub-accounts ul,
+.dns-hub-domain-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dns-hub-account,
+.dns-hub-domain {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--cdnca-border-radius, 4px);
+  background: transparent;
+  color: var(--cdnca-color-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms ease-out;
+}
+
+.dns-hub-account:hover,
+.dns-hub-domain:hover {
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+}
+
+.dns-hub-account:focus-visible,
+.dns-hub-domain:focus-visible {
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: 1px;
+}
+
+.dns-hub-account.is-active,
+.dns-hub-domain-list li.is-active .dns-hub-domain {
+  background: var(--cdnca-color-primary-bg, #eaf4ff);
+  color: var(--cdnca-color-primary);
+}
+
+.dns-hub-account-name,
+.dns-hub-domain-apex {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dns-hub-account-hint,
+.dns-hub-domain-meta {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dns-hub-account-status {
+  margin-top: 2px;
+}
+
+.dns-hub-domain-error {
+  color: var(--cdnca-color-error);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dns-hub-domains > .ant-input-affix-wrapper {
+  margin-bottom: 8px;
+}
+
+.dns-hub-domain-list {
+  max-height: 640px;
+  margin-bottom: 8px;
+  overflow-y: auto;
+}
+
+.dns-hub-domain-list li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dns-hub-domain-list li .ant-checkbox-wrapper {
+  padding-left: 4px;
+}
+
+.dns-hub-selection {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  border-radius: var(--cdnca-border-radius, 4px);
+  background: var(--cdnca-color-primary-bg, #eaf4ff);
+  color: var(--cdnca-color-primary);
+  font-size: 13px;
+}
+
+.dns-hub-records-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dns-hub-records-head .ant-typography {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  word-break: break-all;
+}
+
+.dns-hub-records-toolbar {
+  margin-bottom: 12px;
+}
+
+.dns-hub-type-tag {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.dns-hub-managed-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+}
+
+.dns-hub-note {
+  margin: 12px 0 0;
+}
+
+.dns-hub-pick {
+  padding: 48px 0;
+  text-align: center;
+}
+
+.dns-hub-empty {
+  padding: 48px 0;
+}
+
+.dns-hub-managed-confirm {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--cdnca-color-warning);
+  border-radius: var(--cdnca-border-radius, 4px);
+}
+
+.dns-hub-managed-confirm p {
+  margin: 0 0 8px;
+  color: var(--cdnca-color-text);
+}
+
+.dns-hub-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 1600px) {
+  .dns-hub-layout {
+    grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
+  }
+
+  .dns-hub-accounts {
+    grid-column: 1 / -1;
+  }
+
+  .dns-hub-accounts ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .dns-hub-account {
+    width: auto;
+    min-width: 140px;
+  }
+}
+
+@media (max-width: 720px) {
+  .dns-hub-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dns-hub-domain-list {
+    max-height: 320px;
+  }
+
+  .dns-hub-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dns-hub-account,
+  .dns-hub-domain {
+    transition: none;
+  }
+}

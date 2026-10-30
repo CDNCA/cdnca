@@ -1,0 +1,498 @@
+{
+ "id": "site-groups",
+ "prefix": "/v1/site-groups",
+ "operations": [
+  {
+   "operation_id": "listSiteGroups",
+   "method": "GET",
+   "path": "/v1/site-groups",
+   "summary": "List site groups",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Active groups ordered by creation time and ID.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SiteGroup>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Permission denied."
+    },
+    {
+     "status": "503",
+     "description": "Site group service unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "createSiteGroup",
+   "method": "POST",
+   "path": "/v1/site-groups",
+   "summary": "Create a site group",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "Optional; omission creates an empty remark and preserves the legacy request digest. Null is invalid."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created group or an exact completed request replay.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "Versioned plain text; tab and line breaks are allowed. Omitted only in pre-extension immutable write receipts."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "description": "Database-assigned immutable global display number. New write receipts include the persisted number; immutable historical receipts may omit it and are replayed unchanged."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted_at",
+       "type": "string(date-time) | null(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Permission denied."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or in-use conflict."
+    },
+    {
+     "status": "503",
+     "description": "Site group service unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSiteGroup",
+   "method": "GET",
+   "path": "/v1/site-groups/{id}",
+   "summary": "Read one exact active site group in an authorized tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current group including its real display ID and remark. A newer revision must not be mistaken for exact write readback.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "Versioned plain text; tab and line breaks are allowed. Omitted only in pre-extension immutable write receipts."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "description": "Database-assigned immutable global display number. New write receipts include the persisted number; immutable historical receipts may omit it and are replayed unchanged."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted_at",
+       "type": "string(date-time) | null(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Permission denied."
+    },
+    {
+     "status": "404",
+     "description": "Site group not found."
+    },
+    {
+     "status": "503",
+     "description": "Site group service unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "renameSiteGroup",
+   "method": "PATCH",
+   "path": "/v1/site-groups/{id}",
+   "summary": "Rename a site group",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "Omission preserves the current remark and legacy digest. An explicit empty string clears it. Null is invalid."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Renamed group or an exact completed request replay.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "Versioned plain text; tab and line breaks are allowed. Omitted only in pre-extension immutable write receipts."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "description": "Database-assigned immutable global display number. New write receipts include the persisted number; immutable historical receipts may omit it and are replayed unchanged."
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted_at",
+       "type": "string(date-time) | null(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Permission denied."
+    },
+    {
+     "status": "404",
+     "description": "Site group not found."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or in-use conflict."
+    },
+    {
+     "status": "503",
+     "description": "Site group service unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSiteGroup",
+   "method": "DELETE",
+   "path": "/v1/site-groups/{id}",
+   "summary": "Delete an unused site group",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Group deleted or an exact completed request replay."
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Permission denied."
+    },
+    {
+     "status": "404",
+     "description": "Site group not found."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or in-use conflict."
+    },
+    {
+     "status": "503",
+     "description": "Site group service unavailable."
+    }
+   ]
+  }
+ ]
+}

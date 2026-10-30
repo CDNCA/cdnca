@@ -1,0 +1,116 @@
+{
+ "id": "admin-gateway-settings",
+ "prefix": "/v1/admin/gateway-settings",
+ "operations": [
+  {
+   "operation_id": "getAgentGatewaySettings",
+   "method": "GET",
+   "path": "/v1/admin/gateway-settings",
+   "summary": "Trusted CDN ranges and extra node entry points published to every Gateway",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Settings. ETag is the content digest to send back in If-Match when saving.",
+     "fields": [
+      {
+       "name": "trusted_proxies",
+       "type": "array<object>",
+       "required": true,
+       "description": "Trusted CDN back-to-origin ranges. Only Cloudflare is preset (CF-Connecting-IP); an empty header binds X-Forwarded-For."
+      },
+      {
+       "name": "entrypoints",
+       "type": "array<object>",
+       "required": true,
+       "description": "Extra node entry points listed after the online Gateways, e.g. a CDN's 443 with transport ws."
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateAgentGatewaySettings",
+   "method": "PUT",
+   "path": "/v1/admin/gateway-settings",
+   "summary": "Replace both lists (Gateways pick them up within a minute; audited)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Optimistic concurrency without a stored revision. If-Match must equal the ETag of the current settings (compared under the table lock); otherwise nothing is written and 409 gateway_settings_changed tells the page to reload.",
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "ETag returned by the GET (or the previous PUT) the form was loaded from."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "trusted_proxies",
+      "type": "array<object>",
+      "required": true,
+      "description": "Trusted CDN back-to-origin ranges. Only Cloudflare is preset (CF-Connecting-IP); an empty header binds X-Forwarded-For."
+     },
+     {
+      "name": "entrypoints",
+      "type": "array<object>",
+      "required": true,
+      "description": "Extra node entry points listed after the online Gateways, e.g. a CDN's 443 with transport ws."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved (normalized). ETag is the digest of the saved settings.",
+     "fields": [
+      {
+       "name": "trusted_proxies",
+       "type": "array<object>",
+       "required": true,
+       "description": "Trusted CDN back-to-origin ranges. Only Cloudflare is preset (CF-Connecting-IP); an empty header binds X-Forwarded-For."
+      },
+      {
+       "name": "entrypoints",
+       "type": "array<object>",
+       "required": true,
+       "description": "Extra node entry points listed after the online Gateways, e.g. a CDN's 443 with transport ws."
+      }
+     ]
+    },
+    {
+     "status": "409",
+     "description": "gateway_settings_changed (someone else saved since the form was loaded; reload and retry)"
+    },
+    {
+     "status": "422",
+     "description": "invalid_input"
+    },
+    {
+     "status": "428",
+     "description": "precondition_required (If-Match missing or repeated)"
+    }
+   ]
+  }
+ ]
+}

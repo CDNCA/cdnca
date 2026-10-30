@@ -1,0 +1,661 @@
+{
+ "id": "admin-control-upgrade-rollouts",
+ "prefix": "/v1/admin/control-upgrade-rollouts",
+ "operations": [
+  {
+   "operation_id": "listControlUpgradeRollouts",
+   "method": "GET",
+   "path": "/v1/admin/control-upgrade-rollouts",
+   "summary": "List durable control upgrade rollouts",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity with control.upgrades.read. The response is ordered by created_at descending and id descending. Unknown or repeated query parameters are rejected.",
+   "permissions": [
+    "control.upgrades.read"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "page_size",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: queued / canary / running / paused / rolling_back / completed / failed"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "A page of rollout summaries.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<ControlUpgradeRolloutSummary>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page_size",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "createControlUpgradeRollout",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-rollouts",
+   "summary": "Create a durable control upgrade rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.manage in a platform scope. The canonical request freezes the sorted target cohort, canary subset, batch size, and mandatory automatic rollback. A replay rechecks live RBAC and returns the original durable snapshot without another license call or NATS publication. A changed request under the same idempotency key returns 409.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "schema",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "node_ids",
+      "type": "array<string(uuid)>",
+      "required": true,
+      "description": "Canonical lowercase UUIDs in strictly increasing byte order."
+     },
+     {
+      "name": "canary_node_ids",
+      "type": "array<string(uuid)>",
+      "required": true,
+      "description": "One or two strictly sorted canonical UUIDs, each also present in node_ids."
+     },
+     {
+      "name": "batch_size",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "automatic_rollback",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "The rollout was created or replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "ControlUpgradeRolloutDetail",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "413",
+     "description": "The request body exceeds the one MiB limit."
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getControlUpgradeRollout",
+   "method": "GET",
+   "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}",
+   "summary": "Get a durable control upgrade rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.read in a platform scope.",
+   "permissions": [
+    "control.upgrades.read"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The rollout summary, batches, nodes, ordered state events, and durable status broker receipts.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "ControlUpgradeRolloutDetail",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "pauseControlUpgradeRollout",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/pause",
+   "summary": "Pause a running control upgrade rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.manage and a current expected revision.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "string",
+      "required": true,
+      "description": "Canonical decimal uint63 in the inclusive range 1..9223372036854775807."
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The rollout transition committed, or the exact durable result was replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "ControlUpgradeRolloutDetail",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "413",
+     "description": "The request body exceeds the one MiB limit."
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "resumeControlUpgradeRollout",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/resume",
+   "summary": "Resume a paused control upgrade rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.manage and a current expected revision.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "string",
+      "required": true,
+      "description": "Canonical decimal uint63 in the inclusive range 1..9223372036854775807."
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The rollout transition committed, or the exact durable result was replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "ControlUpgradeRolloutDetail",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "413",
+     "description": "The request body exceeds the one MiB limit."
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "rollbackControlUpgradeRollout",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/rollback",
+   "summary": "Roll back a control upgrade rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.manage and a current expected revision. Rollback remains blocked for irreversible migrations, missing rollback artifacts, or an in-flight dispatched batch.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "string",
+      "required": true,
+      "description": "Canonical decimal uint63 in the inclusive range 1..9223372036854775807."
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The rollout transition committed, or the exact durable result was replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "ControlUpgradeRolloutDetail",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "413",
+     "description": "The request body exceeds the one MiB limit."
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "startControlUpgradeRollout",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/start",
+   "summary": "Start a queued control upgrade rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.manage and a current expected revision.",
+   "permissions": [
+    "control.upgrades.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "string",
+      "required": true,
+      "description": "Canonical decimal uint63 in the inclusive range 1..9223372036854775807."
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The rollout transition committed, or the exact durable result was replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "ControlUpgradeRolloutDetail",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "413",
+     "description": "The request body exceeds the one MiB limit."
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

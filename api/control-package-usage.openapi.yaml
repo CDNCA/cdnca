@@ -1,0 +1,506 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Package Usage API
+  version: 1.0.0
+paths:
+  /v1/admin/package-usage/search:
+    get:
+      operationId: searchAdminPackageUsage
+      summary: 按用户、套餐、服务类型、网站域名和四层端口组合查询已采集用量
+      description: |
+        仅 platform 作用域且具有 billing.adjustments.manage 或 platform.admin 权限。
+        所有条件相交；找不到用户或套餐返回空结果，不扩大范围。用户ID支持数字展示ID或UUID，套餐ID为UUID。
+        网站取 access_events 去重事实，四层取已结算 l4_session_facts_v1；四层端口不匹配网站监听端口。
+        带宽为每个时间桶的出站流量/桶秒数，峰值与95%值在合并后的非空桶计算，不是瞬时带宽或账单。
+        网站域名与四层端口不能同时使用，服务类型与领域筛选冲突返回400。
+        最多返回168个桶，时段不超过167小时或167天；不截断、不使用隐式分页。
+        本接口只读，无账单或资源变更；10秒客户端/6秒默认服务端超时，响应no-store。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/Bucket'
+        - {name: X-Request-ID, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+        - name: user_ids
+          in: query
+          description: 至多50个规范正整数展示ID或UUID，以空格或逗号分隔；去重后按字典序返回。
+          schema: {type: string, maxLength: 2048}
+        - name: subscription_ids
+          in: query
+          description: 至多50个套餐UUID，以空格或逗号分隔；去重后按字典序返回。
+          schema: {type: string, maxLength: 2048}
+        - {name: service_type, in: query, schema: {type: string, enum: [all, site, stream], default: all}}
+        - name: domains
+          in: query
+          description: 至多50个完整ASCII/punycode域名，以空格或逗号分隔；大小写不敏感，不支持通配符/URL/路径。
+          schema: {type: string, maxLength: 4096}
+        - name: listen_ports
+          in: query
+          description: 至多50个1至65535的四层端口，以空格或逗号分隔；去重后数值排序。
+          schema: {type: string, maxLength: 300}
+      responses:
+        '200':
+          description: 有界的组合查询结果；has_data=false仅表示未查到采集事实，不证明零流量。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UsageSearchPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/package-usage/search:
+    get:
+      operationId: searchTenantPackageUsage
+      summary: 当前租户整体用量曲线（带宽/流量按时间桶聚合）
+      description: |
+        仅 tenant 作用域且具有 package_subscriptions.read（或 platform.admin）权限；只统计调用者自己的租户作用域。
+        口径与 /v1/admin/package-usage/search 相同（access_metering_facts_v1 + l4_session_facts_v1，不新建账本），
+        不接受 user_ids / subscription_ids（传入返回400）；service_type、domains、listen_ports 同管理员接口。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/Bucket'
+        - {name: X-Request-ID, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+        - {name: service_type, in: query, schema: {type: string, enum: [all, site, stream], default: all}}
+        - {name: domains, in: query, schema: {type: string, maxLength: 4096}}
+        - {name: listen_ports, in: query, schema: {type: string, maxLength: 300}}
+      responses:
+        '200':
+          description: 有界结果；filters.user_ids 与 subscription_ids 恒为空数组。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UsageSearchPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/package-usage:
+    get:
+      operationId: queryTenantPackageUsage
+      summary: 查询当前用户套餐用量
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/Bucket'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/PackageUsage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/package-usage:
+    get:
+      operationId: queryAdminPackageUsage
+      summary: 查询指定租户套餐用量
+      description: 平台会话需 billing.adjustments.manage 或 platform.admin；有效代理商的租户会话（reseller.customers.read 或 reseller.customers.manage）必须带 tenant_id，且该租户须是本代理商的客户，否则 403（ADR 0018 RS-05）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/Bucket'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/PackageUsage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/package-resource-monitor:
+    get:
+      operationId: listAdminPackageResources
+      summary: 查询所有当前有效用户套餐的带宽与连接数资源状态
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ResourceQueryVersion'
+        - $ref: '#/components/parameters/SubscriptionDisplayIDs'
+        - $ref: '#/components/parameters/ResourcePage'
+        - $ref: '#/components/parameters/ResourceLimit'
+        - $ref: '#/components/parameters/ResourceOrder'
+        - $ref: '#/components/parameters/UserDisplayID'
+        - $ref: '#/components/parameters/SubscriptionIDs'
+        - $ref: '#/components/parameters/NodeIDs'
+      responses:
+        '200': {$ref: '#/components/responses/PackageResourceMonitor'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/package-resource-monitor/nodes:
+    get:
+      operationId: listAdminPackageResourceNodes
+      summary: 查询一个当前有效用户套餐的节点资源状态
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+      responses:
+        '200': {$ref: '#/components/responses/PackageResourceMonitorNodes'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/package-traffic-coverage:
+    get:
+      operationId: listTenantPackageTrafficCoverage
+      summary: 查询本人套餐每个周期由全局流量包覆盖的流量（最近周期在前）
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/CoverageLimit'
+      responses:
+        '200': {$ref: '#/components/responses/PackageTrafficCoverage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/package-traffic-coverage:
+    get:
+      operationId: listAdminPackageTrafficCoverage
+      summary: 查询用户套餐每个周期由全局流量包覆盖的流量（最近周期在前）
+      description: 平台会话需 billing.adjustments.manage 或 platform.admin；有效代理商的租户会话（reseller.customers.read 或 reseller.customers.manage）必须带 tenant_id，且该租户须是本代理商的客户，否则 403（ADR 0018 RS-05）。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/SubscriptionID'
+        - $ref: '#/components/parameters/CoverageLimit'
+      responses:
+        '200': {$ref: '#/components/responses/PackageTrafficCoverage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    TenantID:
+      name: tenant_id
+      in: query
+      required: false
+      description: Optional for platform administrators. When omitted, the control API resolves the subscription's owning tenant from subscription_id before authorizing the usage query.
+      schema: {$ref: '#/components/schemas/UUID'}
+    SubscriptionID:
+      name: subscription_id
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    SiteID:
+      name: site_id
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/UUID'}
+    From:
+      name: from
+      in: query
+      required: true
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      required: true
+      schema: {type: string, format: date-time}
+    Timezone:
+      name: timezone
+      in: query
+      required: true
+      schema: {type: string, minLength: 3, maxLength: 64, example: Asia/Shanghai}
+    Bucket:
+      name: bucket
+      in: query
+      required: true
+      schema: {type: string, enum: [hour, day]}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 168, default: 48}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    ResourceQueryVersion:
+      name: query_version
+      in: query
+      description: 默认版本 1 仅返回旧字段；版本 2 返回稳定 subscription_display_id 并支持数字套餐 ID 筛选。
+      schema: {type: integer, enum: [1, 2], default: 1}
+    SubscriptionDisplayIDs:
+      name: subscription_display_ids
+      in: query
+      description: 仅版本 2；逗号分隔的持久化用户套餐数字编号，不得重复，最多 100 个，单个不超过 9223372036854775807。不能与 subscription_ids 同时使用。
+      schema: {type: string, pattern: '^[1-9][0-9]{0,18}(,[1-9][0-9]{0,18}){0,99}$', maxLength: 1999}
+    ResourcePage:
+      name: page
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+    ResourceLimit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, enum: [10, 30, 100, 300], default: 10}
+    ResourceOrder:
+      name: order_by
+      in: query
+      required: false
+      schema: {type: string, enum: [bandwidth, connections], default: bandwidth}
+    UserDisplayID:
+      name: user_id
+      in: query
+      required: false
+      schema: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+    SubscriptionIDs:
+      name: subscription_ids
+      in: query
+      required: false
+      description: 逗号分隔、不得重复的套餐 UUID，最多 100 个
+      schema: {type: string, minLength: 36, maxLength: 3699}
+    NodeIDs:
+      name: node_ids
+      in: query
+      required: false
+      description: 逗号分隔、不得重复的节点显示 ID，最多 100 个
+      schema: {type: string, pattern: '^[1-9][0-9]{0,18}(,[1-9][0-9]{0,18}){0,99}$', maxLength: 1999}
+    CoverageLimit:
+      name: limit
+      in: query
+      required: false
+      description: 返回的周期数，默认 12
+      schema: {type: integer, minimum: 1, maximum: 24, default: 12}
+  responses:
+    PackageTrafficCoverage:
+      description: 每个周期由流量包覆盖的流量（字节，十进制字符串）与扣量批次
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PackageTrafficCoveragePage'}
+    PackageUsage:
+      description: 使用冻结数据快照计算的套餐用量
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PackageUsagePage'}
+    PackageResourceMonitor:
+      description: 套餐不可变快照、用户显示 ID 与权威监控观测组成的分页结果
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PackageResourceMonitorPage'}
+    PackageResourceMonitorNodes:
+      description: ClickHouse 当前节点维度遥测；缺少任一指标时明确返回 unknown
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PackageResourceMonitorNodes'}
+    Error:
+      description: 稳定错误信封
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    UsageSearchFilters:
+      type: object
+      additionalProperties: false
+      required: [user_ids, subscription_ids, service_type, domains, listen_ports]
+      properties:
+        user_ids: {type: array, maxItems: 50, uniqueItems: true, items: {type: string}}
+        subscription_ids: {type: array, maxItems: 50, uniqueItems: true, items: {$ref: '#/components/schemas/UUID'}}
+        service_type: {type: string, enum: [all, site, stream]}
+        domains: {type: array, maxItems: 50, uniqueItems: true, items: {type: string, maxLength: 253}}
+        listen_ports: {type: array, maxItems: 50, uniqueItems: true, items: {type: integer, minimum: 1, maximum: 65535}}
+    UsageSearchPoint:
+      type: object
+      additionalProperties: false
+      required: [bucket, traffic_bytes, bandwidth_bps]
+      properties:
+        bucket: {type: string, format: date-time}
+        traffic_bytes: {type: string, pattern: '^[0-9]+$'}
+        bandwidth_bps: {type: string, pattern: '^[0-9]+$'}
+    UsageSearchPage:
+      type: object
+      additionalProperties: false
+      required: [schema, from, to, timezone, bucket, filters, bandwidth_basis, has_data, traffic_bytes, peak_bandwidth_bps, bandwidth_95th_bps, series]
+      properties:
+        schema: {type: string, const: package-usage-search/v1}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        timezone: {type: string}
+        bucket: {type: string, enum: [hour, day]}
+        filters: {$ref: '#/components/schemas/UsageSearchFilters'}
+        bandwidth_basis: {type: string, const: finalized-outbound-bytes-per-observed-bucket}
+        has_data: {type: boolean}
+        traffic_bytes: {type: string, pattern: '^[0-9]+$'}
+        peak_bandwidth_bps: {type: string, pattern: '^[0-9]+$'}
+        bandwidth_95th_bps: {type: string, pattern: '^[0-9]+$'}
+        series: {type: array, maxItems: 168, items: {$ref: '#/components/schemas/UsageSearchPoint'}}
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    UInt64String:
+      type: string
+      pattern: '^[0-9]+$'
+      maxLength: 20
+    PackageUsagePoint:
+      type: object
+      additionalProperties: false
+      required: [bucket, traffic_bytes, http_traffic_bytes, l4_traffic_bytes, bandwidth_bps, connections]
+      properties:
+        bucket: {type: string, format: date-time}
+        traffic_bytes: {$ref: '#/components/schemas/UInt64String'}
+        http_traffic_bytes: {$ref: '#/components/schemas/UInt64String'}
+        l4_traffic_bytes: {$ref: '#/components/schemas/UInt64String'}
+        bandwidth_bps: {$ref: '#/components/schemas/UInt64String'}
+        connections: {$ref: '#/components/schemas/UInt64String'}
+    PackageUsagePage:
+      type: object
+      additionalProperties: false
+      required: [metric_schema_version, subscription_id, from, to, timezone, bucket, traffic_bytes, http_traffic_bytes, l4_traffic_bytes, peak_bandwidth_bps, bandwidth_95th_bps, connections, source_watermark, finalized_through, delayed, series]
+      properties:
+        metric_schema_version: {type: string, const: package-usage/v1}
+        subscription_id: {$ref: '#/components/schemas/UUID'}
+        site_id: {$ref: '#/components/schemas/UUID'}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        timezone: {type: string, minLength: 3, maxLength: 64}
+        bucket: {type: string, enum: [hour, day]}
+        traffic_bytes:
+          type: string
+          pattern: '^[0-9]+$'
+          maxLength: 20
+          description: 七层与四层合计（http_traffic_bytes + l4_traffic_bytes）。
+        http_traffic_bytes: {type: string, pattern: '^[0-9]+$', maxLength: 20}
+        l4_traffic_bytes:
+          type: string
+          pattern: '^[0-9]+$'
+          maxLength: 20
+          description: 四层转发字节；带 site_id 筛选时恒为 0（四层转发不属于网站）。
+        peak_bandwidth_bps: {type: string, pattern: '^[0-9]+$', maxLength: 20}
+        bandwidth_95th_bps: {type: string, pattern: '^[0-9]+$', maxLength: 20}
+        connections: {type: string, pattern: '^[0-9]+$', maxLength: 20}
+        source_watermark: {type: string, pattern: '^[0-9]+$', maxLength: 20}
+        finalized_through: {type: string, format: date-time}
+        delayed: {type: boolean}
+        series:
+          type: array
+          maxItems: 168
+          items: {$ref: '#/components/schemas/PackageUsagePoint'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    NullableUInt64String:
+      oneOf:
+        - {$ref: '#/components/schemas/UInt64String'}
+        - {type: 'null'}
+    ResourceFreshness:
+      type: string
+      enum: [fresh, stale, unknown]
+    PackageResourceMonitorItem:
+      type: object
+      additionalProperties: false
+      required: [subscription_id, package_name, owner_user_id, owner_user_display_id, bandwidth_usage_bps, bandwidth_limit_bps, connection_usage, connection_limit, freshness]
+      properties:
+        subscription_id: {$ref: '#/components/schemas/UUID'}
+        subscription_display_id:
+          type: string
+          pattern: '^[1-9][0-9]{0,18}$'
+          description: query_version=2 时必定返回；版本 1 不返回。不可变的套餐显示编号，范围 1 至 9223372036854775807。
+        package_name: {type: string, minLength: 1, maxLength: 160}
+        owner_user_id: {$ref: '#/components/schemas/UUID'}
+        owner_user_display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        bandwidth_usage_bps: {$ref: '#/components/schemas/NullableUInt64String'}
+        bandwidth_limit_bps: {type: string, pattern: '^(-1|[0-9]+)$', maxLength: 20}
+        connection_usage: {$ref: '#/components/schemas/NullableUInt64String'}
+        connection_limit: {type: string, pattern: '^(-1|[0-9]+)$', maxLength: 20}
+        observed_at: {type: string, format: date-time}
+        freshness: {$ref: '#/components/schemas/ResourceFreshness'}
+    PackageResourceMonitorPage:
+      type: object
+      additionalProperties: false
+      required: [count, items]
+      properties:
+        count: {type: integer, minimum: 0}
+        items:
+          type: array
+          maxItems: 300
+          items: {$ref: '#/components/schemas/PackageResourceMonitorItem'}
+    PackageResourceMonitorNode:
+      type: object
+      additionalProperties: false
+      required: [node_id, node_display_id, bandwidth_bps, connections, freshness]
+      properties:
+        node_id: {$ref: '#/components/schemas/UUID'}
+        node_display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        bandwidth_bps: {$ref: '#/components/schemas/NullableUInt64String'}
+        connections: {$ref: '#/components/schemas/NullableUInt64String'}
+        reported_at: {type: string, format: date-time}
+        freshness: {$ref: '#/components/schemas/ResourceFreshness'}
+    PackageResourceMonitorNodes:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 10000
+          items: {$ref: '#/components/schemas/PackageResourceMonitorNode'}
+    PackageTrafficCoverageCycle:
+      type: object
+      additionalProperties: false
+      required: [cycle_starts_at, cycle_ends_at, covered_bytes, batches, first_deducted_at, last_deducted_at]
+      properties:
+        cycle_starts_at: {type: [string, 'null'], format: date-time, description: 迁移 333 之前写入的周期为 null}
+        cycle_ends_at: {type: [string, 'null'], format: date-time}
+        covered_bytes: {$ref: '#/components/schemas/UInt64String'}
+        batches: {type: integer, minimum: 1}
+        first_deducted_at: {type: string, format: date-time}
+        last_deducted_at: {type: string, format: date-time}
+    PackageTrafficCoveragePage:
+      type: object
+      additionalProperties: false
+      required: [subscription_id, items]
+      properties:
+        subscription_id: {$ref: '#/components/schemas/UUID'}
+        items:
+          type: array
+          maxItems: 24
+          items: {$ref: '#/components/schemas/PackageTrafficCoverageCycle'}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}

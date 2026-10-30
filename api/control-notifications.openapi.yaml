@@ -1,0 +1,689 @@
+openapi: 3.1.0
+info:
+  title: CDNCA notification control API
+  version: 1.0.0
+  description: >-
+    Global notification channel settings, immutable templates, delivery policies, and the current
+    tenant user's event subscriptions. Provider accepted means only that the configured
+    email or SMS provider accepted the message; it is not final delivery.
+servers:
+  - url: /
+paths:
+  /v1/admin/notifications/channels:
+    get:
+      summary: Read global notification channel settings
+      operationId: getNotificationChannels
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': { $ref: '#/components/responses/Channels' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Update global notification channel settings
+      operationId: updateNotificationChannels
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchPositive'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/SwitchWrite' } }
+      responses:
+        '200': { $ref: '#/components/responses/Channels' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/notifications/policy:
+    get:
+      summary: Read notification delivery window and event policies
+      operationId: getNotificationDeliveryPolicy
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': { $ref: '#/components/responses/DeliveryPolicy' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Update notification delivery window and event policies
+      operationId: updateNotificationDeliveryPolicy
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatchPositive'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicyWrite' } }
+      responses:
+        '200': { $ref: '#/components/responses/DeliveryPolicy' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/notifications/templates:
+    get:
+      summary: List immutable notification template versions
+      operationId: listNotificationTemplates
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': { $ref: '#/components/responses/Templates' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/notifications/templates/{template_id}/versions/{version}/{channel}:
+    parameters:
+      - $ref: '#/components/parameters/TemplateID'
+      - $ref: '#/components/parameters/TemplateVersion'
+      - $ref: '#/components/parameters/Channel'
+    put:
+      summary: Create an immutable notification template version
+      operationId: putNotificationTemplateVersion
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.manage]
+      parameters: [{ $ref: '#/components/parameters/OptionalRequestID' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/TemplateWrite' } }
+      responses:
+        '200': { $ref: '#/components/responses/Template' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/notifications/deliveries:
+    get:
+      summary: List redacted notification delivery settlements
+      description: >-
+        Lists durable delivery state without recipient contacts, subject, body, deduplication keys,
+        lease tokens, provider response bodies, or credentials. The cursor is stable for the selected filters.
+      operationId: listNotificationDeliveries
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.read]
+      parameters:
+        - $ref: '#/components/parameters/DeliveryScopeID'
+        - $ref: '#/components/parameters/DeliveryChannel'
+        - $ref: '#/components/parameters/DeliveryState'
+        - $ref: '#/components/parameters/DeliveryLimit'
+        - $ref: '#/components/parameters/DeliveryCursor'
+      responses:
+        '200': { $ref: '#/components/responses/DeliveryLogs' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/notifications/deliveries/{outbox_id}/attempts:
+    parameters: [{ $ref: '#/components/parameters/OutboxID' }]
+    get:
+      summary: List redacted attempts for one notification delivery
+      operationId: listNotificationDeliveryAttempts
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': { $ref: '#/components/responses/DeliveryAttempts' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/admin/notifications/messages:
+    get:
+      summary: List the compatibility message projection
+      description: >-
+        Event-centric administrator view of member notification facts. Fields that are not backed
+        by durable facts are returned as null. Site and package use the subject recorded when the
+        event was raised (migration 502); older package-monitor rows fall back to the monitor
+        transition's exact subscription. Events raised without a site subject never match a site
+        filter, and ownership is never inferred from current bindings. Titles, channel bodies and
+        email_state/sms_state come from original generation-1 outbox facts (null = that channel was
+        not generated); delivery replay does not duplicate message rows.
+      operationId: listNotificationMessages
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: [system_configuration.read]
+      parameters:
+        - $ref: '#/components/parameters/MessageScopeID'
+        - $ref: '#/components/parameters/MessageType'
+        - $ref: '#/components/parameters/MessageUserID'
+        - $ref: '#/components/parameters/MessagePackageID'
+        - $ref: '#/components/parameters/MessageSiteID'
+        - $ref: '#/components/parameters/MessageUserKeyword'
+        - $ref: '#/components/parameters/MessagePackageKeyword'
+        - $ref: '#/components/parameters/MessageSiteKeyword'
+        - $ref: '#/components/parameters/MessageLimit'
+        - $ref: '#/components/parameters/MessageCursor'
+      responses:
+        '200': { $ref: '#/components/responses/Messages' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/account/notification-messages:
+    get:
+      summary: List the current user's own event messages
+      description: >-
+        Subscribable operational events (package, traffic, protection, certificate, site) delivered to
+        the caller in the caller's own scope. Scope and recipient come from the session; announcements
+        stay in the announcement inbox and system-required messages are excluded. site_id and package_id
+        are facts recorded when the event was raised and remain after the resource is deleted.
+      operationId: listOwnNotificationMessages
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: []
+      parameters:
+        - $ref: '#/components/parameters/MessageType'
+        - { name: site_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: package_id, in: query, required: false, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/MessageSiteKeyword'
+        - $ref: '#/components/parameters/MessagePackageKeyword'
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 10 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, maximum: 10000, default: 0 } }
+      responses:
+        '200':
+          description: The caller's own event messages, newest first.
+          content: { application/json: { schema: { $ref: '#/components/schemas/OwnMessagePage' } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /v1/account/notification-subscriptions/{event_type}:
+    parameters: [{ $ref: '#/components/parameters/EventType' }]
+    get:
+      summary: Read the current user's event subscription
+      operationId: getNotificationSubscription
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: []
+      responses:
+        '200': { $ref: '#/components/responses/Subscription' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+    put:
+      summary: Update the current user's event subscription
+      operationId: updateNotificationSubscription
+      security: [{ bearerAuth: [] }]
+      x-required-permissions: []
+      parameters:
+        - $ref: '#/components/parameters/IfMatchNonNegative'
+        - $ref: '#/components/parameters/OptionalRequestID'
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/SubscriptionWrite' } }
+      responses:
+        '200': { $ref: '#/components/responses/Subscription' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '405': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '415': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    OptionalRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      description: >-
+        Correlation identifier and retry key for this write. Reusing the same value for the same
+        authenticated actor and operation requires the exact original path, revision, and body;
+        an exact retry replays the original response, while changed semantics return 409.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    IfMatchPositive:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+    IfMatchNonNegative:
+      name: If-Match
+      in: header
+      required: true
+      schema: { type: string, pattern: '^"(0|[1-9][0-9]*)"$' }
+    TemplateID:
+      name: template_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+    TemplateVersion:
+      name: version
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+    Channel:
+      name: channel
+      in: path
+      required: true
+      schema: { type: string, enum: [email, sms] }
+    EventType:
+      name: event_type
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+    DeliveryScopeID:
+      name: scope_id
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    DeliveryChannel:
+      name: channel
+      in: query
+      required: false
+      schema: { type: string, enum: [email, sms] }
+    DeliveryState:
+      name: state
+      in: query
+      required: false
+      schema: { $ref: '#/components/schemas/DeliveryState' }
+    DeliveryLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    DeliveryCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    OutboxID:
+      name: outbox_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    MessageScopeID:
+      name: scope_id
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    MessageType:
+      name: type
+      in: query
+      required: false
+      schema: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+    MessageUserID:
+      name: user_id
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    MessagePackageID:
+      name: package_id
+      in: query
+      required: false
+      description: Exact user subscription ID from a monitor transition; product IDs do not match. Unknown IDs return an empty page.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    MessageSiteID:
+      name: site_id
+      in: query
+      required: false
+      description: Site recorded when the event was raised (notification_events.subject_site_id); events without a site subject never match.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    MessageUserKeyword:
+      name: user
+      in: query
+      required: false
+      description: Recipient user by exact display ID or case-insensitive substring of username / display name (current values).
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    MessagePackageKeyword:
+      name: package
+      in: query
+      required: false
+      description: User subscription by exact display ID or case-insensitive substring of the package name; events whose subscription no longer exists never match.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    MessageSiteKeyword:
+      name: site
+      in: query
+      required: false
+      description: Event-time site by exact display ID or case-insensitive substring of its current domain; events whose site no longer exists never match.
+      schema: { type: string, minLength: 1, maxLength: 128 }
+    MessageLimit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 300, default: 10 }
+    MessageCursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+  schemas:
+    SwitchWrite:
+      type: object
+      additionalProperties: false
+      required: [sms_enabled, email_enabled]
+      properties:
+        sms_enabled: { type: boolean, description: Enables the configured SMS provider for this channel or subscription. }
+        email_enabled: { type: boolean }
+    SubscriptionWrite:
+      type: object
+      additionalProperties: false
+      required: [sms_enabled, email_enabled]
+      properties:
+        sms_enabled: { type: boolean }
+        email_enabled: { type: boolean }
+        inbox_enabled: { type: boolean, description: 'Ticket events only (546): keep the in-app message-center copy. Omitted keeps the stored choice; any other event answers 400.' }
+    ChannelSettings:
+      type: object
+      additionalProperties: false
+      required: [sms_enabled, email_enabled, sms_supported, email_supported, revision, changed]
+      properties:
+        sms_enabled: { type: boolean }
+        email_enabled: { type: boolean }
+        sms_supported: { type: boolean, description: 'Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered.' }
+        email_supported: { type: boolean, description: 'Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered.' }
+        revision: { type: integer, format: int64, minimum: 1 }
+        changed: { type: boolean }
+    DeliveryPolicyEvent:
+      type: object
+      additionalProperties: false
+      required: [event_type, enabled, sms_enabled, email_enabled, repeat_count, interval_hours, supported]
+      properties:
+        event_type: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        enabled: { type: boolean }
+        sms_enabled: { type: boolean }
+        email_enabled: { type: boolean }
+        repeat_count: { type: integer, minimum: 1, maximum: 10 }
+        interval_hours: { type: integer, minimum: 1, maximum: 168 }
+        supported: { type: boolean }
+    DeliveryPolicyWrite:
+      type: object
+      additionalProperties: false
+      required: [window_mode, window_start, window_end, timezone, events]
+      properties:
+        window_mode: { type: string, enum: [all_day, custom] }
+        window_start: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        window_end: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
+        # 与 control-api notificationcontrol maxDeliveryPolicyEvents、前端 maxNotificationPolicyEvents 同值；
+        # 策略按事件目录整表读写（10-22 为 75 条），上限须大于目录总数并留余量。
+        events: { type: array, minItems: 1, maxItems: 256, items: { $ref: '#/components/schemas/DeliveryPolicyEvent' } }
+    DeliveryPolicy:
+      allOf:
+        - $ref: '#/components/schemas/DeliveryPolicyWrite'
+        - type: object
+          additionalProperties: false
+          required: [schema, revision, changed]
+          properties:
+            schema: { type: string, const: cdnca.notification-delivery-policy/v1 }
+            revision: { type: integer, format: int64, minimum: 1 }
+            changed: { type: boolean }
+    TemplateWrite:
+      type: object
+      additionalProperties: false
+      required: [subject, body, variables]
+      properties:
+        subject:
+          type: string
+          x-max-bytes: 2048
+          description: Required and non-empty for email; must be empty for SMS. Maximum source size is 2048 UTF-8 bytes.
+        body:
+          type: string
+          minLength: 1
+          x-max-bytes: 131072
+          description: Maximum source size is 131072 UTF-8 bytes for email and 8192 UTF-8 bytes for SMS.
+        variables:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+    Template:
+      type: object
+      additionalProperties: false
+      required: [template_id, version, channel, subject, body, variables, created_at, changed]
+      properties:
+        template_id: { type: string }
+        version: { type: integer, format: int64, minimum: 1 }
+        channel: { type: string, enum: [email, sms] }
+        subject:
+          type: string
+          x-max-bytes: 2048
+          description: Maximum source size is 2048 UTF-8 bytes.
+        body:
+          type: string
+          minLength: 1
+          x-max-bytes: 131072
+          description: Maximum source size is 131072 UTF-8 bytes.
+        variables:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+        created_at: { type: string, format: date-time }
+        changed: { type: boolean }
+    TemplatePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Template' } }
+    Subscription:
+      type: object
+      additionalProperties: false
+      required: [event_type, sms_enabled, email_enabled, sms_supported, email_supported, revision, changed]
+      properties:
+        event_type: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        sms_enabled: { type: boolean }
+        email_enabled: { type: boolean }
+        sms_supported: { type: boolean, description: 'Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered.' }
+        email_supported: { type: boolean, description: 'Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered.' }
+        inbox_enabled: { type: boolean, description: 'Ticket events only (546): the in-app message-center copy (default true). Absent for every other event.' }
+        revision: { type: integer, format: int64, minimum: 0 }
+        changed: { type: boolean }
+    DeliveryState:
+      type: string
+      enum: [pending, dispatching, retry_wait, accepted, unknown, delivered, permanent_failed, exhausted, cancelled]
+    DeliveryLog:
+      type: object
+      additionalProperties: false
+      required: [scope_id, outbox_id, event_type, channel, template_id, template_version, generation, state, revision, attempt_count, created_at, updated_at]
+      properties:
+        scope_id: { type: string, format: uuid }
+        outbox_id: { type: string, format: uuid }
+        event_type: { type: string }
+        channel: { type: string, enum: [email, sms] }
+        template_id: { type: string }
+        template_version: { type: integer, format: int64, minimum: 1 }
+        generation: { type: integer, minimum: 1 }
+        state: { $ref: '#/components/schemas/DeliveryState' }
+        revision: { type: integer, minimum: 0 }
+        attempt_count: { type: integer, minimum: 0 }
+        provider: { type: string }
+        failure_code: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        retry_at: { type: string, format: date-time }
+        accepted_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        replay_of_outbox_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    DeliveryLogPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/DeliveryLog' }
+        next_cursor: { type: string, format: uuid }
+    DeliveryAttempt:
+      type: object
+      additionalProperties: false
+      required: [attempt_number, outcome, lease_expires_at, claimed_at]
+      properties:
+        attempt_number: { type: integer, minimum: 1 }
+        outcome:
+          type: string
+          enum: [leased, succeeded, accepted, unknown, temporary_failure, permanent_failure, exhausted, lease_expired, cancelled]
+        failure_code: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        next_attempt_at: { type: string, format: date-time }
+        lease_expires_at: { type: string, format: date-time }
+        claimed_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+    DeliveryAttemptPage:
+      type: object
+      additionalProperties: false
+      required: [outbox_id, items]
+      properties:
+        outbox_id: { type: string, format: uuid }
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/DeliveryAttempt' }
+    Message:
+      type: object
+      additionalProperties: false
+      required: [id, user_id, type, title, package_id, site_id, created_at, email_content, sms_content, email_state, sms_state,
+        user_display_id, username, user_display_name, site_domain, package_name]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: [string, 'null'], format: uuid }
+        type: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        title: { type: [string, 'null'] }
+        package_id: { type: [string, 'null'] }
+        site_id: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        email_content: { type: [string, 'null'] }
+        sms_content: { type: [string, 'null'] }
+        email_state:
+          description: Delivery state of the original email message; null when no email was generated for this event.
+          enum: [pending, dispatching, retry_wait, accepted, unknown, delivered, permanent_failed, exhausted, cancelled, null]
+        sms_state:
+          description: Delivery state of the original SMS message; null when no SMS was generated for this event.
+          enum: [pending, dispatching, retry_wait, accepted, unknown, delivered, permanent_failed, exhausted, cancelled, null]
+        user_display_id:
+          description: Current display number of the recipient user; null when the user no longer exists.
+          type: [integer, 'null']
+          minimum: 1
+        username:
+          description: Current login name of the recipient user; null when the user no longer exists.
+          type: [string, 'null']
+        user_display_name:
+          description: Current display name of the recipient user; null when the user no longer exists.
+          type: [string, 'null']
+        site_domain:
+          description: Current primary domain of the event site; null when the event has no site or the site no longer exists.
+          type: [string, 'null']
+        package_name:
+          description: Product name recorded on the package subscription; null when the event has no package or it no longer exists.
+          type: [string, 'null']
+    MessagePage:
+      type: object
+      additionalProperties: false
+      required: [schema, items, total]
+      properties:
+        schema: { type: string, const: cdnca.notification-message-query/v1 }
+        items:
+          type: array
+          maxItems: 300
+          items: { $ref: '#/components/schemas/Message' }
+        next_cursor: { type: string, format: uuid }
+        total: { type: integer, minimum: 0 }
+    OwnMessage:
+      type: object
+      additionalProperties: false
+      required: [id, type, title, site_id, package_id, created_at, content]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$' }
+        title: { type: [string, 'null'] }
+        site_id: { type: [string, 'null'], format: uuid }
+        package_id: { type: [string, 'null'], format: uuid }
+        created_at: { type: string, format: date-time }
+        content: { type: [string, 'null'] }
+    OwnMessagePage:
+      type: object
+      additionalProperties: false
+      required: [schema, items, total]
+      properties:
+        schema: { type: string, const: cdnca.notification-own-messages/v1 }
+        items:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/OwnMessage' }
+        total: { type: integer, minimum: 0 }
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+            message: { type: string }
+            request_id: { type: string }
+            details:
+              description: >-
+                On a 400 validation_error of a channels, delivery policy, template or subscription write that names the
+                refused body field: field is sms_enabled / email_enabled / inbox_enabled, window_mode / window_start /
+                window_end / timezone / events / events[n].event_type|enabled|sms_enabled|email_enabled|repeat_count|interval_hours,
+                or template_id / subject / body / variables / variables[n]; reason is a machine code (required, too_long,
+                invalid_format, out_of_range, duplicate, invalid). Other refusals have no details.
+              x-description-zh: 通知通道、发送策略、模板、订阅保存 400 validation_error 能定位字段时附带 field（请求体 JSON 路径，模板 ID 为 template_id）与 reason 机器码；其它拒绝不带 details。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$' }
+                reason: { type: string, pattern: '^[a-z][a-z0-9_]{0,63}$' }
+              example: { field: 'events[2].interval_hours', reason: out_of_range }
+  responses:
+    Channels:
+      description: Current global channel switches and capability facts.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChannelSettings' } } }
+    DeliveryPolicy:
+      description: Versioned global delivery window and per-event execution policy. System-required identity messages bypass these timing and subscription controls.
+      content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryPolicy' } } }
+    Templates:
+      description: Immutable notification template versions.
+      content: { application/json: { schema: { $ref: '#/components/schemas/TemplatePage' } } }
+    Template:
+      description: Created template version or an identical natural replay.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Template' } } }
+    Subscription:
+      description: Current user's subscription or an identical natural replay.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } }
+    DeliveryLogs:
+      description: Redacted delivery settlement page.
+      content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryLogPage' } } }
+    DeliveryAttempts:
+      description: Redacted delivery attempt facts for one outbox item.
+      content: { application/json: { schema: { $ref: '#/components/schemas/DeliveryAttemptPage' } } }
+    Messages:
+      description: Versioned, event-centric compatibility projection of member notification facts.
+      content: { application/json: { schema: { $ref: '#/components/schemas/MessagePage' } } }
+    Error:
+      description: Stable error envelope. Clients map code through locale resources and do not render message directly.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

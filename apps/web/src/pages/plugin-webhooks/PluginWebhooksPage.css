@@ -1,0 +1,88 @@
+.plugin-webhooks-page {
+  min-width: 0;
+  color: var(--cdnca-color-text);
+}
+
+.plugin-webhooks-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.plugin-webhooks-heading h1 {
+  margin: 0;
+  color: var(--cdnca-color-text);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.plugin-webhooks-heading p {
+  max-width: 700px;
+  margin: 8px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  line-height: 1.6;
+}
+
+.plugin-webhooks-alert { margin-bottom: 16px; }
+
+.plugin-webhook-target-scope {
+  display: grid;
+  grid-template-columns: minmax(260px, 460px) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* ui-density：网格本身占满一行时 auto 列会吃掉剩余宽度，「应用目标」按钮被拉成横条；靠左排列。 */
+.plugin-webhook-target-scope {
+  justify-content: start;
+}
+
+.plugin-webhook-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 1px;
+  margin-bottom: 16px;
+  background: var(--cdnca-color-neutral27, #e8ebf0);
+  border: 1px solid var(--cdnca-color-neutral27, #e8ebf0);
+}
+
+.plugin-webhook-summary > div {
+  display: flex;
+  min-width: 0;
+  min-height: 70px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  padding: 12px 16px;
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.plugin-webhook-summary span { color: var(--cdnca-color-text-secondary); font-size: 12px; }
+.plugin-webhook-summary strong { color: var(--cdnca-color-blue49, #17233c); font-size: 22px; font-weight: 500; }
+.plugin-webhook-summary code { overflow: hidden; color: var(--cdnca-color-primary); text-overflow: ellipsis; white-space: nowrap; }
+.plugin-webhook-name { padding: 0; text-align: left; }
+.plugin-webhook-target { overflow-wrap: anywhere; color: var(--cdnca-color-text); font-size: 12px; }
+.plugin-webhook-loading { display: grid; min-height: 200px; place-items: center; }
+.plugin-webhook-empty { display: grid; min-height: 260px; place-items: center; background: var(--cdnca-color-bg-container, #fff); }
+.plugin-webhook-form { margin-top: 18px; }
+.plugin-webhook-secret { display: grid; gap: 16px; }
+.plugin-webhook-secret-actions { margin-top: 4px; }
+.plugin-webhook-drawer .ant-drawer-body { padding: 20px; }
+.plugin-webhook-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 22px; }
+.plugin-webhook-deliveries-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.plugin-webhook-deliveries-heading h2 { margin: 0; color: var(--cdnca-color-text); font-size: 16px; font-weight: 500; }
+.plugin-webhook-deliveries-empty { padding: 34px 12px; color: var(--cdnca-color-text-secondary); text-align: center; background: var(--cdnca-color-bg-muted, #fafbfc); }
+.plugin-webhook-pagination { display: flex; min-height: 32px; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.plugin-webhook-pagination > span { min-width: 72px; color: var(--cdnca-color-text); text-align: center; }
+
+@media (max-width: 720px) {
+  .plugin-webhooks-heading { flex-direction: column; }
+  .plugin-webhooks-heading .ant-space { width: 100%; }
+  .plugin-webhooks-heading .ant-btn { flex: 1; }
+  .plugin-webhook-target-scope { grid-template-columns: minmax(0, 1fr); }
+  .plugin-webhook-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .plugin-webhook-pagination { flex-wrap: wrap; }
+}

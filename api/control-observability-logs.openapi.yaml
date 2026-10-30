@@ -1,0 +1,210 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Observability Event Logs API
+  version: 1.0.0
+  description: Session-scoped projection of existing identity, audit, notification, and frontend audit facts.
+paths:
+  /v1/observability/logs:
+    get:
+      operationId: listObservabilityLogs
+      summary: List immutable observability facts in one authorized scope
+      parameters:
+        - $ref: '#/components/parameters/TargetScope'
+        - $ref: '#/components/parameters/Kind'
+        - $ref: '#/components/parameters/Result'
+        - $ref: '#/components/parameters/Action'
+        - $ref: '#/components/parameters/SourceIP'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/ActorUser'
+        - $ref: '#/components/parameters/ActorUserDisplay'
+        - $ref: '#/components/parameters/ActionVerb'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/ResourceType'
+        - $ref: '#/components/parameters/ResourceID'
+        - $ref: '#/components/parameters/Change'
+        - $ref: '#/components/parameters/AuditBoundary'
+        - $ref: '#/components/parameters/AfterAuditBoundary'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Stable keyset page bound to actor, session, scope, filters, and snapshot. Tenant sessions receive only facts where they are the actor or subject; platform administrators retain exact target-scope queries.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/LogPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/observability/logs/export:
+    get:
+      operationId: exportObservabilityLogs
+      summary: Export the authorized filtered snapshot as bounded RFC4180 CSV
+      parameters:
+        - $ref: '#/components/parameters/TargetScope'
+        - $ref: '#/components/parameters/Kind'
+        - $ref: '#/components/parameters/Result'
+        - $ref: '#/components/parameters/Action'
+        - $ref: '#/components/parameters/SourceIP'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/ActorUser'
+        - $ref: '#/components/parameters/ActorUserDisplay'
+        - $ref: '#/components/parameters/ActionVerb'
+        - $ref: '#/components/parameters/Category'
+        - $ref: '#/components/parameters/ResourceType'
+        - $ref: '#/components/parameters/ResourceID'
+        - $ref: '#/components/parameters/Change'
+      responses:
+        '200':
+          description: At most 10000 rows and 8 MiB. X-Content-SHA256 authenticates exact bytes.
+          headers:
+            X-Content-SHA256:
+              schema: {type: string, pattern: '^[0-9a-f]{64}$'}
+          content:
+            text/csv:
+              schema: {type: string}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/observability/frontend-events:
+    post:
+      operationId: recordFrontendEvent
+      summary: Append one stable, secret-free frontend result to the existing audit chain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/FrontendEvent'}
+      responses:
+        '202': {description: Fact accepted and appended to the audit chain}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+      parameters:
+        - $ref: '#/components/parameters/TargetScope'
+components:
+  securitySchemes:
+    bearerSession: {type: http, scheme: bearer}
+  parameters:
+    TargetScope:
+      name: target_scope_id
+      in: query
+      schema: {type: string, format: uuid}
+      description: Platform administrators may select one exact scope. Tenant sessions must omit it.
+    Kind:
+      name: kind
+      in: query
+      schema: {type: array, maxItems: 5, uniqueItems: true, items: {type: string, enum: [login, operation, backup, notification, frontend]}}
+      style: form
+      explode: true
+    Result:
+      name: result
+      in: query
+      schema: {type: array, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}}
+      style: form
+      explode: true
+    Action: {name: action, in: query, schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}}
+    SourceIP: {name: source_ip, in: query, schema: {type: string, maxLength: 64}}
+    From: {name: from, in: query, schema: {type: string, format: date-time}}
+    To: {name: to, in: query, schema: {type: string, format: date-time}}
+    ActorUser:
+      name: actor_user_id
+      in: query
+      schema: {type: string, format: uuid}
+      description: Platform-only exact actor filter. Tenant sessions are implicitly restricted to their own actor or subject facts.
+    ActorUserDisplay:
+      name: actor_user_display_id
+      in: query
+      schema: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+      description: Platform-only numeric display ID filter; mutually exclusive with actor_user_id.
+    ActionVerb:
+      name: action_verb
+      in: query
+      schema: {type: string, enum: [create, update, delete]}
+    Category: {name: category, in: query, description: Audit catalog category (audit rows only; notification facts have none)., schema: {type: string, enum: [admin, user, auth, site, security, rule, finance, package, plugin, node, dns, cert, system, other]}}
+    ResourceType: {name: resource_type, in: query, schema: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}}
+    ResourceID: {name: resource_id, in: query, schema: {type: string, maxLength: 256}}
+    Change: {name: change, in: query, schema: {type: string, maxLength: 256}}
+    AuditBoundary:
+      name: audit_boundary
+      in: query
+      schema: {type: string, enum: [capture]}
+      description: Platform-only request to capture an opaque audit head before a subsequent exact-actor read.
+    AfterAuditBoundary:
+      name: after_audit_boundary
+      in: query
+      schema: {type: string, minLength: 1, maxLength: 4096}
+      description: Opaque boundary returned by the capture request; requires an exact actor filter and excludes notification facts.
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 300, default: 50}}
+    Cursor: {name: cursor, in: query, schema: {type: string, minLength: 1, maxLength: 4096}}
+  schemas:
+    LogFact:
+      type: object
+      additionalProperties: false
+      required: [event_id, occurred_at, kind, action, reason_code, result_code, source_ip, geo_code]
+      properties:
+        event_id: {type: string, minLength: 1, maxLength: 128}
+        scope_id: {type: string, format: uuid}
+        occurred_at: {type: string, format: date-time}
+        kind: {type: string, enum: [login, operation, backup, notification, frontend]}
+        actor_user_id: {type: string, format: uuid}
+        actor_user_display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        subject_user_id: {type: string, maxLength: 128}
+        action: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        reason_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        result_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        resource_type: {type: string, maxLength: 96}
+        resource_id: {type: string, maxLength: 256}
+        resource_name: {type: string, minLength: 1, maxLength: 256, description: 'Current object name looked up at query time in the row''s scope (site domain, node/stream/certificate/DNS provider name, ticket subject, member username).'}
+        resource_deleted: {type: boolean, enum: [true], description: 'The nameable object no longer exists in this scope; the page shows 已删除的对象 with the first 8 characters of resource_id.'}
+        user_agent: {type: string, maxLength: 512}
+        change_summary: {type: string, maxLength: 2048}
+        request_id: {type: string, maxLength: 128}
+        source_ip: {type: string, maxLength: 64}
+        geo_code: {type: string, pattern: '^(unknown|[A-Z]{2})$'}
+        geo_region: {type: string, maxLength: 128}
+        geo_city: {type: string, maxLength: 128}
+        geo_resolution: {type: string, enum: [matched, unknown]}
+        category: {type: string, enum: [admin, user, auth, site, security, rule, finance, package, plugin, node, dns, cert, system, other], description: 'Audit catalog category; geo_* come from the IP intelligence base library by source_ip at query time when it has the address.'}
+    LogPage:
+      type: object
+      additionalProperties: false
+      required: [items, snapshot_at]
+      properties:
+        items: {type: array, maxItems: 300, items: {$ref: '#/components/schemas/LogFact'}}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+        snapshot_at: {type: string, format: date-time}
+        total_count: {type: integer, minimum: 0}
+        audit_boundary: {type: string, minLength: 1, maxLength: 4096}
+    FrontendEvent:
+      type: object
+      additionalProperties: false
+      required: [event_code, route, reason_code, result_code, release]
+      properties:
+        event_code: {type: string, enum: [route_error, api_error, render_error]}
+        route: {type: string, pattern: '^/', maxLength: 256}
+        reason_code: {type: string, pattern: '^[a-z][a-z0-9._-]{0,95}$'}
+        result_code: {type: string, enum: [success, denied, failure]}
+        release: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$'}
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, request_id]
+          properties:
+            code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+            request_id: {type: string, maxLength: 128}
+  responses:
+    Error:
+      description: Stable error code without dependency detail
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+security:
+  - bearerSession: []

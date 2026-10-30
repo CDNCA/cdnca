@@ -1,0 +1,228 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/naxsi-strong",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "强注入特征（naxsi）",
+ "description": "参数、URL、Cookie 中的协议包装器（php:// phar:// gopher:// 等）、SQL 注释与 JSON 函数、URL/Cookie 内多处目录穿越或编码绕过等多字符强特征即记录，可改为拦截或挑战。只保留在大规模正常流量评测中单条命中低于 0.5% 的特征。",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "naxsi-strong-args-1",
+  "naxsi-strong-args-r0",
+  "naxsi-strong-cookie-1",
+  "naxsi-strong-cookie-r0",
+  "naxsi-strong-cookie-r1",
+  "naxsi-strong-request-uri-1",
+  "naxsi-strong-request-uri-r0",
+  "naxsi-strong-request-uri-r1",
+  "naxsi-strong-request-uri-r2"
+ ],
+ "rules": [
+  {
+   "id": "naxsi-strong-args-1",
+   "name": "参数含协议包装器/注释/逻辑运算特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "contains",
+       "values": [
+        "input://"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-args-r0",
+   "name": "参数含 SQL 函数特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:::json|to_json|jsonb?_build|jsonb?_object|jsonb?_each|jsonb?_extract|jsonb?_typeof|jsonb?_array|jsonb_set|json_query|json_keys))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-cookie-1",
+   "name": "Cookie含协议包装器/注释/逻辑运算特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "contains",
+       "values": [
+        "&&",
+        "*/",
+        "/*",
+        "data://",
+        "expect://",
+        "file://",
+        "ftp://",
+        "glob://",
+        "gopher://",
+        "http://",
+        "input://",
+        "phar://",
+        "php://",
+        "sftp://",
+        "zip://",
+        "zlib://"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-cookie-r0",
+   "name": "Cookie同一值两处编码绕过特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:%U|\\&\\#)[\\s\\S]*(?:%U|\\&\\#)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-cookie-r1",
+   "name": "Cookie含 SQL 函数特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:::json|to_json|jsonb?_build|jsonb?_object|jsonb?_each|jsonb?_extract|jsonb?_typeof|jsonb?_array|jsonb_set|json_query|json_keys))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-request-uri-1",
+   "name": "URL含协议包装器/注释/逻辑运算特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "request_uri",
+       "operator": "contains",
+       "values": [
+        "&&",
+        "*/",
+        "/*"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-request-uri-r0",
+   "name": "URL同一值两处编码绕过特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "request_uri",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:%U|\\&\\#)[\\s\\S]*(?:%U|\\&\\#)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-request-uri-r1",
+   "name": "URL含 SQL 函数特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "request_uri",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:::json|to_json|jsonb?_build|jsonb?_object|jsonb?_each|jsonb?_extract|jsonb?_typeof|jsonb?_array|jsonb_set|json_query|json_keys))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "naxsi-strong-request-uri-r2",
+   "name": "URL同一值两处目录穿越特征",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "request_uri",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)[\\s\\S]*(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

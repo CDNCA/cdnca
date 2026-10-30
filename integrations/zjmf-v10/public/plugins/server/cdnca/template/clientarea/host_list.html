@@ -1,0 +1,29 @@
+<!-- CDNCA CDN 前台导航产品列表（Cdnca::hostList） -->
+<style>
+  .cdnca-list { padding: 20px 24px; background: #fff; border-radius: 6px; font-size: 14px; color: #303133; }
+  .cdnca-list table { width: 100%; border-collapse: collapse; }
+  .cdnca-list th, .cdnca-list td { padding: 10px 8px; border-bottom: 1px solid #ebeef5; text-align: left; }
+  .cdnca-list th { color: #909399; font-weight: normal; }
+  .cdnca-list a { color: #2f6bff; }
+</style>
+<div class="cdnca-list">
+  {if empty($cdnca_hosts)}
+  <p>暂无 CDN 产品。</p>
+  {else /}
+  <table>
+    <caption class="sr-only">CDN 产品列表</caption>
+    <thead><tr><th scope="col">产品</th><th scope="col">商品</th><th scope="col">周期</th><th scope="col">状态</th><th scope="col">到期时间</th></tr></thead>
+    <tbody>
+      {volist name="cdnca_hosts" id="h"}
+      <tr>
+        <td><a href="productdetail.htm?id={$h.id}">{$h.name}</a></td>
+        <td>{$h.product_name}</td>
+        <td>{$h.billing_cycle_name}</td>
+        <td>{$h.status}</td>
+        <td>{$h.due_time}</td>
+      </tr>
+      {/volist}
+    </tbody>
+  </table>
+  {/if}
+</div>

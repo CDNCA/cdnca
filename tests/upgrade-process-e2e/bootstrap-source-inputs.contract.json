@@ -1,0 +1,54 @@
+{
+  "schema": "cdnca:upgrade-e2e-source-bootstrap:v1",
+  "authoritative_contract": "tests/final-acceptance/input-contract.json",
+  "source_count": 21,
+  "generated_source_count": 11,
+  "upstream_source_count": 10,
+  "generated_source_inputs": [
+    "UPGRADE_E2E_EDGE_CONFIG_JSON",
+    "ENTITLEMENT_TRUSTED_KEYS_FILE",
+    "CONTROL_INSTALLATION_PRIVATE_KEY_FILE",
+    "CONTROL_UPGRADE_COMMAND_GRANT_TRUST_FILE",
+    "CONTROL_UPGRADE_CONTROL_SIGNING_PRIVATE_KEY_FILE",
+    "CONTROL_UPGRADE_EDGE_SIGNING_PRIVATE_KEY_FILE",
+    "UPGRADE_E2E_EDGE_ARTIFACT_TRUST_SHA256",
+    "UPGRADE_E2E_EDGE_CONTROL_EXECUTION_TRUST_SHA256",
+    "UPGRADE_E2E_EDGE_EXECUTION_TRUST_SHA256",
+    "UPGRADE_E2E_INITIAL_VERSION",
+    "UPGRADE_E2E_FORWARD_VERSION"
+  ],
+  "upstream_source_inputs": [
+    "UPGRADE_E2E_LICENSE_AUTHORITY_FIXTURE_SQL",
+    "UPGRADE_E2E_CONTROL_AUTHORITY_FIXTURE_SQL",
+    "CONTROL_ACTIVATION_CREDENTIAL_FILE",
+    "UPGRADE_E2E_INITIAL_ARTIFACT",
+    "UPGRADE_E2E_INITIAL_SBOM",
+    "UPGRADE_E2E_INITIAL_MANIFEST",
+    "UPGRADE_E2E_INITIAL_SIGNATURE",
+    "UPGRADE_E2E_INITIAL_PUBLIC_KEY",
+    "UPGRADE_E2E_FORWARD_BUNDLE",
+    "UPGRADE_E2E_ROLLBACK_BUNDLE"
+  ],
+  "generated_support_files": [
+    "edge-artifact-trust.json",
+    "edge-control-execution-trust.json",
+    "edge-execution-trust.json",
+    "edge-installer-receipt-trust.json"
+  ],
+  "output": {
+    "env_mode": "0600",
+    "manifest_mode": "0600",
+    "material_directory_mode": "0700",
+    "secret_file_mode": "0600",
+    "non_secret_file_mode": "0400",
+    "atomic": true,
+    "env_contains_only": ["path", "sha256", "version"]
+  },
+  "external_facts_never_generated": [
+    "GHCR OCI image and native subject digests",
+    "GitHub Actions OIDC issuer and workflow identity",
+    "cosign keyless signature",
+    "SLSA provenance",
+    "SPDX supply-chain attestation"
+  ]
+}

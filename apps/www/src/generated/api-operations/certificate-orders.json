@@ -1,0 +1,220 @@
+{
+ "id": "certificate-orders",
+ "prefix": "/v1/certificate-orders",
+ "operations": [
+  {
+   "operation_id": "listCertificateOrders",
+   "method": "GET",
+   "path": "/v1/certificate-orders",
+   "summary": "List certificate orders",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Orders visible in the authenticated scope.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<CertificateOrder>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    }
+   ]
+  },
+  {
+   "operation_id": "createCertificateOrder",
+   "method": "POST",
+   "path": "/v1/certificate-orders",
+   "summary": "Queue a pending certificate order",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Wildcards require dns-01 and a provider in the same tenant scope. A 202 response only persists a tenant-scoped pending intent and its audit event; it does not claim CA acceptance. Reusing an Idempotency-Key with a different scope, domain set, challenge, provider, or auto-renew value returns a conflict. HTTP-01 forbids dns_provider_id; DNS-01 requires a verified same-tenant provider. Entitlement authorization is a separate fail-closed server composition requirement and is not implied by RBAC.",
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "dns_provider_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "domains",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "challenge_type",
+      "type": "string: http-01 / dns-01",
+      "required": true
+     },
+     {
+      "name": "auto_renew",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "issuer",
+      "type": "string: lets_encrypt / zerossl / google_trust",
+      "description": "The CA. Omitted uses the requesting user's default issuer, then the platform default. The resolved CA is frozen on the order and its renewals; a CA without platform EAB credentials is refused with 409 certificate_issuer_unavailable. An order for the same domain set that is still pending, validating or issuing refuses the new order with 409 certificate_order_in_flight."
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "description": "Names the order and the certificate it issues; trimmed."
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "Copied to the issued certificate; trimmed"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Pending intent stored without external side effects.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "dns_provider_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "challenge_type",
+       "type": "string: http-01 / dns-01",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / validating / issuing / issued / deploying / active / renewal_due / failed / revoked",
+       "required": true
+      },
+      {
+       "name": "auto_renew",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "issuer",
+       "type": "string: lets_encrypt / zerossl / google_trust",
+       "description": "Frozen CA; omitted for orders that use the platform default issuer."
+      },
+      {
+       "name": "name",
+       "type": "string"
+      },
+      {
+       "name": "remark",
+       "type": "string"
+      },
+      {
+       "name": "renewal_of_order_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "not_after",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "failure_code",
+       "type": "string"
+      },
+      {
+       "name": "issued_asset_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "issued_version_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "issued_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request or structurally invalid DNS/certificate data."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The active role lacks the required permission."
+    },
+    {
+     "status": "404",
+     "description": "Resource absent or hidden by tenant isolation."
+    },
+    {
+     "status": "409",
+     "description": "Duplicate, referenced, stale, or conflicting idempotent request."
+    }
+   ]
+  }
+ ]
+}

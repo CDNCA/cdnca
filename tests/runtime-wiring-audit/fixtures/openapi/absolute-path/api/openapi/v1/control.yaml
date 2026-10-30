@@ -1,0 +1,5 @@
+openapi: 3.1.0
+info: { title: Absolute path fixture, version: 1.0.0 }
+paths:
+  /v1/external:
+    $ref: '/api/external.yaml#/paths/~1v1~1external'

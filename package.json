@@ -1,0 +1,18 @@
+{
+  "name": "cdnca",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "contracts:validate": "node scripts/validate-marketplace-contracts.mjs",
+    "dev": "pnpm --filter @cdnca/web dev",
+    "lint": "pnpm --filter @cdnca/web lint",
+    "test": "pnpm --filter @cdnca/web test",
+    "build": "pnpm --filter @cdnca/web build",
+    "web:release": "bash scripts/web-release-package.sh",
+    "web:release:verify": "bash scripts/web-release-verify.sh"
+  },
+  "devDependencies": {
+    "ajv": "8.17.1",
+    "ajv-formats": "3.0.1"
+  }
+}

@@ -1,0 +1,555 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "host-routing",
+  "scenario_sha256": "461562150c391de44c49c316e175bbad9cdc460e7675558d347bf7b51f5eade2",
+  "steps": [
+    {
+      "id": "primary",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "29",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 29,
+            "sha256": "3a950121655adc002231beca8229ef7909d1b67e6d78abc984f2143eec8c658d",
+            "text": "shop shop.example.test /a?x=1"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/a?x=1",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alias",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "28",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 28,
+            "sha256": "485a650ffe42d22afe825df65ed6b2f407f547f5e246cfaa3822793e1393b888",
+            "text": "shop www.shop.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/",
+              "host": "www.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wildcard-one-level",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "33",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 33,
+            "sha256": "0ec1af5506fba40ed9d548aab2f2cd9ec94a8bb0a11ea88d40f097b9bc157a9e",
+            "text": "shop img.shop.example.test /i.png"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/i.png",
+              "host": "img.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wildcard-two-levels",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "28",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 28,
+            "sha256": "eb491929899d679ac3cd2377444f0f9fe45f141b80a782334282e7a2bfe791c4",
+            "text": "shop a.b.shop.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/",
+              "host": "a.b.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "exact-beats-wildcard",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "29",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 29,
+            "sha256": "75d55d9696ae65b2731978e938a5bac17f87f4683d683f23280c83737f00eb18",
+            "text": "api api.shop.example.test /v1"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "GET",
+              "uri": "/v1",
+              "host": "api.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "longest-wildcard",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "28",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 28,
+            "sha256": "76b99eb1ce7f0da5028a1e60ae54597668a0779afd551dddc1197d136bf5f34e",
+            "text": "api x.eu.shop.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "GET",
+              "uri": "/",
+              "host": "x.eu.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wildcard-not-bare",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "27",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 27,
+            "sha256": "b61794107a8a0ec922061d1ffe969f1d64378de6d4bc79c7889a93370f07dce4",
+            "text": "shop eu.shop.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/",
+              "host": "eu.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "other-alias",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "27",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 27,
+            "sha256": "26ebf97f72432b7b42ce578c49e5682e6e81f0f7c822eac972bdf9cb0f183aa3",
+            "text": "api blog.example.test /post"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "GET",
+              "uri": "/post",
+              "host": "blog.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "uppercase-host",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "24",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 24,
+            "sha256": "ab8252b704e09e5aaab0ec5064252f1a2867014c2d663651650bc68db797c05d",
+            "text": "shop shop.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "host-with-port",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "24",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 24,
+            "sha256": "ab8252b704e09e5aaab0ec5064252f1a2867014c2d663651650bc68db797c05d",
+            "text": "shop shop.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unknown-host",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 421,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "170",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 170,
+            "sha256": "2994add6b59762ad47fa60e1ea26ba3daa14a454cbafa7ad7147b3318774e083",
+            "text": "<html>\r\n<head><title>421 Misdirected Request</title></head>\r\n<body>\r\n<center><h1>421 Misdirected Request</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "parent-of-wildcard",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 421,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "170",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 170,
+            "sha256": "2994add6b59762ad47fa60e1ea26ba3daa14a454cbafa7ad7147b3318774e083",
+            "text": "<html>\r\n<head><title>421 Misdirected Request</title></head>\r\n<body>\r\n<center><h1>421 Misdirected Request</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "ip-host",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 421,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "170",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 170,
+            "sha256": "2994add6b59762ad47fa60e1ea26ba3daa14a454cbafa7ad7147b3318774e083",
+            "text": "<html>\r\n<head><title>421 Misdirected Request</title></head>\r\n<body>\r\n<center><h1>421 Misdirected Request</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "head",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "25",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "HEAD",
+              "uri": "/h",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "post-body",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "33",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 33,
+            "sha256": "3ea46a3a5d148e0defcb656a513fb907c276f26205904aa8f505e68d209858e8",
+            "text": "api api.shop.example.test /submit"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "POST",
+              "uri": "/submit",
+              "host": "api.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "content-length": "7",
+                "content-type": "application/x-www-form-urlencoded",
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "body": {
+                "length": 7,
+                "sha256": "8e85be58c1c372ac29fe7bfa80d8ddcbd04a4032c7b51c1c026d67c55b1ab23f",
+                "text": "a=1&b=2"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ipv6-listener",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "bb61250a3de5b9b3540fb671c3b3fc4b06deb836c6036e49c883088cc8c79b33",
+            "text": "shop shop.example.test /v6"
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/v6",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "::1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "::1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

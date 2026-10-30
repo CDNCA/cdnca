@@ -1,0 +1,547 @@
+{
+ "id": "admin-site-publications",
+ "prefix": "/v1/admin/site-publications",
+ "operations": [
+  {
+   "operation_id": "listAdminSitePublications",
+   "method": "GET",
+   "path": "/v1/admin/site-publications",
+   "summary": "List publications for one tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped principal with edge_publications.read. The opaque keyset cursor is bound to the tenant scope and stable ordering.",
+   "permissions": [
+    "edge_publications.read"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route target tenant access-scope UUID."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope returned by the immediately preceding page. It is bound to audience, resolved tenant scope, resource kind, and the rollout ID for deployment pages. It cannot be reused across those boundaries or modified."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable publication page. Response body is limited to 1 MiB.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AdminPublication>",
+       "required": true
+      },
+      {
+       "name": "current_source_revision",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Current Site/L4 source revision to use for publication compare-and-swap."
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "description": "Opaque authenticated pagination state. Clients must not parse or construct it."
+      },
+      {
+       "name": "pending_modules",
+       "type": "array<PendingModule>",
+       "description": "Modules the scope's latest publication uses that the entitlement no longer grants; the scope is pending republication and is republished automatically when they are granted again. Omitted when none."
+      },
+      {
+       "name": "automatic_failure",
+       "type": "AutomaticPublicationFailure",
+       "description": "The scope's latest automatic publication published nothing and no later publication exists. no_target_nodes means no enabled node serves the sites' line groups (their own or their package's primary/backup group); node_capability_unavailable means every target node's agent lacks a capability or JS challenge policy the release needs; node_artifacts_syncing means the target nodes are refused only because a node artifact the release needs (a rule pack, the IP library) is still reaching them through their node artifact set; node_scope_conflict means a target node carries another tenant's configuration this one cannot share (such as its managed WAF), so the request ended instead of retrying, and the next configuration change or a manual publish tries again. The first three are republished automatically once they change. Omitted otherwise."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "publishSiteConfiguration",
+   "method": "POST",
+   "path": "/v1/admin/site-publications",
+   "summary": "Publish the current Site/L4 revision to an immutable target snapshot",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped principal with edge_publications.manage. Exactly one nodes or line_group_snapshot target is accepted. The domain service performs source revision CAS, target eligibility checks, local non-grace entitlement verification, canonical compilation, signing, config/rollout/deployment/outbox persistence, idempotency, and success audit in one transaction. An unknown write result may be retried only with the same Idempotency-Key and original business payload.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_source_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "target",
+      "type": "ExplicitNodeTarget | LineGroupSnapshotTarget",
+      "required": true
+     },
+     {
+      "name": "health_check",
+      "type": "HealthCheck",
+      "required": true
+     },
+     {
+      "name": "rollout",
+      "type": "RolloutPolicyInput",
+      "description": "Progressive policy for a target frozen at publication time. Nodes are ordered by UUID bytes, then assigned to the canary and fixed-size cohorts. Commands outside the released cohort remain held. The failure threshold is an absolute failed-node count within the current cohort; reaching it pauses the rollout."
+     },
+     {
+      "name": "max_attempts",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "deadline",
+      "type": "string(date-time)",
+      "required": true,
+      "description": "Future RFC3339 deployment deadline."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created publication, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "rollout_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "canonical_source_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "artifact_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "object | object",
+       "required": true
+      },
+      {
+       "name": "node_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "412",
+     "description": "The source or rollout expected revision is stale."
+    },
+    {
+     "status": "422",
+     "description": "Entitlement or target/resource readiness prevents publication."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminSitePublication",
+   "method": "GET",
+   "path": "/v1/admin/site-publications/{publication_id}",
+   "summary": "Get one publication in an explicit tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "edge_publications.read"
+   ],
+   "params": [
+    {
+     "name": "publication_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route target tenant access-scope UUID."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform publication detail.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "rollout_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "canonical_source_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "artifact_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "object | object",
+       "required": true
+      },
+      {
+       "name": "node_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "rollbackSitePublication",
+   "method": "POST",
+   "path": "/v1/admin/site-publications/{publication_id}/rollback",
+   "summary": "Roll selected nodes back to their direct previous published configuration",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Creates a rollback rollout for the immutable configuration referenced by the selected publication. Every selected node must currently name that configuration as its direct previous version. No new configuration or artifact bytes are created, and rollback remains available when an entitlement no longer permits expansion.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "publication_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "target",
+      "type": "ExplicitNodeTarget | LineGroupSnapshotTarget",
+      "required": true
+     },
+     {
+      "name": "health_check",
+      "type": "HealthCheck",
+      "required": true
+     },
+     {
+      "name": "rollout",
+      "type": "RolloutPolicyInput",
+      "description": "Progressive policy for a target frozen at publication time. Nodes are ordered by UUID bytes, then assigned to the canary and fixed-size cohorts. Commands outside the released cohort remain held. The failure threshold is an absolute failed-node count within the current cohort; reaching it pauses the rollout."
+     },
+     {
+      "name": "max_attempts",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "deadline",
+      "type": "string(date-time)",
+      "required": true,
+      "description": "Future RFC3339 rollback deadline."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created rollback rollout, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "publication_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "rollout_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "target",
+       "type": "object | object",
+       "required": true
+      },
+      {
+       "name": "node_count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "422",
+     "description": "Entitlement or target/resource readiness prevents publication."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

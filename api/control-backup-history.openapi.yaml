@@ -1,0 +1,62 @@
+paths:
+  /v1/admin/system-backup-runs:
+    get:
+      operationId: listSystemBackupRuns
+      summary: Read persisted control-plane backup run history
+      description: >-
+        Reads only signed start and terminal facts persisted by the controlled
+        backup runner. A missing terminal or an unverifiable fact is returned
+        as an unknown outcome and is never inferred from plans, approvals, or
+        audit events. With no backup runner bound it answers an empty page
+        with unconfigured=true; a partial or invalid binding is unavailable.
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: backup_id, in: query, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}}
+        - {name: state, in: query, schema: {type: string, enum: [succeeded, failed, unknown]}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: limit, in: query, schema: {type: integer, enum: [10, 30, 100, 300], default: 10}}
+        - {name: cursor, in: query, description: 'Signed continuation bound to the backup ID, state, and effective time range; omitted times retain the first page range.', schema: {type: string, maxLength: 4096}}
+      responses:
+        '200':
+          description: Persisted backup run facts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupRunHistoryPage'
+        '400': {description: Invalid query or cursor}
+        '401': {description: Authentication required}
+        '403': {description: Platform administrator permission required}
+        '503': {description: Protected backup history capability unavailable}
+components:
+  schemas:
+    BackupRunHistoryRecord:
+      type: object
+      required: [backup_id, state, result_code, outcome_unknown, signature_valid, terminal_state, reason_code]
+      properties:
+        backup_id: {type: string}
+        started_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        state: {type: string, enum: [succeeded, failed, unknown]}
+        result_code: {type: string}
+        manifest_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        recovery_point_at: {type: string, format: date-time}
+        observed_rpo_seconds: {type: integer, minimum: 0}
+        outcome_unknown: {type: boolean}
+        signature_valid: {type: boolean}
+        terminal_state: {type: string}
+        reason_code: {type: string}
+    BackupRunHistoryPage:
+      type: object
+      required: [schema, items, total_count, snapshot_at]
+      properties:
+        schema: {type: string, const: cdnca.control-backup-history/v1}
+        items:
+          type: array
+          maxItems: 300
+          items: {$ref: '#/components/schemas/BackupRunHistoryRecord'}
+        total_count: {type: integer, minimum: 0, description: 'All records matching the filters before cursor pagination.'}
+        next_cursor: {type: string}
+        snapshot_at: {type: string, format: date-time}
+        unconfigured: {type: boolean, description: 'True when no backup runner (manifest directory, source cluster and signing trust) is bound to this control plane; items is then empty because there is no backup target.'}

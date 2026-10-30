@@ -1,0 +1,1645 @@
+{
+ "id": "admin-package-commerce",
+ "prefix": "/v1/admin/package-commerce",
+ "operations": [
+  {
+   "operation_id": "listTenantPackageOrdersAsPlatform",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/orders",
+   "summary": "List all package orders for one explicit tenant",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Target tenant access-scope UUID; platform routes never infer it."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    },
+    {
+     "name": "operation",
+     "in": "query",
+     "type": "string: upgrade / downgrade",
+     "description": "Optional platform-only filter for package upgrade or downgrade orders."
+    },
+    {
+     "name": "product_kind",
+     "in": "query",
+     "type": "string: package_subscription / traffic_package",
+     "description": "Optional order product filter shared by tenant and platform order reads."
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: created / paid / fulfilled / cancelled / refund_applied / void_applied / failed",
+     "description": "Optional latest order state filter shared by tenant and platform order reads."
+    },
+    {
+     "name": "request_id",
+     "in": "query",
+     "type": "string",
+     "description": "Optional X-Request-ID the order was created with, so a buyer can confirm the outcome of the original command."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable keyset page ordered by created_at and order UUID descending.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Order>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantPackageOrderAsPlatform",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/orders/{order_id}",
+   "summary": "Get one order in an explicit tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Target tenant access-scope UUID; platform routes never infer it."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized visible order.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Positive tenant-scope package-order identifier. The UUID remains canonical for links and commands."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_display_id",
+       "type": "string",
+       "required": true,
+       "description": "Stable user-facing identifier. The user UUID remains canonical for ownership and commands."
+      },
+      {
+       "name": "operation",
+       "type": "string: purchase / renew / upgrade / downgrade / traffic_package_purchase",
+       "required": true
+      },
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "product_kind",
+       "type": "string: package_subscription / traffic_package",
+       "required": true
+      },
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "protection",
+       "type": "object",
+       "description": "Required for package-subscription orders and frozen from the exact purchased product revision. Traffic-package orders may omit it."
+      },
+      {
+       "name": "traffic_product_snapshot_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "package_period",
+       "type": "string: month / quarter / year"
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "original_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "discount_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "payable_amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "settlement_direction",
+       "type": "string: debit / credit / hold",
+       "required": true
+      },
+      {
+       "name": "funding_source",
+       "type": "string: balance / provider / reseller",
+       "required": true,
+       "description": "reseller = a reseller placed the order for its customer; only the reseller's wholesale cost was charged."
+      },
+      {
+       "name": "effective_mode",
+       "type": "string: immediate / next_cycle",
+       "required": true
+      },
+      {
+       "name": "effective_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: created / paid / fulfilled / cancelled / refund_applied / void_applied / failed",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "seller_scope_id",
+       "type": "object",
+       "description": "Package owner that sold the order (the platform scope, or the customer's reseller). Traffic packages are always the platform's."
+      },
+      {
+       "name": "wholesale_minor",
+       "type": "integer(int64)",
+       "description": "Reseller's prepaid wholesale cost W of the order. Platform responses only; tenant responses always carry 0."
+      },
+      {
+       "name": "product_name",
+       "type": "string",
+       "description": "Package name from the order's product snapshot. Only the reseller customer orders route returns it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantPackageOrderEventsAsPlatform",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/orders/{order_id}/events",
+   "summary": "List sanitized events for one tenant order",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Target tenant access-scope UUID; platform routes never infer it."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable event page ordered by revision ascending.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<OrderEvent>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "refundPackageOrder",
+   "method": "POST",
+   "path": "/v1/admin/package-commerce/orders/{order_id}/refund",
+   "summary": "Apply an approved partial or cumulative refund",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform principal with billing.adjustments.manage and an explicit tenant_id. The core requires a matching unexpired, unused two-person approval fact; this endpoint neither creates nor weakens that approval. gross_amount_minor is the gross amount for this refund action.",
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "gross_amount_minor",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "revoke_entitlement",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "approval_id",
+      "type": "string(uuid) | string",
+      "description": "Optional. Refunds no longer require a second administrator's approval. When supplied it must be a canonical UUID of an unexpired, unused manual approval for this order and operation; it is then validated and consumed as before. An empty string is treated as absent."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Applied command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "422",
+     "description": "Funding, promotion, arithmetic, or fulfillment policy rejected the command."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "voidPackageOrder",
+   "method": "POST",
+   "path": "/v1/admin/package-commerce/orders/{order_id}/void",
+   "summary": "Void an eligible order using a one-time approval fact",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.adjustments.manage and an explicit tenant_id. The approval must match the order, tenant, operation, executor, and validity window. Existing refunds or a consumed approval remain hard failures.",
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "approval_id",
+      "type": "string(uuid) | string",
+      "description": "Optional. Voids no longer require a second administrator's approval. When supplied it is validated and consumed as before; an empty string is treated as absent."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Applied command result or identical committed replay.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "fulfillment",
+       "type": "Fulfillment",
+       "description": "Sanitized fulfillment reference. Billing transaction and balance-hold IDs are intentionally not exposed. Package fulfillment has a non-zero subscription_id plus both positive revisions and no traffic_grant_id; traffic fulfillment has a non-zero traffic_grant_id and no subscription fields. Before returning a command response, the implementation verifies the exact fulfillment, order, tenant, owner, subscription/grant IDs, and revisions against committed commerce facts. A mismatch is rejected."
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAdminSoldPackages",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/sold",
+   "summary": "List sold packages across tenants",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scope principal. Empty optional parameters must be omitted; duplicate and unknown parameters are rejected. Product options include all sold products independent of filters, without a 100-item cap. Names come from the effective immutable product snapshot. User display IDs come from users.display_id. A subscription ID is its actual UUID, never its revision. Expiry week is the next 7 days; month is the next calendar month, both excluding already expired records. Expired includes ends_at equal to the query time. Status is the stored lifecycle status; an expired active subscription still has lifecycle_status active. Usage is currently null because the commerce read model has no authoritative settled per-cycle counter; unknown usage matches neither exhausted nor remaining. A traffic limit of -1 means unlimited. CNAME searches current and last-known-good hostname claims associated with the subscription or one of its sites. Search values are literal case-insensitive substrings, not SQL patterns.",
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "expiry",
+     "in": "query",
+     "type": "string: all / month / week / expired"
+    },
+    {
+     "name": "product_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "sort",
+     "in": "query",
+     "type": "string: created_at_desc / ends_at_asc"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: all / enabled / disabled / active / cancelled"
+    },
+    {
+     "name": "usage",
+     "in": "query",
+     "type": "string: all / exhausted / remaining"
+    },
+    {
+     "name": "user_id",
+     "in": "query",
+     "type": "string",
+     "description": "Exact owner UUID or positive decimal user display ID."
+    },
+    {
+     "name": "q",
+     "in": "query",
+     "type": "string",
+     "description": "Literal substring of the package snapshot name or (when not all digits) of the subscription UUID; a positive decimal also matches the package display ID exactly."
+    },
+    {
+     "name": "cname",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Globally filtered page with count and complete sold-product options.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SoldPackage>",
+       "required": true
+      },
+      {
+       "name": "count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "products",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid parameters (package_commerce_validation_error)."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Platform scope and billing.adjustments.manage required."
+    },
+    {
+     "status": "408",
+     "description": "Request cancelled."
+    },
+    {
+     "status": "502",
+     "description": "Invalid stored facts or oversized response."
+    },
+    {
+     "status": "503",
+     "description": "Read store unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline exceeded."
+    }
+   ]
+  },
+  {
+   "operation_id": "administerSoldPackages",
+   "method": "POST",
+   "path": "/v1/admin/package-commerce/sold/commands",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Executes all selected items in one transaction. The live session and RBAC are rechecked, including replay. A changed body under an existing key is rejected. Editing appends an entitlement snapshot without rewriting the purchased catalog version or historical prices. Enable/disable is independent of cancellation. Safe deletion rejects live resources; cascade deletion uses audited resource deletion and edge publication. Neither mode refunds money; unsettled orders, held balances and scheduled entitlements block deletion. Sync copies only selected fields to bound websites and L4 forwarding resources, then persists signed edge publication, rollout and node command outbox. Publication receipts are polled separately and command success does not imply every node has applied it.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "action",
+      "type": "string: edit / enable / disable / delete / sync",
+      "required": true
+     },
+     {
+      "name": "items",
+      "type": "array<object>",
+      "required": true
+     },
+     {
+      "name": "config",
+      "type": "SoldConfig"
+     },
+     {
+      "name": "ends_at",
+      "type": "string(date-time)"
+     },
+     {
+      "name": "delete_mode",
+      "type": "string: safe / cascade"
+     },
+     {
+      "name": "sync_fields",
+      "type": "array<string: line_group / cname_domain / cname_mode>"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Persisted command or exact idempotent replay.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SoldDetail>",
+       "required": true
+      },
+      {
+       "name": "publications",
+       "type": "array<SoldPublication>",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or duplicate fields/items; edit requires one item and a full config."
+    },
+    {
+     "status": "401",
+     "description": "A live platform session is required."
+    },
+    {
+     "status": "403",
+     "description": "Required package/resource/DNS/publication permission denied."
+    },
+    {
+     "status": "409",
+     "description": "package_sold_dependencies, package_sold_financial_dependencies, package_sold_setting_unsupported, package_sold_invalid_state or idempotency_conflict."
+    },
+    {
+     "status": "412",
+     "description": "revision_conflict; no item was modified."
+    },
+    {
+     "status": "503",
+     "description": "package_sold_runtime_unavailable; no item was modified."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminSoldPackage",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/sold/{subscription_id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Effective sold snapshot and complete authorized reference options.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "deleted",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "ends_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "config",
+       "type": "SoldConfig",
+       "required": true
+      },
+      {
+       "name": "options",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "403",
+     "description": "Platform read permission required."
+    },
+    {
+     "status": "404",
+     "description": "Subscription not found."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminSoldPackageSync",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/sold/{subscription_id}/sync",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Latest 20 publications with authoritative rollout and latest node attempt counts.",
+     "fields": [
+      {
+       "name": "publications",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "403",
+     "description": "Platform read permission required."
+    },
+    {
+     "status": "404",
+     "description": "Subscription not found."
+    }
+   ]
+  },
+  {
+   "operation_id": "listSoldPackageSubscriptionsAsPlatform",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/subscriptions",
+   "summary": "List effective sold subscriptions for one explicit tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Uses the fixed-time effective entitlement projection. Each subsequent page reuses all three values from the endpoint- and tenant-bound signed cursor, so later entitlement backfills, renewals, or cancellations cannot create mixed facts.",
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Target tenant access-scope UUID; platform routes never infer it."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope bound to endpoint, target tenant, and owner user where applicable. Tampering or cross-scope reuse returns package_commerce_validation_error."
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / expired / cancelled",
+     "description": "Effective status at the frozen snapshot. active ends after snapshot_at; expired ends at or before snapshot_at; cancelled always follows the immutable cancelled lifecycle fact regardless of end_at."
+    },
+    {
+     "name": "end_at_from",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Inclusive canonical UTC microsecond lower bound for end_at."
+    },
+    {
+     "name": "end_at_to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Exclusive canonical UTC microsecond upper bound for end_at."
+    },
+    {
+     "name": "include_product_name",
+     "in": "query",
+     "type": "string: true / false",
+     "description": "Accepts exactly one lowercase true or false. Empty, repeated, or other values return 400. Omitted or false preserves the legacy response shape. true includes product_name only when the selected effective entitlement's immutable product_snapshot.name is a JSON string, preserved without normalization. Missing, null, or non-string names are omitted. The current product catalog is never used. This projection does not change subscription membership, ordering, or the cursor's tenant, owner, time, and high-water bounds."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable effective-subscription projection page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Subscription>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "description": "Present only in page-jump mode (tenant list)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "openPackageSubscriptionAsPlatform",
+   "method": "POST",
+   "path": "/v1/admin/package-commerce/subscriptions",
+   "summary": "Open a package subscription for an active tenant member without an order",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Creates the subscription, immutable revision-one state, and active manual_open entitlement atomically. It never fabricates an order, payment, or fulfillment. Unknown outcomes may be retried only with the exact original body and Idempotency-Key.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "owner_user_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "site_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     },
+     {
+      "name": "node_limit",
+      "type": "integer(int64)",
+      "required": true,
+      "description": "-1 means unlimited; otherwise 0 through 1,000,000,000."
+     },
+     {
+      "name": "duration",
+      "type": "string: month / quarter / year"
+     },
+     {
+      "name": "end_at",
+      "type": "string(date-time)"
+     },
+     {
+      "name": "timezone",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "cycle_policy",
+      "type": "object | object",
+      "required": true
+     },
+     {
+      "name": "traffic_factor",
+      "type": "TrafficFactor",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Subscription and entitlement created, or an identical committed replay returned.",
+     "fields": [
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "starts_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "ends_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "lifecycle_status",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    },
+    {
+     "status": "408",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    },
+    {
+     "status": "504",
+     "description": "The write outcome is unknown. Retry only the exact original request with the same Idempotency-Key and If-Match value where present."
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelPackageSubscriptionAsPlatform",
+   "method": "POST",
+   "path": "/v1/admin/package-commerce/subscriptions/{subscription_id}/cancel",
+   "summary": "Cancel a tenant subscription as administrator",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Physical deletion is not supported by cancellation. Use sold package commands for independent enable/disable and audited deletion.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_id",
+      "type": "string(uuid)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Cancelled subscription or exact idempotent replay.",
+     "fields": [
+      {
+       "name": "subscription",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "intent",
+       "type": "object"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request."
+    },
+    {
+     "status": "403",
+     "description": "Permission denied."
+    },
+    {
+     "status": "404",
+     "description": "Subscription not found."
+    },
+    {
+     "status": "409",
+     "description": "Invalid subscription state or idempotency conflict."
+    },
+    {
+     "status": "412",
+     "description": "Revision conflict."
+    }
+   ]
+  },
+  {
+   "operation_id": "suspendPackageSubscriptionAsPlatform",
+   "method": "POST",
+   "path": "/v1/admin/package-commerce/subscriptions/{subscription_id}/suspend",
+   "summary": "Suspend one package subscription as an administrator",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The subscription after the change (or unchanged when already in that state), or an exact idempotent replay.",
+     "fields": [
+      {
+       "name": "subscription",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    }
+   ]
+  },
+  {
+   "operation_id": "unsuspendPackageSubscriptionAsPlatform",
+   "method": "POST",
+   "path": "/v1/admin/package-commerce/subscriptions/{subscription_id}/unsuspend",
+   "summary": "Unsuspend one package subscription as an administrator",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.",
+   "permissions": [
+    "package_subscriptions.manage"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "One bounded business-action key. Exact retries preserve the original payload, target, principal, and If-Match precondition. Reuse with changed input returns idempotency_conflict."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_id",
+      "type": "string(uuid)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The subscription after the change (or unchanged when already in that state), or an exact idempotent replay.",
+     "fields": [
+      {
+       "name": "subscription",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, provider event, state, approval, refund, or traffic-use conflict."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantTrafficPackagePurchaseAsPlatform",
+   "method": "GET",
+   "path": "/v1/admin/package-commerce/traffic-purchases/{order_id}",
+   "summary": "Get one sanitized traffic-purchase result for an explicit tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The platform principal must name the target tenant. A purchase outside that tenant scope is indistinguishable from an unknown order.",
+   "permissions": [
+    "billing.adjustments.manage"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Target tenant access-scope UUID; platform routes never infer it."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized traffic order and an optional grant while provider payment is pending.",
+     "fields": [
+      {
+       "name": "order",
+       "type": "Order",
+       "required": true
+      },
+      {
+       "name": "grant",
+       "type": "TrafficGrant"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, UUID, enum, amount, time zone, query, cursor, or required header."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is absent or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Current scope or live permission does not authorize the operation."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the caller's visible tenant/owner scope."
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the query."
+    },
+    {
+     "status": "502",
+     "description": "Stored facts or encoded response violate the public response contract."
+    },
+    {
+     "status": "503",
+     "description": "Query storage or required callback verification is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline elapsed."
+    }
+   ]
+  }
+ ]
+}

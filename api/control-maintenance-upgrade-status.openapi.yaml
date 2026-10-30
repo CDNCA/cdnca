@@ -1,0 +1,146 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Maintenance Upgrade Status API
+  version: 0.1.0
+  description: Process, authorization and signed release candidate facts for maintenance.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/maintenance-upgrade-status:
+    get:
+      operationId: readMaintenanceUpgradeStatus
+      summary: Read authoritative maintenance upgrade status
+      description: >-
+        Requires a platform identity with control.upgrades.read. Repeated node_id
+        parameters additionally require nodes.read. Membership and permissions are
+        checked against current database state. Duplicate IDs, noncanonical UUIDs,
+        more than 100 IDs and unknown query parameters are rejected. Nodes are sorted
+        by ID and missing or foreign-scope nodes return 404. The main version comes
+        from the running Control API build, never rollout history or configured version.
+        Candidate metadata is verified against installation-bound signatures, current
+        entitlement and release policy; it does not authorize execution. No grants,
+        plans, reservations or audit records are written by this request.
+      x-required-permissions: [control.upgrades.read]
+      parameters:
+        - name: node_id
+          in: query
+          required: false
+          style: form
+          explode: true
+          description: Optional inventory batch; requires nodes.read.
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            uniqueItems: true
+            items: {type: string, format: uuid}
+      responses:
+        '200':
+          description: Fresh read-only status; unavailable dependencies are explicit states.
+          headers:
+            Cache-Control:
+              schema: {type: string, const: no-store}
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: false
+                    required: [schema, observed_at, control, nodes]
+                    properties:
+                      schema: {type: string, const: cdnca.maintenance-upgrade-status/v1}
+                      observed_at: {type: string, format: date-time}
+                      control: {$ref: '#/components/schemas/ControlStatus'}
+                      nodes:
+                        type: array
+                        maxItems: 100
+                        items: {$ref: '#/components/schemas/NodeStatus'}
+        '400': {description: Invalid query or node IDs.}
+        '401': {description: Authentication required.}
+        '403': {description: Platform scope or current permissions denied.}
+        '404': {description: A requested node is not visible in this scope.}
+        '503': {description: Required local runtime is unavailable.}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  schemas:
+    Candidate:
+      type: object
+      additionalProperties: false
+      required: [state, reason, version, expires_at]
+      properties:
+        state: {type: string, enum: [available, up_to_date, rollback_required, unavailable]}
+        reason:
+          type: string
+          description: Stable localizable reason; never a raw upstream error.
+        version: {type: [string, 'null']}
+        expires_at: {type: [string, 'null'], format: date-time}
+      description: >-
+        Positive states require an unexpired signed candidate and local authorization.
+        SemVer direction determines available, up_to_date or rollback_required.
+        Unavailable always has a null version. A signed negative snapshot may have
+        an expiry; a local failure has null expiry. Clients disable stale candidates.
+    Runtime:
+      type: object
+      additionalProperties: false
+      required: [ready, reason]
+      properties:
+        ready: {type: boolean}
+        reason: {type: string}
+    ControlStatus:
+      type: object
+      additionalProperties: false
+      required: [component, current_version, configured_version_matches, authorization, candidate, runtime]
+      properties:
+        component: {type: string, const: control-api}
+        current_version: {type: [string, 'null']}
+        build:
+          type: object
+          additionalProperties: false
+          required: [source_commit, source_tree, built_at, binary_sha256]
+          properties:
+            source_commit: {type: [string, 'null'], pattern: '^[0-9a-f]{40}$'}
+            source_tree: {type: [string, 'null'], pattern: '^[0-9a-f]{40}$'}
+            built_at: {type: [string, 'null'], format: date-time}
+            binary_sha256: {type: [string, 'null'], pattern: '^[0-9a-f]{64}$'}
+          description: >-
+            Compile-time source provenance and SHA-256 of the running executable inode.
+            Missing build metadata is null. Configured versions and release history are
+            never substituted. The binary digest is not a signed release authorization.
+        configured_version_matches: {type: [boolean, 'null']}
+        authorization:
+          type: object
+          additionalProperties: false
+          required: [state, reason]
+          properties:
+            state: {type: string, enum: [valid, unavailable, invalid, denied]}
+            reason: {type: string}
+            channel: {type: string}
+        candidate: {$ref: '#/components/schemas/Candidate'}
+        runtime: {$ref: '#/components/schemas/Runtime'}
+      description: >-
+        Execution reports read-only plan service, repository and replica conditions.
+        Healthy replicas alone cannot mark an independent runner as ready. Reading
+        status never writes a replica observation or starts a runner.
+    NodeStatus:
+      type: object
+      additionalProperties: false
+      required: [node_id, current_version, candidate, runtime, reason, eligible]
+      properties:
+        node_id: {type: string, format: uuid}
+        current_version: {type: [string, 'null']}
+        candidate: {$ref: '#/components/schemas/Candidate'}
+        runtime: {$ref: '#/components/schemas/Runtime'}
+        reason: {type: string}
+        eligible: {type: boolean}
+      description: >-
+        Eligibility allows preflight plan creation only. It requires confirmed current
+        version/session, fresh online heartbeat, active node, valid upgrade capabilities,
+        an authorized upgrade candidate and ready node upgrade runtime. Starting a
+        plan must independently reauthorize through the existing grant workflow.

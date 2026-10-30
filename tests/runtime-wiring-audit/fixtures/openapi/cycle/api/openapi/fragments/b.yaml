@@ -1,0 +1,7 @@
+openapi: 3.1.0
+info: { title: Cycle B fixture, version: 1.0.0 }
+paths: {}
+components:
+  pathItems:
+    B:
+      $ref: './a.yaml#/components/pathItems/A'

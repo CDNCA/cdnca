@@ -1,0 +1,90 @@
+# tests/ruleintel-poc/grey-challenge/run.sh, cdnca-native-runtime:edge-golden arm64, 2026-10-19
+# full run (CONFIG-OK failed only because logs/ did not exist for -t; fixed):
+runtime: nginx version: openresty/1.31.1.1
+FAIL CONFIG-OK expected=yes actual=no  error_page 418/599 = @named 与规则加载通过
+== challenge code 418: browser GET in the grey zone
+PASS GET-418-CHALLENGED expected=200/challenge actual=200/challenge  灰区浏览器 GET → 挑战页（状态改写为 200，不暴露 418）
+PASS GET-418-NAMED-SEES-METHOD expected=GET actual=GET  命名 location 里方法仍是原始 GET
+PASS GET-418-NAMED-SEES-TXID expected=yes actual=yes  命名 location 能读到事务 ID 上下文（g=0）
+PASS GET-418-ONE-TRANSACTION expected=1 actual=1  error_page 跳命名 location 后 ModSecurity 不再建第二个事务
+PASS GET-418-RETRY-PASSES expected=200 actual=200  带挑战 cookie 重发同一 GET → 放行
+PASS GET-418-RETRY-AT-ORIGIN expected=yes actual=yes  重发请求到达源站
+== challenge code 599: browser GET in the grey zone
+PASS GET-599-CHALLENGED expected=200/challenge actual=200/challenge  灰区浏览器 GET → 挑战页（状态改写为 200，不暴露 599）
+PASS GET-599-NAMED-SEES-METHOD expected=GET actual=GET  命名 location 里方法仍是原始 GET
+PASS GET-599-NAMED-SEES-TXID expected=yes actual=yes  命名 location 能读到事务 ID 上下文（g=0）
+PASS GET-599-ONE-TRANSACTION expected=1 actual=1  error_page 跳命名 location 后 ModSecurity 不再建第二个事务
+PASS GET-599-RETRY-PASSES expected=200 actual=200  带挑战 cookie 重发同一 GET → 放行
+PASS GET-599-RETRY-AT-ORIGIN expected=yes actual=yes  重发请求到达源站
+        1 ModSecurity: Access denied with code 418
+        1 ModSecurity: Access denied with code 599
+== POST (form) in the grey zone: 307 keeps method and body
+PASS POST-307 expected=307 actual=307  表单 POST → 307 + Set-Cookie
+PASS POST-307-LOCATION expected=/form actual=/form  Location 指回同一 URL
+PASS POST-REPEAT-PASSES expected=200 actual=200  浏览器按 307 带 cookie 重发同一 POST → 放行
+PASS POST-REPEAT-BODY expected=origin method=POST len=22 actual=origin method=POST len=22  源站收到原方法与完整请求体
+PASS POST-OTHER-ADDR expected=307 actual=307  伪造/篡改 cookie → 再次挑战
+== who is not challenged
+PASS API-JSON-PASS expected=200 actual=200  API 类（JSON 体）灰区 → 放行，不挑战
+PASS API-AUTH-PASS expected=200 actual=200  带 Authorization 的 GET 灰区 → 放行
+PASS XHR-PASS expected=200 actual=200  XHR 灰区 → 放行
+PASS STRONG-BLOCK expected=403 actual=403  强载荷（≥ 阈值）→ 403，不给挑战
+PASS STRONG-BLOCK-WITH-COOKIE expected=403 actual=403  过了挑战也不放宽强分拦截
+PASS CLEAN-NO-CHALLENGE expected=200 actual=200  干净请求 → 直接放行
+PASS NOCHALLENGE-GREY-PASS expected=200 actual=200  站点关灰区挑战（无 51310）→ 灰区放行（现状）
+PASS HEAD-CHALLENGED expected=200 actual=200  HEAD 灰区 → 挑战（200，无 body）
+== cost: browser GET, 2000 sequential, 1 worker (interleaved rounds)
+round 1 clean             {"count":2000,"failed":0,"first_error":"","max_ms":2.335,"p50_ms":0.638,"p99_ms":0.997}
+round 1 grey-challenge    {"count":2000,"failed":0,"first_error":"","max_ms":2.501,"p50_ms":0.713,"p99_ms":1.279}
+round 1 grey-cookie       {"count":2000,"failed":0,"first_error":"","max_ms":7.312,"p50_ms":0.807,"p99_ms":1.327}
+round 1 grey-nochallenge  {"count":2000,"failed":0,"first_error":"","max_ms":2.737,"p50_ms":0.719,"p99_ms":1.221}
+round 2 clean             {"count":2000,"failed":0,"first_error":"","max_ms":2.481,"p50_ms":0.64,"p99_ms":1.13}
+round 2 grey-challenge    {"count":2000,"failed":0,"first_error":"","max_ms":21.379,"p50_ms":0.724,"p99_ms":1.459}
+round 2 grey-cookie       {"count":2000,"failed":0,"first_error":"","max_ms":4.097,"p50_ms":0.833,"p99_ms":1.88}
+round 2 grey-nochallenge  {"count":2000,"failed":0,"first_error":"","max_ms":18.018,"p50_ms":0.722,"p99_ms":1.267}
+round 3 clean             {"count":2000,"failed":0,"first_error":"","max_ms":27.729,"p50_ms":0.636,"p99_ms":1.027}
+round 3 grey-challenge    {"count":2000,"failed":0,"first_error":"","max_ms":4.614,"p50_ms":0.711,"p99_ms":1.348}
+round 3 grey-cookie       {"count":2000,"failed":0,"first_error":"","max_ms":6.207,"p50_ms":0.812,"p99_ms":1.365}
+round 3 grey-nochallenge  {"count":2000,"failed":0,"first_error":"","max_ms":22.07,"p50_ms":0.727,"p99_ms":2.716}
+RESULT grey-challenge failures=1
+# rerun after the fix (ROUNDS=1 REQUESTS=500):
+runtime: nginx version: openresty/1.31.1.1
+  nginx: configuration file /poc/nginx.conf test is successful
+PASS CONFIG-OK expected=yes actual=yes  error_page 418/599 = @named 与规则加载通过
+== challenge code 418: browser GET in the grey zone
+PASS GET-418-CHALLENGED expected=200/challenge actual=200/challenge  灰区浏览器 GET → 挑战页（状态改写为 200，不暴露 418）
+PASS GET-418-NAMED-SEES-METHOD expected=GET actual=GET  命名 location 里方法仍是原始 GET
+PASS GET-418-NAMED-SEES-TXID expected=yes actual=yes  命名 location 能读到事务 ID 上下文（g=0）
+PASS GET-418-ONE-TRANSACTION expected=1 actual=1  error_page 跳命名 location 后 ModSecurity 不再建第二个事务
+PASS GET-418-RETRY-PASSES expected=200 actual=200  带挑战 cookie 重发同一 GET → 放行
+PASS GET-418-RETRY-AT-ORIGIN expected=yes actual=yes  重发请求到达源站
+== challenge code 599: browser GET in the grey zone
+PASS GET-599-CHALLENGED expected=200/challenge actual=200/challenge  灰区浏览器 GET → 挑战页（状态改写为 200，不暴露 599）
+PASS GET-599-NAMED-SEES-METHOD expected=GET actual=GET  命名 location 里方法仍是原始 GET
+PASS GET-599-NAMED-SEES-TXID expected=yes actual=yes  命名 location 能读到事务 ID 上下文（g=0）
+PASS GET-599-ONE-TRANSACTION expected=1 actual=1  error_page 跳命名 location 后 ModSecurity 不再建第二个事务
+PASS GET-599-RETRY-PASSES expected=200 actual=200  带挑战 cookie 重发同一 GET → 放行
+PASS GET-599-RETRY-AT-ORIGIN expected=yes actual=yes  重发请求到达源站
+        1 ModSecurity: Access denied with code 418
+        1 ModSecurity: Access denied with code 599
+== POST (form) in the grey zone: 307 keeps method and body
+PASS POST-307 expected=307 actual=307  表单 POST → 307 + Set-Cookie
+PASS POST-307-LOCATION expected=/form actual=/form  Location 指回同一 URL
+PASS POST-REPEAT-PASSES expected=200 actual=200  浏览器按 307 带 cookie 重发同一 POST → 放行
+PASS POST-REPEAT-BODY expected=origin method=POST len=22 actual=origin method=POST len=22  源站收到原方法与完整请求体
+PASS POST-OTHER-ADDR expected=307 actual=307  伪造/篡改 cookie → 再次挑战
+== who is not challenged
+PASS API-JSON-PASS expected=200 actual=200  API 类（JSON 体）灰区 → 放行，不挑战
+PASS API-AUTH-PASS expected=200 actual=200  带 Authorization 的 GET 灰区 → 放行
+PASS XHR-PASS expected=200 actual=200  XHR 灰区 → 放行
+PASS STRONG-BLOCK expected=403 actual=403  强载荷（≥ 阈值）→ 403，不给挑战
+PASS STRONG-BLOCK-WITH-COOKIE expected=403 actual=403  过了挑战也不放宽强分拦截
+PASS CLEAN-NO-CHALLENGE expected=200 actual=200  干净请求 → 直接放行
+PASS NOCHALLENGE-GREY-PASS expected=200 actual=200  站点关灰区挑战（无 51310）→ 灰区放行（现状）
+PASS HEAD-CHALLENGED expected=200 actual=200  HEAD 灰区 → 挑战（200，无 body）
+== cost: browser GET, 500 sequential, 1 worker (interleaved rounds)
+round 1 clean             {"count":500,"failed":0,"first_error":"","max_ms":1.766,"p50_ms":0.66,"p99_ms":0.761}
+round 1 grey-challenge    {"count":500,"failed":0,"first_error":"","max_ms":1.867,"p50_ms":0.726,"p99_ms":0.871}
+round 1 grey-cookie       {"count":500,"failed":0,"first_error":"","max_ms":2.036,"p50_ms":0.826,"p99_ms":1.022}
+round 1 grey-nochallenge  {"count":500,"failed":0,"first_error":"","max_ms":2.014,"p50_ms":0.75,"p99_ms":1.004}
+RESULT grey-challenge failures=0

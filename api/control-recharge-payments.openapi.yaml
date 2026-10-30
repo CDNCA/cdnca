@@ -1,0 +1,344 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Recharge Payment Lifecycle API
+  version: 1.0.0
+  description: >-
+    签名收银台、退款、撤销和对账的独立契约 fragment。该文件不代表共享 server 已挂载；
+    支付网关通知走收款渠道的 /payments/v1/notify/{channel_id}，由主控核对金额、商户号与订单号后入账。
+    原始签名载荷、商户私钥、API v3 密钥和付款人资料不进入响应或稳定错误。
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/recharge-payments/checkouts:
+    post:
+      operationId: createRechargePaymentCheckout
+      summary: 为已认证租户充值订单创建签名收银台
+      x-required-permissions: [billing.recharges.create]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateCheckout'}
+      responses:
+        '201':
+          description: 新建或精确幂等重放；不返回原始签名载荷
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SignedCheckout'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/ProviderUnavailable'}
+  /v1/recharge-payments/orders/{order_id}/cancellation:
+    post:
+      operationId: cancelRechargePayment
+      summary: 取消当前租户自己的待支付充值订单
+      description: >-
+        在调用支付渠道前先持久化不可变请求身份。渠道超时或响应丢失返回 unknown，调用方必须使用
+        相同 Idempotency-Key 和 X-Request-ID 重试；服务端复用相同 provider_request_id。
+      x-required-permissions: [billing.recharges.cancel]
+      x-cdnca-provider-mutation:
+        durableIntent: before-remote-call
+        retryIdentity: provider_request_id
+        terminalOrderGuard: canceled-cannot-become-paid
+      parameters:
+        - {$ref: '#/components/parameters/OrderID'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CancellationRequest'}
+      responses:
+        '200':
+          description: 渠道已确定关闭或已确定拒绝
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CancellationResult'}
+        '202':
+          description: 已持久化请求，但渠道结果仍为 pending 或 unknown
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CancellationResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/ProviderUnavailable'}
+  /v1/admin/recharge-payments/orders/{order_id}/refunds:
+    post:
+      operationId: requestRechargePaymentRefund
+      summary: 执行已批准的退款（意图先持久化，按稳定退款单号外调，结果事务化入账）
+      x-required-permissions: [billing.recharges.compensate]
+      x-cdnca-step-up:
+        consumption: atomic-before-provider-mutation
+        binding: [actor, approval_id, tenant, order, operation, amount_minor, expected_revision, idempotency_key, request_id]
+      x-cdnca-provider-mutation:
+        durableIntent: before-remote-call
+        retryIdentity: provider_request_id
+        balanceReservation: in-flight-amount
+      parameters:
+        - {$ref: '#/components/parameters/OrderID'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/CompensationStepUpToken'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CompensationRequest'}
+      responses:
+        '200':
+          description: 渠道结果已确定：succeeded（渠道已确认且已入账）或 failed（渠道未接受，资金未退出、预留已释放）
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CompensationResult'}
+        '202':
+          description: 退款意图已持久化但渠道结果待确认（pending/unknown）；用同一请求（同 Idempotency-Key，或同审批，无需新的 X-Step-Up-Token）重试会查询原退款单号，不会重复退款
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CompensationResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/ProviderUnavailable'}
+  /v1/admin/recharge-payments/orders/{order_id}/voids:
+    post:
+      operationId: requestRechargePaymentVoid
+      summary: 执行已批准的撤销（意图先持久化，按稳定退款单号外调，结果事务化入账）
+      x-required-permissions: [billing.recharges.compensate]
+      x-cdnca-step-up:
+        consumption: atomic-before-provider-mutation
+        binding: [actor, approval_id, tenant, order, operation, amount_minor, expected_revision, idempotency_key, request_id]
+      x-cdnca-provider-mutation:
+        durableIntent: before-remote-call
+        retryIdentity: provider_request_id
+        balanceReservation: in-flight-amount
+      parameters:
+        - {$ref: '#/components/parameters/OrderID'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/CompensationStepUpToken'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/VoidRequest'}
+      responses:
+        '200':
+          description: 渠道结果已确定：succeeded（渠道已确认且已入账）或 failed（渠道未接受，资金未退出、预留已释放）
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CompensationResult'}
+        '202':
+          description: 撤销意图已持久化但渠道结果待确认（pending/unknown）；用同一请求（同 Idempotency-Key，或同审批，无需新的 X-Step-Up-Token）重试会查询原退款单号，不会重复撤销
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CompensationResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/ProviderUnavailable'}
+  /v1/admin/recharge-payments/orders/{order_id}/reconciliation:
+    post:
+      operationId: reconcileRechargePayment
+      summary: 向支付渠道查询并应用确定状态
+      x-required-permissions: [billing.recharges.reconcile]
+      parameters:
+        - {$ref: '#/components/parameters/OrderID'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReconcileRequest'}
+      responses:
+        '200':
+          description: 确定结果、仍需对账或精确重放
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SettlementResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/ProviderUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      x-cdnca-single-value: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      x-cdnca-single-value: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    StepUpToken:
+      name: X-Step-Up-Token
+      in: header
+      required: true
+      x-cdnca-single-value: true
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    CompensationStepUpToken:
+      name: X-Step-Up-Token
+      in: header
+      required: false
+      description: 首次执行必填；恢复已持久化的同一退款/撤销意图（同审批）时省略
+      x-cdnca-single-value: true
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    OrderID:
+      name: order_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+  responses:
+    Error:
+      description: 稳定错误码；message 禁止直接展示给用户
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    ProviderUnavailable:
+      description: 渠道不可用或结果不确定；调用方不得自行推断支付结果
+      headers:
+        Retry-After:
+          description: 已校验且上限为一小时的渠道退避秒数或 HTTP-date；缺失时由任务策略退避
+          schema: {type: string, minLength: 1, maxLength: 64}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    CreateCheckout:
+      type: object
+      additionalProperties: false
+      required: [order_id, provider, expected_revision]
+      properties:
+        order_id: {$ref: '#/components/schemas/UUID'}
+        provider: {type: string, enum: [alipay, wechat]}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    CancellationRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    CompensationRequest:
+      type: object
+      additionalProperties: false
+      required: [approval_id, tenant_scope_id, amount_minor, expected_revision]
+      properties:
+        approval_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        amount_minor: {type: integer, format: int64, minimum: 1, maximum: 9000000000000000}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    VoidRequest:
+      type: object
+      additionalProperties: false
+      required: [approval_id, tenant_scope_id, amount_minor, expected_revision]
+      properties:
+        approval_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        amount_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    ReconcileRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_scope_id, provider, expected_revision]
+      properties:
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        provider: {type: string, enum: [alipay, wechat]}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    SignedCheckout:
+      type: object
+      additionalProperties: false
+      required: [provider, provider_account_id, order_id, tenant_scope_id, amount_minor, currency, expires_at, verification_key_id, payload_sha256, signature_sha256, checkout_url, replayed]
+      properties:
+        provider: {type: string, enum: [alipay, wechat]}
+        provider_account_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        amount_minor: {type: integer, format: int64, minimum: 1}
+        currency: {type: string, const: CNY}
+        expires_at: {type: string, format: date-time}
+        verification_key_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+        payload_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        signature_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        checkout_url: {type: string, format: uri, pattern: '^(https://qr\\.alipay\\.com/|weixin://wxpay/)'}
+        replayed: {type: boolean}
+    CompensationResult:
+      type: object
+      additionalProperties: false
+      required: [compensation_id, approval_id, order_id, tenant_scope_id, kind, amount_minor, currency, status, reason_code, attempt, provider_request_id, order_state, order_revision, retryable, replayed]
+      properties:
+        compensation_id: {$ref: '#/components/schemas/UUID'}
+        approval_id: {$ref: '#/components/schemas/UUID'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        kind: {type: string, enum: [refund, void]}
+        amount_minor: {type: integer, format: int64, minimum: 1}
+        currency: {type: string, const: CNY}
+        status: {type: string, enum: [pending, succeeded, failed, unknown]}
+        reason_code: {type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$'}
+        attempt: {type: integer, format: int64, minimum: 1}
+        provider_request_id:
+          type: string
+          description: 稳定的渠道退款单号（支付宝 out_request_no / 微信 out_refund_no），每次重试复用
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+        order_state: {type: string, enum: [pending, paid, partially_refunded, refunded, voided, failed, canceled, reconcile_required]}
+        order_revision: {type: integer, format: int64, minimum: 1}
+        retryable: {type: boolean}
+        replayed: {type: boolean}
+    SettlementResult:
+      type: object
+      additionalProperties: false
+      required: [order_id, state, reason_code, revision, replayed, deferred]
+      properties:
+        order_id: {$ref: '#/components/schemas/UUID'}
+        state: {type: string, enum: [pending, paid, partially_refunded, refunded, voided, failed, canceled, reconcile_required]}
+        reason_code: {type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$'}
+        revision: {type: integer, format: int64, minimum: 1}
+        transaction_id: {$ref: '#/components/schemas/UUID'}
+        replayed: {type: boolean}
+        deferred: {type: boolean}
+    CancellationResult:
+      type: object
+      additionalProperties: false
+      required: [cancellation_id, order_id, status, order_state, order_revision, attempt, provider_request_id, reason_code, retryable, replayed]
+      properties:
+        cancellation_id: {$ref: '#/components/schemas/UUID'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        status: {type: string, enum: [pending, succeeded, failed, unknown]}
+        order_state: {type: string, enum: [pending, paid, failed, canceled]}
+        order_revision: {type: integer, format: int64, minimum: 1}
+        attempt: {type: integer, format: int64, minimum: 1}
+        provider_request_id: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+        reason_code: {type: string, pattern: '^[A-Z][A-Z0-9_]{0,63}$'}
+        retryable: {type: boolean}
+        replayed: {type: boolean}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          enum: [validation_error, unauthenticated, permission_denied, identity_verification_required, recharge_method_unavailable, mfa_step_up_required, not_found, recharge_payment_response_mismatch, recharge_payment_revision_conflict, recharge_payment_binding_mismatch, recharge_payment_event_conflict, recharge_payment_state_conflict, recharge_payment_insufficient_balance, recharge_payment_compensation_not_sent, recharge_payment_approval_required, recharge_payment_approval_expired, recharge_payment_approval_conflict, signature_invalid, recharge_payment_result_unknown, recharge_payment_unavailable]
+        params: {type: object, additionalProperties: true}

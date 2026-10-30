@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.cdnca.example/marketplace/v1/webhook-test-event.schema.json",
+  "title": "CDNCA Plugin Webhook Test CloudEvent",
+  "description": "Canonical CloudEvents 1.0 body emitted by the plugin webhook test-delivery route.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specversion", "id", "source", "type", "subject", "time", "datacontenttype", "dataschema", "tenant_id", "request_id", "sequence", "data"],
+  "properties": {
+    "specversion": {"const": "1.0"},
+    "id": {"type": "string", "format": "uuid", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", "description": "UUIDv7 event identity."},
+    "source": {"const": "/control-plane/plugin-webhooks"},
+    "type": {"const": "io.cdnca.webhook.v1.test"},
+    "subject": {"type": "string", "pattern": "^webhook_subscription/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "time": {"type": "string", "format": "date-time", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"},
+    "datacontenttype": {"const": "application/json"},
+    "dataschema": {"const": "https://schemas.cdnca.example/marketplace/v1/webhook-test-event.schema.json"},
+    "tenant_id": {"type": "string", "format": "uuid", "description": "Stable tenant identity from access_scopes.tenant_id; this is not the tenant scope UUID."},
+    "request_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "traceparent": {"type": "string", "pattern": "^00-(?!0{32})[0-9a-f]{32}-(?!0{16})[0-9a-f]{16}-(00|01)$"},
+    "sequence": {"type": "integer", "minimum": 1, "maximum": 18446744073709551615},
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 10,
+      "required": ["subscription_id", "test"],
+      "properties": {
+        "subscription_id": {"type": "string", "format": "uuid"},
+        "test": {"const": true}
+      },
+      "patternProperties": {
+        "^x_[a-z][a-z0-9_]{0,63}$": {
+          "not": {"type": "null"}
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "specversion": "1.0",
+      "id": "018cc251-f400-7def-8000-000000000001",
+      "source": "/control-plane/plugin-webhooks",
+      "type": "io.cdnca.webhook.v1.test",
+      "subject": "webhook_subscription/018cc251-f400-7def-8000-000000000010",
+      "time": "2024-01-01T00:00:00Z",
+      "datacontenttype": "application/json",
+      "dataschema": "https://schemas.cdnca.example/marketplace/v1/webhook-test-event.schema.json",
+      "tenant_id": "018cc251-f400-7def-8000-000000000030",
+      "request_id": "request-084",
+      "traceparent": "00-11111111111111111111111111111111-2222222222222222-01",
+      "sequence": 1,
+      "data": {"subscription_id": "018cc251-f400-7def-8000-000000000010", "test": true}
+    }
+  ],
+  "x-cdnca-receiver-verification": {
+    "timestamp_tolerance_seconds": 300,
+    "timestamp_bounds_inclusive": true,
+    "verification_order": ["body_sha256", "hmac_sha256", "json"],
+    "delivery_deduplication": {
+      "header": "X-CDNCA-Webhook-Delivery-Id",
+      "minimum_retention_days": 30,
+      "attempts_reuse_delivery_id": true,
+      "explicit_replay_uses_new_delivery_id": true
+    }
+  },
+  "x-cdnca-signature-example": {
+    "test_key_notice": "Public deterministic test key; never configure it as a production webhook secret.",
+    "public_test_key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "canonical_request_path": "/cdnca/hooks",
+    "canonical_body_bytes": 612,
+    "canonical_body": "{\"specversion\":\"1.0\",\"id\":\"018cc251-f400-7def-8000-000000000001\",\"source\":\"/control-plane/plugin-webhooks\",\"type\":\"io.cdnca.webhook.v1.test\",\"subject\":\"webhook_subscription/018cc251-f400-7def-8000-000000000010\",\"time\":\"2024-01-01T00:00:00Z\",\"datacontenttype\":\"application/json\",\"dataschema\":\"https://schemas.cdnca.example/marketplace/v1/webhook-test-event.schema.json\",\"tenant_id\":\"018cc251-f400-7def-8000-000000000030\",\"request_id\":\"request-084\",\"traceparent\":\"00-11111111111111111111111111111111-2222222222222222-01\",\"sequence\":1,\"data\":{\"subscription_id\":\"018cc251-f400-7def-8000-000000000010\",\"test\":true}}",
+    "headers": {
+      "Content-Type": "application/cloudevents+json",
+      "X-CDNCA-Webhook-Event-Id": "018cc251-f400-7def-8000-000000000001",
+      "X-CDNCA-Webhook-Delivery-Id": "018cc251-f400-7def-8000-000000000002",
+      "X-CDNCA-Webhook-Timestamp": "1704067200",
+      "X-CDNCA-Webhook-Content-Sha256": "a151948885c16b99e9baf2836b61a9ad29ebf5bb3e993f2517cf8901120662a3",
+      "X-CDNCA-Webhook-Key-Id": "018cc251-f400-7def-8000-000000000011",
+      "X-CDNCA-Webhook-Signature-Version": "v2",
+      "X-CDNCA-Webhook-Signature": "v2=VgARCiCHvvwQHdzbKrvVyC5bP-6px3-tRz1z4rS2LQo",
+      "X-CDNCA-Idempotency-Key": "plugin-webhook-v2-557dba69d2d1f24d0dc523fbde9c672431d21702e1428a9a53596df4bb90c911",
+      "X-CDNCA-Webhook-Attempt": "1"
+    },
+    "signing_input": "cdnca.webhook.signature/v2\nPOST\n/cdnca/hooks\n1704067200\n018cc251-f400-7def-8000-000000000001\n018cc251-f400-7def-8000-000000000002\n018cc251-f400-7def-8000-000000000011\na151948885c16b99e9baf2836b61a9ad29ebf5bb3e993f2517cf8901120662a3"
+  }
+}

@@ -1,0 +1,2864 @@
+{
+ "id": "account",
+ "prefix": "/v1/account",
+ "operations": [
+  {
+   "operation_id": "listSelfAPIKeys",
+   "method": "GET",
+   "path": "/v1/account/api-keys",
+   "summary": "List API keys owned by the current tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Session-only endpoint requiring api_keys.self.manage. CdncaKey credentials are rejected. Each item includes the exact persisted IP allowlist; secret material is never returned.",
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: pending_activation / active / revoked"
+    },
+    {
+     "name": "name",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "key_id",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "offset",
+     "in": "query",
+     "type": "integer",
+     "description": "Page-number access (canonical non-negative integer, 0-10000). Cannot be combined with cursor; an offset past the end returns empty items with total."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "API key metadata only; secret material is never returned.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<APIKey>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true,
+       "description": "Empty on the terminal page; otherwise pass unchanged as cursor to the next request."
+      },
+      {
+       "name": "has_more",
+       "type": "boolean",
+       "required": true,
+       "description": "True exactly when next_cursor is non-empty."
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "description": "Exact filtered key count at the page snapshot. Present on the first page and on offset pages; omitted on cursor continuation pages."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createSelfAPIKey",
+   "method": "POST",
+   "path": "/v1/account/api-keys",
+   "summary": "Create and activate an API key for the current tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Session-only endpoint requiring api_keys.self.manage. The secret is returned in this response only. A replay with the same identity, request, and Idempotency-Key deterministically returns the same secret. An unknown result must be retried with the unchanged body, If-Match revision, and Idempotency-Key.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Collection creation precondition. Must be the quoted revision zero value."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "scopes",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+     },
+     {
+      "name": "expires_at",
+      "type": "string(date-time)",
+      "description": "Must be in the future and no more than 366 days from the server clock."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Active key and its one-time secret.",
+     "fields": [
+      {
+       "name": "key",
+       "type": "APIKey",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string(password)",
+       "required": true,
+       "description": "One-time base64url secret. Prefix with key.key_id and a dot when building CdncaKey credentials."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getSelfAPIKey",
+   "method": "GET",
+   "path": "/v1/account/api-keys/{key_id}",
+   "summary": "Get API key metadata owned by the current tenant user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Session-only endpoint requiring api_keys.self.manage. The exact persisted IP allowlist is returned; secret material is never returned.",
+   "params": [
+    {
+     "name": "key_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current API key metadata.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "key_prefix",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
+      },
+      {
+       "name": "ip_allowlist",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+      },
+      {
+       "name": "status",
+       "type": "string: pending_activation / active / revoked",
+       "required": true,
+       "description": "pending_activation becomes active only through owner activation; revoked is terminal."
+      },
+      {
+       "name": "pending_expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_used_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "activated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSelfAPIKey",
+   "method": "PATCH",
+   "path": "/v1/account/api-keys/{key_id}",
+   "summary": "Update API key metadata",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Session-only endpoint. Revoked keys cannot be updated. An unknown result must be retried with the unchanged body, If-Match revision, and Idempotency-Key.",
+   "params": [
+    {
+     "name": "key_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "scopes",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+     },
+     {
+      "name": "expires_at",
+      "type": "string(date-time)",
+      "description": "Must be in the future and no more than 366 days from the server clock."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated metadata.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "key_prefix",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
+      },
+      {
+       "name": "ip_allowlist",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+      },
+      {
+       "name": "status",
+       "type": "string: pending_activation / active / revoked",
+       "required": true,
+       "description": "pending_activation becomes active only through owner activation; revoked is terminal."
+      },
+      {
+       "name": "pending_expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_used_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "activated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "activateSelfAPIKey",
+   "method": "POST",
+   "path": "/v1/account/api-keys/{key_id}/activate",
+   "summary": "Activate a pending API key and issue its secret",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Session-only endpoint for the key owner. Only an unexpired pending_activation key can be activated; the secret is returned in this response only. The body carries the exact persisted IP allowlist. An unknown result must be retried with the unchanged body, If-Match revision, and Idempotency-Key.",
+   "params": [
+    {
+     "name": "key_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "required": true,
+      "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+     },
+     {
+      "name": "grant_all_scopes",
+      "type": "boolean",
+      "description": "Rotate only. When true, the rotation also replaces the key scopes with every permission the current session may grant to an API key (the simple-mode \"reset key\"). It is part of the idempotency binding. Other operations reject true with 400 invalid_request."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Activated key and one-time secret.",
+     "fields": [
+      {
+       "name": "key",
+       "type": "APIKey",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string(password)",
+       "required": true,
+       "description": "One-time base64url secret. Prefix with key.key_id and a dot when building CdncaKey credentials."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "revokeSelfAPIKey",
+   "method": "POST",
+   "path": "/v1/account/api-keys/{key_id}/revoke",
+   "summary": "Revoke an API key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Session-only endpoint. Revocation immediately prevents future API key authentication. The body carries the exact persisted IP allowlist. An unknown result must be retried with the unchanged body, If-Match revision, and Idempotency-Key.",
+   "params": [
+    {
+     "name": "key_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "required": true,
+      "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+     },
+     {
+      "name": "grant_all_scopes",
+      "type": "boolean",
+      "description": "Rotate only. When true, the rotation also replaces the key scopes with every permission the current session may grant to an API key (the simple-mode \"reset key\"). It is part of the idempotency binding. Other operations reject true with 400 invalid_request."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Revoked key metadata.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "key_prefix",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
+      },
+      {
+       "name": "ip_allowlist",
+       "type": "array<string>",
+       "required": true,
+       "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+      },
+      {
+       "name": "status",
+       "type": "string: pending_activation / active / revoked",
+       "required": true,
+       "description": "pending_activation becomes active only through owner activation; revoked is terminal."
+      },
+      {
+       "name": "pending_expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "last_used_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "activated_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "rotateSelfAPIKey",
+   "method": "POST",
+   "path": "/v1/account/api-keys/{key_id}/rotate",
+   "summary": "Rotate an active API key secret",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Session-only endpoint. The previous credential becomes invalid when the transaction commits. The body carries the exact persisted IP allowlist. An unknown result must be retried with the unchanged body, If-Match revision, and Idempotency-Key.",
+   "params": [
+    {
+     "name": "key_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "required": true,
+      "description": "Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6, duplicate prefixes, or overlaps. Empty means unrestricted."
+     },
+     {
+      "name": "grant_all_scopes",
+      "type": "boolean",
+      "description": "Rotate only. When true, the rotation also replaces the key scopes with every permission the current session may grant to an API key (the simple-mode \"reset key\"). It is part of the idempotency binding. Other operations reject true with 400 invalid_request."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated key and one-time replacement secret.",
+     "fields": [
+      {
+       "name": "key",
+       "type": "APIKey",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string(password)",
+       "required": true,
+       "description": "One-time base64url secret. Prefix with key.key_id and a dot when building CdncaKey credentials."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Malformed JSON, UUID, revision, CIDR, duplicate or overlapping prefix, or more than 32 prefixes. Validation params expose only field indexes and counts, never any submitted CIDR, secret, digest, or matching prefix."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getAccountBalance",
+   "method": "GET",
+   "path": "/v1/account/balance",
+   "summary": "Read the active tenant CNY balance",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.account.read in a tenant scope. A platform identity cannot use this tenant endpoint.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current cached balance and optimistic revision. The balance is reconstructable from immutable postings.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "balance_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "available_minor",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "可用余额 = 余额 − 套餐预扣 − 退款处理中（在途充值退款），所有扣余额的操作按此判定。"
+      },
+      {
+       "name": "refunding_minor",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "退款处理中（已发起、未到终态的充值退款/撤销）预留的金额。"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listAccountInbox",
+   "method": "GET",
+   "path": "/v1/account/inbox",
+   "summary": "List the tenant member's in-app messages (站内信), newest first",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant in-app notices addressed to the caller in the session's tenant scope (attack escalation security.escalate.blackhole once the blackhole is in force, security.escalate.cname_change_required). Written whatever the platform email/SMS settings say. Tenant-scope sessions only (platform sessions use /v1/admin/inbox). params holds the event's public template values; the console renders the text per language.",
+   "params": [
+    {
+     "name": "unread",
+     "in": "query",
+     "type": "string: true"
+    },
+    {
+     "name": "page_size",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "unread",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "unread_only",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "page_size",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "markAllAccountInboxMessagesRead",
+   "method": "POST",
+   "path": "/v1/account/inbox/read-all",
+   "summary": "Mark all the caller's in-app messages read (audited admin.inbox.read_all); read messages older than 180 days are pruned",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Number of messages marked.",
+     "fields": [
+      {
+       "name": "marked",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "operation_id": "getAccountInboxUnreadCount",
+   "method": "GET",
+   "path": "/v1/account/inbox/unread-count",
+   "summary": "Unread message count for the header badge",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Count.",
+     "fields": [
+      {
+       "name": "unread",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    }
+   ]
+  },
+  {
+   "operation_id": "markAccountInboxMessageRead",
+   "method": "POST",
+   "path": "/v1/account/inbox/{message_id}/read",
+   "summary": "Mark one message read",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "message_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Read."
+    },
+    {
+     "status": "404",
+     "description": "admin_inbox_message_not_found (not the caller's message)."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAccountLedger",
+   "method": "GET",
+   "path": "/v1/account/ledger",
+   "summary": "List immutable entries for the active tenant CNY balance",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.account.read and always derives scope from the authenticated tenant principal.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Newest-first tenant ledger page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingLedgerEntry>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listAccountMessages",
+   "method": "GET",
+   "path": "/v1/account/messages",
+   "summary": "List the current user's in-app messages",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "offset",
+     "in": "query",
+     "type": "integer",
+     "description": "Page by position (page-number pagination). Cannot be combined with cursor."
+    },
+    {
+     "name": "filter",
+     "in": "query",
+     "type": "string: read / unread"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Inbox page",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<InboxMessage>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "description": "Messages matching the filter in this snapshot; returned for a first or offset page, omitted on cursor pages."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "markMessageDelivered",
+   "method": "POST",
+   "path": "/v1/account/messages/{event_id}/delivered",
+   "summary": "Mark an in-app message delivered",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "event_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Inbox state",
+     "fields": [
+      {
+       "name": "event_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "delivered_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "read_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "markMessageRead",
+   "method": "POST",
+   "path": "/v1/account/messages/{event_id}/read",
+   "summary": "Mark an in-app message read",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "event_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Inbox state",
+     "fields": [
+      {
+       "name": "event_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "delivered_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "read_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error"
+    },
+    {
+     "status": "401",
+     "description": "Stable API error"
+    },
+    {
+     "status": "403",
+     "description": "Stable API error"
+    },
+    {
+     "status": "404",
+     "description": "Stable API error"
+    },
+    {
+     "status": "409",
+     "description": "Stable API error"
+    },
+    {
+     "status": "415",
+     "description": "Stable API error"
+    },
+    {
+     "status": "500",
+     "description": "Stable API error"
+    }
+   ]
+  },
+  {
+   "operation_id": "getMyMFAStatus",
+   "method": "GET",
+   "path": "/v1/account/mfa",
+   "summary": "Read the authenticated account's current MFA state",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns only inactive, enrollment_pending, or active plus non-sensitive credential metadata. No account label, seed, ciphertext, recovery code, or proof material is returned.",
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Canonical W3C version 00 traceparent; the non-zero trace ID is used for correlation."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current non-sensitive MFA state."
+    },
+    {
+     "status": "400",
+     "description": "Request metadata, path, query, body, or input is invalid"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session is absent, malformed, expired, revoked, or disabled"
+    },
+    {
+     "status": "403",
+     "description": "Live principal, tenant, permissions, or proof binding changed"
+    },
+    {
+     "status": "405",
+     "description": "Request method is not allowed."
+    },
+    {
+     "status": "408",
+     "description": "Request was canceled"
+    },
+    {
+     "status": "503",
+     "description": "MFA, encryption, identity, IAM, or PostgreSQL dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Request deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "disableMyMFA",
+   "method": "POST",
+   "path": "/v1/account/mfa/disable",
+   "summary": "Disable active MFA after strong reauthentication",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A TOTP or unused recovery code is consumed in the same transaction as the immutable terminal fact and audit event. A same-payload Idempotency-Key retry is safe after an unknown commit result and returns 204 without re-consuming authentication evidence.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "authentication",
+      "type": "Authentication",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "204",
+     "description": "Terminal fact already exists or was committed by this request."
+    },
+    {
+     "status": "400",
+     "description": "Request metadata, path, query, body, or input is invalid"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session is absent, malformed, expired, revoked, or disabled"
+    },
+    {
+     "status": "403",
+     "description": "Live principal, tenant, permissions, or proof binding changed"
+    },
+    {
+     "status": "405",
+     "description": "Request method is not allowed."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, code replay, or bounded-use conflict"
+    },
+    {
+     "status": "412",
+     "description": "Active MFA is required"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds the configured limit"
+    },
+    {
+     "status": "422",
+     "description": "MFA code or proof is invalid"
+    },
+    {
+     "status": "408",
+     "description": "Request was canceled"
+    },
+    {
+     "status": "503",
+     "description": "MFA, encryption, identity, IAM, or PostgreSQL dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Request deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "beginMyMFAEnrollment",
+   "method": "POST",
+   "path": "/v1/account/mfa/enrollments",
+   "summary": "Begin TOTP enrollment",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A first successful response contains the seed and provisioning URI. A same-payload Idempotency-Key replay returns only credential_id, expires_at, and replayed=true; the service does not decrypt or reconstruct setup material during replay.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Canonical W3C version 00 traceparent; the non-zero trace ID is used for correlation."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "account_label",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Enrollment created; secret and provisioning_uri are present exactly once.",
+     "fields": [
+      {
+       "name": "credential_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "provisioning_uri",
+       "type": "string(uri)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "const false",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Enrollment replayed; secret and provisioning_uri are absent.",
+     "fields": [
+      {
+       "name": "credential_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "const true",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request metadata, path, query, body, or input is invalid"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session is absent, malformed, expired, revoked, or disabled"
+    },
+    {
+     "status": "403",
+     "description": "Live principal, tenant, permissions, or proof binding changed"
+    },
+    {
+     "status": "405",
+     "description": "Request method is not allowed."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, code replay, or bounded-use conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds the configured limit"
+    },
+    {
+     "status": "408",
+     "description": "Request was canceled"
+    },
+    {
+     "status": "503",
+     "description": "MFA, encryption, identity, IAM, or PostgreSQL dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Request deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "activateMyMFAEnrollment",
+   "method": "POST",
+   "path": "/v1/account/mfa/enrollments/{credential_id}/activate",
+   "summary": "Activate a pending TOTP credential",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Recovery codes are returned only by the first successful activation. They are omitted entirely from a same-payload Idempotency-Key replay.",
+   "params": [
+    {
+     "name": "credential_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Canonical W3C version 00 traceparent; the non-zero trace ID is used for correlation."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "code",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Enrollment activated; recovery_codes are present exactly once.",
+     "fields": [
+      {
+       "name": "credential_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "recovery_codes",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "activated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "const false",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Activation replayed; recovery_codes are absent.",
+     "fields": [
+      {
+       "name": "credential_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "activated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "const true",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request metadata, path, query, body, or input is invalid"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session is absent, malformed, expired, revoked, or disabled"
+    },
+    {
+     "status": "403",
+     "description": "Live principal, tenant, permissions, or proof binding changed"
+    },
+    {
+     "status": "405",
+     "description": "Request method is not allowed."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, code replay, or bounded-use conflict"
+    },
+    {
+     "status": "410",
+     "description": "Enrollment or proof expired"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds the configured limit"
+    },
+    {
+     "status": "422",
+     "description": "MFA code or proof is invalid"
+    },
+    {
+     "status": "408",
+     "description": "Request was canceled"
+    },
+    {
+     "status": "503",
+     "description": "MFA, encryption, identity, IAM, or PostgreSQL dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Request deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "resetMyMFA",
+   "method": "POST",
+   "path": "/v1/account/mfa/reset",
+   "summary": "Reset active MFA after strong reauthentication",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Reset has the same atomic authentication, terminal-fact, audit, idempotency, and unknown commit semantics as disable. Account recovery without a TOTP or recovery code is a separate audited workflow and is not represented by this operation.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "authentication",
+      "type": "Authentication",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "createMyMFAStepUpProof",
+   "method": "POST",
+   "path": "/v1/account/mfa/step-up-proofs",
+   "summary": "Create a short-lived bound step-up proof",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The proof is bound server-side to the authenticated user, scope, session, live permissions, tenant, audience, and action. The opaque token is returned only once and is omitted from replay. There is no client-accessible proof consume operation.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "audience",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "action",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "authentication",
+      "type": "Authentication",
+      "required": true
+     },
+     {
+      "name": "ttl_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "max_uses",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Step-up proof created; token is present exactly once.",
+     "fields": [
+      {
+       "name": "proof_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "token",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "method",
+       "type": "string: totp / recovery_code",
+       "required": true
+      },
+      {
+       "name": "issued_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "max_uses",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "const false",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Step-up proof replayed; token is absent.",
+     "fields": [
+      {
+       "name": "proof_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "method",
+       "type": "string: totp / recovery_code",
+       "required": true
+      },
+      {
+       "name": "issued_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "max_uses",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "const true",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request metadata, path, query, body, or input is invalid"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session is absent, malformed, expired, revoked, or disabled"
+    },
+    {
+     "status": "403",
+     "description": "Live principal, tenant, permissions, or proof binding changed"
+    },
+    {
+     "status": "405",
+     "description": "Request method is not allowed."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, lifecycle, code replay, or bounded-use conflict"
+    },
+    {
+     "status": "410",
+     "description": "Enrollment or proof expired"
+    },
+    {
+     "status": "412",
+     "description": "Active MFA is required"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds the configured limit"
+    },
+    {
+     "status": "422",
+     "description": "MFA code or proof is invalid"
+    },
+    {
+     "status": "408",
+     "description": "Request was canceled"
+    },
+    {
+     "status": "503",
+     "description": "MFA, encryption, identity, IAM, or PostgreSQL dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Request deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "listOwnNotificationMessages",
+   "method": "GET",
+   "path": "/v1/account/notification-messages",
+   "summary": "List the current user's own event messages",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Subscribable operational events (package, traffic, protection, certificate, site) delivered to the caller in the caller's own scope. Scope and recipient come from the session; announcements stay in the announcement inbox and system-required messages are excluded. site_id and package_id are facts recorded when the event was raised and remain after the resource is deleted.",
+   "params": [
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "package_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "site",
+     "in": "query",
+     "type": "string",
+     "description": "Event-time site by exact display ID or case-insensitive substring of its current domain; events whose site no longer exists never match."
+    },
+    {
+     "name": "package",
+     "in": "query",
+     "type": "string",
+     "description": "User subscription by exact display ID or case-insensitive substring of the package name; events whose subscription no longer exists never match."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "offset",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The caller's own event messages, newest first.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<OwnMessage>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNotificationSubscription",
+   "method": "GET",
+   "path": "/v1/account/notification-subscriptions/{event_type}",
+   "summary": "Read the current user's event subscription",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "event_type",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current user's subscription or an identical natural replay.",
+     "fields": [
+      {
+       "name": "event_type",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "sms_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "email_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "sms_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "email_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "inbox_enabled",
+       "type": "boolean",
+       "description": "Ticket events only (546): the in-app message-center copy (default true). Absent for every other event."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "changed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateNotificationSubscription",
+   "method": "PUT",
+   "path": "/v1/account/notification-subscriptions/{event_type}",
+   "summary": "Update the current user's event subscription",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "event_type",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Correlation identifier and retry key for this write. Reusing the same value for the same authenticated actor and operation requires the exact original path, revision, and body; an exact retry replays the original response, while changed semantics return 409."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "sms_enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "email_enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "inbox_enabled",
+      "type": "boolean",
+      "description": "Ticket events only (546): keep the in-app message-center copy. Omitted keeps the stored choice; any other event answers 400."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current user's subscription or an identical natural replay.",
+     "fields": [
+      {
+       "name": "event_type",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "sms_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "email_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "sms_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "email_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered."
+      },
+      {
+       "name": "inbox_enabled",
+       "type": "boolean",
+       "description": "Ticket events only (546): the in-app message-center copy (default true). Absent for every other event."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "changed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "405",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "415",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    },
+    {
+     "status": "500",
+     "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAccountOrders",
+   "method": "GET",
+   "path": "/v1/account/orders",
+   "summary": "List tenant consumption records",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.account.read. Callers with billing.order_records.read (tenant_owner) see all tenant users; other callers are restricted to their own user ID. Tenant rows are never editable.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: paid / unpaid"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Exact-page substring search over source-local display ID, UUID, user ID, username, email, or phone."
+    },
+    {
+     "name": "created_from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "created_to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Exclusive upper bound."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Consumption record page",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AccountOrder>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "can_manage",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request fields"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Required permission is absent"
+    },
+    {
+     "status": "503",
+     "description": "Account order service unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "changeAccountPassword",
+   "method": "POST",
+   "path": "/v1/account/password",
+   "summary": "Re-authenticate and change the current tenant user's password",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Success revokes every existing session, including the session used for this request.",
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "current_password",
+      "type": "string(password)",
+      "required": true
+     },
+     {
+      "name": "new_password",
+      "type": "string(password)",
+      "required": true,
+      "description": "8 to 1024 printable ASCII characters (no space) with at least two of upper case, lower case, digits and symbols; otherwise password_policy_unmet."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "204",
+     "description": "Password changed and all sessions revoked. The client must sign in again."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getAccountProfile",
+   "method": "GET",
+   "path": "/v1/account/profile",
+   "summary": "Get the current tenant user's profile",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current profile.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string(email) | null(email)",
+       "required": true
+      },
+      {
+       "name": "phone",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateAccountProfile",
+   "method": "PATCH",
+   "path": "/v1/account/profile",
+   "summary": "Update the current tenant user's profile",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Changing email or phone requires current_password. A display-name-only update remains compatible without reauthentication.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "display_name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "email",
+      "type": "string(email) | null(email)",
+      "required": true
+     },
+     {
+      "name": "phone",
+      "type": "string | null",
+      "required": true
+     },
+     {
+      "name": "current_password",
+      "type": "string(password)",
+      "description": "Required when the normalized email or phone differs from the current profile."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Profile updated, or an identical idempotent request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "email",
+       "type": "string(email) | null(email)",
+       "required": true
+      },
+      {
+       "name": "phone",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listAccountStatement",
+   "method": "GET",
+   "path": "/v1/account/statement",
+   "summary": "List the caller's merged consumption statement (orders, recharges and balance ledger entries)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires billing.account.read in the caller's own tenant scope. Merges manual order records, package and traffic-package orders, recharge orders and balance ledger postings that have no order row (manual adjustments, migration import credits, refund/void reversals, reseller sale/wholesale) into one newest-first page. Order-like rows are restricted to the caller's own user unless the caller holds billing.order_records.read; ledger rows belong to the tenant balance and follow the same visibility as GET /v1/account/ledger. Ledger operations that already have an order row (checkout debit, provider payment, recharge payment) are not repeated.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change / traffic_package / refund / income"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: paid / unpaid"
+    },
+    {
+     "name": "created_from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "created_to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Exclusive upper bound."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Statement page",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AccountStatementEntry>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request fields"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Required permission is absent"
+    },
+    {
+     "status": "503",
+     "description": "Account order service unavailable"
+    }
+   ]
+  }
+ ]
+}

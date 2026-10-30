@@ -1,0 +1,118 @@
+{
+ "id": "admin-control-upgrade-checks",
+ "prefix": "/v1/admin/control-upgrade-checks",
+ "operations": [
+  {
+   "operation_id": "checkControlUpgradeEligibility",
+   "method": "POST",
+   "path": "/v1/admin/control-upgrade-checks",
+   "summary": "Check local control-plane upgrade eligibility",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires control.upgrades.check in a platform scope. The decision re-verifies the locally cached signed entitlement lease, checks its release channel and version range, then evaluates the current locally cached signed platform policy. The license service is not called by this request. Business denials return 200 with eligible=false and a stable reason; authentication, validation, and idempotency failures retain their normal HTTP status. An identical idempotent replay returns the original decision without appending another audit event.",
+   "permissions": [
+    "control.upgrades.check"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "component",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "current_version",
+      "type": "string",
+      "required": true,
+      "description": "Canonical SemVer without a v prefix or build metadata."
+     },
+     {
+      "name": "channel",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Eligible or a stable business denial based only on verified local state.",
+     "fields": [
+      {
+       "name": "eligible",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string: eligible / entitlement_unavailable / entitlement_invalid / entitlement_state_denied / entitlement_channel_mismatch / entitlement_version_denied / platform_policy_stale / release_channel_denied",
+       "required": true
+      },
+      {
+       "name": "component",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "current_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "channel",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "entitlement",
+       "type": "ControlUpgradeEntitlementDecision"
+      },
+      {
+       "name": "policy",
+       "type": "ControlUpgradePolicyDecision",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

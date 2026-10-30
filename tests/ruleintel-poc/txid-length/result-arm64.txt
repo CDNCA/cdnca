@@ -1,0 +1,62 @@
+# tests/ruleintel-poc/txid-length/run.sh, cdnca-native-runtime:edge-golden arm64, 2026-10-19 (columns: uidlen = UNIQUE_ID length ModSecurity saw, tlen = parsed t=, errline = bytes of the error-log line carrying the full ID; cost run on the wide rule set without CRS)
+runtime: nginx version: openresty/1.31.1.1
+want    port   status  uidlen tlen   auditlen  errline
+128     8081   200     128    50     128       803
+128     8082   200     128    50     128       805
+1024    8081   200     1024   946    1024      2597
+1024    8082   200     1024   946    1024      2600
+2048    8081   200     2048   1970   2048      4096
+2048    8082   200     2048   1970   2048      4096
+2300    8081   200     2300   2222   2300      4096
+2300    8082   501     2300   -      2300      4096
+4096    8081   200     4096   4018   4096      4096
+4096    8082   501     4096   -      4096      4096
+8192    8081   200     8192   8114   8192      4096
+8192    8082   501     8192   -      8192      4096
+16384   8081   200     16384  16306  16384     4096
+16384   8082   501     16384  -      16384     4096
+32768   8081   200     32768  32690  32768     4096
+32768   8082   501     32768  -      32768     4096
+65536   8081   200     65536  65458  65536     4096
+65536   8082   501     65536  -      65536     4096
+65700   8081   501     65700  -      65700     4096
+65700   8082   501     65700  -      65700     4096
+PASS LEN-128-RECEIVED expected=128 actual=128  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-128-AUDIT expected=128 actual=128  审计记录 unique_id 全长
+PASS LEN-1024-RECEIVED expected=1024 actual=1024  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-1024-AUDIT expected=1024 actual=1024  审计记录 unique_id 全长
+PASS LEN-2048-RECEIVED expected=2048 actual=2048  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-2048-AUDIT expected=2048 actual=2048  审计记录 unique_id 全长
+PASS LEN-2300-RECEIVED expected=2300 actual=2300  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-2300-AUDIT expected=2300 actual=2300  审计记录 unique_id 全长
+PASS LEN-4096-RECEIVED expected=4096 actual=4096  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-4096-AUDIT expected=4096 actual=4096  审计记录 unique_id 全长
+PASS LEN-8192-RECEIVED expected=8192 actual=8192  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-8192-AUDIT expected=8192 actual=8192  审计记录 unique_id 全长
+PASS LEN-16384-RECEIVED expected=16384 actual=16384  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-16384-AUDIT expected=16384 actual=16384  审计记录 unique_id 全长
+PASS LEN-32768-RECEIVED expected=32768 actual=32768  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-32768-AUDIT expected=32768 actual=32768  审计记录 unique_id 全长
+PASS LEN-65536-RECEIVED expected=65536 actual=65536  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-65536-AUDIT expected=65536 actual=65536  审计记录 unique_id 全长
+PASS LEN-65700-RECEIVED expected=65700 actual=65700  ModSecurity 收到的 UNIQUE_ID 长度 = Lua 写入长度（尾部 request id 完整，未截断）
+PASS LEN-65700-AUDIT expected=65700 actual=65700  审计记录 unique_id 全长
+PASS NARROW-2048 expected=200 actual=200  现有 2000 字符上限规则：2048 字节上下文能解析
+PASS NARROW-2300-REJECT expected=501 actual=501  现有 2000 字符上限规则：t= 超 2000 → 解析失败（生产为 500 fail closed）
+PASS WIDE-65536 expected=200 actual=200  t= 上限放到 65535 后 64 KiB 上下文能解析（线性字符类，不触 PCRE 上限）
+PASS WIDE-65700-REJECT expected=501 actual=501  t= 超 65535（PCRE 有界重复上限）→ 解析失败
+PASS ERRLOG-TRUNCATED expected=yes actual=yes  error.log 单行被截断（NGX_MAX_ERROR_STR 4096）：日志里看不到完整事务 ID
+== cost: request with a context of N bytes, 2000 sequential, 1 worker (interleaved rounds)
+round 1 len 128    {"count":2000,"failed":0,"first_error":"","max_ms":1.315,"p50_ms":0.089,"p99_ms":0.152}
+round 1 len 2048   {"count":2000,"failed":0,"first_error":"","max_ms":1.353,"p50_ms":0.135,"p99_ms":0.23}
+round 1 len 8192   {"count":2000,"failed":0,"first_error":"","max_ms":21.92,"p50_ms":0.296,"p99_ms":0.594}
+round 1 len 32768  {"count":2000,"failed":0,"first_error":"","max_ms":17.432,"p50_ms":0.994,"p99_ms":1.481}
+round 2 len 128    {"count":2000,"failed":0,"first_error":"","max_ms":1.499,"p50_ms":0.092,"p99_ms":0.184}
+round 2 len 2048   {"count":2000,"failed":0,"first_error":"","max_ms":1.34,"p50_ms":0.137,"p99_ms":0.249}
+round 2 len 8192   {"count":2000,"failed":0,"first_error":"","max_ms":1.306,"p50_ms":0.299,"p99_ms":0.408}
+round 2 len 32768  {"count":2000,"failed":0,"first_error":"","max_ms":4.072,"p50_ms":1.025,"p99_ms":1.564}
+round 3 len 128    {"count":2000,"failed":0,"first_error":"","max_ms":1.025,"p50_ms":0.09,"p99_ms":0.167}
+round 3 len 2048   {"count":2000,"failed":0,"first_error":"","max_ms":2.325,"p50_ms":0.136,"p99_ms":0.61}
+round 3 len 8192   {"count":2000,"failed":0,"first_error":"","max_ms":1.128,"p50_ms":0.271,"p99_ms":0.464}
+round 3 len 32768  {"count":2000,"failed":0,"first_error":"","max_ms":18.126,"p50_ms":1.021,"p99_ms":1.954}
+RESULT txid-length failures=0

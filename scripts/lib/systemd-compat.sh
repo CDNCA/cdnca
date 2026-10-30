@@ -1,0 +1,128 @@
+# shellcheck shell=bash
+# systemd 兼容渲染（主控与节点共用）。
+#
+# 唯一源文件：由 scripts/sync-install-preflight.mjs 逐字嵌入 install-control.sh
+# 与 install-node.sh 的 “BEGIN/END systemd-compat” 标记之间。
+#
+# 原则：单元文件本身不改（节点单元受签名清单逐字节校验，主控单元受升级器
+# 校验），只在本机 systemd 不认识其中的指令时，生成
+#   /etc/systemd/system/<unit>.d/zz-cdnca-systemd-compat.conf
+# 把“功能性”指令换成旧版本能理解的等价写法；纯加固指令旧版本本来就会忽略，
+# 这里只记录下来供安装前检测提示“沙箱加固降级”。新版 systemd 上不产生任何
+# 文件，行为与原来完全一致。依据：docs/install/os-support-matrix.md 第 2 节。
+#
+# 本机支持哪些指令，直接从 systemd 二进制里的 gperf 表（"Section.Key"）和
+# 系统调用分组名（"@group"）判断，不按发行版或版本号猜（RHEL 有大量回移植）。
+
+SYSTEMD_COMPAT_ROOT=${SYSTEMD_COMPAT_ROOT:-}
+SYSTEMD_COMPAT_DEGRADED=()
+
+systemd_compat_binaries() {
+  {
+    local candidate binary
+    # The directive tables live in PID 1 or in the private libraries it links
+    # (libsystemd-core-NNN.so on EL9, libsystemd-shared-NNN.so on Debian/Ubuntu).
+    for binary in "${SYSTEMD_COMPAT_ROOT}"/lib/systemd/systemd "${SYSTEMD_COMPAT_ROOT}"/usr/lib/systemd/systemd; do
+      [ -f "$binary" ] && [ ! -L "$binary" ] || continue
+      printf '%s\n' "$binary"
+      [ -z "$SYSTEMD_COMPAT_ROOT" ] || continue
+      ldd "$binary" 2>/dev/null | awk '$3 ~ /\/libsystemd-[a-z]+-[0-9.]+\.so$/ { print $3 }'
+    done
+    for candidate in "${SYSTEMD_COMPAT_ROOT}"/lib/systemd/libsystemd-*.so "${SYSTEMD_COMPAT_ROOT}"/usr/lib/systemd/libsystemd-*.so \
+      "${SYSTEMD_COMPAT_ROOT}"/usr/lib64/systemd/libsystemd-*.so "${SYSTEMD_COMPAT_ROOT}"/usr/lib/x86_64-linux-gnu/systemd/libsystemd-*.so \
+      "${SYSTEMD_COMPAT_ROOT}"/lib/x86_64-linux-gnu/systemd/libsystemd-*.so; do
+      [ -f "$candidate" ] && [ ! -L "$candidate" ] && printf '%s\n' "$candidate"
+    done
+  } 2>/dev/null | sort -u
+}
+
+# 参数：Section.Key 或 @group。在 systemd 二进制的字符串表中按整词查找。
+systemd_compat_knows() {
+  local binaries
+  binaries=$(systemd_compat_binaries)
+  [ -n "$binaries" ] || return 1
+  # shellcheck disable=SC2086 # one path per line, no spaces in systemd paths
+  LC_ALL=C grep -aqwF -- "$1" $binaries
+}
+
+systemd_compat_version() {
+  systemctl --version 2>/dev/null | awk 'NR == 1 { sub(/[^0-9].*/, "", $2); print $2 }'
+}
+
+# 打印单元需要的兼容 drop-in 内容（无需兼容时为空），并把被忽略的加固指令
+# 追加到 SYSTEMD_COMPAT_DEGRADED。参数：单元文件路径。
+systemd_compat_render() {
+  local unit=$1 section='' line key value token version reset_filter=false exec_start='' bind=''
+  local -a service=()
+  version=$(systemd_compat_version)
+  version=${version:-0}
+  # Ubuntu 24.04 (255) is the baseline the units were written for.
+  [ "$version" -lt 255 ] || return 0
+  # Never downgrade on a probe that cannot see the directive tables: a key that
+  # every systemd has must be found first.
+  systemd_compat_knows Service.ExecStart && systemd_compat_knows Unit.Description || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      \[*\]) section=${line#[}; section=${section%]}; continue ;;
+      ''|'#'*|';'*) continue ;;
+      *=*) key=${line%%=*}; value=${line#*=} ;;
+      *) continue ;;
+    esac
+    [ "$section" = Service ] && [ "$key" = ExecStart ] && exec_start=$value
+    if [ "$section" = Service ] && [ "$key" = SystemCallFilter ]; then
+      for token in $value; do
+        token=${token#\~}
+        case "$token" in
+          @*) systemd_compat_knows "$token" || reset_filter=true ;;
+        esac
+      done
+    fi
+    if [ "$section" = Service ] && [ "$key" = Type ] && [ "$value" = exec ] && [ "$version" -lt 240 ]; then
+      service+=('Type=simple')
+    fi
+    if [ "$section" = Service ] && [ "$key" = ProtectSystem ] && [ "$value" = strict ] && [ "$version" -lt 232 ]; then
+      # “strict”在 232 之前是无效值，整行会被忽略；full 至少保护 /usr /boot /etc。
+      service+=('ProtectSystem=full')
+      SYSTEMD_COMPAT_DEGRADED+=("ProtectSystem=strict→full")
+    fi
+    systemd_compat_knows "$section.$key" && continue
+    case "$section.$key" in
+      Unit.StartLimitIntervalSec) service+=("StartLimitInterval=$value") ;;
+      Unit.StartLimitBurst) service+=("StartLimitBurst=$value") ;;
+      Service.BindPaths) bind=$value ;;
+      Service.ReadWritePaths) service+=("ReadWriteDirectories=$value") ;;
+      Service.ReadOnlyPaths) service+=("ReadOnlyDirectories=$value") ;;
+      *) SYSTEMD_COMPAT_DEGRADED+=("$key") ;;
+    esac
+  done <"$unit"
+  if [ "$reset_filter" = true ]; then
+    # 旧版本不认识其中的分组时，部分生效的白名单可能拦截必需的系统调用；
+    # 整体清空（加固降级）比服务被内核杀掉安全。
+    service+=('SystemCallFilter=')
+    SYSTEMD_COMPAT_DEGRADED+=("SystemCallFilter")
+  fi
+  if [ -n "$bind" ]; then
+    # BindPaths（233+）之前：在同一服务进程的私有挂载命名空间（PrivateTmp/
+    # ProtectSystem 已创建）内先绑定，再 exec 原程序，效果等同于 BindPaths。
+    local source=${bind%%:*} rest=${bind#*:} target
+    target=${rest%%:*}
+    [ -n "$exec_start" ] && [ -n "$source" ] && [ -n "$target" ] || return 1
+    # "$$" is a literal dollar for systemd; the shell then sees "$1".
+    service+=('ExecStart=' "ExecStart=/bin/sh -c 'mount --bind \"\$\$1\" \"\$\$2\" && shift 2 && exec \"\$\$@\"' sh $source $target $exec_start")
+  fi
+  [ "${#service[@]}" -gt 0 ] || return 0
+  printf '# Generated by the CDNCA installer for systemd %s; see docs/install/os-support-matrix.md.\n' "$version"
+  printf '[Service]\n'
+  printf '%s\n' "${service[@]}"
+}
+
+# 生成并安装 drop-in（只在需要时）。参数：单元文件路径 单元名。
+systemd_compat_apply() {
+  local unit=$1 name=$2 content directory
+  content=$(systemd_compat_render "$unit") || return 1
+  [ -n "$content" ] || return 0
+  directory="${SYSTEMD_COMPAT_ROOT}/etc/systemd/system/${name}.d"
+  install -d -m 0755 "$directory"
+  printf '%s\n' "$content" >"${directory}/zz-cdnca-systemd-compat.conf"
+  chmod 0644 "${directory}/zz-cdnca-systemd-compat.conf"
+}

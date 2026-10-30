@@ -1,0 +1,79 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Platform Brand Assets API
+  version: 0.1.0
+  description: Immutable platform brand assets stored outside the control database and referenced by system settings.
+servers: [{url: /}]
+paths:
+  /v1/admin/brand-assets:
+    get:
+      operationId: listPlatformBrandAssets
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Asset metadata, content: {application/json: {schema: {$ref: '#/components/schemas/ListDocument'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+  /v1/admin/brand-assets/{slot}:
+    parameters: [{name: slot, in: path, required: true, schema: {$ref: '#/components/schemas/Slot'}}]
+    get:
+      operationId: getPlatformBrandAsset
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Asset metadata, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+    put:
+      operationId: uploadPlatformBrandAsset
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+      requestBody:
+        required: true
+        content:
+          image/png: {schema: {type: string, format: binary}}
+          image/jpeg: {schema: {type: string, format: binary}}
+          image/x-icon: {schema: {type: string, format: binary}}
+          image/vnd.microsoft.icon: {schema: {type: string, format: binary}}
+      responses:
+        '200': {description: Uploaded asset, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '400': {description: Invalid media or request}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '409': {description: Revision or idempotency conflict}
+  /v1/brand-assets/{slot}:
+    parameters: [{name: slot, in: path, required: true, schema: {$ref: '#/components/schemas/Slot'}}]
+    get:
+      operationId: readPublicBrandAsset
+      description: 'Pages request only the slots listed in GET /v1/theme/current brand_assets, with v set to that slot''s revision.'
+      security: []
+      parameters:
+        - {name: v, in: query, required: false, description: 'Cache-busting revision from /v1/theme/current brand_assets', schema: {type: string, pattern: '^[0-9]+$'}}
+      responses:
+        '200': {description: Immutable image bytes}
+        '304': {description: Not modified}
+        '404': {description: Asset not found}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    Slot: {type: string, enum: [favicon, logo, login_ad, logo_dark, login_background, app_icon]}
+    Asset:
+      type: object
+      required: [schema, slot, revision]
+      properties:
+        schema: {const: cdnca.platform-brand-asset/v1}
+        slot: {$ref: '#/components/schemas/Slot'}
+        revision: {type: integer, minimum: 0}
+        reference: {type: string, pattern: '^asset://brand/(favicon|logo|login_ad|logo_dark|login_background|app_icon)/[0-9a-f]{64}$'}
+        mime_type: {type: string}
+        size_bytes: {type: integer, minimum: 0}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        updated_at: {type: string, format: date-time}
+    ListDocument:
+      type: object
+      required: [schema, assets]
+      properties:
+        schema: {const: cdnca.platform-brand-asset/v1}
+        assets: {type: array, items: {$ref: '#/components/schemas/Asset'}}

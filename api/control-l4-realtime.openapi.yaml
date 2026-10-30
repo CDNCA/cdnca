@@ -1,0 +1,259 @@
+openapi: 3.1.0
+info:
+  title: CDNCA L4 实时监控 API
+  version: 1.0.0
+paths:
+  /v1/analytics/l4-realtime:
+    get:
+      operationId: getTenantL4Realtime
+      security: [{ bearerAuth: [] }]
+      parameters: &l4Parameters
+        - {name: range, in: query, required: true, schema: {type: string, enum: [1h, 6h, 12h, 24h, custom]}}
+        - {name: timezone, in: query, required: true, schema: {type: string, example: UTC}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: site_id, in: query, schema: {type: string, format: uuid}}
+        - {name: stream_id, in: query, schema: {type: string, format: uuid}}
+        - {name: node_id, in: query, schema: {type: string, format: uuid}}
+        - {name: protocol, in: query, schema: {type: string, enum: [tcp, udp]}}
+        - {name: listen_port, in: query, schema: {type: integer, minimum: 1, maximum: 65535}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: L4 session aggregates
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/L4RealtimeResponse'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/analytics/l4-realtime:
+    get:
+      operationId: getAdminL4Realtime
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - {name: tenant_id, in: query, required: false, description: 可选租户范围；省略时平台管理员查询全部租户, schema: {type: string, format: uuid}}
+        - {name: range, in: query, required: true, schema: {type: string, enum: [1h, 6h, 12h, 24h, custom]}}
+        - {name: timezone, in: query, required: true, schema: {type: string, example: UTC}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: site_id, in: query, schema: {type: string, format: uuid}}
+        - {name: stream_id, in: query, schema: {type: string, format: uuid}}
+        - {name: node_id, in: query, schema: {type: string, format: uuid}}
+        - {name: protocol, in: query, schema: {type: string, enum: [tcp, udp]}}
+        - {name: listen_port, in: query, schema: {type: integer, minimum: 1, maximum: 65535}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses:
+        '200':
+          description: L4 session aggregates
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/L4RealtimeResponse'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/analytics/l4-session-logs:
+    get:
+      operationId: getTenantL4SessionLogs
+      description: 四层访问日志（开启会话日志的转发，每个会话一行，含被拒绝的会话），按结束时间倒序。保留 30 天。
+      security: [{ bearerAuth: [] }]
+      parameters: &l4LogParameters
+        - {name: range, in: query, required: true, schema: {type: string, enum: [1h, 6h, 12h, 24h, custom]}}
+        - {name: timezone, in: query, required: true, schema: {type: string, example: UTC}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: site_id, in: query, schema: {type: string, format: uuid}}
+        - {name: stream_id, in: query, schema: {type: string, format: uuid}}
+        - {name: node_id, in: query, schema: {type: string, format: uuid}}
+        - {name: protocol, in: query, schema: {type: string, enum: [tcp, udp]}}
+        - {name: listen_port, in: query, schema: {type: integer, minimum: 1, maximum: 65535}}
+        - {name: client_ip, in: query, description: 客户端地址或 CIDR, schema: {type: string}}
+        - {name: end_reason, in: query, schema: {$ref: '#/components/schemas/L4EndReason'}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses: &l4LogResponses
+        '200':
+          description: L4 session log rows
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content: {application/json: {schema: {$ref: '#/components/schemas/L4SessionLogResponse'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '503':
+          description: l4_session_log_unavailable when the analytics store lacks the session log table, otherwise dependency unavailable.
+          content: {application/json: {schema: {$ref: '#/components/schemas/ErrorResponse'}}}
+  /v1/admin/analytics/l4-session-logs:
+    get:
+      operationId: getAdminL4SessionLogs
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - {name: tenant_id, in: query, required: false, schema: {type: string, format: uuid}}
+        - {name: range, in: query, required: true, schema: {type: string, enum: [1h, 6h, 12h, 24h, custom]}}
+        - {name: timezone, in: query, required: true, schema: {type: string, example: UTC}}
+        - {name: from, in: query, schema: {type: string, format: date-time}}
+        - {name: to, in: query, schema: {type: string, format: date-time}}
+        - {name: site_id, in: query, schema: {type: string, format: uuid}}
+        - {name: stream_id, in: query, schema: {type: string, format: uuid}}
+        - {name: node_id, in: query, schema: {type: string, format: uuid}}
+        - {name: protocol, in: query, schema: {type: string, enum: [tcp, udp]}}
+        - {name: listen_port, in: query, schema: {type: integer, minimum: 1, maximum: 65535}}
+        - {name: client_ip, in: query, schema: {type: string}}
+        - {name: end_reason, in: query, schema: {$ref: '#/components/schemas/L4EndReason'}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+        - {name: cursor, in: query, schema: {type: string}}
+      responses: *l4LogResponses
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  headers:
+    RequestID:
+      description: Canonical request identifier for tracing and support.
+      schema: {$ref: '#/components/schemas/RequestID'}
+  responses:
+    BadRequest:
+      description: Request validation failed; clients map the stable code through locale resources.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+    Unauthenticated:
+      description: Authentication is required or the session is invalid.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+    Forbidden:
+      description: The authenticated principal cannot access this scope or operation.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+    InternalError:
+      description: The response could not be encoded safely.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+    ServiceUnavailable:
+      description: The analytics dependency is unavailable; retry with the same query.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+  schemas:
+    L4EndReason:
+      type: string
+      enum: [closed, killed, geo_blocked, rate_limited, banned, conn_limited, bad_request, forbidden, upstream_failed, internal_error, config_error, guard_blocked]
+      description: closed 含正常结束与空闲超时（nginx 不区分）；guard_blocked 为四层防护规则拒绝（banned 含新建速率与防护规则拉黑期内的拒绝）。
+    L4SessionLogResponse:
+      type: object
+      additionalProperties: false
+      required: [version, from, to, rows]
+      properties:
+        version: {const: l4-session-logs/v1}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        next_cursor: {type: string}
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [event_id, started_at, finalized_at, node_id, site_id, stream_id, listener_id, protocol, listen_port, client_ip, client_port, bytes_up, bytes_down, status_code, end_reason]
+            properties:
+              event_id: {type: string}
+              started_at: {type: string, format: date-time}
+              finalized_at: {type: string, format: date-time}
+              node_id: {type: string, format: uuid}
+              site_id: {type: string, format: uuid}
+              stream_id: {type: string, format: uuid}
+              listener_id: {type: string, format: uuid}
+              protocol: {type: string, enum: [tcp, udp]}
+              listen_port: {type: integer}
+              client_ip: {type: string}
+              client_port: {type: integer}
+              peer_ip: {type: string, description: 套接字对端（可信代理）与 client_ip 不同时出现}
+              upstream_addr: {type: string}
+              upstream_connect_ms: {type: integer}
+              bytes_up: {type: integer}
+              bytes_down: {type: integer}
+              status_code: {type: integer}
+              end_reason: {$ref: '#/components/schemas/L4EndReason'}
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {$ref: '#/components/schemas/Error'}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: {type: string, minLength: 1}
+        message: {type: string, minLength: 1}
+        request_id: {$ref: '#/components/schemas/RequestID'}
+    RequestID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9._-]{1,128}$'
+    L4RealtimeResponse:
+      type: object
+      required: [version, meta, totals, rows]
+      properties:
+        version: {type: string}
+        meta:
+          type: object
+          required: [range, timezone, from, to, snapshot]
+          properties:
+            range: {type: string}
+            timezone: {type: string}
+            from: {type: string, format: date-time}
+            to: {type: string, format: date-time}
+            snapshot:
+              type: object
+              required: [source_watermark, finalized_through]
+              properties:
+                at: {type: string, format: date-time}
+                source_watermark: {type: integer, format: int64}
+                finalized_through: {type: string, format: date-time}
+        totals:
+          type: object
+          required: [sessions, bytes_up, bytes_down, errors]
+          properties:
+            sessions: {type: integer, format: int64}
+            bytes_up: {type: integer, format: int64}
+            bytes_down: {type: integer, format: int64}
+            errors: {type: integer, format: int64}
+        rows:
+          type: array
+          items:
+            type: object
+            required: [bucket, node_id, site_id, stream_id, listener_id, protocol, listen_port, sessions, bytes_up, bytes_down, errors]
+            properties:
+              bucket: {type: string, format: date-time}
+              node_id: {type: string, format: uuid}
+              site_id: {type: string, format: uuid}
+              stream_id: {type: string, format: uuid}
+              listener_id: {type: string, format: uuid}
+              protocol: {type: string}
+              listen_port: {type: integer}
+              sessions: {type: integer, format: int64}
+              bytes_up: {type: integer, format: int64}
+              bytes_down: {type: integer, format: int64}
+              errors: {type: integer, format: int64}
+        next_cursor: {type: string}

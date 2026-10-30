@@ -1,0 +1,311 @@
+{
+ "corpus": "wafcomp-legit fast",
+ "requests": 155078,
+ "limit_pct": 0.5,
+ "candidates": [
+  {
+   "target": "args",
+   "operator": "contains",
+   "value": "&&",
+   "legit_hits": 662,
+   "legit_pct": 0.427,
+   "selected": false
+  },
+  {
+   "target": "args",
+   "operator": "contains",
+   "value": "*/",
+   "legit_hits": 834,
+   "legit_pct": 0.538,
+   "selected": false
+  },
+  {
+   "target": "args",
+   "operator": "contains",
+   "value": "/*",
+   "legit_hits": 909,
+   "legit_pct": 0.586,
+   "selected": false
+  },
+  {
+   "target": "args",
+   "operator": "contains",
+   "value": "http://",
+   "legit_hits": 627,
+   "legit_pct": 0.404,
+   "selected": false
+  },
+  {
+   "target": "args",
+   "operator": "contains",
+   "value": "https://",
+   "legit_hits": 34626,
+   "legit_pct": 22.328,
+   "selected": false
+  },
+  {
+   "target": "args",
+   "operator": "contains",
+   "value": "input://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "args",
+   "operator": "regex",
+   "value": "(?i)(?:(?:::json|to_json|jsonb?_build|jsonb?_object|jsonb?_each|jsonb?_extract|jsonb?_typeof|jsonb?_array|jsonb_set|json_query|json_keys))",
+   "legit_hits": 1,
+   "legit_pct": 0.001,
+   "selected": true
+  },
+  {
+   "target": "args",
+   "operator": "regex",
+   "value": "(?i)(?:%U|\\&\\#)[\\s\\S]*(?:%U|\\&\\#)",
+   "legit_hits": 783,
+   "legit_pct": 0.505,
+   "selected": false
+  },
+  {
+   "target": "args",
+   "operator": "regex",
+   "value": "(?i)(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load_file|substr|group_concat|dumpfile|bigint)|@@|\\-\\-)[\\s\\S]*(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load_file|substr|group_concat|dumpfile|bigint)|@@|\\-\\-)",
+   "legit_hits": 4307,
+   "legit_pct": 2.777,
+   "selected": false
+  },
+  {
+   "target": "args",
+   "operator": "regex",
+   "value": "(?i)(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)[\\s\\S]*(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)",
+   "legit_hits": 1183,
+   "legit_pct": 0.763,
+   "selected": false
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "&&",
+   "legit_hits": 40,
+   "legit_pct": 0.026,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "*/",
+   "legit_hits": 73,
+   "legit_pct": 0.047,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "/*",
+   "legit_hits": 213,
+   "legit_pct": 0.137,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "data://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "expect://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "file://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "ftp://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "glob://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "gopher://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "http://",
+   "legit_hits": 2,
+   "legit_pct": 0.001,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "https://",
+   "legit_hits": 28124,
+   "legit_pct": 18.135,
+   "selected": false
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "input://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "phar://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "php://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "sftp://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "zip://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "contains",
+   "value": "zlib://",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "regex",
+   "value": "(?i)(?:(?:::json|to_json|jsonb?_build|jsonb?_object|jsonb?_each|jsonb?_extract|jsonb?_typeof|jsonb?_array|jsonb_set|json_query|json_keys))",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "regex",
+   "value": "(?i)(?:%U|\\&\\#)[\\s\\S]*(?:%U|\\&\\#)",
+   "legit_hits": 57,
+   "legit_pct": 0.037,
+   "selected": true
+  },
+  {
+   "target": "cookie",
+   "operator": "regex",
+   "value": "(?i)(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load_file|substr|group_concat|dumpfile|bigint)|@@|\\-\\-)[\\s\\S]*(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load_file|substr|group_concat|dumpfile|bigint)|@@|\\-\\-)",
+   "legit_hits": 4425,
+   "legit_pct": 2.853,
+   "selected": false
+  },
+  {
+   "target": "cookie",
+   "operator": "regex",
+   "value": "(?i)(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)[\\s\\S]*(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)",
+   "legit_hits": 1862,
+   "legit_pct": 1.201,
+   "selected": false
+  },
+  {
+   "target": "request_uri",
+   "operator": "contains",
+   "value": "&&",
+   "legit_hits": 186,
+   "legit_pct": 0.12,
+   "selected": true
+  },
+  {
+   "target": "request_uri",
+   "operator": "contains",
+   "value": "*/",
+   "legit_hits": 31,
+   "legit_pct": 0.02,
+   "selected": true
+  },
+  {
+   "target": "request_uri",
+   "operator": "contains",
+   "value": "/*",
+   "legit_hits": 102,
+   "legit_pct": 0.066,
+   "selected": true
+  },
+  {
+   "target": "request_uri",
+   "operator": "regex",
+   "value": "(?i)(?:(?:::json|to_json|jsonb?_build|jsonb?_object|jsonb?_each|jsonb?_extract|jsonb?_typeof|jsonb?_array|jsonb_set|json_query|json_keys))",
+   "legit_hits": 0,
+   "legit_pct": 0.0,
+   "selected": true
+  },
+  {
+   "target": "request_uri",
+   "operator": "regex",
+   "value": "(?i)(?:%U|\\&\\#)[\\s\\S]*(?:%U|\\&\\#)",
+   "legit_hits": 6,
+   "legit_pct": 0.004,
+   "selected": true
+  },
+  {
+   "target": "request_uri",
+   "operator": "regex",
+   "value": "(?i)(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load_file|substr|group_concat|dumpfile|bigint)|@@|\\-\\-)[\\s\\S]*(?:(?:select|union|update|delete|insert|table|from|ascii|hex|unhex|drop|load_file|substr|group_concat|dumpfile|bigint)|@@|\\-\\-)",
+   "legit_hits": 1553,
+   "legit_pct": 1.001,
+   "selected": false
+  },
+  {
+   "target": "request_uri",
+   "operator": "regex",
+   "value": "(?i)(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)[\\s\\S]*(?:/%2e\\./|/\\.%2e/|/\\.;/|/etc/passwd|\\.\\.|c:\\\\|cmd\\.exe)",
+   "legit_hits": 89,
+   "legit_pct": 0.057,
+   "selected": true
+  }
+ ]
+}

@@ -1,0 +1,54 @@
+/* 10-27 用户：标题旁的同步状态是"圆点 + 文字"，待同步时倒数刷新秒数。 */
+.site-edit-sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.site-edit-sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--cdnca-color-warning);
+}
+
+.site-edit-sync-status.is-synced .site-edit-sync-dot {
+  background: var(--cdnca-color-success);
+}
+
+.site-edit-sync-status.is-failed {
+  color: var(--cdnca-color-error);
+}
+
+.site-edit-sync-status.is-failed .site-edit-sync-dot {
+  background: var(--cdnca-color-error);
+}
+
+/* WEB/FLOW-STATE-01：标题旁"查看发布记录"，与同步状态同一行的次要链接。 */
+.site-edit-publications-link {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--cdnca-color-primary);
+}
+
+.site-edit-publications-link {
+  white-space: nowrap;
+}
+
+/* 窄屏（.site-edit-title-row 是标题行 header 的自有类）：读取失败的说明较长，标题行换行，状态与"查看发布记录"排到下一行，不横向溢出。 */
+@media (max-width: 720px) {
+  .site-edit-title-row:has(.site-edit-sync-status) {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    padding-block: 8px;
+  }
+
+  .site-edit-title-row .site-edit-sync-status {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}

@@ -1,0 +1,6 @@
+# Engine Off; per transaction ctl:auditEngine=On (ADR 0011 §3.1 wording):
+# the sampled grey zone (parts A, H) and every blocked transaction.
+SecRule TX:blocking_inbound_anomaly_score "@gt 0" "id:51200,phase:5,pass,nolog,t:none,chain"
+  SecRule TX:blocking_inbound_anomaly_score "@lt %{tx.inbound_anomaly_score_threshold}" "t:none,chain"
+  SecRule UNIQUE_ID "@rx 0$" "t:none,ctl:auditEngine=On,ctl:auditLogParts=-B"
+SecRule TX:blocking_inbound_anomaly_score "@ge %{tx.inbound_anomaly_score_threshold}" "id:51202,phase:5,pass,nolog,t:none,ctl:auditEngine=On"

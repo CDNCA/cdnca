@@ -1,0 +1,3502 @@
+{
+ "id": "sites",
+ "prefix": "/v1/sites",
+ "operations": [
+  {
+   "operation_id": "listSites",
+   "method": "GET",
+   "path": "/v1/sites",
+   "summary": "List websites visible in the authenticated scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform administrators can list all tenant scopes. Tenant principals are always restricted by the server to their active tenant scope, and owner and region are redacted in their response. The owner, region_id, and node_group_id filters are platform-only to prevent count-based disclosure of redacted metadata.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive domain substring; a positive decimal also matches the site display ID exactly."
+    },
+    {
+     "name": "domains",
+     "in": "query",
+     "type": "string",
+     "description": "Comma- or whitespace-separated exact domains, at most 50."
+    },
+    {
+     "name": "origin_ip",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "site_ids",
+     "in": "query",
+     "type": "string",
+     "description": "Comma- or whitespace-separated UUIDs, at most 100."
+    },
+    {
+     "name": "owner",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "package_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "package",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive substring of the site's package name (the name form of package_id)."
+    },
+    {
+     "name": "site",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive domain substring or exact site display ID (the name form of site_ids)."
+    },
+    {
+     "name": "group_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "region_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_group_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "cname_domain",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "cname_hostname",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "http_port",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "https_port",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "https_enabled",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "enabled",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / disabled / package_expired / traffic_exceeded / locked / syncing / sync_failed"
+    },
+    {
+     "name": "is_default",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "sync_status",
+     "in": "query",
+     "type": "string: synced / pending / failed"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page ordered by creation time and ID descending.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SiteListItem>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "createSite",
+   "method": "POST",
+   "path": "/v1/sites",
+   "summary": "Create a website",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and Idempotency-Key. A platform principal must provide target_scope_id and owner_id. A tenant principal is forced to its active scope and own user ID even if those fields are supplied.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "basic",
+      "type": "SiteBasicRequest",
+      "required": true
+     },
+     {
+      "name": "origin_pool",
+      "type": "OriginPool",
+      "description": "Optional atomic rich origin configuration. When omitted, the server derives a pool from basic.origins. When present, its canonical host and port sequence must exactly match basic.origins. A missing balance_method follows the owner's site default (balance_way), then the platform website default, then round_robin. Missing connect_timeout_ms / read_timeout_ms follow the owner's site defaults, then 3000 / 30000."
+     },
+     {
+      "name": "dns_provider_id",
+      "type": "string(uuid)",
+      "description": "建站「DNS API（自动添加记录）」: a verified DNS API account of the owner (needs dns.manage). After the site is created, every domain gets a CNAME to the site CNAME through it (site.auto_dns). A failure there never fails the create; it shows in auto_dns and is retried. 422 dns_provider_unusable: not a verified account of the owner."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created, or the stored result of an identical idempotent retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "Tenant scope that owns the site; platform operators use it for scoped certificate and policy operations."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "OwnerReference | null",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "lock",
+       "type": "SiteLockState",
+       "required": true
+      },
+      {
+       "name": "listener_state",
+       "type": "SiteListenerState",
+       "required": true
+      },
+      {
+       "name": "https_certificate_bound",
+       "type": "boolean",
+       "description": "The site has a bound certificate. Turning HTTPS or forced HTTPS on without one is refused (400 validation_error, details.field https_enabled / force_https, reason certificate_required)."
+      },
+      {
+       "name": "basic",
+       "type": "SiteBasicResponse",
+       "required": true
+      },
+      {
+       "name": "origin_pool",
+       "type": "OriginPool",
+       "required": true
+      },
+      {
+       "name": "package_expires_at",
+       "type": "string(date-time) | null(date-time)",
+       "description": "Period end (ends_at) of the site's package subscription; null without one."
+      },
+      {
+       "name": "package_expired_days",
+       "type": "integer | null",
+       "description": "Whole days since package_expires_at passed (0 while valid or within the first day); null without a subscription."
+      },
+      {
+       "name": "package_remaining_days",
+       "type": "integer | null",
+       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+      },
+      {
+       "name": "access_readiness",
+       "type": "SiteAccessReadiness | null",
+       "description": "接入状态 (same as the list item's)."
+      },
+      {
+       "name": "package_unavailable_reason",
+       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "batchSiteAction",
+   "method": "POST",
+   "path": "/v1/sites/batch-action",
+   "summary": "Enable, disable, soft-delete, queue CNAME regeneration for, or set the HTTPS protocols of websites",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (网站协议批量设置) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "action",
+      "type": "string: enable / disable / delete / regenerate_cname / set_protocols",
+      "required": true
+     },
+     {
+      "name": "items",
+      "type": "array<BatchSiteActionItem>",
+      "required": true,
+      "description": "Site IDs must be unique even when expected versions differ."
+     },
+     {
+      "name": "protocols",
+      "type": "BatchSiteProtocols",
+      "description": "Required with set_protocols and rejected with every other action. An omitted key keeps each site's value; tls_prefer_server_ciphers null follows the cipher preset again."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Ordered per-item results, or the stored result of an identical idempotent retry.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BatchSiteActionItemResult>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "exportSiteDomains",
+   "method": "GET",
+   "path": "/v1/sites/export",
+   "summary": "Export an immutable snapshot of site domains",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.export. Tenant principals are restricted to their active tenant scope. Platform principals must provide target_scope_id. The response is a UTF-8 CSV produced from an immutable, actor- and filter-bound snapshot; cells that could be interpreted as spreadsheet formulas are escaped.",
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform principals; tenants may omit their own scope."
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string",
+     "description": "Optional case-insensitive domain substring filter."
+    },
+    {
+     "name": "domains",
+     "in": "query",
+     "type": "string",
+     "description": "Comma- or whitespace-separated exact domains, at most 50."
+    },
+    {
+     "name": "origin_ip",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "site_ids",
+     "in": "query",
+     "type": "string",
+     "description": "Comma- or whitespace-separated UUIDs, at most 100."
+    },
+    {
+     "name": "owner",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "package_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "package",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive substring of the site's package name (the name form of package_id)."
+    },
+    {
+     "name": "site",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive domain substring or exact site display ID (the name form of site_ids)."
+    },
+    {
+     "name": "group_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "region_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_group_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "cname_domain",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "cname_hostname",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "http_port",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "https_port",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "https_enabled",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "enabled",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: active / disabled / package_expired / traffic_exceeded / locked / syncing / sync_failed"
+    },
+    {
+     "name": "is_default",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "sync_status",
+     "in": "query",
+     "type": "string: synced / pending / failed"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable site-domain snapshot in deterministic order."
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSite",
+   "method": "GET",
+   "path": "/v1/sites/{id}",
+   "summary": "Get one website and its basic settings",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Website detail. Tenant responses redact owner.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "Tenant scope that owns the site; platform operators use it for scoped certificate and policy operations."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "OwnerReference | null",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "lock",
+       "type": "SiteLockState",
+       "required": true
+      },
+      {
+       "name": "listener_state",
+       "type": "SiteListenerState",
+       "required": true
+      },
+      {
+       "name": "https_certificate_bound",
+       "type": "boolean",
+       "description": "The site has a bound certificate. Turning HTTPS or forced HTTPS on without one is refused (400 validation_error, details.field https_enabled / force_https, reason certificate_required)."
+      },
+      {
+       "name": "basic",
+       "type": "SiteBasicResponse",
+       "required": true
+      },
+      {
+       "name": "origin_pool",
+       "type": "OriginPool",
+       "required": true
+      },
+      {
+       "name": "package_expires_at",
+       "type": "string(date-time) | null(date-time)",
+       "description": "Period end (ends_at) of the site's package subscription; null without one."
+      },
+      {
+       "name": "package_expired_days",
+       "type": "integer | null",
+       "description": "Whole days since package_expires_at passed (0 while valid or within the first day); null without a subscription."
+      },
+      {
+       "name": "package_remaining_days",
+       "type": "integer | null",
+       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+      },
+      {
+       "name": "access_readiness",
+       "type": "SiteAccessReadiness | null",
+       "description": "接入状态 (same as the list item's)."
+      },
+      {
+       "name": "package_unavailable_reason",
+       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSiteSettings",
+   "method": "PATCH",
+   "path": "/v1/sites/{id}",
+   "summary": "Replace the complete basic or origin settings section",
+   "auth": [
+    "bearer"
+   ],
+   "description": "section=basic and section=origin are writable discriminated variants. expected_version is a shared optimistic concurrency guard, so basic and origin writes against one website serialize on the same version. The complete selected section is required. Origin writes update control-plane desired state and the legacy basic.origins compatibility projection in one transaction; no edge configuration is generated or activated in this slice. A basic write may preserve an identical rich origin projection, but replacing origins while non-default origin metadata exists returns 409 origin_section_conflict. Identical retries require the same normalized payload and Idempotency-Key.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "Tenant scope that owns the site; platform operators use it for scoped certificate and policy operations."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "OwnerReference | null",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "lock",
+       "type": "SiteLockState",
+       "required": true
+      },
+      {
+       "name": "listener_state",
+       "type": "SiteListenerState",
+       "required": true
+      },
+      {
+       "name": "https_certificate_bound",
+       "type": "boolean",
+       "description": "The site has a bound certificate. Turning HTTPS or forced HTTPS on without one is refused (400 validation_error, details.field https_enabled / force_https, reason certificate_required)."
+      },
+      {
+       "name": "basic",
+       "type": "SiteBasicResponse",
+       "required": true
+      },
+      {
+       "name": "origin_pool",
+       "type": "OriginPool",
+       "required": true
+      },
+      {
+       "name": "package_expires_at",
+       "type": "string(date-time) | null(date-time)",
+       "description": "Period end (ends_at) of the site's package subscription; null without one."
+      },
+      {
+       "name": "package_expired_days",
+       "type": "integer | null",
+       "description": "Whole days since package_expires_at passed (0 while valid or within the first day); null without a subscription."
+      },
+      {
+       "name": "package_remaining_days",
+       "type": "integer | null",
+       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+      },
+      {
+       "name": "access_readiness",
+       "type": "SiteAccessReadiness | null",
+       "description": "接入状态 (same as the list item's)."
+      },
+      {
+       "name": "package_unavailable_reason",
+       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSite",
+   "method": "DELETE",
+   "path": "/v1/sites/{id}",
+   "summary": "Soft-delete a website",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted decimal version returned by ETag."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted, or an identical delete retry was replayed."
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "checkSiteAccess",
+   "method": "POST",
+   "path": "/v1/sites/{id}/access-check",
+   "summary": "接入状态 > 立即检查 (resolve the site's domains now)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.read. Resolves every domain of the site through the control plane host's resolver now (no DNS provider or third-party API), stores the result as the background check does and returns the site's access_readiness. Once a minute per site: 429 access_check_throttled with Retry-After (seconds) within the minute.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's access readiness after the check.",
+     "fields": [
+      {
+       "name": "state",
+       "type": "string: ready / pending / blocked",
+       "required": true
+      },
+      {
+       "name": "checks",
+       "type": "array<SiteAccessCheck>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "429",
+     "description": "Rate limited; Retry-After gives the seconds to wait."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "syncSiteAutoDNS",
+   "method": "POST",
+   "path": "/v1/sites/{id}/auto-dns/sync",
+   "summary": "解析检测 > 同步解析 (run the site's automatic DNS records again)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and dns.manage. Resets the site's auto_dns task to pending (creating it with provider_id when the site has none) and returns at once; the records are written in the background. Repeating the call is harmless. 422 dns_provider_unusable: not a verified account of the site owner.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "provider_id",
+      "type": "string(uuid)",
+      "description": "another account of the owner; omitted keeps the task's"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Task scheduled.",
+     "fields": [
+      {
+       "name": "provider_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "provider_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / done / failed",
+       "required": true,
+       "description": "done once every site domain is written to the DNS provider and the provider lists the CNAME back; propagation is not waited for."
+      },
+      {
+       "name": "failure_code",
+       "type": "string | null",
+       "required": true,
+       "description": "Stable code, e.g. cname_pending, zone_not_hosted, apex_domain, wildcard_domain, dns_record_conflict, dns_provider_<code>, retries_exhausted:<code>."
+      },
+      {
+       "name": "attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "results",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "422",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "lockSite",
+   "method": "POST",
+   "path": "/v1/sites/{id}/lock",
+   "summary": "Lock a website against tenant writes",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage in a platform scope. The expected version is checked atomically. Locking changes only control-plane lock metadata and the website version; it does not disable or republish the active edge configuration. Tenant edit, enable/disable, and delete attempts return 409 site_locked until a platform administrator unlocks the site.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Locked, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "Tenant scope that owns the site; platform operators use it for scoped certificate and policy operations."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "OwnerReference | null",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "lock",
+       "type": "SiteLockState",
+       "required": true
+      },
+      {
+       "name": "listener_state",
+       "type": "SiteListenerState",
+       "required": true
+      },
+      {
+       "name": "https_certificate_bound",
+       "type": "boolean",
+       "description": "The site has a bound certificate. Turning HTTPS or forced HTTPS on without one is refused (400 validation_error, details.field https_enabled / force_https, reason certificate_required)."
+      },
+      {
+       "name": "basic",
+       "type": "SiteBasicResponse",
+       "required": true
+      },
+      {
+       "name": "origin_pool",
+       "type": "OriginPool",
+       "required": true
+      },
+      {
+       "name": "package_expires_at",
+       "type": "string(date-time) | null(date-time)",
+       "description": "Period end (ends_at) of the site's package subscription; null without one."
+      },
+      {
+       "name": "package_expired_days",
+       "type": "integer | null",
+       "description": "Whole days since package_expires_at passed (0 while valid or within the first day); null without a subscription."
+      },
+      {
+       "name": "package_remaining_days",
+       "type": "integer | null",
+       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+      },
+      {
+       "name": "access_readiness",
+       "type": "SiteAccessReadiness | null",
+       "description": "接入状态 (same as the list item's)."
+      },
+      {
+       "name": "package_unavailable_reason",
+       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "failbackSiteOrigin",
+   "method": "POST",
+   "path": "/v1/sites/{id}/origin-failback",
+   "summary": "Switch the pool back to the highest healthy level (manual failback)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and Idempotency-Key. Moves the active level to the lowest-numbered level that is healthy (the primary when it is), records site.origin.failback and republishes the site. 409 origin_failback_unavailable: no higher level is healthy.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "State after the switch.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "failback_mode",
+       "type": "string: auto / manual",
+       "required": true
+      },
+      {
+       "name": "active_level",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "overall",
+       "type": "string: healthy / unhealthy / unknown",
+       "required": true,
+       "description": "healthy while any level is healthy, unhealthy when every level is, otherwise unknown."
+      },
+      {
+       "name": "failback_ready",
+       "type": "boolean",
+       "required": true,
+       "description": "manual mode: a higher level is healthy again"
+      },
+      {
+       "name": "levels",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "origins",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "switched_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "checked_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSiteOriginRouting",
+   "method": "GET",
+   "path": "/v1/sites/{id}/origin-routing",
+   "summary": "Get the normalized conditional origin-routing document",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.read. Tenant principals can only read sites in their active scope. The document is ordered deterministically and represents control-plane desired state, not proof of edge activation. The response-only effective_retry and effective_l2_fallback objects expose the fixed fail-safe edge retry and L1-to-L2 direct-origin fallback guards. These guards are not caller-configurable and do not indicate that L2 routing is enabled for this site.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current normalized document and the shared site version.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "document",
+       "type": "ConditionalOriginDocument",
+       "required": true
+      },
+      {
+       "name": "effective_retry",
+       "type": "ConditionalOriginEffectiveRetry",
+       "required": true
+      },
+      {
+       "name": "effective_l2_fallback",
+       "type": "ConditionalOriginEffectiveL2Fallback",
+       "required": true,
+       "description": "Fixed edge safety semantics for an enabled L1-to-L2 route. This object does not indicate that L2 routing is enabled for the site."
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "replaceSiteOriginRouting",
+   "method": "PUT",
+   "path": "/v1/sites/{id}/origin-routing",
+   "summary": "Replace the complete conditional origin-routing document",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage, Idempotency-Key, and a strong If-Match value for the shared site version. The update, idempotency claim, automatic edge publication request, and site.origin_route.update audit event commit in one transaction. Identical semantic input is normalized before the idempotency digest is calculated. effective_retry and effective_l2_fallback are response-only and are rejected if supplied in this request document.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted decimal version returned by ETag."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "schema",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "ingress_source_enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "pools",
+      "type": "array<ConditionalOriginPool>",
+      "required": true
+     },
+     {
+      "name": "default_pool_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "default_fallback_pool_id",
+      "type": "string"
+     },
+     {
+      "name": "routes",
+      "type": "array<ConditionalOriginRoute>",
+      "required": true
+     },
+     {
+      "name": "retry",
+      "type": "ConditionalOriginRetry",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated state, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "document",
+       "type": "ConditionalOriginDocument",
+       "required": true
+      },
+      {
+       "name": "effective_retry",
+       "type": "ConditionalOriginEffectiveRetry",
+       "required": true
+      },
+      {
+       "name": "effective_l2_fallback",
+       "type": "ConditionalOriginEffectiveL2Fallback",
+       "required": true,
+       "description": "Fixed edge safety semantics for an enabled L1-to-L2 route. This object does not indicate that L2 routing is enabled for the site."
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSiteOriginStatus",
+   "method": "GET",
+   "path": "/v1/sites/{id}/origin-status",
+   "summary": "Origin pool probe state and the active origin level",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.read. The control plane probes every origin of the pool (origin address with the pool's origin Host / SNI and health check path, from the tenant's own nodes when they can, else from the control plane). An origin is unhealthy after 3 consecutive failures, healthy after 2 consecutive successes, unknown before that or when it cannot be probed. Aggregated edge scheduling reads overall.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current state.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "failback_mode",
+       "type": "string: auto / manual",
+       "required": true
+      },
+      {
+       "name": "active_level",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "overall",
+       "type": "string: healthy / unhealthy / unknown",
+       "required": true,
+       "description": "healthy while any level is healthy, unhealthy when every level is, otherwise unknown."
+      },
+      {
+       "name": "failback_ready",
+       "type": "boolean",
+       "required": true,
+       "description": "manual mode: a higher level is healthy again"
+      },
+      {
+       "name": "levels",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "origins",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "switched_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "checked_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSiteSchedule302",
+   "method": "GET",
+   "path": "/v1/sites/{id}/schedule302",
+   "summary": "Get the site's HTTP 302 scheduling settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.read. HTTP 302 scheduling (together with DNS scheduling) lets the node a visitor reaches redirect large downloads and video to the best node for the visitor's carrier and region. Disabled sites return the default settings with enabled false. plain_http reports whether the site has a plain HTTP port, which scheduling needs.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current settings and the shared site version.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "SiteSchedule302Settings",
+       "required": true
+      },
+      {
+       "name": "plain_http",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "replaceSiteSchedule302",
+   "method": "PUT",
+   "path": "/v1/sites/{id}/schedule302",
+   "summary": "Replace the site's HTTP 302 scheduling settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage, Idempotency-Key, and a strong If-Match value for the shared site version. The update, idempotency claim, automatic edge publication request and the site.schedule302.update audit event commit in one transaction; a refused write records the event with result denied and a reason code. Turning scheduling off deletes the settings and the site's signing key. 422 schedule302_no_plain_http: the site has no plain HTTP port.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted decimal version returned by ETag."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "target",
+      "type": "string: address / hostname",
+      "required": true,
+      "description": "Redirect to the node's line-group endpoint address, or to its direct hostname (nodes without one are skipped)."
+     },
+     {
+      "name": "keep_path",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "keep_query",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "signature_ttl_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "https_to_http",
+      "type": "boolean",
+      "required": true,
+      "description": "Also redirect HTTPS requests; they land on plain HTTP (nodes hold no certificate for their address)."
+     },
+     {
+      "name": "extensions",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "path_prefixes",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "min_size_bytes",
+      "type": "integer",
+      "required": true,
+      "description": "Redirect only URLs whose response the node already served at least this large (0 off)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated state, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "SiteSchedule302Settings",
+       "required": true
+      },
+      {
+       "name": "plain_http",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "422",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "transferSite",
+   "method": "POST",
+   "path": "/v1/sites/{id}/transfer",
+   "summary": "Move a website to another user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage in a platform scope held by a platform administrator. In one transaction the website is re-created in the target user's tenant (new website ID, newly allocated CNAME) and the current website is deleted; the old CNAME retires by the delete rules and the customer must repoint DNS from from_cname to the new site's CNAME. Historical statistics, logs and bills stay with the previous owner. The target is another active user with a tenant of its own; target_package_subscription_id is one of that user's own package subscriptions, or null for no package. copied lists what was carried to the new website and released what the administrator must configure again; item names are http_policy, cache_policy, certificate, waf_policy, cc_policy, acl_policy, auto_defense and js_challenge (automatic DNS records are not moved). Without a carried certificate HTTPS is off on the new website. Errors: 422 site_transfer_target_invalid (target is not an active user with its own tenant, or is the current owner), 422 domain_blocked, 409 domain_verified_by_other (an apex is verified by another account, including the previous owner; domain ownership is not transferred), 409 domain_ownership_required, 409 site_locked, 409 version_conflict (stale expected_version) and 409 idempotency_conflict. Domain errors carry the refused domain and apex.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "target_user_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "target_package_subscription_id",
+      "type": "string(uuid) | null(uuid)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Moved, or the stored result of an identical idempotent retry. The ETag is the new website's version.",
+     "fields": [
+      {
+       "name": "site",
+       "type": "SiteDetail",
+       "required": true
+      },
+      {
+       "name": "from_site_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The deleted website."
+      },
+      {
+       "name": "from_cname",
+       "type": "string",
+       "required": true,
+       "description": "The retired CNAME the customer repoints from."
+      },
+      {
+       "name": "copied",
+       "type": "array<string: http_policy / cache_policy / certificate / waf_policy / cc_policy / acl_policy / auto_defense / js_challenge>",
+       "required": true
+      },
+      {
+       "name": "released",
+       "type": "array<string: http_policy / cache_policy / certificate / waf_policy / cc_policy / acl_policy / auto_defense / js_challenge>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "domain_verified_by_other, domain_ownership_required, site_locked, version_conflict or idempotency_conflict."
+    },
+    {
+     "status": "422",
+     "description": "site_transfer_target_invalid or domain_blocked."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "unlockSite",
+   "method": "POST",
+   "path": "/v1/sites/{id}/unlock",
+   "summary": "Restore tenant write access to a website",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage in a platform scope. The expected version is checked atomically and the previous lock metadata is cleared. Existing edge traffic and operational website status are not changed.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_version",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Unlocked, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "Tenant scope that owns the site; platform operators use it for scoped certificate and policy operations."
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "OwnerReference | null",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "lock",
+       "type": "SiteLockState",
+       "required": true
+      },
+      {
+       "name": "listener_state",
+       "type": "SiteListenerState",
+       "required": true
+      },
+      {
+       "name": "https_certificate_bound",
+       "type": "boolean",
+       "description": "The site has a bound certificate. Turning HTTPS or forced HTTPS on without one is refused (400 validation_error, details.field https_enabled / force_https, reason certificate_required)."
+      },
+      {
+       "name": "basic",
+       "type": "SiteBasicResponse",
+       "required": true
+      },
+      {
+       "name": "origin_pool",
+       "type": "OriginPool",
+       "required": true
+      },
+      {
+       "name": "package_expires_at",
+       "type": "string(date-time) | null(date-time)",
+       "description": "Period end (ends_at) of the site's package subscription; null without one."
+      },
+      {
+       "name": "package_expired_days",
+       "type": "integer | null",
+       "description": "Whole days since package_expires_at passed (0 while valid or within the first day); null without a subscription."
+      },
+      {
+       "name": "package_remaining_days",
+       "type": "integer | null",
+       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+      },
+      {
+       "name": "access_readiness",
+       "type": "SiteAccessReadiness | null",
+       "description": "接入状态 (same as the list item's)."
+      },
+      {
+       "name": "package_unavailable_reason",
+       "type": "string: no_package / package_disabled / package_deleted / null | null: no_package / package_disabled / package_deleted / null",
+       "description": "Why the site is not served for lack of a valid package (only sites on an enabled, undeleted package are published): no_package (none bound), package_disabled, package_deleted. Null while the package is valid."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSiteAccess",
+   "method": "GET",
+   "path": "/v1/sites/{site_id}/access",
+   "summary": "Get a site's request handling settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Basic auth users are returned by name only; passwords are never stored or returned. Tenant principals only reach sites of their scope. ETag is the site version.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's settings",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "SiteAccessSettings",
+       "required": true
+      },
+      {
+       "name": "https_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "force_https",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error"
+    },
+    {
+     "status": "401",
+     "description": "Error"
+    },
+    {
+     "status": "403",
+     "description": "Error"
+    },
+    {
+     "status": "404",
+     "description": "Error"
+    }
+   ]
+  },
+  {
+   "operation_id": "replaceSiteAccess",
+   "method": "PUT",
+   "path": "/v1/sites/{site_id}/access",
+   "summary": "Replace a site's request handling settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Replaces every setting; an absent or null setting is off, and all off removes the site's row. A basic auth user without password keeps its stored secret (SHA-256 of site_id:username:password). HSTS and a forced HTTPS status other than 301 or excluded domains need the site's HTTPS. The write advances the site version: a manual scope shows it pending, an automatic scope publishes it. The write and its site.access.update audit event (changes, no secrets) commit together; a refused write is audited as denied with its reason code.",
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "The quoted site version (GET ETag)"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "host_redirects",
+      "type": "array<HostRedirect>"
+     },
+     {
+      "name": "hsts",
+      "type": "HSTS | null"
+     },
+     {
+      "name": "compression",
+      "type": "Compression | null"
+     },
+     {
+      "name": "limits",
+      "type": "Limits | null"
+     },
+     {
+      "name": "basic_auth",
+      "type": "BasicAuth | null"
+     },
+     {
+      "name": "maintenance",
+      "type": "Maintenance | null"
+     },
+     {
+      "name": "webp",
+      "type": "WebP | null"
+     },
+     {
+      "name": "response_rules",
+      "type": "array<ResponseRule>",
+      "description": "Response phase rules, evaluated in order when the origin's response headers arrive (the body is never read). Absent or [] = none; a read always returns the list. Needs nodes declaring EDGE_RESPONSE_RULES (a release to others is refused and names them)."
+     },
+     {
+      "name": "force_https",
+      "type": "ForceHTTPS"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The site's settings after the write",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "settings",
+       "type": "SiteAccessSettings",
+       "required": true
+      },
+      {
+       "name": "https_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "force_https",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "domains",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error"
+    },
+    {
+     "status": "401",
+     "description": "Error"
+    },
+    {
+     "status": "403",
+     "description": "Error"
+    },
+    {
+     "status": "404",
+     "description": "Error"
+    },
+    {
+     "status": "409",
+     "description": "site_locked, version_conflict or idempotency_conflict"
+    },
+    {
+     "status": "422",
+     "description": "validation_error or site_access_https_required"
+    }
+   ]
+  },
+  {
+   "operation_id": "getCertificateSiteBinding",
+   "method": "GET",
+   "path": "/v1/sites/{site_id}/certificate-binding",
+   "summary": "Get the active certificate binding for one site",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns the current bound fact and its active immutable certificate version in one tenant-scoped read. An unbound site returns the stable certificate_site_binding_not_found error code.",
+   "permissions": [
+    "certificates.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Active site certificate binding and version",
+     "fields": [
+      {
+       "name": "binding",
+       "type": "CertificateAssetBinding",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "CertificateAssetVersion",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "applyDNSReconciliation",
+   "method": "POST",
+   "path": "/v1/sites/{site_id}/dns-reconcile/apply",
+   "summary": "Persist and enqueue a DNS reconciliation task",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires dns.manage and a live DNS reconciliation entitlement. The authenticated tenant, site path, idempotency key, canonical payload digest, and provider revision form the durable command identity. A same-key retry with a different payload returns 409.",
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a site in the authenticated tenant."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable command key; retry only with the same route and payload."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Strong quoted decimal provider/task revision, for example `\"7\"`."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "expected",
+      "type": "array<ExpectedRecord>",
+      "required": true
+     },
+     {
+      "name": "authoritative_ns",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "line",
+      "type": "string",
+      "description": "Provider routing line. Empty/default values preserve the provider default line."
+     },
+     {
+      "name": "weight",
+      "type": "integer",
+      "description": "Provider record weight; zero is the provider default."
+     },
+     {
+      "name": "propagation_started_at",
+      "type": "string(date-time)"
+     },
+     {
+      "name": "propagation_window_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "provider",
+      "type": "ProviderSnapshot",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Durable job created or replayed and available for workers.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "required_consecutive",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "job",
+       "type": "Job",
+       "required": true
+      },
+      {
+       "name": "request",
+       "type": "CheckRequest",
+       "required": true
+      },
+      {
+       "name": "result",
+       "type": "ReconcileResult",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Non-canonical path/header, unsupported media type, oversized body, unknown field, or invalid JSON."
+    },
+    {
+     "status": "401",
+     "description": "Exactly one valid Bearer session is required."
+    },
+    {
+     "status": "403",
+     "description": "Live IAM permission or DNS reconciliation entitlement denied."
+    },
+    {
+     "status": "405",
+     "description": "Method is not supported by this route."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload conflict or task state does not permit the command."
+    },
+    {
+     "status": "412",
+     "description": "If-Match or provider revision is stale."
+    },
+    {
+     "status": "408",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    },
+    {
+     "status": "503",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    },
+    {
+     "status": "504",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    }
+   ]
+  },
+  {
+   "operation_id": "dryRunDNSReconciliation",
+   "method": "POST",
+   "path": "/v1/sites/{site_id}/dns-reconcile/dry-run",
+   "summary": "Build a deterministic repair plan without provider side effects",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a site in the authenticated tenant."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "expected",
+      "type": "array<ExpectedRecord>",
+      "required": true
+     },
+     {
+      "name": "authoritative_ns",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "ttl",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "line",
+      "type": "string",
+      "description": "Provider routing line. Empty/default values preserve the provider default line."
+     },
+     {
+      "name": "weight",
+      "type": "integer",
+      "description": "Provider record weight; zero is the provider default."
+     },
+     {
+      "name": "propagation_started_at",
+      "type": "string(date-time)"
+     },
+     {
+      "name": "propagation_window_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "provider",
+      "type": "ProviderSnapshot",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Deterministic side-effect-free reconciliation plan.",
+     "fields": [
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "zone_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "payload_digest",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "plan",
+       "type": "RepairPlan",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: dry_run / applying / propagating / ready_to_commit / committed / failed / cancelled / timed_out / commit_failed",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "ready_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "initial_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "provider_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "operations",
+       "type": "array<OperationResult>",
+       "required": true
+      },
+      {
+       "name": "deferred_deletes",
+       "type": "array<OperationResult>",
+       "required": true
+      },
+      {
+       "name": "compensation_plan",
+       "type": "array<ProviderOperation>",
+       "required": true
+      },
+      {
+       "name": "propagation",
+       "type": "array<PropagationAttempt>",
+       "required": true
+      },
+      {
+       "name": "last_check",
+       "type": "CheckResult"
+      },
+      {
+       "name": "error_class",
+       "type": "string:  / transient / permanent / revision_conflict / cancelled / timeout",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Non-canonical path/header, unsupported media type, oversized body, unknown field, or invalid JSON."
+    },
+    {
+     "status": "401",
+     "description": "Exactly one valid Bearer session is required."
+    },
+    {
+     "status": "403",
+     "description": "Live IAM permission or DNS reconciliation entitlement denied."
+    },
+    {
+     "status": "405",
+     "description": "Method is not supported by this route."
+    },
+    {
+     "status": "408",
+     "description": "Read-only request was cancelled."
+    },
+    {
+     "status": "503",
+     "description": "Required runtime dependency is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read-only request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "getDNSReconciliationTask",
+   "method": "GET",
+   "path": "/v1/sites/{site_id}/dns-reconcile/tasks/{task_id}",
+   "summary": "Read one durable DNS reconciliation task",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires dns.read. Unknown, cross-tenant, and task/site mismatches all return the same 404 response. Tenant scope is never accepted from a path, query parameter, or request body.",
+   "permissions": [
+    "dns.read"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a site in the authenticated tenant."
+    },
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a dns_reconcile job."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current durable task facts.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "required_consecutive",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "job",
+       "type": "Job",
+       "required": true
+      },
+      {
+       "name": "request",
+       "type": "CheckRequest",
+       "required": true
+      },
+      {
+       "name": "result",
+       "type": "ReconcileResult",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Non-canonical path/header, unsupported media type, oversized body, unknown field, or invalid JSON."
+    },
+    {
+     "status": "401",
+     "description": "Exactly one valid Bearer session is required."
+    },
+    {
+     "status": "403",
+     "description": "Live IAM permission or DNS reconciliation entitlement denied."
+    },
+    {
+     "status": "404",
+     "description": "Task is absent or outside the authenticated tenant/site scope."
+    },
+    {
+     "status": "405",
+     "description": "Method is not supported by this route."
+    },
+    {
+     "status": "408",
+     "description": "Read-only request was cancelled."
+    },
+    {
+     "status": "503",
+     "description": "Required runtime dependency is unavailable."
+    },
+    {
+     "status": "504",
+     "description": "Read-only request timed out."
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelDNSReconciliationTask",
+   "method": "POST",
+   "path": "/v1/sites/{site_id}/dns-reconcile/tasks/{task_id}/cancel",
+   "summary": "Persist a cancellation request for a DNS reconciliation task",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a site in the authenticated tenant."
+    },
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a dns_reconcile job."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable command key; retry only with the same route and payload."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Strong quoted decimal provider/task revision, for example `\"7\"`."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current durable task facts.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "required_consecutive",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "job",
+       "type": "Job",
+       "required": true
+      },
+      {
+       "name": "request",
+       "type": "CheckRequest",
+       "required": true
+      },
+      {
+       "name": "result",
+       "type": "ReconcileResult",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Non-canonical path/header, unsupported media type, oversized body, unknown field, or invalid JSON."
+    },
+    {
+     "status": "401",
+     "description": "Exactly one valid Bearer session is required."
+    },
+    {
+     "status": "403",
+     "description": "Live IAM permission or DNS reconciliation entitlement denied."
+    },
+    {
+     "status": "404",
+     "description": "Task is absent or outside the authenticated tenant/site scope."
+    },
+    {
+     "status": "405",
+     "description": "Method is not supported by this route."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload conflict or a provider operation is still in flight."
+    },
+    {
+     "status": "412",
+     "description": "If-Match or provider revision is stale."
+    },
+    {
+     "status": "408",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    },
+    {
+     "status": "503",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    },
+    {
+     "status": "504",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    }
+   ]
+  },
+  {
+   "operation_id": "commitDNSReconciliationTask",
+   "method": "POST",
+   "path": "/v1/sites/{site_id}/dns-reconcile/tasks/{task_id}/commit",
+   "summary": "Delete superseded records after propagation is healthy",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires dns.manage and a live DNS reconciliation entitlement. Commit rechecks convergence and provider revision before processing deferred deletes. Crash/retry reuses the same command identity and durable task.",
+   "permissions": [
+    "dns.manage"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a site in the authenticated tenant."
+    },
+    {
+     "name": "task_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of a dns_reconcile job."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable command key; retry only with the same route and payload."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Strong quoted decimal provider/task revision, for example `\"7\"`."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current durable task facts.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "required_consecutive",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "job",
+       "type": "Job",
+       "required": true
+      },
+      {
+       "name": "request",
+       "type": "CheckRequest",
+       "required": true
+      },
+      {
+       "name": "result",
+       "type": "ReconcileResult",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Non-canonical path/header, unsupported media type, oversized body, unknown field, or invalid JSON."
+    },
+    {
+     "status": "401",
+     "description": "Exactly one valid Bearer session is required."
+    },
+    {
+     "status": "403",
+     "description": "Live IAM permission or DNS reconciliation entitlement denied."
+    },
+    {
+     "status": "404",
+     "description": "Task is absent or outside the authenticated tenant/site scope."
+    },
+    {
+     "status": "405",
+     "description": "Method is not supported by this route."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload conflict or task state does not permit the command."
+    },
+    {
+     "status": "412",
+     "description": "If-Match or provider revision is stale."
+    },
+    {
+     "status": "408",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    },
+    {
+     "status": "503",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    },
+    {
+     "status": "504",
+     "description": "Mutation result is unknown; retry only with the same key and payload."
+    }
+   ]
+  },
+  {
+   "operation_id": "getSiteTrafficLimit",
+   "method": "GET",
+   "path": "/v1/sites/{site_id}/traffic-limit",
+   "summary": "Read a website's traffic caps and their enforcement (sites.read)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The caps; ETag is the site version.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "setting",
+       "type": "SiteTrafficLimitSetting",
+       "required": true
+      },
+      {
+       "name": "total_since",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "exceeded_period",
+       "type": "string:  / daily / monthly / total",
+       "required": true,
+       "description": "The reached cap; nodes serve the notice page while set."
+      },
+      {
+       "name": "exceeded_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "evaluated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "validation_error, site_not_found, site_locked, version_conflict or idempotency_conflict."
+    },
+    {
+     "status": "403",
+     "description": "validation_error, site_not_found, site_locked, version_conflict or idempotency_conflict."
+    },
+    {
+     "status": "404",
+     "description": "validation_error, site_not_found, site_locked, version_conflict or idempotency_conflict."
+    }
+   ]
+  },
+  {
+   "operation_id": "putSiteTrafficLimit",
+   "method": "PUT",
+   "path": "/v1/sites/{site_id}/traffic-limit",
+   "summary": "Replace a website's traffic caps (sites.manage)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "The quoted site version."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true,
+      "description": "An enabled limit needs at least one cap."
+     },
+     {
+      "name": "daily_bytes",
+      "type": "integer | null",
+      "required": true
+     },
+     {
+      "name": "monthly_bytes",
+      "type": "integer | null",
+      "required": true
+     },
+     {
+      "name": "total_bytes",
+      "type": "integer | null",
+      "required": true,
+      "description": "Counted from total_since (set when the total cap is set or changed)."
+     },
+     {
+      "name": "time_zone",
+      "type": "string",
+      "required": true,
+      "description": "IANA zone the daily and monthly periods start in (\"\" means Asia/Shanghai)."
+     },
+     {
+      "name": "notice_html",
+      "type": "string",
+      "required": true,
+      "description": "Page served with status 509 while exceeded (\"\" the default page)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The stored caps; the site's next release enforces them.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "setting",
+       "type": "SiteTrafficLimitSetting",
+       "required": true
+      },
+      {
+       "name": "total_since",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "exceeded_period",
+       "type": "string:  / daily / monthly / total",
+       "required": true,
+       "description": "The reached cap; nodes serve the notice page while set."
+      },
+      {
+       "name": "exceeded_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "evaluated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "validation_error, site_not_found, site_locked, version_conflict or idempotency_conflict."
+    },
+    {
+     "status": "403",
+     "description": "validation_error, site_not_found, site_locked, version_conflict or idempotency_conflict."
+    },
+    {
+     "status": "404",
+     "description": "validation_error, site_not_found, site_locked, version_conflict or idempotency_conflict."
+    },
+    {
+     "status": "409",
+     "description": "validation_error, site_not_found, site_locked, version_conflict or idempotency_conflict."
+    }
+   ]
+  }
+ ]
+}

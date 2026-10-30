@@ -1,0 +1,21 @@
+DROP TRIGGER package_subscription_write_requests_no_truncate ON package_subscription_write_requests;
+DROP TRIGGER package_subscription_write_requests_protect ON package_subscription_write_requests;
+DROP FUNCTION protect_package_subscription_write_request();
+DROP TABLE package_subscription_write_requests;
+DROP TRIGGER package_subscription_versions_no_truncate ON package_subscription_versions;
+DROP TRIGGER package_subscription_versions_append_only ON package_subscription_versions;
+DROP FUNCTION prevent_package_subscription_version_mutation();
+DROP TABLE package_subscription_versions;
+DROP TRIGGER package_subscriptions_protect_snapshot ON package_subscriptions;
+DROP FUNCTION protect_package_subscription_snapshot();
+DROP TRIGGER package_subscriptions_product_snapshot ON package_subscriptions;
+DROP FUNCTION assert_package_subscription_product_snapshot();
+DROP TRIGGER package_subscriptions_scope_kind ON package_subscriptions;
+DROP FUNCTION assert_package_subscription_scope();
+DROP TABLE package_subscriptions;
+DROP FUNCTION is_valid_package_subscription_timezone(text);
+
+DELETE FROM role_permissions
+WHERE permission_name IN ('package_subscriptions.read', 'package_subscriptions.manage');
+DELETE FROM permissions
+WHERE name IN ('package_subscriptions.read', 'package_subscriptions.manage');

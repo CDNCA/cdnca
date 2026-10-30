@@ -1,0 +1,259 @@
+{
+ "id": "admin-reseller-wholesale-prices",
+ "prefix": "/v1/admin/reseller-wholesale-prices",
+ "operations": [
+  {
+   "operation_id": "listResellerWholesalePrices",
+   "method": "GET",
+   "path": "/v1/admin/reseller-wholesale-prices",
+   "summary": "List wholesale prices",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Prices per (price list, platform line group, period) in fen. A reseller's order costs the main line group's price plus the backup's (where priced) for the order's period; a package whose main line group has no price for a period cannot be sold for it.",
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "price_list",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Prices ordered by list, line group name and period.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ResellerWholesalePrice>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "putResellerWholesalePrice",
+   "method": "PUT",
+   "path": "/v1/admin/reseller-wholesale-prices/{price_list}/{line_group_id}/{period}",
+   "summary": "Set one wholesale price (audited reseller.wholesale_price.put)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Conditional write. expected_updated_at is the updated_at of the row the caller read, or null to create a row that does not exist yet; if the current row differs (changed, deleted or created by someone else) the write is refused with 409 wholesale_price_conflict and nothing changes. Every write moves updated_at forward. The line group must be one of the platform's own line groups (404 reseller_not_found otherwise).",
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "price_list",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "line_group_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "period",
+     "in": "path",
+     "type": "string: month / quarter / year",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "price_minor",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "expected_updated_at",
+      "type": "string(date-time)",
+      "required": true,
+      "description": "updated_at of the row the caller read; null = create."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The price after the write.",
+     "fields": [
+      {
+       "name": "price_list",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "line_group_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "line_group_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "period",
+       "type": "string: month / quarter / year",
+       "required": true
+      },
+      {
+       "name": "price_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteResellerWholesalePrice",
+   "method": "DELETE",
+   "path": "/v1/admin/reseller-wholesale-prices/{price_list}/{line_group_id}/{period}",
+   "summary": "Remove one wholesale price (audited reseller.wholesale_price.delete)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Conditional delete: removes the row only if its updated_at still equals expected_updated_at (409 wholesale_price_conflict otherwise; 404 when there is no row).",
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "price_list",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "line_group_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "period",
+     "in": "path",
+     "type": "string: month / quarter / year",
+     "required": true
+    },
+    {
+     "name": "expected_updated_at",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Removed."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

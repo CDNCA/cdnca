@@ -1,0 +1,393 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Theme Packages API
+  version: 0.1.0
+  description: >-
+    PA-17 declarative themes (ADR 0007 §7, cdnca.theme/v1). Download and activation are separate; one theme
+    is active at a time. The active theme is served as content-addressed same-origin files; a theme never
+    carries script and never changes any CSP. State changes are audited (plugin.theme.download|upload|activate|remove).
+servers: [{url: /}]
+paths:
+  /v1/theme/current:
+    get:
+      operationId: getCurrentTheme
+      description: >-
+        Public pointer to the theme the caller sees (Cache-Control no-store). A tenant session gets its tenant's
+        theme (PA-26); without a session, a Host bound to a tenant (sign-in page) gets that tenant's theme; the
+        platform console and everyone else get the platform theme (the default theme until one is activated).
+      parameters:
+        - {name: Authorization, in: header, required: false, schema: {type: string}, description: Optional bearer session}
+      responses:
+        '200': {description: Active theme, content: {application/json: {schema: {$ref: '#/components/schemas/Current'}}}}
+  /v1/theme/theme.{sha}.css:
+    parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
+    get:
+      operationId: getThemeStylesheet
+      description: 'Rendered custom properties on :root[data-cdnca-theme], then one block per tokens_by_role role on :root[data-cdnca-theme][data-cdnca-role="admin"|"user"] carrying only that role''s overrides. Immutable.'
+      responses:
+        '200': {description: Stylesheet, content: {text/css: {schema: {type: string}}}}
+        '404': {description: Unknown digest}
+  /v1/theme/theme.{sha}.json:
+    parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
+    get:
+      operationId: getThemeTokens
+      description: Rendered tokens (cdnca.theme.rendered/v1) for ConfigProvider and layout slots. Immutable.
+      responses:
+        '200': {description: Rendered theme, content: {application/json: {schema: {$ref: '#/components/schemas/Rendered'}}}}
+        '404': {description: Unknown digest}
+  /v1/theme/assets/{sha}:
+    parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
+    get:
+      operationId: getThemeAsset
+      description: A theme brand image (png/jpeg/ico). Immutable.
+      responses:
+        '200': {description: Image}
+        '404': {description: Unknown digest}
+  /v1/theme/auth-style:
+    get:
+      operationId: getThemeAuthStyle
+      description: >-
+        Public sign-in page style of the theme plugin active on the user console (site theme C, auth_style):
+        CSS the console puts in a <style> of its own on /auth/* and the plugin's images. Forms and submission
+        stay the platform's; nginx serves /auth/* with img-src, font-src and connect-src 'self'. An empty css
+        without one. Cache-Control no-cache.
+      responses:
+        '200':
+          description: Sign-in style
+          content: {application/json: {schema: {type: object, required: [css, images], properties: {css: {type: string}, images: {type: object, additionalProperties: {type: string, pattern: '^/v1/theme/auth-style/assets/[0-9a-f]{64}$'}}}}}}
+        '405': {description: Not GET or HEAD}
+  /v1/theme/auth-style/assets/{sha}:
+    parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
+    get:
+      operationId: getThemeAuthStyleAsset
+      description: An image of an installed plugin's sign-in style, served with a sandboxing CSP. Immutable.
+      responses:
+        '200': {description: Image}
+        '404': {description: Unknown digest}
+  /v1/admin/themes:
+    get:
+      operationId: listThemes
+      security: [{bearerAuth: []}]
+      description: Catalog themes with download state and the downloaded packages. Requires system_configuration.read.
+      responses:
+        '200': {description: Catalog, content: {application/json: {schema: {$ref: '#/components/schemas/Catalog'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+  /v1/admin/themes/catalog/{theme_id}/download:
+    parameters: [{name: theme_id, in: path, required: true, schema: {type: string, pattern: '^(default|official\.[a-z][a-z0-9-]{0,31})$'}}]
+    post:
+      operationId: downloadTheme
+      security: [{bearerAuth: []}]
+      description: Store a catalog theme (downloaded, not active). Requires system_configuration.manage.
+      responses:
+        '200': {description: Downloaded package, content: {application/json: {schema: {$ref: '#/components/schemas/Package'}}}}
+        '404': {description: Unknown catalog theme}
+  /v1/admin/themes/packages:
+    post:
+      operationId: uploadTheme
+      security: [{bearerAuth: []}]
+      description: Upload a custom cdnca.theme/v1 package (id custom.*). Packages with url(), @import, external links, script or undeclared classes are refused.
+      requestBody: {required: true, content: {application/json: {schema: {type: object}}}}
+      responses:
+        '201': {description: Downloaded package, content: {application/json: {schema: {$ref: '#/components/schemas/Package'}}}}
+        '413': {description: Larger than 8 MiB}
+        '422': {description: Refused package, content: {application/json: {schema: {$ref: '#/components/schemas/InvalidPackage'}}}}
+  /v1/admin/themes/packages/{sha}/activate:
+    parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
+    post:
+      operationId: activateTheme
+      security: [{bearerAuth: []}]
+      description: >-
+        Make a downloaded package the active theme of one console (site theme C, migration 461): no body is both
+        consoles as before; {"slot":"admin"|"user"|"all"} names one. The admin console (admin, all) takes official
+        themes only (built in, uploads and copies, or the io.cdnca market namespace); a third party's market theme
+        is a user console theme. An admin activation records a new error page publication revision pinned to the
+        theme; node default error pages follow the admin console, so a user activation republishes nothing.
+      parameters:
+        - {name: If-Match, in: header, required: true, description: 'Activation revision the caller saw ("0" before any).', schema: {type: string, pattern: '^"(0|[1-9][0-9]*)"$'}}
+      requestBody:
+        required: false
+        content: {application/json: {schema: {type: object, additionalProperties: false, properties: {slot: {type: string, enum: [all, admin, user]}}}}}
+      responses:
+        '200': {description: Activated, content: {application/json: {schema: {$ref: '#/components/schemas/Activation'}}}}
+        '400': {description: Unknown slot}
+        '403': {description: Permission denied, entitlement_feature_denied (paid official theme) or admin_slot_official_only}
+        '404': {description: Not downloaded}
+        '412': {description: Revision conflict}
+  /v1/admin/themes/packages/{sha}:
+    parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
+    get:
+      operationId: getThemePackage
+      security: [{bearerAuth: []}]
+      description: >-
+        The cdnca.theme/v1 JSON of a package this installation stored (removed ones too) or a catalog theme, byte for byte (its SHA-256 is the
+        path digest). The theme management page edits a copy of it and uploads the copy as a custom.* package
+        whose derived_from names this package. Requires system_configuration.read.
+      responses:
+        '200': {description: Package JSON, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {type: object}}}}
+        '404': {description: Never stored and not in the catalog}
+    delete:
+      operationId: removeTheme
+      security: [{bearerAuth: []}]
+      responses:
+        '204': {description: Removed (can be downloaded again)}
+        '409': {description: 'The active package, or one a tenant uses (theme_package_selected_by_tenant), cannot be removed'}
+  /v1/tenant-scopes/{tenant_scope_id}/theme:
+    parameters: [{name: tenant_scope_id, in: path, required: true, schema: {type: string, format: uuid}}]
+    get:
+      operationId: getTenantTheme
+      description: The caller's own tenant theme state (any tenant member) and the downloaded themes it may choose.
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Tenant theme, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
+        '403': {description: Not a member of this tenant scope}
+    put:
+      operationId: selectTenantTheme
+      description: >-
+        Choose the tenant theme (tenant_theme.manage). package_sha256 "" follows the platform theme. Allowed only
+        while the tenant may choose (its selection_mode allow, or inherit while the platform allows) and the
+        platform has not assigned the tenant a theme. Audited as theme.tenant.activate.
+      security: [{bearerAuth: []}]
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}, description: '"<revision>" from ETag'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [package_sha256], properties: {package_sha256: {type: string, pattern: '^([0-9a-f]{64})?$'}}}
+      responses:
+        '200': {description: New tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
+        '403': {description: 'theme_permission_denied, theme_tenant_selection_denied or entitlement_feature_denied'}
+        '404': {description: Package not downloaded}
+        '412': {description: theme_revision_conflict}
+  /v1/admin/themes/tenant-policy:
+    get:
+      operationId: getTenantThemePolicy
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Platform default, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/TenantPolicy'}}}}
+    put:
+      operationId: updateTenantThemePolicy
+      description: Whether tenants in inherit mode may choose their theme. Audited as theme.tenant_policy.update.
+      security: [{bearerAuth: []}]
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: false, required: [tenant_selection_allowed], properties: {tenant_selection_allowed: {type: boolean}}}
+      responses:
+        '200': {description: New policy, content: {application/json: {schema: {$ref: '#/components/schemas/TenantPolicy'}}}}
+        '412': {description: theme_revision_conflict}
+  /v1/admin/themes/tenants/{tenant_scope_id}:
+    parameters: [{name: tenant_scope_id, in: path, required: true, schema: {type: string, format: uuid}}]
+    get:
+      operationId: getTenantThemeForPlatform
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
+        '404': {description: Unknown tenant scope}
+    put:
+      operationId: updateTenantThemeForPlatform
+      description: >-
+        Set the tenant's selection_mode (inherit | allow | deny) and, with assign, the theme the platform assigns it
+        (package_sha256 "" clears the assignment). An assigned theme applies whatever the selection mode. Audited as
+        theme.tenant.activate (assign) or theme.tenant.selection_update.
+      security: [{bearerAuth: []}]
+      parameters: [{name: If-Match, in: header, required: true, schema: {type: string}}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [selection_mode]
+              properties:
+                selection_mode: {enum: [inherit, allow, deny]}
+                assign: {type: boolean}
+                package_sha256: {type: string, pattern: '^([0-9a-f]{64})?$', description: Required exactly when assign is true}
+      responses:
+        '200': {description: New tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
+        '412': {description: theme_revision_conflict}
+  /v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}:
+    parameters:
+      - {name: tenant_scope_id, in: path, required: true, schema: {type: string, format: uuid}}
+      - {name: hostname, in: path, required: true, schema: {type: string}}
+    put:
+      operationId: bindTenantThemeDomain
+      description: Bind a sign-in hostname to the tenant (its sign-in page shows the tenant theme). Audited as theme.tenant_domain.bind.
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
+        '409': {description: theme_domain_conflict (bound to another tenant)}
+    delete:
+      operationId: unbindTenantThemeDomain
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Tenant theme, content: {application/json: {schema: {$ref: '#/components/schemas/TenantTheme'}}}}
+        '404': {description: Not bound}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  schemas:
+    SHA256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    Rendered:
+      type: object
+      required: [schema, id, version, package_sha256, name, antd_tokens, css_variables, layout, brand]
+      properties:
+        schema: {const: cdnca.theme.rendered/v1}
+        id: {type: string}
+        version: {type: string}
+        package_sha256: {$ref: '#/components/schemas/SHA256'}
+        name: {type: object}
+        antd_tokens: {type: object, description: ConfigProvider tokens (shared values)}
+        antd_tokens_by_role:
+          type: object
+          description: Only the antd tokens a role overrides (package tokens_by_role); absent when none.
+          properties:
+            admin: {type: object}
+            user: {type: object}
+        css_variables: {type: object, additionalProperties: {type: string}, description: Shared custom properties}
+        layout:
+          type: object
+          required: [login_layout, sidebar, header_links, footer_text, user_home_blocks, look, motion]
+          properties:
+            login_layout: {enum: [split, centered, background]}
+            sidebar: {enum: [light, dark]}
+            header_links: {type: array, items: {type: object}}
+            footer_text: {type: object}
+            brand_name: {type: object, description: 'Product name for the consoles and sign-in page (layout_slots.brand_name, zh-CN required); absent when the package sets none, the SPA then shows cdnca.'}
+            user_home_blocks: {type: array, items: {type: string}}
+            look: {enum: [classic, tech], description: 'Structural style set of the SPA (html[data-cdnca-look]); classic when the package leaves it out.'}
+            motion: {enum: ['off', subtle, rich], description: 'Animation level (html[data-cdnca-motion]); off when left out. prefers-reduced-motion always turns it off.'}
+        brand: {type: object}
+    Current:
+      type: object
+      required: [schema, revision, theme_id, version, package_sha256, tokens_url, stylesheet_url]
+      properties:
+        schema: {const: cdnca.theme.current/v1}
+        revision: {type: integer, minimum: 0}
+        theme_id: {type: string}
+        version: {type: string}
+        package_sha256: {$ref: '#/components/schemas/SHA256'}
+        tokens_url: {type: string, pattern: '^/v1/theme/theme\.[0-9a-f]{64}\.json$'}
+        stylesheet_url: {type: string, pattern: '^/v1/theme/theme\.[0-9a-f]{64}\.css$'}
+        scope: {enum: [platform, tenant], description: 'tenant: a tenant''s own theme; platform-uploaded brand images do not apply'}
+        brand_assets:
+          type: object
+          description: 'Slots the platform uploaded (GET /v1/brand-assets/{slot}), each with its revision; request /v1/brand-assets/{slot}?v={revision} only for these. Empty for a tenant''s own theme.'
+          propertyNames: {enum: [favicon, logo, login_ad, logo_dark, login_background, app_icon]}
+          additionalProperties: {type: integer, minimum: 1}
+    TenantPolicy:
+      type: object
+      required: [tenant_selection_allowed, revision]
+      properties:
+        tenant_selection_allowed: {type: boolean}
+        revision: {type: integer, minimum: 0}
+    TenantTheme:
+      type: object
+      required: [schema, tenant_scope_id, selection_mode, platform_allows, selection_allowed, effective_package_sha256, effective_theme_id, follows_platform, revision, domains, choices]
+      properties:
+        schema: {const: cdnca.theme.tenant/v1}
+        tenant_scope_id: {type: string, format: uuid}
+        selection_mode: {enum: [inherit, allow, deny]}
+        platform_allows: {type: boolean}
+        selection_allowed: {type: boolean}
+        selected_package_sha256: {$ref: '#/components/schemas/SHA256'}
+        assigned_by: {enum: [platform, tenant]}
+        effective_package_sha256: {$ref: '#/components/schemas/SHA256'}
+        effective_theme_id: {type: string}
+        follows_platform: {type: boolean}
+        revision: {type: integer, minimum: 0}
+        domains: {type: array, items: {type: string}}
+        choices: {type: array, items: {type: object}}
+    Package:
+      type: object
+      required: [package_sha256, theme_id, version, name, source, downloaded_at, active, tokens_url, stylesheet_url]
+      properties:
+        package_sha256: {$ref: '#/components/schemas/SHA256'}
+        theme_id: {type: string}
+        version: {type: string}
+        name: {type: object}
+        description: {type: object}
+        source: {enum: [builtin, upload, market], description: "market: a third-party theme bought on the plugin market (id market.<plugin id>), downloaded by artifact sync once the plugin installation is confirmed; it cannot be activated after its authorization ends."}
+        requires_feature: {type: string, description: 'theme.<id>; absent for free themes'}
+        downloaded_at: {type: string, format: date-time}
+        active: {type: boolean}
+        tokens_url: {type: string}
+        stylesheet_url: {type: string}
+        preview_url:
+          type: string
+          pattern: '^/v1/control-site/assets/[0-9a-f]{64}$'
+          description: >-
+            The screenshot of the theme plugin (cdnca.site-theme) that carries this console theme, the same image as the
+            plugin's card (public, content-addressed, immutable). Absent when no plugin carries the package or it has no preview.
+        derived_from:
+          type: object
+          description: >-
+            A customized theme (custom.*) edited from another package: that package's id, version and digest. Upload
+            refuses a source this installation does not know; activation applies the source's license feature and
+            market authorization to the copy.
+          required: [id, version, package_sha256]
+          additionalProperties: false
+          properties:
+            id: {type: string}
+            version: {type: string}
+            package_sha256: {$ref: '#/components/schemas/SHA256'}
+    Catalog:
+      type: object
+      required: [schema, activation_revision, active_package_sha256, user_package_sha256, available, packages, error_page_republication]
+      properties:
+        schema: {const: cdnca.theme.catalog/v1}
+        activation_revision: {type: integer, minimum: 0}
+        active_package_sha256: {$ref: '#/components/schemas/SHA256'}
+        user_package_sha256:
+          description: >-
+            The package the user console shows (its latest user or all activation); empty before any console
+            activation. A plain cdnca.theme/v1 package chosen for the user console is recognized by this pointer.
+          type: string
+          pattern: '^([0-9a-f]{64})?$'
+        available: {type: array, items: {type: object}}
+        packages: {type: array, items: {$ref: '#/components/schemas/Package'}}
+        error_page_republication: {$ref: '#/components/schemas/ErrorPageRepublication'}
+    ErrorPageRepublication:
+      description: >-
+        The latest activation's automatic error page republication: every tenant scope that has published
+        error pages gets the theme's default error pages through the system republication channel
+        (trigger theme_activation), without a tenant publish. All zero before any activation.
+      type: object
+      required: [activation_revision, total, pending, published, skipped, failed]
+      properties:
+        activation_revision: {type: integer, minimum: 0}
+        total: {type: integer, minimum: 0}
+        pending: {type: integer, minimum: 0}
+        published: {type: integer, minimum: 0}
+        skipped: {type: integer, minimum: 0, description: 'Superseded by a later activation, or no node can take it.'}
+        failed: {type: integer, minimum: 0, description: 'Gave up after the system channel retries; the next activation queues it again.'}
+    Activation:
+      type: object
+      required: [revision, package_sha256, theme_id, error_page_publication_revision, error_page_republish_scopes]
+      properties:
+        revision: {type: integer, minimum: 1}
+        package_sha256: {$ref: '#/components/schemas/SHA256'}
+        theme_id: {type: string}
+        error_page_publication_revision: {type: integer, minimum: 1}
+        error_page_republish_scopes:
+          type: integer
+          minimum: 0
+          description: Tenant scopes whose error pages the system republishes with the new theme.
+        already_active:
+          type: boolean
+          description: The package was already the active theme; nothing was activated or republished.
+    InvalidPackage:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, reason]
+          properties:
+            code: {const: theme_package_invalid}
+            reason: {type: string, description: 'external_reference, class_undeclared, template_head, template_variable, token_unknown, token_value, layout_value, header_link_url, brand_asset_media, style_value, id, package_json, ...'}
+            field: {type: string, description: JSON path of the offending value}
+            request_id: {type: string}

@@ -1,0 +1,1112 @@
+{
+ "source": "arcjet/well-known-bots（MIT）",
+ "crawlers": [
+  {
+   "name": "adyen-webhook",
+   "categories": [
+    "webhook"
+   ],
+   "user_agent_tokens": [
+    "HttpClient"
+   ],
+   "rdns_suffixes": [
+    "out.adyen.com"
+   ]
+  },
+  {
+   "name": "ahrefs-crawler",
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "AhrefsBot/"
+   ],
+   "network_sources": [
+    "https://api.ahrefs.com/v3/public/crawler-ip-ranges"
+   ]
+  },
+  {
+   "name": "ahrefs-site-audit",
+   "categories": [
+    "advertising"
+   ],
+   "user_agent_tokens": [
+    "AhrefsSiteAudit/"
+   ],
+   "network_sources": [
+    "https://api.ahrefs.com/v3/public/crawler-ip-ranges"
+   ]
+  },
+  {
+   "name": "algolia-crawler",
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Crawler/"
+   ],
+   "networks": [
+    "34.66.202.43/32"
+   ]
+  },
+  {
+   "name": "amazon-route53-health-check",
+   "categories": [
+    "amazon",
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Service"
+   ],
+   "network_sources": [
+    "https://ip-ranges.amazonaws.com/ip-ranges.json"
+   ]
+  },
+  {
+   "name": "anthropic-crawler-search",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "Claude-SearchBot"
+   ],
+   "network_sources": [
+    "https://claude.com/crawling/bots.json"
+   ]
+  },
+  {
+   "name": "anthropic-crawler-user",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "Claude-User"
+   ],
+   "network_sources": [
+    "https://claude.com/crawling/bots.json"
+   ]
+  },
+  {
+   "name": "apple-crawler",
+   "categories": [
+    "apple",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Applebot"
+   ],
+   "network_sources": [
+    "https://search.developer.apple.com/applebot.json"
+   ]
+  },
+  {
+   "name": "betterstack-monitor",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Better"
+   ],
+   "network_sources": [
+    "https://uptime.betterstack.com/ips-by-cluster.json"
+   ]
+  },
+  {
+   "name": "betteruptime-monitor",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Better"
+   ],
+   "network_sources": [
+    "https://uptime.betterstack.com/ips-by-cluster.json"
+   ]
+  },
+  {
+   "name": "bing-crawler",
+   "categories": [
+    "microsoft",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "bingbot/"
+   ],
+   "network_sources": [
+    "https://www.bing.com/toolbox/bingbot.json"
+   ]
+  },
+  {
+   "name": "bing-preview",
+   "categories": [
+    "microsoft",
+    "preview"
+   ],
+   "user_agent_tokens": [
+    "BingPreview/"
+   ],
+   "network_sources": [
+    "https://www.bing.com/toolbox/bingbot.json"
+   ]
+  },
+  {
+   "name": "ccbot-crawler",
+   "categories": [
+    "archive"
+   ],
+   "user_agent_tokens": [
+    "CCBot/"
+   ],
+   "network_sources": [
+    "https://index.commoncrawl.org/ccbot.json"
+   ]
+  },
+  {
+   "name": "censys-inspect",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "CensysInspect/"
+   ],
+   "networks": [
+    "162.142.125.0/24",
+    "167.248.133.0/24",
+    "167.94.138.0/24",
+    "167.94.145.0/24",
+    "167.94.146.0/24",
+    "199.45.154.0/24",
+    "199.45.155.0/24",
+    "206.168.34.0/24",
+    "206.168.35.0/24",
+    "2602:80d:1000:b0cc:e::/80",
+    "2602:80d:1003::/112",
+    "2602:80d:1004::/112",
+    "2620:96:e000:b0cc:e::/80",
+    "66.132.148.0/24",
+    "66.132.153.0/24",
+    "66.132.159.0/24",
+    "66.132.172.0/24",
+    "66.132.186.0/24",
+    "66.132.195.0/24",
+    "66.132.224.0/24"
+   ]
+  },
+  {
+   "name": "checkly-monitor",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Checkly"
+   ],
+   "network_sources": [
+    "https://api.checklyhq.com/v1/static-ips"
+   ]
+  },
+  {
+   "name": "cloudflare-healthchecks",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Cloudflare-Healthchecks"
+   ],
+   "network_sources": [
+    "https://www.cloudflare.com/ips-v4/",
+    "https://www.cloudflare.com/ips-v6/"
+   ]
+  },
+  {
+   "name": "cloudflare-prefetch",
+   "categories": [
+    "optimizer"
+   ],
+   "user_agent_tokens": [
+    "CloudFlare-Prefetch"
+   ],
+   "network_sources": [
+    "https://www.cloudflare.com/ips-v4/",
+    "https://www.cloudflare.com/ips-v6/"
+   ]
+  },
+  {
+   "name": "cloudflare-security-center",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "https://developers.cloudflare.com/security-center/"
+   ],
+   "network_sources": [
+    "https://www.cloudflare.com/ips-v4/",
+    "https://www.cloudflare.com/ips-v6/"
+   ]
+  },
+  {
+   "name": "cloudflare-ssl-detector",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Cloudflare-SSLDetector"
+   ],
+   "network_sources": [
+    "https://www.cloudflare.com/ips-v4/",
+    "https://www.cloudflare.com/ips-v6/"
+   ]
+  },
+  {
+   "name": "cloudflare-traffic-manager",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Cloudflare-Traffic-Manager"
+   ],
+   "network_sources": [
+    "https://www.cloudflare.com/ips-v4/",
+    "https://www.cloudflare.com/ips-v6/"
+   ]
+  },
+  {
+   "name": "commoncrawl-crawler",
+   "categories": [
+    "academic",
+    "ai",
+    "archive"
+   ],
+   "user_agent_tokens": [
+    "CCBot"
+   ],
+   "network_sources": [
+    "https://index.commoncrawl.org/ccbot.json"
+   ]
+  },
+  {
+   "name": "cookiehub-scan",
+   "categories": [
+    "tool"
+   ],
+   "user_agent_tokens": [
+    "CookieHubScan"
+   ],
+   "network_sources": [
+    "https://dash.cookiehub.com/scanner-ip/json"
+   ]
+  },
+  {
+   "name": "detectify",
+   "categories": [
+    "tool"
+   ],
+   "user_agent_tokens": [
+    "Detectify"
+   ],
+   "networks": [
+    "107.20.158.220/32",
+    "13.126.5.12/32",
+    "3.234.180.95/32",
+    "3.7.157.159/32",
+    "3.7.173.162/32",
+    "34.234.177.119/32",
+    "52.17.9.21/32",
+    "52.17.98.131/32"
+   ]
+  },
+  {
+   "name": "duckassist-bot",
+   "categories": [
+    "ai",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "DuckAssistBot"
+   ],
+   "network_sources": [
+    "https://duckduckgo.com/duckassistbot.json"
+   ]
+  },
+  {
+   "name": "duckduckgo-crawler",
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "DuckDuckBot"
+   ],
+   "network_sources": [
+    "https://duckduckgo.com/duckduckbot.json"
+   ]
+  },
+  {
+   "name": "facebook-catalog",
+   "categories": [
+    "meta",
+    "social"
+   ],
+   "user_agent_tokens": [
+    "facebookcatalog/"
+   ],
+   "network_sources": [
+    "https://www.facebook.com/peering/geofeed"
+   ]
+  },
+  {
+   "name": "facebook-share-crawler",
+   "categories": [
+    "ai",
+    "meta",
+    "preview",
+    "social"
+   ],
+   "user_agent_tokens": [
+    "facebookexternalhit"
+   ],
+   "network_sources": [
+    "https://www.facebook.com/peering/geofeed"
+   ]
+  },
+  {
+   "name": "geedo-crawler-products",
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "GeedoProductSearch"
+   ],
+   "network_sources": [
+    "https://geedo.com/product-search/product-search-ip.json"
+   ]
+  },
+  {
+   "name": "github-hookshot",
+   "categories": [
+    "webhook"
+   ],
+   "user_agent_tokens": [
+    "GitHub-Hookshot/"
+   ],
+   "network_sources": [
+    "https://api.github.com/meta"
+   ]
+  },
+  {
+   "name": "google-adsbot-mobile",
+   "categories": [
+    "google",
+    "advertising"
+   ],
+   "user_agent_tokens": [
+    "AdsBot-Google-Mobile"
+   ],
+   "rdns_suffixes": [
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/special-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-adsense",
+   "categories": [
+    "google",
+    "advertising"
+   ],
+   "user_agent_tokens": [
+    "Mediapartners-Google"
+   ],
+   "rdns_suffixes": [
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/special-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-agent",
+   "categories": [
+    "ai",
+    "google"
+   ],
+   "user_agent_tokens": [
+    "Google-Agent"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-agents.json"
+   ]
+  },
+  {
+   "name": "google-crawler",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Googlebot/"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-cloudvertex",
+   "categories": [
+    "ai",
+    "google"
+   ],
+   "user_agent_tokens": [
+    "Google-CloudVertexBot"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-image",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Googlebot-Image"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-mobile",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Googlebot-Mobile"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-news",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Googlebot-News"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-other",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "GoogleOther"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-safety",
+   "categories": [
+    "google"
+   ],
+   "user_agent_tokens": [
+    "Google-Safety"
+   ],
+   "rdns_suffixes": [
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/special-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-store",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Storebot-Google"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-crawler-video",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Googlebot-Video"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-cws",
+   "categories": [
+    "google"
+   ],
+   "user_agent_tokens": [
+    "Google-CWS"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json",
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+   ]
+  },
+  {
+   "name": "google-feedfetcher",
+   "categories": [
+    "google",
+    "feedfetcher"
+   ],
+   "user_agent_tokens": [
+    "Feedfetcher-Google"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json",
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+   ]
+  },
+  {
+   "name": "google-inspection-tool",
+   "categories": [
+    "google",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Google-InspectionTool"
+   ],
+   "rdns_suffixes": [
+    "geo.googlebot.com",
+    "googlebot.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/common-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-messages",
+   "categories": [
+    "google",
+    "preview"
+   ],
+   "user_agent_tokens": [
+    "GoogleMessages"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json",
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+   ]
+  },
+  {
+   "name": "google-pinpoint",
+   "categories": [
+    "google"
+   ],
+   "user_agent_tokens": [
+    "Google-Pinpoint"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json",
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+   ]
+  },
+  {
+   "name": "google-producer",
+   "categories": [
+    "google",
+    "feedfetcher"
+   ],
+   "user_agent_tokens": [
+    "GoogleProducer"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json",
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+   ]
+  },
+  {
+   "name": "google-push-notifications",
+   "categories": [
+    "google"
+   ],
+   "user_agent_tokens": [
+    "APIs-Google"
+   ],
+   "rdns_suffixes": [
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/special-crawlers.json"
+   ]
+  },
+  {
+   "name": "google-site-verification",
+   "categories": [
+    "google",
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Google-Site-Verification"
+   ],
+   "rdns_suffixes": [
+    "gae.googleusercontent.com",
+    "google.com"
+   ],
+   "network_sources": [
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers-google.json",
+    "https://developers.google.com/static/crawling/ipranges/user-triggered-fetchers.json"
+   ]
+  },
+  {
+   "name": "hydrozen-monitor",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "Hydrozen.io/"
+   ],
+   "network_sources": [
+    "https://hydrozen.io/config/iplist.json"
+   ]
+  },
+  {
+   "name": "isonsearch-crawler",
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "IsonSearchBot/"
+   ],
+   "network_sources": [
+    "https://search.isonai.com/bot/ips.json"
+   ]
+  },
+  {
+   "name": "kagi-crawler",
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Kagibot"
+   ],
+   "networks": [
+    "104.254.65.50/32",
+    "209.151.156.194/32",
+    "216.18.205.234/32",
+    "35.212.27.76/32"
+   ]
+  },
+  {
+   "name": "kimi-bot",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "KimiBot"
+   ],
+   "network_sources": [
+    "https://www.kimi.ai/policies/kimibot.json"
+   ]
+  },
+  {
+   "name": "kimi-searchbot",
+   "categories": [
+    "ai",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "Kimi-SearchBot"
+   ],
+   "network_sources": [
+    "https://www.kimi.ai/policies/kimi-searchbot.json"
+   ]
+  },
+  {
+   "name": "kimi-user",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "Kimi-User"
+   ],
+   "network_sources": [
+    "https://www.kimi.ai/policies/kimi-user.json"
+   ]
+  },
+  {
+   "name": "meta-crawler-user",
+   "categories": [
+    "ai",
+    "meta",
+    "preview"
+   ],
+   "user_agent_tokens": [
+    "meta-externalfetcher"
+   ],
+   "network_sources": [
+    "https://www.facebook.com/peering/geofeed"
+   ]
+  },
+  {
+   "name": "meta-externalhit",
+   "categories": [
+    "meta",
+    "preview",
+    "social"
+   ],
+   "user_agent_tokens": [
+    "Meta-ExternalHit"
+   ],
+   "network_sources": [
+    "https://www.facebook.com/peering/geofeed"
+   ]
+  },
+  {
+   "name": "meta-webindexer",
+   "categories": [
+    "meta",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "meta-webindexer"
+   ],
+   "network_sources": [
+    "https://www.facebook.com/peering/geofeed"
+   ]
+  },
+  {
+   "name": "microsoft-preview",
+   "categories": [
+    "microsoft",
+    "preview"
+   ],
+   "user_agent_tokens": [
+    "MicrosoftPreview/"
+   ],
+   "network_sources": [
+    "https://www.bing.com/toolbox/bingbot.json"
+   ]
+  },
+  {
+   "name": "mojeek-crawler",
+   "categories": [
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "MojeekBot/"
+   ],
+   "network_sources": [
+    "https://www.mojeek.com/mojeekbot.json"
+   ]
+  },
+  {
+   "name": "openai-crawler",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "GPTBot"
+   ],
+   "network_sources": [
+    "https://openai.com/gptbot.json"
+   ]
+  },
+  {
+   "name": "openai-crawler-ads",
+   "categories": [
+    "advertising"
+   ],
+   "user_agent_tokens": [
+    "OAI-AdsBot/"
+   ],
+   "network_sources": [
+    "https://openai.com/adsbot.json"
+   ]
+  },
+  {
+   "name": "openai-crawler-search",
+   "categories": [
+    "ai",
+    "search-engine"
+   ],
+   "user_agent_tokens": [
+    "OAI-SearchBot"
+   ],
+   "network_sources": [
+    "https://openai.com/searchbot.json"
+   ]
+  },
+  {
+   "name": "openai-crawler-user",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "ChatGPT-User"
+   ],
+   "network_sources": [
+    "https://openai.com/chatgpt-user.json"
+   ]
+  },
+  {
+   "name": "perplexity-crawler",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "PerplexityBot/"
+   ],
+   "network_sources": [
+    "https://www.perplexity.ai/perplexitybot.json"
+   ]
+  },
+  {
+   "name": "quantcast-crawler",
+   "categories": [
+    "advertising"
+   ],
+   "user_agent_tokens": [
+    "Quantcastbot/"
+   ],
+   "networks": [
+    "103.229.11.253/32",
+    "192.184.74.253/32",
+    "192.184.75.253/32",
+    "192.184.76.253/32",
+    "192.184.77.253/32",
+    "52.34.88.131/32",
+    "54.71.154.151/32"
+   ]
+  },
+  {
+   "name": "reflectionbot",
+   "categories": [
+    "ai"
+   ],
+   "user_agent_tokens": [
+    "Reflectionbot"
+   ],
+   "network_sources": [
+    "https://reflection.ai/bot/ips.json"
+   ]
+  },
+  {
+   "name": "semrush-site-audit",
+   "categories": [
+    "optimizer",
+    "tool"
+   ],
+   "user_agent_tokens": [
+    "SiteAuditBot"
+   ],
+   "networks": [
+    "85.208.98.128/25"
+   ]
+  },
+  {
+   "name": "sentry-uptime-monitor",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "SentryUptimeBot/1.0"
+   ],
+   "network_sources": [
+    "https://sentry.io/api/0/uptime-ips/"
+   ]
+  },
+  {
+   "name": "siteimprove-crawler",
+   "categories": [
+    "optimizer",
+    "tool"
+   ],
+   "user_agent_tokens": [
+    "Siteimprove.com"
+   ],
+   "networks": [
+    "13.58.165.213/32",
+    "18.116.191.222/32",
+    "18.116.197.208/32",
+    "18.157.140.51/32",
+    "18.159.218.224/32",
+    "18.189.206.159/32",
+    "18.190.68.80/32",
+    "18.192.147.131/32",
+    "18.196.205.2/32",
+    "18.198.120.55/32",
+    "18.216.137.252/32",
+    "18.219.35.44/32",
+    "18.223.191.8/32",
+    "185.229.144.10/32",
+    "185.229.145.22/32",
+    "3.10.81.130/32",
+    "3.124.26.114/32",
+    "3.125.99.135/32",
+    "3.129.126.175/32",
+    "3.13.121.241/32",
+    "3.133.38.181/32",
+    "3.135.49.180/32",
+    "3.136.111.218/32",
+    "3.138.54.100/32",
+    "3.64.159.177/32",
+    "3.66.247.32/32",
+    "3.68.122.244/32",
+    "35.156.240.123/32",
+    "35.157.236.87/32",
+    "35.157.42.7/32",
+    "35.158.180.204/32",
+    "35.204.24.17/32",
+    "52.199.41.160/32",
+    "52.20.183.91/32",
+    "52.4.143.42/32",
+    "52.47.166.84/32",
+    "52.48.230.149/32",
+    "52.55.30.145/32",
+    "52.57.167.198/32",
+    "52.57.25.76/32",
+    "52.58.146.230/32",
+    "52.60.34.56/32",
+    "52.64.209.168/32",
+    "52.7.141.1/32"
+   ]
+  },
+  {
+   "name": "statuscake-monitor",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "StatusCake"
+   ],
+   "network_sources": [
+    "https://app.statuscake.com/Workfloor/Locations.php?format=json"
+   ]
+  },
+  {
+   "name": "stripe-webhook",
+   "categories": [
+    "webhook"
+   ],
+   "user_agent_tokens": [
+    "Stripe/"
+   ],
+   "network_sources": [
+    "https://stripe.com/files/ips/ips_webhooks.json"
+   ]
+  },
+  {
+   "name": "telegram-crawler",
+   "categories": [
+    "preview",
+    "social"
+   ],
+   "user_agent_tokens": [
+    "TelegramBot"
+   ],
+   "network_sources": [
+    "https://core.telegram.org/resources/cidr.txt"
+   ]
+  },
+  {
+   "name": "uptimerobot-monitor",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "UptimeRobot"
+   ],
+   "rdns_suffixes": [
+    "ip.uptimerobot.com"
+   ],
+   "network_sources": [
+    "https://uptimerobot.com/inc/files/ips/IPv4.txt",
+    "https://uptimerobot.com/inc/files/ips/IPv6.txt"
+   ]
+  },
+  {
+   "name": "watchfor-bot",
+   "categories": [
+    "monitor"
+   ],
+   "user_agent_tokens": [
+    "WatchForBot"
+   ],
+   "network_sources": [
+    "https://watchfor.io/ips.json"
+   ]
+  }
+ ]
+}

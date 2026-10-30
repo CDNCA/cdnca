@@ -1,0 +1,13 @@
+{
+  "schema": "cdnca.site-theme/v2",
+  "id": "market.acme.dev.shield-blue",
+  "version": "1.0.0",
+  "name": { "zh-CN": "盾蓝", "en-US": "Shield Blue" },
+  "description": { "zh-CN": "深蓝科技风官网与用户端外观（示例）", "en-US": "Navy tech-style website and user console (example)" },
+  "applies_to": ["user", "site"],
+  "console_theme": "console-theme.json",
+  "site_bundle": { "dir": "site", "entry": "index.html" },
+  "content_schema": "content-schema.json",
+  "auth_style": { "css": "auth/auth.css", "images": { "logo": "auth/logo.svg" } },
+  "supply_chain": { "sbom": "supply-chain/sbom.cdx.json", "provenance": "supply-chain/provenance.json" }
+}

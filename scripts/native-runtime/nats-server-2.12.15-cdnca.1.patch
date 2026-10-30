@@ -1,0 +1,37 @@
+--- a/server/const.go
++++ b/server/const.go
+@@ -69 +69 @@
+-	VERSION = "2.12.15"
++	VERSION = "2.12.15-cdnca.1"
+--- a/server/consumer.go
++++ b/server/consumer.go
+@@ -1898,0 +1899 @@
++	defer o.mu.Unlock()
+@@ -1900 +1901,3 @@
+-	o.mu.Unlock()
++	if fs, ok := o.store.(*consumerFileStore); ok {
++		fs.setCreatedTime(created)
++	}
+--- a/server/stream.go
++++ b/server/stream.go
+@@ -1491,0 +1492,4 @@
++	store := mset.store
++	if fs, ok := store.(*fileStore); ok {
++		fs.setCreatedTime(created)
++	}
+--- a/server/filestore.go
++++ b/server/filestore.go
+@@ -664,0 +665,6 @@
++}
++
++func (fs *fileStore) setCreatedTime(created time.Time) {
++	fs.mu.Lock()
++	fs.cfg.Created = created
++	fs.mu.Unlock()
+@@ -12098,0 +12105,6 @@
++}
++
++func (o *consumerFileStore) setCreatedTime(created time.Time) {
++	o.mu.Lock()
++	o.cfg.Created = created
++	o.mu.Unlock()

@@ -1,0 +1,312 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "l4-streams",
+  "scenario_sha256": "a1d0c3397ac3c3cc16eced84669c3b478761a7e9d4ee5e55f607cd00565881ec",
+  "steps": [
+    {
+      "id": "tcp",
+      "kind": "tcp",
+      "stream": {
+        "reply": "tcp-a:hello"
+      }
+    },
+    {
+      "id": "tcp-again",
+      "kind": "tcp",
+      "stream": {
+        "reply": "tcp-a:again"
+      }
+    },
+    {
+      "id": "udp",
+      "kind": "udp",
+      "stream": {
+        "reply": "udp-a:ping"
+      }
+    },
+    {
+      "id": "passthrough",
+      "kind": "tcp",
+      "stream": {
+        "reply": "pass:through",
+        "tls": {
+          "version": "1.3",
+          "subject": "db.l4.example.test",
+          "names": [
+            "db.l4.example.test"
+          ],
+          "serial": 1000,
+          "issuer": "cdnca edge golden origin CA"
+        }
+      }
+    },
+    {
+      "id": "shared-site",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/2.0",
+          "headers": {
+            "content-length": "37",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 37,
+            "sha256": "02bab3d7fefe818c359c6f3c6d4b4475a26bb50b1150b1903be5389590660196",
+            "text": "secure secure.l4.example.test /shared"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "h2",
+            "subject": "secure.l4.example.test",
+            "names": [
+              "secure.l4.example.test"
+            ],
+            "serial": 1102,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "secure",
+              "method": "GET",
+              "uri": "/shared",
+              "host": "secure.l4.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shared-site-h1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "33",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 33,
+            "sha256": "46d2abd0311ae1ae1f93e1040534288728a26c846e9781a80f2f7cacfc33cd6d",
+            "text": "secure secure.l4.example.test /h1"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "secure.l4.example.test",
+            "names": [
+              "secure.l4.example.test"
+            ],
+            "serial": 1102,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "secure",
+              "method": "GET",
+              "uri": "/h1",
+              "host": "secure.l4.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.7",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.7"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shared-unknown-sni",
+      "kind": "tls",
+      "tls": {
+        "error": "tls_alert_internal_error"
+      }
+    },
+    {
+      "id": "plain-site",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "6d9e91c8ee21179c9cceceadbfc2d2038a0fa18e55112df5dc68f41864cc5d92",
+            "text": "web web.l4.example.test /p"
+          },
+          "origin": [
+            {
+              "origin": "web",
+              "method": "GET",
+              "uri": "/p",
+              "host": "web.l4.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "switch-tcp-origin",
+      "kind": "publish"
+    },
+    {
+      "id": "tcp-after-switch",
+      "kind": "tcp",
+      "stream": {
+        "reply": "tcp-b:switched"
+      }
+    },
+    {
+      "id": "udp-after-switch",
+      "kind": "udp",
+      "stream": {
+        "reply": "udp-a:still"
+      }
+    },
+    {
+      "id": "remove-tcp-and-passthrough",
+      "kind": "publish"
+    },
+    {
+      "id": "tcp-removed",
+      "kind": "tcp",
+      "stream": {
+        "error": "connect_refused"
+      }
+    },
+    {
+      "id": "udp-kept",
+      "kind": "udp",
+      "stream": {
+        "reply": "udp-a:kept"
+      }
+    },
+    {
+      "id": "passthrough-removed",
+      "kind": "tcp",
+      "stream": {
+        "error": "tls_alert_internal_error"
+      }
+    },
+    {
+      "id": "shared-site-back",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/2.0",
+          "headers": {
+            "content-length": "35",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 35,
+            "sha256": "70629b089d000296f7bf5e917c5dd3e56b443d79369a02e0b3b5b548d0a0af57",
+            "text": "secure secure.l4.example.test /back"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "h2",
+            "subject": "secure.l4.example.test",
+            "names": [
+              "secure.l4.example.test"
+            ],
+            "serial": 1102,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "secure",
+              "method": "GET",
+              "uri": "/back",
+              "host": "secure.l4.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plain-site-after",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "27",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 27,
+            "sha256": "e91c146716a604b37a7eb0c902fb3c94853fb4b660351a4e1b1e11a290f95108",
+            "text": "web web.l4.example.test /p2"
+          },
+          "origin": [
+            {
+              "origin": "web",
+              "method": "GET",
+              "uri": "/p2",
+              "host": "web.l4.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+/var/log/cdnca-edge-agent/*.log {
+    daily
+    rotate 14
+    maxage 30
+    size 50M
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    dateformat -%Y%m%d%H%M%S
+    copytruncate
+    su cdnca-edge cdnca-edge
+    create 0640 cdnca-edge cdnca-edge
+}

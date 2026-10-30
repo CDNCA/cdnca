@@ -1,0 +1,192 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Node Realtime Metrics
+  version: 0.1.0
+  description: Durable host metrics scoped to the authenticated customer control plane.
+servers: [{url: /}]
+security: [{bearerAuth: []}]
+paths:
+  /v1/monitor/node/top:
+    get:
+      operationId: getNodeRealtimeTop
+      summary: Rank node resource metrics
+      description: Requires nodes.read or platform.admin in a platform scope. Filters precede the limit. No metrics are invented for unknown samples.
+      parameters:
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/ExternalOnly'
+        - name: recent_time
+          in: query
+          schema: {type: string, default: 1m, pattern: '^[1-9][0-9]{0,3}(s|m|h)$'}
+          description: Must not exceed 31 days.
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 300, default: 100}
+      responses:
+        '200':
+          description: Rows sorted by the sum of inbound and outbound resource values, then node name and NIC.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data, msg, code]
+                properties:
+                  msg: {type: string, const: ''}
+                  code: {type: integer, const: 0}
+                  data:
+                    type: array
+                    maxItems: 300
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [node_id, node_name, nic, inbound, outbound]
+                      properties:
+                        node_id: {type: string, format: uuid}
+                        node_name: {type: string}
+                        nic: {type: string}
+                        inbound: {type: number, minimum: 0}
+                        outbound: {type: number, minimum: 0}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/monitor/node/realtime:
+    get:
+      operationId: getNodeRealtimeSeries
+      summary: Read per-interface or per-resource metric series
+      description: Requires nodes.read or platform.admin in a platform scope. Node ownership is checked server-side. Unknown automatic selections produce no bandwidth points, never aggregate fallback values.
+      parameters:
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/Type'
+        - $ref: '#/components/parameters/ExternalOnly'
+        - $ref: '#/components/parameters/Start'
+        - $ref: '#/components/parameters/End'
+        - $ref: '#/components/parameters/HistoryLimit'
+      responses:
+        '200':
+          description: Series grouped by NIC or resource; data pairs are UTC epoch milliseconds and values.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data, msg, code]
+                properties:
+                  msg: {type: string, const: ''}
+                  code: {type: integer, const: 0}
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: object
+                        additionalProperties: false
+                        required: [name, data]
+                        properties:
+                          name: {type: string}
+                          data:
+                            type: array
+                            maxItems: 2000
+                            items:
+                              type: array
+                              minItems: 2
+                              maxItems: 2
+                              items: {type: number, minimum: 0}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/node-traffic:
+    get:
+      operationId: getNodeTraffic
+      summary: Read interval node traffic, not cumulative lifetime counters
+      description: >-
+        Requires nodes.read or platform.admin in a platform scope. external_only
+        differences each NIC before selecting the current sample's default-route
+        devices. A route change therefore cannot create a lifetime-counter spike.
+        At least two known snapshots with a baseline for each selected NIC are
+        required. Missing evidence is not a zero. Explicitly excluded NICs are
+        omitted after automatic selection. This is monitoring, not billable usage.
+      parameters:
+        - $ref: '#/components/parameters/Node'
+        - $ref: '#/components/parameters/ExternalOnly'
+        - $ref: '#/components/parameters/Start'
+        - $ref: '#/components/parameters/End'
+        - $ref: '#/components/parameters/HistoryLimit'
+        - name: excl_nic
+          in: query
+          schema: {type: string}
+          description: Space-separated interface names to exclude. excluded_nic is a compatible alias; both sets are combined.
+      responses:
+        '200':
+          description: Interval bytes at each sample time, without billing settlement claims.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [data, count, msg, code]
+                properties:
+                  msg: {type: string, const: ''}
+                  code: {type: integer, const: 0}
+                  count: {type: integer, minimum: 0}
+                  data:
+                    type: array
+                    maxItems: 2000
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [bytes_received, bytes_sent, create_at]
+                      properties:
+                        bytes_received: {type: integer, format: int64, minimum: 0}
+                        bytes_sent: {type: integer, format: int64, minimum: 0}
+                        create_at: {type: string, description: 'UTC timestamp formatted YYYY-MM-DD HH:mm:ss.'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    ExternalOnly:
+      name: external_only
+      in: query
+      description: >-
+        Literal true or false, at most once. Default false preserves old API
+        callers. The management UI explicitly sends true by default. Filters
+        bandwidth/traffic by each sample's reported network_selection; missing or
+        unavailable selection never means all interfaces. Other metric types are
+        unchanged. False exposes all original NIC facts for manual diagnostics.
+      schema: {type: boolean, default: false}
+    Type:
+      name: type
+      in: query
+      schema: {type: string, enum: [bandwidth, connections, load, disk], default: bandwidth}
+    Node:
+      name: node
+      in: query
+      required: true
+      schema: {type: string, format: uuid}
+    Start:
+      name: start
+      in: query
+      schema: {type: string, format: date-time}
+      description: Start of a window no longer than 31 days; defaults to one hour ago for realtime and one day ago for traffic.
+    End:
+      name: end
+      in: query
+      schema: {type: string, format: date-time}
+      description: Defaults to now; must not precede start.
+    HistoryLimit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 2000, default: 2000}
+  responses:
+    Invalid: {description: Invalid parameters; validation_error.}
+    Unauthorized: {description: Authentication required.}
+    Forbidden: {description: Platform scope and nodes.read or platform.admin required.}
+    NotFound: {description: Node absent from the caller scope; node_metrics_not_found.}
+    Unavailable: {description: Metrics runtime unavailable; node_metrics_unavailable.}

@@ -1,0 +1,114 @@
+openapi: 3.1.0
+info:
+  title: CDNCA native control backup, restore and migration
+  version: 1.0.35
+  description: >-
+    Console API for native (systemd) control planes. Writes only queue jobs for
+    the root backup agent (cdnca-control-backup.service): a backup briefly
+    stops this API. Target credentials and SSH secrets are accepted but never
+    returned, logged or audited. Read requires control.upgrades.read, writes
+    control.upgrades.manage, both in the platform scope.
+paths:
+  /v1/admin/control-backup:
+    get:
+      operationId: getControlBackupStatus
+      summary: Signer fingerprint, freeze state, bundles, recent runs and redacted settings
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Status}
+        '401': {description: Authentication required}
+        '403': {description: Permission denied}
+  /v1/admin/control-backup/settings:
+    put:
+      operationId: putControlBackupSettings
+      summary: Replace schedule, retention and off-host targets
+      description: >-
+        expected_revision must equal settings.revision of the status read (409
+        control_backup_revision_conflict otherwise). Each target names the saved
+        target it edits in stored_name (absent for a new target, which never
+        inherits stored secrets). Empty secret fields keep the stored value of
+        stored_name; for SFTP only while auth stays the same: a changed auth
+        without a matching new credential is 400 control_backup_auth_changed,
+        and a credential that does not fit auth is 400
+        control_backup_invalid_private_key / control_backup_invalid_password,
+        with error.details {target, field}.
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Updated status}
+        '400': {description: Invalid settings or a refused target credential}
+        '409': {description: The settings changed since expected_revision}
+  /v1/admin/control-backup/backups:
+    post:
+      operationId: requestControlBackup
+      summary: Queue an immediate backup
+      security: [{bearerAuth: []}]
+      responses:
+        '202': {description: Queued run}
+        '409': {description: Another backup or migration is queued or running, the agent is not installed, or this host is held after a migration}
+  /v1/admin/control-backup/backups/{backup_id}:
+    delete:
+      operationId: deleteControlBackup
+      summary: Queue deletion of a bundle and its remote copies; body confirm must equal backup_id
+      security: [{bearerAuth: []}]
+      parameters: [{name: backup_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '202': {description: Queued}
+        '400': {description: Confirmation mismatch}
+  /v1/admin/control-backup/backups/{backup_id}/restore-commands:
+    get:
+      operationId: getControlBackupRestoreCommands
+      summary: Text commands to restore a bundle onto an empty host (nothing is executed)
+      security: [{bearerAuth: []}]
+      parameters: [{name: backup_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Commands}
+  /v1/admin/control-backup/runs/{run_id}:
+    get:
+      operationId: getControlBackupRun
+      summary: One agent run with its redacted log
+      security: [{bearerAuth: []}]
+      parameters: [{name: run_id, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Run}
+        '404': {description: Unknown run}
+  /v1/admin/control-backup/targets/probe:
+    post:
+      operationId: probeControlBackupTarget
+      summary: Write, read back and delete a probe object on the target as on screen (nothing is saved)
+      description: >-
+        Body {expected_revision, target}. target is merged over the stored
+        settings exactly as a save would (same stored_name and credential
+        rules), then probed.
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Probe result (ok and a redacted message)}
+        '400': {description: Invalid target or a refused credential}
+        '409': {description: The settings changed since expected_revision}
+  /v1/admin/control-backup/host-key:
+    post:
+      operationId: fetchControlBackupHostKey
+      summary: Read an SSH host key fingerprint to pin before a migration
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Fingerprint}
+        '502': {description: Host unreachable}
+  /v1/admin/control-backup/migrations:
+    post:
+      operationId: requestControlMigration
+      summary: Queue a migration to an empty new host; confirm must equal host. This control plane stays frozen after success.
+      security: [{bearerAuth: []}]
+      responses:
+        '202': {description: Queued run}
+        '400': {description: Invalid target or confirmation mismatch}
+        '409': {description: Busy, held, agent not installed, or the saved dependency installer is missing}
+  /v1/admin/control-backup/recovery-kit:
+    post:
+      operationId: exportControlBackupRecoveryKit
+      summary: Download the backup identity sealed with a passphrase (scrypt) for off-host disaster recovery
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Recovery kit JSON}
+        '400': {description: Passphrase shorter than 12 characters}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}

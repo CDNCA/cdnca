@@ -1,0 +1,106 @@
+.site-groups-page { padding: 0 24px 24px; }
+.site-groups-page.site-groups-embedded { padding: 0; }
+.site-groups-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 14px 0 12px; }
+.site-groups-count { margin-left: auto; border: 1px solid var(--cdnca-color-border-secondary); border-radius: 3px; padding: 5px 10px; color: var(--cdnca-color-text-secondary); font-size: 12px; }
+.site-groups-count::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 8px; border-radius: 50%; background: var(--cdnca-color-success); }
+.site-groups-actions { display: flex; gap: 4px; }
+.site-groups-remark { white-space: pre-wrap; overflow-wrap: anywhere; }
+.site-groups-page .ant-table-cell { overflow-wrap: anywhere; }
+.site-groups-page .ant-table-placeholder > td.ant-table-cell { padding: 0; height: 48px; color: var(--cdnca-color-text-secondary); }
+.site-groups-page .ant-table-placeholder .ant-table-expanded-row-fixed { padding: 0; margin: 0; line-height: 48px; }
+.site-groups-page > .ant-alert { margin-bottom: 12px; }
+.site-groups-editor .ant-modal-content { padding: 0; }
+.site-groups-editor .ant-modal-header { padding: 14px 16px; margin: 0; border-bottom: 1px solid var(--cdnca-color-border-secondary); }
+.site-groups-editor .ant-modal-body { padding: 24px 28px 8px 20px; }
+.site-groups-editor .ant-modal-footer { margin: 0; padding: 12px 28px; border-top: 1px solid var(--cdnca-color-border-secondary); }
+.site-groups-editor .ant-form-item { margin-bottom: 20px; }
+.site-groups-editor .ant-form-item-control { min-width: 0; }
+.site-groups-editor .ant-alert { margin-bottom: 12px; }
+@media (max-width: 640px) { .site-groups-page { padding: 0 12px 16px; } .site-groups-count { width: auto; } .site-groups-editor .ant-modal-body { padding: 20px 16px 4px; } .site-groups-editor .ant-form-item-row { display: block; } .site-groups-editor .ant-form-item-label { text-align: left; } }
+
+/* 网站列表 > DNS API 新增弹窗：「基础信息 / 验证信息」分区，标签右对齐横排 */
+.dns-provider-editor--sectioned .dns-provider-editor-section {
+  margin: 4px 0 16px;
+  padding-left: 10px;
+  border-left: 3px solid var(--cdnca-color-primary, #2d8cf0);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.dns-provider-editor--sectioned .dns-provider-editor-section + .dns-provider-editor-hint {
+  margin: -10px 0 14px 13px;
+  color: var(--cdnca-color-text-secondary, #808695);
+  font-size: 12px;
+}
+.dns-provider-editor--sectioned .dns-provider-editor-section:not(:first-child) {
+  margin-top: 24px;
+  padding-top: 0;
+}
+.dns-provider-editor--sectioned .dns-provider-editor-placeholder {
+  margin: 0 0 16px 96px;
+  padding: 10px 12px;
+  border: 1px dashed var(--cdnca-color-border, #dcdee2);
+  border-radius: 4px;
+  color: var(--cdnca-color-text-secondary, #808695);
+}
+
+/* 网站列表 > 解析检测：左动作右搜索，下方统计胶囊条 */
+.site-dns-check-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.site-dns-check-toolbar > .ant-space { margin-right: auto; }
+.site-dns-check-provider { min-width: 160px; }
+.site-dns-check-hint { color: var(--cdnca-color-text-secondary, #808695); font-size: 13px; }
+.site-dns-check-search { width: 260px; }
+.site-dns-check-addon { pointer-events: none; color: var(--cdnca-color-text, #515a6e); }
+.site-dns-check-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--cdnca-color-border-secondary, #e8eaec);
+  border-radius: 6px;
+}
+.site-dns-check-stats > button {
+  min-height: 28px;
+  padding: 2px 10px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--cdnca-color-text, #515a6e);
+  cursor: pointer;
+}
+.site-dns-check-stats > button:hover,
+.site-dns-check-stats > button:focus-visible { border-color: var(--cdnca-color-primary, #2d8cf0); }
+.site-dns-check-stats > button.is-active {
+  border-color: var(--cdnca-color-primary, #2d8cf0);
+  color: var(--cdnca-color-primary, #2d8cf0);
+}
+.site-dns-check-stats > button strong { margin-left: 4px; }
+.site-dns-check-scope { margin-left: auto; color: var(--cdnca-color-text-secondary, #808695); font-size: 12px; }
+
+/* 网站列表 > 默认设置：卡内标题 + 一句说明 */
+.site-defaults-header {
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary, #e8eaec);
+}
+.site-defaults-header h2 {
+  margin: 0 0 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--cdnca-color-primary, #2d8cf0);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+}
+.site-defaults-header p { margin: 0; color: var(--cdnca-color-text-secondary, #808695); font-size: 13px; }
+.site-defaults-panel .site-groups-toolbar { gap: 8px; }
+.site-default-document-editor { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.site-default-document-editor .ant-table-wrapper { width: 100%; }
+.dns-provider-editor--sectioned { margin-top: 12px; }

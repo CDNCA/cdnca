@@ -1,0 +1,1455 @@
+{
+ "id": "billing-bridge",
+ "prefix": "/v1/billing-bridge",
+ "operations": [
+  {
+   "operation_id": "listResellerBillingBridgeKeys",
+   "method": "GET",
+   "path": "/v1/billing-bridge/keys",
+   "summary": "List the reseller billing bridge keys",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Bearer session of the active reseller (tenant session, reseller.customers.manage; 403 reseller_inactive when the tenant is not an active reseller). Lease feature module.billing.bridge (403 entitlement_feature_denied when the plugin is not enabled). Keys are paged by (created_at DESC, id DESC); the secret is never returned here.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of keys.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingBridgeKey>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "has_more",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "createResellerBillingBridgeKey",
+   "method": "POST",
+   "path": "/v1/billing-bridge/keys",
+   "summary": "Create a reseller billing bridge key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Bearer session of the active reseller (tenant session, reseller.customers.manage; 403 reseller_inactive when the tenant is not an active reseller), MFA step-up proof (audience billing-bridge, action billing_bridge.key.create) in step_up_token; 403 mfa_step_up_required without it. ip_allowlist is required (1–32 addresses or CIDR networks, no /0). The secret is returned once in this response and only its pepper-derived seed is stored. Audit billing_bridge.key.created.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "expires_at",
+      "type": "string(date-time)"
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "The key and its one-time secret.",
+     "fields": [
+      {
+       "name": "key",
+       "type": "BillingBridgeKey",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string",
+       "required": true,
+       "description": "Shown once; sign requests with it (cbs_ + 43 base64url characters)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "revokeResellerBillingBridgeKey",
+   "method": "POST",
+   "path": "/v1/billing-bridge/keys/{id}/revoke",
+   "summary": "Revoke a reseller billing bridge key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Step-up action billing_bridge.key.revoke bound to the key id. Revocation is final. Audit billing_bridge.key.revoked.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The revoked key.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_kind",
+       "type": "string: platform / reseller",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ip_allowlist",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / revoked",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "last_used_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "rotateResellerBillingBridgeKey",
+   "method": "POST",
+   "path": "/v1/billing-bridge/keys/{id}/rotate",
+   "summary": "Rotate the secret of a reseller billing bridge key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Step-up action billing_bridge.key.rotate bound to the key id. The old secret stops working at once; the new one is returned once. 409 revision_conflict on a stale expected_revision, 409 key_revoked for a revoked key. Audit billing_bridge.key.rotated.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The key and its new one-time secret.",
+     "fields": [
+      {
+       "name": "key",
+       "type": "BillingBridgeKey",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string",
+       "required": true,
+       "description": "Shown once; sign requests with it (cbs_ + 43 base64url characters)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listResellerBillingBridgeLogs",
+   "method": "GET",
+   "path": "/v1/billing-bridge/logs",
+   "summary": "List the reseller billing bridge call log",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Calls made with the caller's own keys only (owner scope), newest first, cursor paged. Denied calls carry the internal reason_code the caller of the bridge never sees. Rows are kept 90 days.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of log rows.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingBridgeLogEntry>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "has_more",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "pingBillingBridge",
+   "method": "GET",
+   "path": "/v1/billing-bridge/ping",
+   "summary": "Billing system TestConnection with a signed bridge key",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Signed with the bridge headers (billingBridgeSignature). Any authentication failure (unknown key, clock skew over 300 s, replayed nonce, wrong signature, source IP outside the allowlist, revoked or expired key, owner no longer an active reseller) is 401 unauthorized with no further detail; the reason is written to the bridge log. A valid key whose plugin is not enabled gets 403 entitlement_feature_denied. Bridge keys authenticate only /v1/billing-bridge/* facade routes; every other route rejects them.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "The key owner and server time.",
+     "fields": [
+      {
+       "name": "owner_kind",
+       "type": "string: platform / reseller",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "module_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "server_time",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "listBillingBridgeProducts",
+   "method": "GET",
+   "path": "/v1/billing-bridge/products",
+   "summary": "Billing system ConfigOptions — the key owner's published packages",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "A (reseller key): the reseller's own published packages with its wholesale cost per period; B (platform key): the platform's published packages (no wholesale_minor).",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Published packages.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<BillingBridgeProduct>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "createBillingBridgeService",
+   "method": "POST",
+   "path": "/v1/billing-bridge/services",
+   "summary": "Billing system CreateAccount — open a CDN service for a billing service",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "(owner, external_system, external_service_id) is the idempotency key of the service: repeating it with the same input returns the same service (200, created false); other input is 409 bridge_service_conflict. The customer of (external_system, external_client_id) is found or opened (A: a reseller customer, B: a platform direct customer; username {system}_{client_id}, a short suffix on a clash, random password not returned). A places the order for its customer and pays the prepaid wholesale cost (422 reseller_prepaid_insufficient, reseller_wholesale_unpriced); B opens the subscription without a charge.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "{system}:{service_id}:{action}:{billing task, invoice ID or date}. A retry with the same key and body replays the result; another body with the same key is 409 bridge_service_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "external_system",
+      "type": "string: whmcs / zjmf / zjmf_cbap",
+      "required": true
+     },
+     {
+      "name": "external_service_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "external_client_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "client",
+      "type": "object",
+      "required": true
+     },
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer(int64)"
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Opened (created true).",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Already opened by an earlier call (created false).",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "getBillingBridgeService",
+   "method": "GET",
+   "path": "/v1/billing-bridge/services/{system}/{service_id}",
+   "summary": "Billing system ClientArea — one service of the key owner",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "A service of another owner, or not opened, is 404 bridge_service_not_found.",
+   "params": [
+    {
+     "name": "system",
+     "in": "path",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "service_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The service.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "changeBillingBridgeService",
+   "method": "POST",
+   "path": "/v1/billing-bridge/services/{system}/{service_id}/change",
+   "summary": "Billing system ChangePackage",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Upgrade or downgrade by the new and the current period price (same price is an upgrade), effective at once. A: between the reseller's packages, prorated wholesale difference charged or returned; B: between platform packages, no customer charge.",
+   "params": [
+    {
+     "name": "system",
+     "in": "path",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "service_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "{system}:{service_id}:{action}:{billing task, invoice ID or date}. A retry with the same key and body replays the result; another body with the same key is 409 bridge_service_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "fields": [
+     {
+      "name": "product_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "product_revision",
+      "type": "integer(int64)"
+     },
+     {
+      "name": "period",
+      "type": "string: month / quarter / year"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The service after the action.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "renewBillingBridgeService",
+   "method": "POST",
+   "path": "/v1/billing-bridge/services/{system}/{service_id}/renew",
+   "summary": "Billing system Renew",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Extends the term by period (default the current period). A renews for its customer at the wholesale cost; B renews without a charge. A retry with the same Idempotency-Key does not renew twice.",
+   "params": [
+    {
+     "name": "system",
+     "in": "path",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "service_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "{system}:{service_id}:{action}:{billing task, invoice ID or date}. A retry with the same key and body replays the result; another body with the same key is 409 bridge_service_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "fields": [
+     {
+      "name": "period",
+      "type": "string: month / quarter / year"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The service after the action.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "issueBillingBridgeSso",
+   "method": "POST",
+   "path": "/v1/billing-bridge/services/{system}/{service_id}/sso",
+   "summary": "Billing system ServiceSingleSignOn — one-time console sign-in link",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Returns {url, expires_at}: url is {console}/sso/bridge?ticket=…, valid 60 seconds and once. Only the ticket's digest is stored. Audited as billing_bridge.sso.issued.",
+   "params": [
+    {
+     "name": "system",
+     "in": "path",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "service_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "{system}:{service_id}:{action}:{billing task, invoice ID or date}. A retry with the same key and body replays the result; another body with the same key is 409 bridge_service_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "fields": [
+     {
+      "name": "redirect",
+      "type": "string",
+      "description": "Same-site path after sign-in (default /)."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The sign-in link.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "suspendBillingBridgeService",
+   "method": "POST",
+   "path": "/v1/billing-bridge/services/{system}/{service_id}/suspend",
+   "summary": "Billing system Suspend — stop this service only",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Suspends the subscription: its sites stop being published, configuration is kept, the term keeps running. Other services of the customer are untouched. Already suspended succeeds without a change.",
+   "params": [
+    {
+     "name": "system",
+     "in": "path",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "service_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "{system}:{service_id}:{action}:{billing task, invoice ID or date}. A retry with the same key and body replays the result; another body with the same key is 409 bridge_service_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "fields": [
+     {
+      "name": "reason",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The service after the action.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "terminateBillingBridgeService",
+   "method": "POST",
+   "path": "/v1/billing-bridge/services/{system}/{service_id}/terminate",
+   "summary": "Billing system Terminate",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Cancels the subscription (sites stop) and marks the service terminated; when the customer has no other live service of this owner, the CDN account is disabled. Later actions are 409 bridge_service_terminated.",
+   "params": [
+    {
+     "name": "system",
+     "in": "path",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "service_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "{system}:{service_id}:{action}:{billing task, invoice ID or date}. A retry with the same key and body replays the result; another body with the same key is 409 bridge_service_conflict."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The service after the action.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "unsuspendBillingBridgeService",
+   "method": "POST",
+   "path": "/v1/billing-bridge/services/{system}/{service_id}/unsuspend",
+   "summary": "Billing system Unsuspend",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Republishes the subscription. Already active succeeds without a change.",
+   "params": [
+    {
+     "name": "system",
+     "in": "path",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "service_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "{system}:{service_id}:{action}:{billing task, invoice ID or date}. A retry with the same key and body replays the result; another body with the same key is 409 bridge_service_conflict."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The service after the action.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "BillingBridgeService",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  },
+  {
+   "operation_id": "getResellerBillingBridgeSettings",
+   "method": "GET",
+   "path": "/v1/billing-bridge/settings",
+   "summary": "Read the reseller billing bridge plugin settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Reseller plugin settings. sso_require_mfa defaults to false (bridge SSO skips the second factor); revision 0 means never saved. Lease feature module.billing.bridge (403 entitlement_feature_denied).",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current settings.",
+     "fields": [
+      {
+       "name": "sso_require_mfa",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "putResellerBillingBridgeSettings",
+   "method": "PUT",
+   "path": "/v1/billing-bridge/settings",
+   "summary": "Change the reseller billing bridge plugin settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a step-up proof (audience billing-bridge, action billing_bridge.settings.update, bound to the owner scope): turning MFA off weakens every bridge SSO sign-in. expected_revision is the revision read (0 for the first save); a stale revision is 409. Audited as billing_bridge.settings.updated.",
+   "permissions": [
+    "reseller.customers.manage"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "sso_require_mfa",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved settings.",
+     "fields": [
+      {
+       "name": "sso_require_mfa",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getBillingBridgeUsage",
+   "method": "GET",
+   "path": "/v1/billing-bridge/usage",
+   "summary": "Billing system UsageUpdate — current billing cycle usage",
+   "auth": [
+    "apiKey"
+   ],
+   "description": "Up to 100 ids; ids that are not the owner's opened services are left out.",
+   "params": [
+    {
+     "name": "external_system",
+     "in": "query",
+     "type": "string: whmcs / zjmf / zjmf_cbap",
+     "required": true
+    },
+    {
+     "name": "ids",
+     "in": "query",
+     "type": "string",
+     "required": true,
+     "description": "Comma-separated external_service_id (1–100)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Usage of the current billing cycle.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<BillingBridgeUsage>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "401",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "403",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "404",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "409",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "412",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "422",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    },
+    {
+     "status": "503",
+     "description": "{\"error\":{\"code\",\"message\",\"request_id\"}}. Codes: bridge_unauthenticated 401, entitlement_feature_denied 403, bridge_service_not_found 404, bridge_product_not_found 404, bridge_service_conflict 409, bridge_service_terminated 409, reseller_prepaid_insufficient 422, reseller_wholesale_unpriced 422, bridge_validation_error 400; other package commerce codes as they are."
+    }
+   ]
+  }
+ ]
+}

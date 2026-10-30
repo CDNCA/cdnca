@@ -1,0 +1,303 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "conditional-origin",
+  "scenario_sha256": "c00aa3d870be5e3b10a60f60c810bb80d0cc0a97faa1ca3a26cf6ff99bdb5480",
+  "steps": [
+    {
+      "id": "default",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "29",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 29,
+            "sha256": "d50f224fd1ad286cb15471a8012ec79be491b27bb627a84fa517753e191a7a93",
+            "text": "primary route.example.test /x"
+          },
+          "origin": [
+            {
+              "origin": "primary",
+              "method": "GET",
+              "uri": "/x",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "path-exact",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "27",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 27,
+            "sha256": "aee85bfcf235bc4a23d276c43f9f3bf405f71c99892d6444e26c424a2bbeaf5d",
+            "text": "api route.example.test /api"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "GET",
+              "uri": "/api",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "path-below",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "34",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 34,
+            "sha256": "891c3d656897acad630c0715b3ba40555527cd81197cc0dd30a2e97ce775f824",
+            "text": "api route.example.test /api/v1?q=1"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "GET",
+              "uri": "/api/v1?q=1",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "path-apiary",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "34",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 34,
+            "sha256": "4a1efb56702135b31d81b6d5cfd8dec827d31d408e19fe05b2bfe30792c74fb3",
+            "text": "primary route.example.test /apiary"
+          },
+          "origin": [
+            {
+              "origin": "primary",
+              "method": "GET",
+              "uri": "/apiary",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "path-query-only",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "31",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 31,
+            "sha256": "de1ea178caa0db07c0f8090c84863d6a9a99246c2b0e55613533b8f5b51a97df",
+            "text": "api route.example.test /api?x=1"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "GET",
+              "uri": "/api?x=1",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "region",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "30",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 30,
+            "sha256": "9c68fffcd8113e77e85a6bf478afedf8ce598cca6cf98a8ac075e6afed06e7a5",
+            "text": "east route.example.test /geo/a"
+          },
+          "origin": [
+            {
+              "origin": "east",
+              "method": "GET",
+              "uri": "/geo/a",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "client-cidr",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "25",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 25,
+            "sha256": "ee7cd5ae7043cb24578aa2762da06a166d86014458a59575eac00db5d4ac1ce2",
+            "text": "lan route.example.test /x"
+          },
+          "origin": [
+            {
+              "origin": "lan",
+              "method": "GET",
+              "uri": "/x",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.9",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.9"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "path-before-cidr",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "29",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 29,
+            "sha256": "8f78640709513fb7fb28374004bdb36797acaa615c562c59c4a38e7e53332e93",
+            "text": "api route.example.test /api/z"
+          },
+          "origin": [
+            {
+              "origin": "api",
+              "method": "GET",
+              "uri": "/api/z",
+              "host": "route.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.9",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.9"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

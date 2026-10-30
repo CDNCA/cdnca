@@ -1,0 +1,169 @@
+{
+ "id": "dashboard",
+ "prefix": "/v1/dashboard",
+ "operations": [
+  {
+   "operation_id": "getTenantDashboard",
+   "method": "GET",
+   "path": "/v1/dashboard",
+   "summary": "Read the authenticated tenant dashboard",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The target tenant, scope, user, and session are derived only from the authenticated tenant session. Any tenant_id parameter, including an empty or matching value, returns dashboard_scope_forbidden. The live session must conjunctively retain every required permission listed below in the same repeatable-read PostgreSQL transaction as the aggregate reads. nodes.read is optional; when absent, node-backed resource facts use the explicit unavailable branch.",
+   "permissions": [
+    "sites.read",
+    "certificates.read",
+    "billing.account.read",
+    "package_subscriptions.read",
+    "traffic_packages.read",
+    "announcements.read",
+    "jobs.read"
+   ],
+   "params": [
+    {
+     "name": "range",
+     "in": "query",
+     "type": "string: today / yesterday / seven_days / thirty_days",
+     "required": true,
+     "description": "Tenant calendar range in the requested timezone."
+    },
+    {
+     "name": "timezone",
+     "in": "query",
+     "type": "string",
+     "required": true,
+     "description": "IANA timezone name other than Local. Calendar boundaries converted to UTC must be hour aligned; zones with a non-hour boundary offset are rejected rather than rounded."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Optional canonical site UUID for ClickHouse drill-down; tenant scope remains session-derived."
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Optional canonical node UUID for ClickHouse drill-down; tenant scope remains session-derived."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Optional safe correlation ID; invalid values are replaced."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Version 2 dashboard snapshot for the authenticated tenant only.",
+     "fields": [
+      {
+       "name": "dashboard_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "DashboardMeta",
+       "required": true
+      },
+      {
+       "name": "identity_verification",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "profile",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "resources",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "certificates",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "billing",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "subscriptions",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "traffic_packages",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "operations",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "notices",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "account_security",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "network",
+       "type": "object | UnavailableSection",
+       "required": true
+      },
+      {
+       "name": "analytics",
+       "type": "object | UnavailableSection",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "dashboard_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "dashboard_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "dashboard_scope_forbidden or dashboard_permission_denied"
+    },
+    {
+     "status": "408",
+     "description": "dashboard_request_cancelled"
+    },
+    {
+     "status": "500",
+     "description": "dashboard_internal_error"
+    },
+    {
+     "status": "502",
+     "description": "dashboard_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "dashboard_storage_unavailable; no zero-value data is substituted."
+    },
+    {
+     "status": "504",
+     "description": "dashboard_query_timeout"
+    }
+   ]
+  }
+ ]
+}

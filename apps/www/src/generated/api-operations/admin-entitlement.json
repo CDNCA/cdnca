@@ -1,0 +1,90 @@
+{
+ "id": "admin-entitlement",
+ "prefix": "/v1/admin/entitlement",
+ "operations": [
+  {
+   "operation_id": "refreshAdminEntitlement",
+   "method": "POST",
+   "path": "/v1/admin/entitlement/refresh",
+   "summary": "Refresh the locally verified entitlement lease",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a live platform administrator session. The control plane contacts the configured license service, verifies the signed lease, and atomically installs it locally. Existing edge traffic does not depend on this request or on license-service availability.",
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The signed lease was verified and installed.",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "request_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "snapshot",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable API error."
+    },
+    {
+     "status": "401",
+     "description": "Stable API error."
+    },
+    {
+     "status": "403",
+     "description": "Stable API error."
+    },
+    {
+     "status": "409",
+     "description": "Stable API error."
+    },
+    {
+     "status": "502",
+     "description": "Stable API error."
+    },
+    {
+     "status": "503",
+     "description": "Stable API error."
+    },
+    {
+     "status": "504",
+     "description": "Stable API error."
+    }
+   ]
+  }
+ ]
+}

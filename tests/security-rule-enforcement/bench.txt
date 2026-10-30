@@ -1,0 +1,9 @@
+plain      GET  benign  p50 5000 us  p99 50000 us  973 req/s  status 200x4000
+plain      POST form    p50 8000 us  p99 51000 us  674 req/s  status 200x4000
+plain      GET  attack  p50 4000 us  p99 32000 us  1286 req/s  status 200x4000
+wafall     GET  benign  p50 30000 us  p99 191000 us  192 req/s  status 200x4000
+wafall     POST form    p50 34000 us  p99 359000 us  136 req/s  status 200x4000
+wafall     GET  attack  p50 36000 us  p99 310000 us  136 req/s  status 403x4000
+wafallpl2  GET  benign  p50 37000 us  p99 245000 us  154 req/s  status 200x4000
+wafallpl2  POST form    p50 37000 us  p99 290000 us  143 req/s  status 200x4000
+wafallpl2  GET  attack  

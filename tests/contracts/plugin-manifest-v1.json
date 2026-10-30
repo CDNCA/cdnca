@@ -1,0 +1,37 @@
+{
+  "api_version": "marketplace.cdnca.io/v1",
+  "kind": "Plugin",
+  "metadata": {
+    "id": "com.example.dns-connector",
+    "version": "1.0.0",
+    "name": {"zh-CN": "示例 DNS 连接器", "en-US": "Example DNS Connector"},
+    "description": {"zh-CN": "用于验证插件清单契约的非生产示例", "en-US": "Non-production fixture for validating the plugin manifest contract"},
+    "publisher": {
+      "id": "com.example",
+      "name": "Example Publisher",
+      "website": "https://example.invalid",
+      "support_url": "https://example.invalid/support"
+    }
+  },
+  "spec": {
+    "categories": ["dns_provider"],
+    "compatibility": {"control_api": ">=0.1.0 <1.0.0"},
+    "entrypoint": {
+      "type": "external_https",
+      "base_url": "https://plugin.example.invalid",
+      "health_path": "/health/ready"
+    },
+    "permissions": ["dns.records.read", "dns.records.write"],
+    "subscriptions": ["io.cdnca.site.v1.updated"],
+    "configuration_schema": {
+      "path": "schemas/config.schema.json",
+      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    }
+  },
+  "integrity": {
+    "algorithm": "Ed25519",
+    "key_id": "publisher-example-2026-01",
+    "payload_sha256": "ff9330c3906f1ca54b7c67adf7dcd7cd98dd5d0f20df757a4a7a007e7fa7fdb2",
+    "signature": "kM5YeKrE5vG_lw3Q-d7zyLuFpJU4LGHBzv0hweZ3FTPX5kheKMbWoEFX2muAJ3pAqMVZRC3Fjs_bkahFRPBLDw"
+  }
+}

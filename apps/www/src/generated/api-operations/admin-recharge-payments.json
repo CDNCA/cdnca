@@ -1,0 +1,621 @@
+{
+ "id": "admin-recharge-payments",
+ "prefix": "/v1/admin/recharge-payments",
+ "operations": [
+  {
+   "operation_id": "reconcileRechargePayment",
+   "method": "POST",
+   "path": "/v1/admin/recharge-payments/orders/{order_id}/reconciliation",
+   "summary": "向支付渠道查询并应用确定状态",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.recharges.reconcile"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "provider",
+      "type": "string: alipay / wechat",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "确定结果、仍需对账或精确重放",
+     "fields": [
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "transaction_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "deferred",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "409",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "503",
+     "description": "渠道不可用或结果不确定；调用方不得自行推断支付结果"
+    }
+   ]
+  },
+  {
+   "operation_id": "requestRechargePaymentRefund",
+   "method": "POST",
+   "path": "/v1/admin/recharge-payments/orders/{order_id}/refunds",
+   "summary": "执行已批准的退款（意图先持久化，按稳定退款单号外调，结果事务化入账）",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.recharges.compensate"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Token",
+     "in": "header",
+     "type": "string",
+     "description": "首次执行必填；恢复已持久化的同一退款/撤销意图（同审批）时省略"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "approval_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "tenant_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "amount_minor",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "渠道结果已确定：succeeded（渠道已确认且已入账）或 failed（渠道未接受，资金未退出、预留已释放）",
+     "fields": [
+      {
+       "name": "compensation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "approval_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: refund / void",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / succeeded / failed / unknown",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "provider_request_id",
+       "type": "string",
+       "required": true,
+       "description": "稳定的渠道退款单号（支付宝 out_request_no / 微信 out_refund_no），每次重试复用"
+      },
+      {
+       "name": "order_state",
+       "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required",
+       "required": true
+      },
+      {
+       "name": "order_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "retryable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "202",
+     "description": "退款意图已持久化但渠道结果待确认（pending/unknown）；用同一请求（同 Idempotency-Key，或同审批，无需新的 X-Step-Up-Token）重试会查询原退款单号，不会重复退款",
+     "fields": [
+      {
+       "name": "compensation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "approval_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: refund / void",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / succeeded / failed / unknown",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "provider_request_id",
+       "type": "string",
+       "required": true,
+       "description": "稳定的渠道退款单号（支付宝 out_request_no / 微信 out_refund_no），每次重试复用"
+      },
+      {
+       "name": "order_state",
+       "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required",
+       "required": true
+      },
+      {
+       "name": "order_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "retryable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "409",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "503",
+     "description": "渠道不可用或结果不确定；调用方不得自行推断支付结果"
+    }
+   ]
+  },
+  {
+   "operation_id": "requestRechargePaymentVoid",
+   "method": "POST",
+   "path": "/v1/admin/recharge-payments/orders/{order_id}/voids",
+   "summary": "执行已批准的撤销（意图先持久化，按稳定退款单号外调，结果事务化入账）",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "billing.recharges.compensate"
+   ],
+   "params": [
+    {
+     "name": "order_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Token",
+     "in": "header",
+     "type": "string",
+     "description": "首次执行必填；恢复已持久化的同一退款/撤销意图（同审批）时省略"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "approval_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "tenant_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "amount_minor",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "渠道结果已确定：succeeded（渠道已确认且已入账）或 failed（渠道未接受，资金未退出、预留已释放）",
+     "fields": [
+      {
+       "name": "compensation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "approval_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: refund / void",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / succeeded / failed / unknown",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "provider_request_id",
+       "type": "string",
+       "required": true,
+       "description": "稳定的渠道退款单号（支付宝 out_request_no / 微信 out_refund_no），每次重试复用"
+      },
+      {
+       "name": "order_state",
+       "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required",
+       "required": true
+      },
+      {
+       "name": "order_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "retryable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "202",
+     "description": "撤销意图已持久化但渠道结果待确认（pending/unknown）；用同一请求（同 Idempotency-Key，或同审批，无需新的 X-Step-Up-Token）重试会查询原退款单号，不会重复撤销",
+     "fields": [
+      {
+       "name": "compensation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "approval_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "order_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: refund / void",
+       "required": true
+      },
+      {
+       "name": "amount_minor",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / succeeded / failed / unknown",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "provider_request_id",
+       "type": "string",
+       "required": true,
+       "description": "稳定的渠道退款单号（支付宝 out_request_no / 微信 out_refund_no），每次重试复用"
+      },
+      {
+       "name": "order_state",
+       "type": "string: pending / paid / partially_refunded / refunded / voided / failed / canceled / reconcile_required",
+       "required": true
+      },
+      {
+       "name": "order_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "retryable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "409",
+     "description": "稳定错误码；message 禁止直接展示给用户"
+    },
+    {
+     "status": "503",
+     "description": "渠道不可用或结果不确定；调用方不得自行推断支付结果"
+    }
+   ]
+  }
+ ]
+}

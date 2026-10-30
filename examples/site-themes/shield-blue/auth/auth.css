@@ -1,0 +1,7 @@
+/* 盾蓝：平台登录 / 注册页样式。只写样式，表单与字段由平台提供。 */
+.cdnca-auth { background: radial-gradient(900px 400px at 85% 0%, rgb(56 189 248 / 25%), transparent), linear-gradient(160deg, #0b1b3f, #12306e); }
+.cdnca-auth-card { border: 0; border-radius: 10px; box-shadow: 0 20px 48px rgb(2 6 23 / 35%); }
+.cdnca-auth-title { color: #0b1b3f; }
+.cdnca-auth-submit { background: #2563eb; }
+.cdnca-auth-submit:hover { background: #1d4ed8; }
+.cdnca-auth-brand { background-image: var(--cdnca-auth-image-logo); background-repeat: no-repeat; background-position: left center; background-size: contain; }

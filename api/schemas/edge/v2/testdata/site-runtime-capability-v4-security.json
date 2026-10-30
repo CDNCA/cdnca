@@ -1,0 +1,176 @@
+{
+  "schema": "cdnca.edge.site-runtime/v2",
+  "configuration_scope_id": "10000000-0000-4000-8000-000000000001",
+  "source_revision": 41,
+  "config_version_id": "10000000-0000-4000-8000-000000000002",
+  "sites": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "revision": 3,
+      "domains": [
+        "route.example.test"
+      ],
+      "listeners": [
+        {
+          "id": "http",
+          "position": 0,
+          "address_family": "ipv4",
+          "port": 18090,
+          "protocols": [
+            "http1"
+          ],
+          "security": {
+            "policies": [
+              {
+                "kind": "waf",
+                "policy_id": "60000000-0000-4000-8000-000000000001",
+                "policy_version": 1,
+                "binding_revision": 1,
+                "runtime_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "enabled": true,
+                "default_action": "allow",
+                "rules": [
+                  {
+                    "rule_id": "60000000-0000-4000-8000-000000000002",
+                    "match": {
+                      "path": {
+                        "kind": "prefix",
+                        "value": "/private"
+                      }
+                    },
+                    "action": "block",
+                    "flow": "stop"
+                  }
+                ]
+              }
+            ],
+            "cc": {
+              "SourceSHA256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "CompiledSHA256": "b68a1629e1b07ec07bb7169dc3dab791532bc1391065d01d68197be75c2d4a83",
+              "Policy": {
+                "schema_version": "cdnca.edge.cc/v2",
+                "tenant_scope_id": "10000000-0000-4000-8000-000000000001",
+                "site_id": "11111111-1111-4111-8111-111111111111",
+                "policy_id": "50000000-0000-4000-8000-000000000001",
+                "policy_version": 1,
+                "binding_id": "50000000-0000-4000-8000-000000000002",
+                "binding_revision": 1,
+                "publication_id": "50000000-0000-4000-8000-000000000003",
+                "enabled": true,
+                "trusted_proxies": [],
+                "allowlist": [],
+                "rules": [
+                  {
+                    "rule_id": "50000000-0000-4000-8000-000000000004",
+                    "priority": 1,
+                    "flow": "stop",
+                    "match": {
+                      "method": "GET"
+                    },
+                    "dimension": "client_ip",
+                    "limit": {
+                      "algorithm": "fixed_window",
+                      "requests": 100,
+                      "window_seconds": 60
+                    },
+                    "action": {
+                      "kind": "reject_429"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "https",
+          "position": 1,
+          "address_family": "ipv4",
+          "port": 18443,
+          "protocols": [
+            "http1"
+          ],
+          "tls": {
+            "certificate_version_id": "22222222-2222-4222-8222-222222222222",
+            "protocols": [
+              "TLSv1.2",
+              "TLSv1.3"
+            ]
+          }
+        }
+      ],
+      "origin_pools": [
+        {
+          "id": "primary",
+          "position": 0,
+          "kind": "origin",
+          "algorithm": "round_robin",
+          "origins": [
+            {
+              "id": "origin",
+              "position": 0,
+              "tier": "origin",
+              "scheme": "http",
+              "host": "127.0.0.1",
+              "port": 18091,
+              "weight": 100
+            }
+          ],
+          "retry": {
+            "methods": [
+              "GET",
+              "HEAD"
+            ],
+            "bodyless_only": true,
+            "response_not_started": true,
+            "retry_on": [
+              "connect_error",
+              "connect_timeout",
+              "read_timeout",
+              "http_502",
+              "http_503",
+              "http_504"
+            ],
+            "max_attempts": 3,
+            "connect_timeout_ms": 1000,
+            "read_timeout_ms": 1000,
+            "total_budget_ms": 3000
+          }
+        }
+      ],
+      "default_pool_id": "primary",
+      "websocket": false,
+      "range": true,
+      "l2": {
+        "enabled": false,
+        "probe_interval_ms": 10000,
+        "failure_threshold": 3,
+        "recovery_threshold": 3,
+        "single_half_open_probe": true,
+        "max_hops": 1
+      }
+    }
+  ],
+  "required_capabilities": [
+    {
+      "name": "cc",
+      "api_version": 2
+    },
+    {
+      "name": "http1",
+      "api_version": 1
+    },
+    {
+      "name": "ipv4",
+      "api_version": 1
+    },
+    {
+      "name": "site_runtime",
+      "api_version": 4
+    },
+    {
+      "name": "waf",
+      "api_version": 1
+    }
+  ]
+}

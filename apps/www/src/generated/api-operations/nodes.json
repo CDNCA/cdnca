@@ -1,0 +1,1853 @@
+{
+ "id": "nodes",
+ "prefix": "/v1/nodes",
+ "operations": [
+  {
+   "operation_id": "listNodes",
+   "method": "GET",
+   "path": "/v1/nodes",
+   "summary": "List platform nodes with explicit inventory order and keyset pagination",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read in a platform scope. Search is always evaluated after scope isolation and matches node name or region by case-insensitive literal containment, a full UUID exactly, a canonical display ID prefix, or a normalized IPv4/IPv6 address exactly. platform.admin remains a wildcard permission. Without order, the existing UUID ascending order and cursor remain unchanged. With management_sort_desc, rows use persisted management sort, numeric display ID, then UUID descending; its opaque cursor is bound to the authorized scope and filters. Pages are live reads, not a snapshot.",
+   "params": [
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: pending / active / draining / disabled / retired",
+     "description": "Exact admin state filter. Deleting a node removes it, so retired is not accepted here (validation_error); a retired row left by a release before physical deletion is listed without a filter and can be deleted."
+    },
+    {
+     "name": "presence",
+     "in": "query",
+     "type": "string: online / offline / unknown",
+     "description": "Effective presence derived from the confirmed PostgreSQL projection and the offline threshold."
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Optional literal node search. Surrounding whitespace is ignored; control characters are rejected."
+    },
+    {
+     "name": "order",
+     "in": "query",
+     "type": "string: management_sort_desc",
+     "description": "Omit for the unchanged UUID-ascending NodeListResponse. Explicit management_sort_desc requests persisted management_settings.sort DESC, numeric display_id DESC, internal UUID DESC and requires an order echo. nodes.read and the current platform scope are checked on every request. In this mode only order, status, presence, search, limit and cursor are accepted; unknown or repeated parameters return validation_error (400). Explicit empty/unknown order or cursor is invalid. Limit is 1..300, default 20. There is no ascending management-sort mode."
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string(uuid) | string",
+     "description": "With no order, the existing last-node UUID. With management_sort_desc, the exact next_cursor returned for the same scope, status, presence and normalized search. Page size can change. Changing sort/filter/scope requires restarting at the first page. This is live keyset pagination, not a snapshot across concurrent writes. Cursors are untrusted bookmarks, not authorization; changing scope/filter/order returns validation_error."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Node page in the requested order; explicit order is echoed only for the ordered response."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createNode",
+   "method": "POST",
+   "path": "/v1/nodes",
+   "summary": "Create a pending platform node",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope and a valid local entitlement granting nodes.manage plus nodes.count. The quota counts every platform node whose admin_state is not retired; disabled nodes still consume quota. Grace, expired, unavailable, missing-feature, and missing-quota states reject creation without interrupting existing nodes. The Idempotency-Key is scoped to the actor and operation. An identical replay returns the original node before evaluating the current lease or quota, but never returns or regenerates the one-time enrollment token. Reusing the key with different normalized input returns idempotency_conflict. platform.admin remains a wildcard RBAC permission but does not bypass entitlement.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string"
+     },
+     {
+      "name": "region",
+      "type": "string"
+     },
+     {
+      "name": "ipv4",
+      "type": "string(ipv4)"
+     },
+     {
+      "name": "ipv6",
+      "type": "string(ipv6)"
+     },
+     {
+      "name": "issue_enrollment_token",
+      "type": "boolean"
+     },
+     {
+      "name": "enrollment_purpose",
+      "type": "string: initial_enrollment / re_enrollment"
+     },
+     {
+      "name": "enrollment_token_ttl_seconds",
+      "type": "integer"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Node created, or the original result replayed. A requested raw enrollment token is shown only on the first successful response; it is absent on replay.",
+     "fields": [
+      {
+       "name": "node",
+       "type": "Node",
+       "required": true
+      },
+      {
+       "name": "enrollment_token",
+       "type": "IssuedEnrollmentToken"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "batchUpdateNodeAdminState",
+   "method": "POST",
+   "path": "/v1/nodes/batch-admin-state",
+   "summary": "Update one administrative state across a batch of nodes",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. The request accepts at most 100 unique node IDs and preserves input order in the response. Nodes are locked in UUID order, successful items and their audits commit in one transaction, and validation or state failures are returned per item. Replaying the same idempotency key with the same normalized request returns the stored result without another revision or audit event. admin_state retired is the batch delete; it follows updateNode. Each deletion runs in its own savepoint, so a node in use fails alone with node_in_use (or node_not_found) and the others are still deleted; a deleted item reports status updated with the last node snapshot. Disabling or draining the last online available node of a node-market supply that still has a normal subscriber fails that item with supply_in_use (with online_available and normal_subscriptions); items are checked in UUID order against the ones applied before them.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "admin_state",
+      "type": "string: active / draining / disabled / retired",
+      "required": true
+     },
+     {
+      "name": "items",
+      "type": "array<BatchNodeAdminStateItem>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Ordered per-item results. Successful items are committed even when other items fail validation against current state.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BatchNodeAdminStateItemResult>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeInstallationTickets",
+   "method": "GET",
+   "path": "/v1/nodes/installation-tickets",
+   "summary": "Get each node's last license service ticket and the days left",
+   "auth": [
+    "bearer"
+   ],
+   "description": "PF09. Requires nodes.read in the current platform scope. Supply only node_id, repeated once per unique canonical nonzero UUID (1 to 300). Each item is the ServiceTicket the node reported in its last installation ban receipt: valid (with days_left rounded down), expired (the node stopped serving), no_ticket (the node never received its first ticket and does not serve yet) or unknown (no receipt: the node has not connected since, or an old Agent). A node of another scope reads as unknown. Items preserve request order.",
+   "params": [
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "array<string(uuid)>",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One ticket view per requested node.",
+     "fields": [
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getLatestNodeMetricsBatch",
+   "method": "GET",
+   "path": "/v1/nodes/metrics/latest",
+   "summary": "Get latest durable load samples for a bounded set of platform nodes",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read in the current platform scope. Supply only node_id, repeated once per unique canonical nonzero UUID (1 to 300 identifiers). Missing, duplicate, malformed or extra query parameters return 400 validation_error. Membership and samples are read in one database snapshot. Any nonexistent or other-scope node rejects the entire batch with the same 404 node_metrics_not_found; no partial results or foreign identifiers are returned. Existing in-scope nodes without a durable load sample appear in not_reported_node_ids. Those identifiers and items.node_id are disjoint and together cover the request exactly, with each array preserving request order. Each item is the unchanged single-node latest DTO, including unknown values, record_kind, original sample time, telemetry and durable delivery identity. No sample is fabricated from presence, and host_metric is not a probe-health decision. observed_at is the server UTC read time, not the sample time or a claim of freshness. Unavailable storage or batch runtime returns 503 node_metrics_unavailable. This endpoint does not aggregate monthly traffic.",
+   "params": [
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "array<string(uuid)>",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Complete scoped batch, with absent samples distinguished from measured values.",
+     "fields": [
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true,
+       "description": "Server UTC time after reading the batch; per-item observed_at remains the original Agent sample time."
+      },
+      {
+       "name": "items",
+       "type": "array<NodeMetricsLatest>",
+       "required": true
+      },
+      {
+       "name": "not_reported_node_ids",
+       "type": "array<string(uuid)>",
+       "required": true,
+       "description": "Requested in-scope nodes with no durable load sample; never zero-valued placeholder samples."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getLatestNodeMonitoring",
+   "method": "GET",
+   "path": "/v1/nodes/monitoring/latest",
+   "summary": "批量读取节点本机 TCP 探测事实与当前生效策略",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform principal with nodes.read in the current scope. One read-only repeatable database snapshot covers membership, head/active configuration and probe-only node_metric_latest. Items cover the unique request IDs exactly in request order, with no partial results. Any absent or foreign node returns the same node_monitoring_not_found (404), without leaking sibling facts. Invalid/duplicate/unknown query parameters return validation_error (400); absent session invalid_session (401); non-platform or missing permission permission_denied (403). Unavailable storage or invalid persisted facts return node_monitoring_unavailable (503), not an empty snapshot. The configuration reader checks canonical_schema, canonical_snapshot, canonical bytes and SHA-256; this is no signature claim. It neither locks/creates a stream nor reconciles publications. Policy comes only from active_revision, never the editable head. A disabled policy is a request with no application ACK, not evidence that the node has stopped probing. Samples are actual agent_local_tcp only; host metrics and heartbeats are not probes. Requested HTTP/Ping protocols and distributed monitor groups are not execution proof; an executed pause appears as serving_holds.",
+   "params": [
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "array<string(uuid)>",
+     "required": true,
+     "description": "1–300 unique canonical lowercase nonzero UUIDs; no other query keys are accepted."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "当前生效配置与实际探测事实；缺失数据保持 null。",
+     "fields": [
+      {
+       "name": "schema_version",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "configuration",
+       "type": "NodeMonitoringLatestConfiguration",
+       "required": true,
+       "description": "No stream/head zero is unconfigured. A valid nonzero head without an active revision is not_activated. Only active has policy and activation time. head_revision is at least active_revision; a newer head does not replace active policy. Values beyond 9007199254740991 are rejected as unavailable."
+      },
+      {
+       "name": "items",
+       "type": "array<NodeMonitoringLatestItem>",
+       "required": true,
+       "description": "Exactly one item for each requested ID in the same order; no foreign or duplicate IDs."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "validation_error"
+    },
+    {
+     "status": "401",
+     "description": "invalid_session"
+    },
+    {
+     "status": "403",
+     "description": "permission_denied"
+    },
+    {
+     "status": "404",
+     "description": "node_monitoring_not_found"
+    },
+    {
+     "status": "503",
+     "description": "node_monitoring_unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeRegistrationCredential",
+   "method": "GET",
+   "path": "/v1/nodes/registration-credential",
+   "summary": "Get the reusable node registration credential",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. Returns the scope-level credential embedded in the node install command (the same command for every node); issues the first credential when none exists. Viewing it never creates a node. Only the credential SHA-256 is persisted; the value is derived from a server-side secret. Responses are Cache-Control no-store.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current credential.",
+     "fields": [
+      {
+       "name": "key_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "credential",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "issued_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "resetNodeRegistrationCredential",
+   "method": "POST",
+   "path": "/v1/nodes/registration-credential/reset",
+   "summary": "Reset the node registration credential",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. Issues a new credential; every previously copied install command is rejected from then on. Installed nodes keep their mTLS identity and are unaffected.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "New credential.",
+     "fields": [
+      {
+       "name": "key_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "credential",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "issued_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNode",
+   "method": "GET",
+   "path": "/v1/nodes/{id}",
+   "summary": "Get one platform node",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read in a platform scope. platform.admin remains a wildcard permission.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Node inventory record.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Scope-local immutable decimal identifier; encoded as a string to preserve bigint precision."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "region",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ipv4",
+       "type": "string(ipv4)"
+      },
+      {
+       "name": "ipv6",
+       "type": "string(ipv6)"
+      },
+      {
+       "name": "admin_state",
+       "type": "string: pending / active / draining / disabled / retired",
+       "required": true
+      },
+      {
+       "name": "management_settings",
+       "type": "NodeManagementSettings",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "presence",
+       "type": "NodePresence",
+       "required": true
+      },
+      {
+       "name": "network_inventory",
+       "type": "NodeNetworkInventoryStatus",
+       "description": "Automatic default-egress address discovery. Verified means the same-family mTLS transport peer matched; it does not prove inbound service reachability. Older servers may omit this object."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateNode",
+   "method": "PATCH",
+   "path": "/v1/nodes/{id}",
+   "summary": "Update node inventory metadata or administrative state",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. If-Match supplies the expected revision. pending nodes cannot be activated or moved through an intermediate management state; first activation is reserved for the future Gateway CompleteEnrollment contract. disabled to active requires a node-bound consumed enrollment authorization. That authorization records permission to enroll only and does not prove certificate persistence, mTLS connectivity, or completed Gateway enrollment. retired is the delete operation and must be the only field: it physically deletes the node. It is rejected with node_in_use while the current revision of a live line group or a live L2 configuration lists the node, or while the node takes part in a queued or running cache operation or an active CC coordination. In one transaction it revokes the active certificates, writes a node.delete audit event (node ID, display ID, name, addresses, revoked certificate IDs and serial numbers, deleting user, time), and deletes the node row together with every row that only describes the node (certificates, identity, sessions, monitoring samples, deployment receipts, task projections). The response is the last node snapshot with admin_state retired. The Gateway ends the session on its next authorization refresh (at most 30 seconds) and rejects reconnects. The name and the licensed node slot are released at once; running the install command on the same host registers a new pending node, which may reuse the name but never the deleted node ID. Disabling or draining the last online available node (active, online, not isolated, not held) of a node-market supply that still has a normal subscriber is rejected with 409 supply_in_use, error.details {online_available, normal_subscriptions}; a supply already without online nodes is not blocked. Line groups only take nodes of their own region, so changing region is rejected with 409 node_region_in_use while the current revision of a live line group of another region lists the node (remove it from that line group first). When pending to active (initialize) leaves the node without a region and the region catalog has exactly one region, the node is put into that region; with several, the request may name one in region.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string"
+     },
+     {
+      "name": "description",
+      "type": "string"
+     },
+     {
+      "name": "region",
+      "type": "string"
+     },
+     {
+      "name": "ipv4",
+      "type": "string(ipv4) | string",
+      "description": "An IPv4 address, or an empty string to clear the address."
+     },
+     {
+      "name": "ipv6",
+      "type": "string(ipv6) | string",
+      "description": "An IPv6 address, or an empty string to clear the address."
+     },
+     {
+      "name": "admin_state",
+      "type": "string: active / draining / disabled / retired"
+     },
+     {
+      "name": "management_settings",
+      "type": "NodeManagementSettings"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated node, or the original response for an identical idempotent replay.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Scope-local immutable decimal identifier; encoded as a string to preserve bigint precision."
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "description",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "region",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ipv4",
+       "type": "string(ipv4)"
+      },
+      {
+       "name": "ipv6",
+       "type": "string(ipv6)"
+      },
+      {
+       "name": "admin_state",
+       "type": "string: pending / active / draining / disabled / retired",
+       "required": true
+      },
+      {
+       "name": "management_settings",
+       "type": "NodeManagementSettings",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "presence",
+       "type": "NodePresence"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "issueNodeEnrollmentToken",
+   "method": "POST",
+   "path": "/v1/nodes/{id}/enrollment-tokens",
+   "summary": "Issue a one-time enrollment token",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. platform.admin remains a wildcard permission. The raw token is shown only in this response.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "purpose",
+      "type": "string: initial_enrollment / re_enrollment"
+     },
+     {
+      "name": "ttl_seconds",
+      "type": "integer"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Token issued.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "purpose",
+       "type": "string: initial_enrollment / re_enrollment",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "token",
+       "type": "string",
+       "required": true,
+       "description": "One-time secret shown only in this response."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createNodeGatewayPortTransition",
+   "method": "POST",
+   "path": "/v1/nodes/{id}/gateway-port-transitions",
+   "summary": "Start a versioned Agent Gateway communication-port transition",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. The old and candidate listeners remain distinct until a durable Agent status permits finalize or rollback. A missing, disabled or unavailable command runtime returns 503 node_port_transition_runtime_unavailable before any command is queued. Runtime readiness alone does not prove endpoint reachability or Agent capability.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_node_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "old_endpoint",
+      "type": "NodeGatewayEndpoint",
+      "required": true
+     },
+     {
+      "name": "new_endpoint",
+      "type": "NodeGatewayEndpoint",
+      "required": true
+     },
+     {
+      "name": "compatibility_deadline",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "rollback_deadline",
+      "type": "string(date-time)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Transition and durable switch command created, or the original result replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_node_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "old_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "new_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "compatibility_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "rollback_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: preparing / switching / switched / failed / rolled_back / finalized",
+       "required": true
+      },
+      {
+       "name": "status_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "active_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeGatewayPortTransition",
+   "method": "GET",
+   "path": "/v1/nodes/{id}/gateway-port-transitions/{transition_id}",
+   "summary": "Get the durable communication-port transition state",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read in a platform scope. State is advanced only by status events bound to the node certificate and JetStream PubAck identity.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "transition_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current durable transition state.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_node_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "old_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "new_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "compatibility_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "rollback_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: preparing / switching / switched / failed / rolled_back / finalized",
+       "required": true
+      },
+      {
+       "name": "status_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "active_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "finalizeNodeGatewayPortTransition",
+   "method": "POST",
+   "path": "/v1/nodes/{id}/gateway-port-transitions/{transition_id}/finalize",
+   "summary": "Finalize a switched Agent Gateway communication port",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. Finalization is accepted only after the durable switched state and before the rollback deadline. Reuse both X-Request-ID and Idempotency-Key for an exact retry. A missing, disabled or unavailable command runtime returns 503 node_port_transition_runtime_unavailable without queueing an action. A 202 response confirms acceptance, not listener retirement or completed execution.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "transition_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Caller-stable canonical UUID. Send and retain it together with the same Idempotency-Key when retrying an action after an uncertain response. If omitted, the server generates a new ID for each HTTP request and cannot recognize an exact action retry."
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "A durable finalize command was accepted, or the original action was replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_node_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "old_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "new_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "compatibility_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "rollback_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: preparing / switching / switched / failed / rolled_back / finalized",
+       "required": true
+      },
+      {
+       "name": "status_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "active_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "rollbackNodeGatewayPortTransition",
+   "method": "POST",
+   "path": "/v1/nodes/{id}/gateway-port-transitions/{transition_id}/rollback",
+   "summary": "Roll back an Agent Gateway communication-port transition",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.manage in a platform scope. Rollback is accepted only while the previous listener remains inside its versioned rollback window. Reuse both X-Request-ID and Idempotency-Key for an exact retry. A missing, disabled or unavailable command runtime returns 503 node_port_transition_runtime_unavailable without queueing an action. A 202 response confirms acceptance, not completed rollback.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "transition_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Caller-stable canonical UUID. Send and retain it together with the same Idempotency-Key when retrying an action after an uncertain response. If omitted, the server generates a new ID for each HTTP request and cannot recognize an exact action retry."
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "A durable rollback command was accepted, or the original action was replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "expected_node_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "old_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "new_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "compatibility_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "rollback_deadline",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: preparing / switching / switched / failed / rolled_back / finalized",
+       "required": true
+      },
+      {
+       "name": "status_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "active_endpoint",
+       "type": "NodeGatewayEndpoint",
+       "required": true
+      },
+      {
+       "name": "error_code",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getNodeIPLocation",
+   "method": "GET",
+   "path": "/v1/nodes/{id}/ip-location",
+   "summary": "Get a node's IP location (automatic resolution and manual fields)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read in a platform scope. effective 是条件匹配（L2 条件的节点国家代码/运营商/省份/城市、 市场供货分组）实际使用的值；manual_fields 里的字段是管理员修正的，其余来自 resolution（主控 IP 情报库按 IPv4、IPv6、子 IP 的顺序解析出的第一个结果，新增节点、地址变化、IP 库更新后一分钟内重新解析）。 resolution 为 null 表示尚未解析；outcome unresolved 为 IP 库里查不到，no_library 为主控尚无 IP 库。",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Node IP location.",
+     "fields": [
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "effective",
+       "type": "NodeManagementIPLocation",
+       "required": true
+      },
+      {
+       "name": "manual_fields",
+       "type": "array<string: country / province / city / isp / country_code>",
+       "required": true
+      },
+      {
+       "name": "resolution",
+       "type": "null | object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getLatestNodeMetrics",
+   "method": "GET",
+   "path": "/v1/nodes/{id}/metrics/latest",
+   "summary": "Get the latest durable load sample for one platform node",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires nodes.read in a platform scope. The latest row is selected by the accepted publication sequence, not by the Agent clock. puback_sequence is the authoritative JetStream stream sequence returned to the Gateway. Reports from older Agents remain visible with known=false and all six metric values null; unknown values are never represented as zero.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Latest accepted metric sample and its durable delivery identity.",
+     "fields": [
+      {
+       "name": "record_kind",
+       "type": "string: metric / host_metric"
+      },
+      {
+       "name": "telemetry_detail",
+       "type": "boolean",
+       "description": "节点最近一次会话声明 NODE_TELEMETRY_DETAIL v1（能力号 69，fz-x11）：遥测带 mounts 与 port_group_overrides。false 时控制台显示“节点版本未上报”。"
+      },
+      {
+       "name": "storage_supported",
+       "type": "boolean",
+       "description": "节点最近一次会话声明 NODE_STORAGE v1（能力号 71）：可在编辑节点 → 节点设置修改缓存目录、 缓存上限与日志目录。false 时这三项只读（409 node_storage_unsupported）。"
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "config_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "active_config_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "publication_sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "observed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "probe_port",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "healthy",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "probe_succeeded",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "consecutive_failures",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "consecutive_successes",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "probes_total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "probe_failures_total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "recovered",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "recovery_notified",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "rolled_back",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "known",
+       "type": "boolean",
+       "required": true,
+       "description": "False for reports from Agents that do not carry NodeLoadMetricsV1."
+      },
+      {
+       "name": "cpu_percent",
+       "type": "number(double) | null(double)",
+       "required": true
+      },
+      {
+       "name": "memory_used_bytes",
+       "type": "integer(int64) | null(int64)",
+       "required": true
+      },
+      {
+       "name": "memory_total_bytes",
+       "type": "integer(int64) | null(int64)",
+       "required": true
+      },
+      {
+       "name": "active_connections",
+       "type": "integer(int64) | null(int64)",
+       "required": true
+      },
+      {
+       "name": "rx_bandwidth_bps",
+       "type": "integer(int64) | null(int64)",
+       "required": true
+      },
+      {
+       "name": "tx_bandwidth_bps",
+       "type": "integer(int64) | null(int64)",
+       "required": true
+      },
+      {
+       "name": "total_rx_bytes",
+       "type": "integer(int64) | null(int64)",
+       "required": true
+      },
+      {
+       "name": "total_tx_bytes",
+       "type": "integer(int64) | null(int64)",
+       "required": true
+      },
+      {
+       "name": "telemetry",
+       "type": "NodeTelemetry"
+      },
+      {
+       "name": "latest_recovery",
+       "type": "object"
+      },
+      {
+       "name": "puback_stream",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "puback_sequence",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "JetStream stream sequence returned to the Gateway in the publication acknowledgement."
+      },
+      {
+       "name": "consumer_durable",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "consumer_sequence",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "ingested_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,39 @@
+.DS_Store
+.idea/
+.vscode/
+
+# Local code intelligence and browser/test output
+.gitnexus/
+.playwright-cli/
+output/
+logs/
+
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
+
+*.log
+*.out
+*.test
+
+# Locally built binaries and generated screenshots
+services/control-api/control-api
+operator-quota-*.png
+
+tmp/
+
+# 本机 go build 产物
+/agents/edge-agent/edge-agent
+
+# 在包目录 go build 产生的网关二进制（a9db3dbd9 曾误提交）
+/services/agent-gateway/agent-gateway
+
+# 根目录不再放截图、打包产物、日志和临时脚本（10-23 根目录整理）
+/*.png
+/*.tar.gz
+/*.txt
+/tmp-*.mjs

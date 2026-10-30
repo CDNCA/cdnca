@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+case "${1:-}" in
+  upgrade|failed-upgrade) exit 0 ;;
+  remove|deconfigure)
+    if [ -x /usr/libexec/cdnca-edge-agent/uninstall.sh ]; then
+      /usr/libexec/cdnca-edge-agent/uninstall.sh || {
+        printf 'reason_code=PKG_REMOVE_FAILED service could not be stopped and disabled\n' >&2
+        exit 1
+      }
+    fi
+    ;;
+  *) printf 'reason_code=PKG_REMOVE_FAILED unsupported prerm action %s\n' "${1:-missing}" >&2; exit 1 ;;
+esac

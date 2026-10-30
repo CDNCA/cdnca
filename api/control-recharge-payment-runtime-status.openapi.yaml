@@ -1,0 +1,45 @@
+paths:
+  /v1/admin/recharge-payment-runtime-status:
+    get:
+      operationId: getRechargePaymentRuntimeStatus
+      summary: Read non-secret recharge payment runtime status
+      description: Returns provider configuration/readiness state without credentials or endpoint details.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Runtime status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RechargePaymentRuntimeStatus'
+        '401':
+          description: Administrator session required
+        '403':
+          description: Platform system configuration read permission required
+components:
+  schemas:
+    RechargePaymentProviderStatus:
+      type: object
+      additionalProperties: false
+      required: [state, configured, ready]
+      properties:
+        state:
+          type: string
+          enum: [disabled, unavailable, degraded, ready]
+        configured: {type: boolean}
+        ready: {type: boolean}
+    RechargePaymentRuntimeStatus:
+      type: object
+      additionalProperties: false
+      required: [schema, state, enabled, ready, alipay, wechat, bank_transfer]
+      properties:
+        schema: {type: string, const: cdnca.recharge-payment-runtime-status/v1}
+        state:
+          type: string
+          enum: [disabled, unavailable, degraded, ready]
+        enabled: {type: boolean}
+        ready: {type: boolean}
+        alipay: {$ref: '#/components/schemas/RechargePaymentProviderStatus'}
+        wechat: {$ref: '#/components/schemas/RechargePaymentProviderStatus'}
+        bank_transfer: {$ref: '#/components/schemas/RechargePaymentProviderStatus'}

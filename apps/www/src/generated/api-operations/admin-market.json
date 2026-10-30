@@ -1,0 +1,133 @@
+{
+ "id": "admin-market",
+ "prefix": "/v1/admin/market",
+ "operations": [
+  {
+   "operation_id": "downloadMarketPlugin",
+   "method": "POST",
+   "path": "/v1/admin/market/plugin-downloads",
+   "summary": "Download a plugin licence for this installation (forwarded to the market)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A live licence this installation holds is returned; a free plan issues the installation's free licence (repeat calls return the same one); otherwise the market answers 402 purchase_required. Naturally idempotent, so no Idempotency-Key is required. Market errors other than 401 and 5xx are passed through.",
+   "permissions": [
+    "marketplace.purchase"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "plugin_id",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Downloadable",
+     "fields": [
+      {
+       "name": "plugin_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "publisher_kind",
+       "type": "string: official / certified / third_party",
+       "required": true
+      },
+      {
+       "name": "source",
+       "type": "string: licensed / free",
+       "required": true
+      },
+      {
+       "name": "license",
+       "type": "object",
+       "required": true,
+       "description": "market License (marketplace-openapi components/trading.yaml#/License)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid query or body (invalid_query, invalid_body)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "402",
+     "description": "Market error passed through (e.g. purchase_required, not_found)"
+    },
+    {
+     "status": "403",
+     "description": "Required marketplace permission is missing (forbidden)"
+    },
+    {
+     "status": "404",
+     "description": "Market error passed through (e.g. purchase_required, not_found)"
+    },
+    {
+     "status": "501",
+     "description": "The market has not mounted this entry (market_feature_unavailable)"
+    },
+    {
+     "status": "502",
+     "description": "Market unreachable, 401 or 5xx (market_unavailable, market_response_invalid)"
+    }
+   ]
+  },
+  {
+   "operation_id": "getMarketPluginLibrary",
+   "method": "GET",
+   "path": "/v1/admin/market/plugin-library",
+   "summary": "What this controller holds of each market plugin (installed, enabled, withdrawn)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Installed means an installation head exists in any tenant; enabled that one is enabled; withdrawn that a materialized artifact (data pack, ui_page, provider) was withdrawn by the platform because the licence moved to another controller or ended. No query parameters are accepted.",
+   "any_permissions": [
+    "marketplace.browse",
+    "marketplace.purchase",
+    "marketplace.sell"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One item per plugin with local state",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<LibraryItem>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid query or body (invalid_query, invalid_body)"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Required marketplace permission is missing (forbidden)"
+    },
+    {
+     "status": "500",
+     "description": "Local store failure (internal)"
+    }
+   ]
+  }
+ ]
+}

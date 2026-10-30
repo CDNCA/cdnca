@@ -1,0 +1,61 @@
+{
+ "id": "admin-node-isolations",
+ "prefix": "/v1/admin/node-isolations",
+ "operations": [
+  {
+   "operation_id": "listNodeIsolationStates",
+   "method": "GET",
+   "path": "/v1/admin/node-isolations",
+   "summary": "查询当前作用域内持久化的节点配置同步隔离状态",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "array<string(uuid)>",
+     "description": "可重复；省略时返回当前作用域内全部已有隔离状态事实。"
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "状态按节点 ID 稳定排序；没有状态事实的节点不在结果中。",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<IsolationState>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+    },
+    {
+     "status": "default",
+     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+    }
+   ]
+  }
+ ]
+}

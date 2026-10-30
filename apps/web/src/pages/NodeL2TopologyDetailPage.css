@@ -1,0 +1,496 @@
+/* Compact detail parity for the observed L2 configuration inventory. */
+.node-l2-topology-detail-page {
+  min-width: 0;
+  padding: 16px;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+  box-shadow: none;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-header {
+  min-height: 32px;
+  margin-bottom: 12px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-header h1 {
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-header .ant-btn,
+.node-l2-topology-detail-page .node-scheduling-toolbar .ant-btn,
+.node-l2-topology-detail-page .ant-form-inline > .ant-btn,
+.node-l2-topology-detail-page .ant-input-number,
+.node-l2-topology-detail-page .ant-input-number-input,
+.node-l2-topology-detail-page .ant-select-selector,
+.node-l2-topology-detail-page .ant-input,
+.node-l2-topology-detail-page .ant-input-affix-wrapper {
+  min-height: 32px;
+  font-size: 14px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-header .ant-btn,
+.node-l2-topology-detail-page .node-scheduling-toolbar .ant-btn,
+.node-l2-topology-detail-page .ant-form-inline > .ant-btn {
+  height: 32px;
+  padding-inline: 14px;
+  line-height: 30px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-alert {
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-alert .ant-alert-message {
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-alert .ant-alert-description {
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.node-l2-topology-detail-page > .ant-descriptions {
+  margin-bottom: 0;
+}
+
+.node-l2-topology-detail-page .ant-descriptions-view {
+  border-color: var(--cdnca-color-border-secondary);
+}
+
+.node-l2-topology-detail-page .ant-descriptions-row > th,
+.node-l2-topology-detail-page .ant-descriptions-row > td {
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-l2-topology-detail-page .ant-descriptions-item-label {
+  color: var(--cdnca-color-text-secondary);
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+}
+
+.node-l2-topology-detail-page .ant-descriptions-item-content {
+  color: var(--cdnca-color-text);
+  overflow-wrap: anywhere;
+}
+
+.node-l2-topology-detail-page .ant-descriptions-item-content code {
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section {
+  min-width: 0;
+  padding-top: 14px;
+  margin-top: 16px;
+  border-top: 1px solid var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+.node-l2-topology-detail-page .node-scheduling-section-heading {
+  margin: 0 0 10px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-section-heading h2,
+.node-l2-topology-detail-page .node-scheduling-detail-section > h2 {
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-section-heading .ant-tag {
+  margin-inline-end: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section > .ant-alert {
+  margin-bottom: 10px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section > .ant-result {
+  padding: 16px 0;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section > .ant-result .ant-result-icon {
+  margin-bottom: 8px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section > .ant-result .ant-result-title {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section > .node-scheduling-toolbar {
+  align-items: flex-start;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.node-l2-topology-detail-page .node-scheduling-scope-input {
+  width: 420px;
+  min-height: 64px;
+  flex: 0 1 420px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-scope-input textarea {
+  min-height: 64px !important;
+  padding: 5px 10px;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-topology {
+  grid-template-columns: minmax(0, 1fr) 44px minmax(0, 1.35fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-topology-column {
+  gap: 6px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-topology-node {
+  min-height: 42px;
+  padding: 7px 10px;
+  color: var(--cdnca-color-text);
+  border-color: var(--cdnca-color-border-secondary);
+  background: var(--cdnca-color-bg-container, #fff);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-topology-node strong {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.node-l2-topology-detail-page .node-scheduling-topology-node code {
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-topology-node small {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 19px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-topology-arrow {
+  color: var(--cdnca-color-primary);
+}
+
+.node-l2-topology-detail-page .ant-form-inline {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 8px;
+  margin-top: 10px;
+}
+
+.node-l2-topology-detail-page .ant-form-inline .ant-form-item {
+  min-width: 0;
+  margin-inline-end: 0;
+  margin-bottom: 8px;
+}
+
+.node-l2-topology-detail-page .ant-form-inline .ant-form-item-label > label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.node-l2-topology-detail-page .ant-form-inline .ant-input {
+  width: 150px;
+  height: 32px;
+  padding-inline: 10px;
+}
+
+.node-l2-topology-detail-page .ant-form-inline .ant-form-item:nth-child(3) .ant-select {
+  width: 190px;
+}
+
+.node-l2-topology-detail-page .ant-form-inline .ant-form-item:nth-child(4) .ant-input {
+  width: 220px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-decision-facts {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-decision-fact {
+  min-height: 52px;
+  padding: 7px 9px;
+  border-color: var(--cdnca-color-border-secondary);
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-decision-fact strong {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.node-l2-topology-detail-page .node-scheduling-decision-fact span {
+  color: var(--cdnca-color-text);
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section > h2 {
+  margin: 0 0 10px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section .ant-input-number {
+  width: 120px;
+  height: 32px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section .ant-input-number-input {
+  height: 30px;
+  padding-inline: 10px;
+  line-height: 30px;
+}
+
+.node-l2-topology-detail-page .node-scheduling-detail-section > .node-scheduling-toolbar .ant-btn {
+  flex: 0 0 auto;
+}
+
+/* Observed /node/line-group/line/:id resolution inventory. */
+.node-line-resolution-detail-page {
+  max-width: 100%;
+  overflow: hidden;
+  padding: 18px 20px 20px;
+  border-color: transparent;
+  border-radius: 10px;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--cdnca-color-blue46, #23304a) 5%, transparent);
+}
+
+.node-line-resolution-navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; margin-bottom: 16px; padding: 12px; background: var(--cdnca-color-bg-panel, #fbfdff); border: 1px solid var(--cdnca-color-border-divider, #f0f1f2); border-radius: 6px; }
+.node-line-resolution-navigation > .ant-btn { padding-inline: 2px; margin-inline-end: 26px; }
+.node-line-resolution-navigation label { display: flex; align-items: center; gap: 16px; }
+.node-line-resolution-navigation .ant-select { width: 200px; }
+.node-line-resolution-panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; }
+.node-line-resolution-panes > section { min-width: 0; }
+.node-line-resolution-panes h2 { display: flex; align-items: center; gap: 7px; min-height: 40px; margin: 0 0 12px; padding-bottom: 8px; color: var(--cdnca-color-title); border-bottom: 1px solid var(--cdnca-color-border-divider, #f0f1f2); font-size: 16px; font-weight: 600; }
+.node-line-resolution-panes h2 > svg { color: var(--cdnca-color-blue36, #6cadde); flex-shrink: 0; }
+.node-line-resolution-panes h2 .ant-select { width: 220px; min-width: 100px; flex: 0 1 220px; max-width: 100%; font-weight: 400; }
+.node-line-resolution-actions .node-line-resolution-search { width: 198px; max-width: 100%; height: 32px; }
+.node-line-resolution-actions .node-line-resolution-search .ant-input { min-height: 0; }
+.node-line-resolution-search .ant-input-suffix { color: var(--cdnca-color-text-secondary); }
+.node-line-resolution-actions .line-enable:not(:disabled) { background: var(--cdnca-color-success); border-color: var(--cdnca-color-success); }
+.node-line-resolution-actions .line-disable:not(:disabled) { background: var(--cdnca-color-warning); border-color: var(--cdnca-color-warning); }
+.node-line-resolution-actions .line-delete:not(:disabled) { background: var(--cdnca-color-error); border-color: var(--cdnca-color-error); }
+.node-line-resolution-presence { display: inline-flex; align-items: center; gap: 4px; color: var(--cdnca-color-text-secondary); line-height: 20px; }
+.node-line-resolution-presence > svg { flex-shrink: 0; }
+.node-line-resolution-presence.is-online > svg { color: var(--cdnca-color-text-inverse, #fff); fill: var(--cdnca-color-success); }
+.node-line-resolution-presence.is-offline > svg { color: var(--cdnca-color-error); }
+.node-line-resolution-detail-page .node-line-resolution-table-scroll .ant-table-thead > tr > th { background: var(--cdnca-color-bg-panel, #fbfdff); }
+.node-line-resolution-detail-page .node-line-resolution-table-scroll .ant-table-thead > tr > th::before {
+  display: none;
+}
+.node-line-resolution-detail-page .node-line-resolution-table-scroll .ant-table-tbody > .ant-table-placeholder > td {
+  height: 48px;
+  padding: 0 !important;
+  color: var(--cdnca-color-text-secondary);
+}
+.node-line-resolution-detail-page .node-line-resolution-table-scroll .ant-table-placeholder .ant-table-expanded-row-fixed {
+  padding: 0;
+  margin: 0;
+}
+
+.node-line-resolution-actions,
+.node-line-resolution-filters {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.node-line-resolution-actions {
+  margin-bottom: 10px;
+  margin-inline-start: -8px;
+}
+
+.node-line-resolution-actions .ant-btn,
+.node-line-resolution-filters .ant-input,
+.node-line-resolution-filters .ant-select,
+.node-line-resolution-filters .ant-select-selector {
+  height: 32px !important;
+  min-height: 32px;
+  font-size: 14px;
+}
+
+.node-line-resolution-actions .ant-btn {
+  padding-inline: 13px;
+  line-height: 30px;
+}
+
+.node-line-resolution-actions .ant-btn-link { padding-inline: 0; }
+
+.node-line-resolution-filters {
+  margin-bottom: 10px;
+}
+
+.node-line-resolution-filters .ant-select {
+  width: 180px;
+  flex: 0 0 180px;
+}
+
+.node-line-resolution-filters .ant-input {
+  width: 220px;
+  max-width: 100%;
+  flex: 0 1 220px;
+  padding-inline: 10px;
+}
+
+.node-line-resolution-configured-filters {
+  margin-top: 16px;
+}
+
+.node-line-resolution-configured-filters .ant-select {
+  width: 200px;
+  flex-basis: 200px;
+}
+
+.node-line-resolution-table-scroll {
+  width: 100%;
+  min-width: 0;
+}
+
+.node-line-resolution-table-scroll .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+}
+
+.node-line-resolution-table-scroll .ant-table-thead > tr > th {
+  height: 39px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-weight: 600;
+  line-height: 39px;
+  white-space: nowrap;
+  background: var(--cdnca-color-table-header);
+}
+
+.node-line-resolution-table-scroll .ant-table-tbody > tr > td {
+  height: 48px;
+  padding: 0 12px !important;
+  line-height: 48px;
+  white-space: nowrap;
+}
+
+.node-line-resolution-detail-page .node-line-resolution-table-scroll td.node-line-resolution-name,
+.node-line-resolution-detail-page .node-line-resolution-table-scroll td.node-line-resolution-address {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 20px;
+}
+
+.node-line-resolution-table-scroll .ant-table-cell code {
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+}
+
+.node-line-resolution-table-scroll .ant-empty-normal {
+  margin-block: 12px;
+}
+
+.node-line-resolution-table-scroll .ant-pagination {
+  margin: 21px 0 0;
+}
+
+@media (max-width: 767px) {
+  .node-line-resolution-detail-page .node-scheduling-alert {
+    display: block;
+  }
+  .node-line-resolution-detail-page .node-scheduling-alert .ant-alert-content {
+    min-width: 0;
+    width: 100%;
+  }
+  .node-line-resolution-detail-page .node-scheduling-alert .ant-alert-action {
+    width: 100%;
+    margin: 8px 0 0;
+    padding: 0;
+  }
+  .node-line-resolution-panes { grid-template-columns: minmax(0, 1fr); }
+  .node-line-resolution-navigation { gap: 10px; }
+  .node-line-resolution-navigation label { width: 100%; }
+  .node-line-resolution-navigation .ant-select { flex: 1; min-width: 0; }
+  .node-l2-topology-detail-page {
+    margin: 24px !important;
+    padding: 16px;
+  }
+
+  .node-l2-topology-detail-page .node-scheduling-detail-header {
+    align-items: flex-start;
+  }
+
+  .node-l2-topology-detail-page .node-scheduling-detail-header h1 {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .node-l2-topology-detail-page .node-scheduling-scope-input,
+  .node-l2-topology-detail-page .node-scheduling-detail-section > .node-scheduling-toolbar .ant-btn,
+  .node-l2-topology-detail-page .ant-form-inline .ant-input,
+  .node-l2-topology-detail-page .ant-form-inline .ant-form-item:nth-child(3) .ant-select,
+  .node-l2-topology-detail-page .ant-form-inline .ant-form-item:nth-child(4) .ant-input {
+    width: 100%;
+    max-width: 100%;
+    flex-basis: 100%;
+  }
+
+  .node-l2-topology-detail-page .node-scheduling-topology {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .node-l2-topology-detail-page .node-scheduling-topology-arrow {
+    min-height: 26px;
+    transform: rotate(90deg);
+  }
+
+  .node-l2-topology-detail-page .node-scheduling-decision-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .node-l2-topology-detail-page .ant-form-inline {
+    display: block;
+  }
+
+  .node-l2-topology-detail-page .ant-form-inline .ant-form-item,
+  .node-l2-topology-detail-page .ant-form-inline > .ant-btn {
+    width: 100%;
+  }
+
+  .node-l2-topology-detail-page .ant-form-inline > .ant-btn {
+    margin-top: 2px;
+  }
+
+  .node-line-resolution-detail-page .node-line-resolution-actions,
+  .node-line-resolution-detail-page .node-line-resolution-filters {
+    width: 100%;
+  }
+
+  .node-line-resolution-detail-page .node-line-resolution-filters .ant-select,
+  .node-line-resolution-detail-page .node-line-resolution-filters .ant-input {
+    max-width: 100%;
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema": "cdnca-platform-policy-contract/v1",
+  "platform_signing_public_key": "eTH7OoPBDgBeCeIdZkS3r210YgPoAcky6Sh4onpHbdY",
+  "installation_public_key": "C4Hi0Q1mh939a_lKEZbOz-c5zMzj5rZmK0OLza4Te9I",
+  "canonical_policy": "eyJhbGxvd2VkX3JlbGVhc2VfY2hhbm5lbHMiOlsibHRzIiwic3RhYmxlIl0sImJsb2NrZWRfY29udHJvbF92ZXJzaW9ucyI6WyIxLjQuMSIsIjEuNC4yIl0sIm1pbmltdW1fY29udHJvbF92ZXJzaW9uIjoiMS40LjAiLCJwbHVnaW5fbWFya2V0Ijp7ImVuYWJsZWQiOnRydWUsInRydXN0ZWRfY2F0YWxvZ19pZHMiOlsiY2RuY2Etb2ZmaWNpYWwiXX0sInNjaGVtYSI6InBsYXRmb3JtLXBvbGljeS92MSJ9",
+  "policy_sha256": "3NV8bdS-NdpZTaWJjl6604G_9DZ_YmIG8RjobS1jiIU",
+  "canonical_envelope": "eyJhY3Rpb24iOiJhcHBseSIsImNhbm9uaWNhbF9wb2xpY3lfc2hhMjU2IjoiM05WOGJkUy1OZHBaVGFXSmpsNjYwNEdfOURaX1ltSUc4UmpvYlMxamlJVSIsImNvbnRyb2xfcHJvdG9jb2xfbWF4IjoxLCJjb250cm9sX3Byb3RvY29sX21pbiI6MSwiZG9tYWluIjoiY2RuY2EtcGxhdGZvcm0tcG9saWN5LXNpZ25hdHVyZS92MSIsImV4cGlyZXNfYXQiOjE3ODczNTY4MDAsImluc3RhbGxhdGlvbl9pZCI6IjAxOGY5YzA4LWJjN2UtNzhlOS05OTg0LTk1ZWM5ZTY5MGJjZCIsImtleV9pZCI6InBsYXRmb3JtLXNpZ25pbmctMjAyNi0wNyIsInJvbGxiYWNrX29mIjpudWxsLCJzY2hlbWEiOiJwbGF0Zm9ybS1wb2xpY3kvdjEiLCJzY29wZV9raW5kIjoiaW5zdGFsbGF0aW9uIiwic2NvcGVfcmV2aXNpb24iOjQsInNpZ25lZF9hdCI6MTc4NDY3ODM5MCwic3VwZXJzZWRlcyI6IjAxOGY5YzMwLTc4ZGMtN2Q5OC1iNDRiLWM0ZWU0NzhkNzdjNyIsInRhcmdldF9yZXZpc2lvbl9pZCI6IjAxOGY5YzNlLTQ1ODctN2QyMS1hNjJmLThhMmRmMGI2MTk2ZCIsInZhbGlkX2Zyb20iOjE3ODQ2Nzg0MDB9",
+  "signature": "cXQREIAJuCW8ILL8Zz9F4ZHbflW6Z3-m24NEt0fKgU53BUNvJShhGy0we9rslKPDPEFTBUU_s0-j_RGMOK4cAw",
+  "signed_target": "eyJlbnZlbG9wZSI6eyJkb21haW4iOiJjZG5jYS1wbGF0Zm9ybS1wb2xpY3ktc2lnbmF0dXJlL3YxIiwidGFyZ2V0X3JldmlzaW9uX2lkIjoiMDE4ZjljM2UtNDU4Ny03ZDIxLWE2MmYtOGEyZGYwYjYxOTZkIiwiYWN0aW9uIjoiYXBwbHkiLCJzY2hlbWEiOiJwbGF0Zm9ybS1wb2xpY3kvdjEiLCJzY29wZV9raW5kIjoiaW5zdGFsbGF0aW9uIiwiaW5zdGFsbGF0aW9uX2lkIjoiMDE4ZjljMDgtYmM3ZS03OGU5LTk5ODQtOTVlYzllNjkwYmNkIiwic2NvcGVfcmV2aXNpb24iOjQsInNpZ25lZF9hdCI6MTc4NDY3ODM5MCwidmFsaWRfZnJvbSI6MTc4NDY3ODQwMCwiZXhwaXJlc19hdCI6MTc4NzM1NjgwMCwiY29udHJvbF9wcm90b2NvbF9taW4iOjEsImNvbnRyb2xfcHJvdG9jb2xfbWF4IjoxLCJjYW5vbmljYWxfcG9saWN5X3NoYTI1NiI6IjNOVjhiZFMtTmRwWlRhV0pqbDY2MDRHXzlEWl9ZbUlHOFJqb2JTMWppSVUiLCJzdXBlcnNlZGVzIjoiMDE4ZjljMzAtNzhkYy03ZDk4LWI0NGItYzRlZTQ3OGQ3N2M3Iiwicm9sbGJhY2tfb2YiOm51bGwsImtleV9pZCI6InBsYXRmb3JtLXNpZ25pbmctMjAyNi0wNyJ9LCJwb2xpY3kiOnsic2NoZW1hIjoicGxhdGZvcm0tcG9saWN5L3YxIiwibWluaW11bV9jb250cm9sX3ZlcnNpb24iOiIxLjQuMCIsImJsb2NrZWRfY29udHJvbF92ZXJzaW9ucyI6WyIxLjQuMSIsIjEuNC4yIl0sImFsbG93ZWRfcmVsZWFzZV9jaGFubmVscyI6WyJsdHMiLCJzdGFibGUiXSwicGx1Z2luX21hcmtldCI6eyJlbmFibGVkIjp0cnVlLCJ0cnVzdGVkX2NhdGFsb2dfaWRzIjpbImNkbmNhLW9mZmljaWFsIl19fSwic2lnbmF0dXJlIjoiY1hRUkVJQUp1Q1c4SUxMOFp6OUY0WkhiZmxXNlozLW0yNE5FdDBmS2dVNTNCVU52SlNoaEd5MHdlOXJzbEtQRFBFRlRCVVVfczAtal9SR01PSzRjQXcifQ",
+  "resolve": {
+    "request": {
+      "schema": "platform-policy.resolve-request/v1",
+      "request_id": "0190-resolve-0001",
+      "installation_id": "018f9c08-bc7e-78e9-9984-95ec9e690bcd",
+      "requested_at": 1784678460,
+      "control_version": "1.4.0",
+      "control_protocol_version": 1,
+      "known_global_revision": 3,
+      "known_installation_revision": 1,
+      "active_target_revision_id": "018f9c3e-4587-7d21-a62f-8a2df0b6196d",
+      "active_policy_sha256": "3NV8bdS-NdpZTaWJjl6604G_9DZ_YmIG8RjobS1jiIU",
+      "cursor": "opaque-server-cursor",
+      "known_etag": "opaque-server-etag"
+    },
+    "proof_message": "BWa3C3cH5ea715GdxtkCEmJaUa-ayf8euZkyGWZOdhY",
+    "proof": "3H1d-PfDNb0v1sUFJb5vVziMTZs8VFrhbo8lPcH6Pt6WmNwXU-Z9j8UT2B95d7GzQx2bmrTlyJY_Z3G-NfKdCA"
+  },
+  "acknowledgement": {
+    "request": {
+      "schema": "platform-policy.ack-request/v1",
+      "request_id": "0190-ack-0001",
+      "installation_id": "018f9c08-bc7e-78e9-9984-95ec9e690bcd",
+      "requested_at": 1784678470,
+      "target_revision_id": "018f9c3e-4587-7d21-a62f-8a2df0b6196d",
+      "scope_kind": "installation",
+      "scope_revision": 4,
+      "canonical_policy_sha256": "3NV8bdS-NdpZTaWJjl6604G_9DZ_YmIG8RjobS1jiIU",
+      "status": "rejected",
+      "error_code": "invalid_signature",
+      "observed_at": 1784678469
+    },
+    "proof_message": "RyL1snkPc_5KkEPbxYhbzKHcbohMeNOFDMSwglPNLv8",
+    "proof": "e80ay9YxK4gqs9YvPAKCRjSf04Oylxg6qt8bUdUVX8APXAFIS_JDzQR5I077Pd_qvBIt-RVkQyTIz2ioJeN5Bg"
+  }
+}

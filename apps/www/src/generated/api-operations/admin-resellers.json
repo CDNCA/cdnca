@@ -1,0 +1,334 @@
+{
+ "id": "admin-resellers",
+ "prefix": "/v1/admin/resellers",
+ "operations": [
+  {
+   "operation_id": "listResellers",
+   "method": "GET",
+   "path": "/v1/admin/resellers",
+   "summary": "List reseller profiles",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Every reseller, active first.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ResellerProfile>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getReseller",
+   "method": "GET",
+   "path": "/v1/admin/resellers/{scope_id}",
+   "summary": "Read a reseller profile",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The profile.",
+     "fields": [
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / suspended",
+       "required": true
+      },
+      {
+       "name": "customer_limit",
+       "type": "integer | null",
+       "required": true
+      },
+      {
+       "name": "customer_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "wholesale_price_list",
+       "type": "string",
+       "required": true,
+       "description": "Wholesale price list the reseller is charged by."
+      },
+      {
+       "name": "prepaid_account_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true,
+       "description": "Prepaid balance account: the reseller's own tenant_liability billing account (id = scope_id), bound when the reseller is opened. Top up or adjust it with POST /v1/admin/billing/adjustments."
+      },
+      {
+       "name": "low_balance_minor",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Alert when the prepaid balance falls below (fen); 0 = off."
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "suspended_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "putReseller",
+   "method": "PUT",
+   "path": "/v1/admin/resellers/{scope_id}",
+   "summary": "Open a tenant as a reseller, suspend or resume it, set its parameters",
+   "auth": [
+    "bearer"
+   ],
+   "description": "revision 0 opens the tenant as a reseller (status must be active); otherwise revision is the current one. An active reseller's tenant_owner role holds reseller.packages.manage, reseller.customers.manage and reseller.customers.read; suspending takes them away (customers and sold subscriptions stay). A tenant under a reseller cannot become one (422 reseller_one_level). Prepaid wholesale: each order of the reseller's package charges its wholesale cost W (by wholesale_price_list) from the prepaid balance; when an order takes the balance below low_balance_minor the reseller is notified (reseller.prepaid.low_balance).",
+   "permissions": [
+    "identity.users.manage"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "status",
+      "type": "string: active / suspended",
+      "required": true
+     },
+     {
+      "name": "customer_limit",
+      "type": "integer | null",
+      "description": "null = unlimited"
+     },
+     {
+      "name": "wholesale_price_list",
+      "type": "string"
+     },
+     {
+      "name": "low_balance_minor",
+      "type": "integer(int64)"
+     },
+     {
+      "name": "revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The profile after the write.",
+     "fields": [
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / suspended",
+       "required": true
+      },
+      {
+       "name": "customer_limit",
+       "type": "integer | null",
+       "required": true
+      },
+      {
+       "name": "customer_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "wholesale_price_list",
+       "type": "string",
+       "required": true,
+       "description": "Wholesale price list the reseller is charged by."
+      },
+      {
+       "name": "prepaid_account_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true,
+       "description": "Prepaid balance account: the reseller's own tenant_liability billing account (id = scope_id), bound when the reseller is opened. Top up or adjust it with POST /v1/admin/billing/adjustments."
+      },
+      {
+       "name": "low_balance_minor",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Alert when the prepaid balance falls below (fen); 0 = off."
+      },
+      {
+       "name": "currency",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "suspended_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "The request is well formed but breaks a business rule (error.code names it)."
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,56 @@
+{
+ "installation_public_key": "IVL40Zt5HSRFMkLhXy6rbLfP-ntqXtMAl5YOBpiB2xI",
+ "report": {
+  "schema": "cdnca.security-custom-rule-report/v2",
+  "installation_id": "00000000-0000-4000-8000-0000000000a1",
+  "sequence": 1,
+  "observed_at": 1900000002,
+  "report": {
+   "waf_policies": [],
+   "cc_rule_groups": [
+    {
+     "default_action": "allow",
+     "description": "",
+     "enabled": true,
+     "id": "00000000-0000-4000-8000-0000000000e1",
+     "name": "自定义规则组",
+     "owner_hash": "39609cc7d5d7c6de28302904d78c1be721177e337f8f0aa60bc8732a15b764bc",
+     "rules": [],
+     "scope_id": "00000000-0000-4000-8000-0000000000d1",
+     "version": 1
+    }
+   ],
+   "cc_matchers": [
+    {
+     "enabled": true,
+     "field": "path",
+     "id": "00000000-0000-4000-8000-0000000000e2",
+     "name": "m",
+     "operator": "prefix",
+     "owner_hash": "39609cc7d5d7c6de28302904d78c1be721177e337f8f0aa60bc8732a15b764bc",
+     "values": [
+      "/api"
+     ],
+     "version": 1
+    }
+   ],
+   "cc_filters": [
+    {
+     "enabled": true,
+     "id": "00000000-0000-4000-8000-0000000000e3",
+     "name": "f",
+     "owner_hash": "39609cc7d5d7c6de28302904d78c1be721177e337f8f0aa60bc8732a15b764bc",
+     "parameters": {
+      "max_req": 10
+     },
+     "type": "req_rate",
+     "version": 1
+    }
+   ]
+  },
+  "request_id": "00000000-0000-4000-8000-0000000000f9",
+  "signature": "Et3w5A75GFmVYmjBoM5xeo0CFS-eLNpEI95G8PzW8op5AYbhCJvZykhTQUBS91iIcD9dPwviysxLlpnRGQlsCA"
+ },
+ "report_digest": "79c2abb53670a1e7b916eb24e3d458aab1337b02700ba616394a0fbd5953c13c",
+ "owner_hash": "39609cc7d5d7c6de28302904d78c1be721177e337f8f0aa60bc8732a15b764bc"
+}

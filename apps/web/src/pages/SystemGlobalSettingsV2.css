@@ -1,0 +1,321 @@
+/* redesign-a: 系统配置（/sys/setting）外壳与系统配置页签（artifacts/redesign-a/DESIGN-system-settings.md）.
+   Every rule sits under the new outer root .sys-setting-v2, so the base
+   declarations in SystemGlobalSettingsPage.css stay as they were
+   (DefaultLookLock). Colors come from the shared --cdnca-* variables only. */
+
+/* ---- shell: soft panel, white section cards (all seven tabs) ---- */
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+  padding: 16px 20px 0;
+  background: var(--cdnca-color-bg-soft);
+  border-color: var(--cdnca-color-border-card);
+  border-radius: 6px;
+  overflow-x: visible;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs {
+  margin: 0;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs > .ant-tabs-nav {
+  margin: -16px -20px 16px;
+  padding: 0 20px;
+  background: var(--cdnca-color-bg-container);
+  border-radius: 6px 6px 0 0;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-tab-scope {
+  max-width: none !important;
+  padding: 10px 16px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-left: 3px solid var(--cdnca-color-primary);
+  border-radius: 6px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-tab-scope .ant-alert-icon {
+  display: none;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-tab-scope .ant-alert-message {
+  font-size: 14px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-tab-scope .ant-alert-description {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 0 16px;
+  padding: 4px 12px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-btn {
+  height: 36px;
+  border-radius: 0;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-btn.is-active {
+  color: var(--cdnca-color-primary);
+  background: transparent;
+  box-shadow: inset 0 -2px 0 var(--cdnca-color-primary);
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card {
+  margin: 0 0 16px;
+  padding: 20px 24px 8px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2,
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title {
+  margin: 0 0 16px;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2::before,
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title::before {
+  display: block;
+  width: 3px;
+  height: 14px;
+  margin-right: 8px;
+  background: var(--cdnca-color-primary);
+  border-radius: 2px;
+  content: '';
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2::after,
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title::after {
+  display: none;
+  content: none;
+}
+
+/* 系统信息 / 品牌资源 titles were visually hidden behind the section nav; the cards need them now. */
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page [data-testid='system-settings-baseline-system'] .system-settings-system-info > h2,
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page [data-testid='system-settings-baseline-system'] .system-settings-system-brand > h2 {
+  position: static;
+  width: 100%;
+  height: auto;
+  margin: 0 0 16px;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card h2:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 4px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card.sys-setting-v2-impact {
+  border-left: 3px solid var(--cdnca-color-warning);
+}
+
+.sys-setting-v2 .sys-setting-v2-impact-note {
+  color: var(--cdnca-color-warning);
+  font-weight: 500;
+}
+
+.sys-setting-v2 .sys-setting-v2-theme-banner {
+  max-width: 840px;
+  margin-bottom: 16px;
+}
+
+/* ---- 当前生效 summary ---- */
+.sys-setting-v2 .sys-setting-v2-summary {
+  margin: 0 0 16px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.sys-setting-v2 .sys-setting-v2-summary > ul {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(150px, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sys-setting-v2 .sys-setting-v2-summary li {
+  min-width: 0;
+  border-left: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.sys-setting-v2 .sys-setting-v2-summary li:first-child {
+  border-left: 0;
+}
+
+.sys-setting-v2 .sys-setting-v2-summary button {
+  display: flex;
+  width: 100%;
+  min-height: 64px;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 16px;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.sys-setting-v2 .sys-setting-v2-summary button:hover {
+  background: var(--cdnca-color-bg-hover);
+}
+
+.sys-setting-v2 .sys-setting-v2-summary button:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: -2px;
+}
+
+.sys-setting-v2 .sys-setting-v2-summary-label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.sys-setting-v2 .sys-setting-v2-summary-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sys-setting-v2 .sys-setting-v2-summary-value.is-warning {
+  color: var(--cdnca-color-warning);
+}
+
+.sys-setting-v2 .sys-setting-v2-summary-value.is-success {
+  color: var(--cdnca-color-success);
+}
+
+.sys-setting-v2 .sys-setting-v2-summary-value.is-off {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.sys-setting-v2 .sys-setting-v2-summary-value .ant-tag {
+  margin: 0;
+  font-weight: 400;
+}
+
+/* ---- 套餐开关卡（own markup, not Form.Item: the base page forces label/control widths with !important） ---- */
+.sys-setting-v2 .sys-setting-v2-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle {
+  display: flex;
+  width: 220px;
+  min-height: 64px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle-title {
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle-state {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle.is-on {
+  background: var(--cdnca-color-primary-bg);
+  border-color: var(--cdnca-color-primary);
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle.is-impact {
+  background: var(--cdnca-color-warning-bg);
+  border-color: var(--cdnca-color-warning);
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle.is-on .sys-setting-v2-toggle-state {
+  color: var(--cdnca-color-primary);
+}
+
+.sys-setting-v2 .sys-setting-v2-toggle.is-impact .sys-setting-v2-toggle-state {
+  color: var(--cdnca-color-warning);
+}
+
+/* ---- 底部自动保存条 ---- */
+.sys-setting-v2 .sys-setting-v2-savebar {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 -20px;
+  padding: 10px 20px;
+  color: var(--cdnca-color-text-secondary);
+  background: var(--cdnca-color-bg-container);
+  border-top: 1px solid var(--cdnca-color-border-card);
+  border-radius: 0 0 6px 6px;
+  transition: background-color 150ms ease;
+}
+
+.sys-setting-v2 .sys-setting-v2-savebar > .ant-btn {
+  margin-left: auto;
+}
+
+.sys-setting-v2 .sys-setting-v2-savebar.is-dirty {
+  color: var(--cdnca-color-title);
+  background: var(--cdnca-color-warning-bg);
+}
+
+@media (max-width: 1199px) {
+  .sys-setting-v2 .sys-setting-v2-summary > ul {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sys-setting-v2 .sys-setting-v2-summary button,
+  .sys-setting-v2 .sys-setting-v2-savebar,
+  .sys-setting-v2 .sys-setting-v2-toggle {
+    transition: none;
+  }
+}

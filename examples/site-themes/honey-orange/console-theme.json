@@ -1,0 +1,18 @@
+{
+  "schema": "cdnca.theme/v1",
+  "id": "market.acme.dev.honey-orange",
+  "version": "1.0.0",
+  "name": { "zh-CN": "蜜橙", "en-US": "Honey Orange" },
+  "description": { "zh-CN": "浅色侧栏、橙色主色的用户端外观" },
+  "tokens": {
+    "colorPrimary": "#f97316",
+    "colorLink": "#c2410c",
+    "colorLinkHover": "#f97316",
+    "colorBgLayout": "#fffaf5",
+    "borderRadius": 8
+  },
+  "tokens_by_role": {
+    "user": { "colorSidebarDark": "#292524" }
+  },
+  "layout_slots": { "login_layout": "centered", "sidebar": "light", "look": "classic", "motion": "subtle" }
+}

@@ -1,0 +1,430 @@
+{
+ "id": "site-defaults",
+ "prefix": "/v1/site-defaults",
+ "operations": [
+  {
+   "operation_id": "listSiteDefaults",
+   "method": "GET",
+   "path": "/v1/site-defaults",
+   "summary": "网站列表 > 默认设置 (the caller's defaults for new sites)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.read. A tenant sees only its own scope. Defaults fill the fields a new site's create request leaves out; group rows win over global ones; existing sites are never changed.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "setting_name",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "enabled",
+     "in": "query",
+     "type": "boolean"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<SiteUserDefault>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "createSiteDefault",
+   "method": "POST",
+   "path": "/v1/site-defaults",
+   "summary": "Add a site default",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and Idempotency-Key. 409 site_default_conflict: the setting already has a default in the same scope (global, or the same group).",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)",
+      "description": "platform only"
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)",
+      "description": "platform only"
+     },
+     {
+      "name": "setting_name",
+      "type": "string",
+      "required": true,
+      "description": "Ports are space separated; balance_way is round_robin, ip_hash, url_hash, least_conn or random; backend_https_port 1-65535; ups_keepalive_timeout seconds 1-300; cc_ban_seconds 1-86400 and cc_pass_seconds 60-604800 (filled into a new CC policy that names none); dns_provider is the ID of a verified DNS account of the scope (checked when saved; a create that names none uses it when the creator has dns.manage, and skips the records if it is no longer usable); cc_policy, waf_policy and acl_policy are the ID of one of the owner's own rule libraries of that kind (not a subscribed one; checked when saved), copied into a library of the new site's own and bound to it in the create (later changes of the library or the default leave existing sites alone; a library gone by then, or a package without the feature, skips the copy); block_proxy 1 adds rules blocking requests with a Via, X-Forwarded-For or Forwarded header to the new site's WAF library (identified by proxy headers: users behind a corporate proxy are blocked too); req_header is one \"Name: value\" per line (up to 8192 characters), set on requests to the origin; post_size_limit is the upload limit in MB 1-1024 (client_max_body_size). req_header and post_size_limit become the new site's HTTP policy when the creator has http_policies.manage; http2, http3 and ssl_prefer_server_ciphers fill the new site's http2_enabled, http3_enabled and tls_prefer_server_ciphers; proxy_cache is a cache policy document (JSON, the document of /v1/cache-policies/{site_id}; up to 65536 characters) written as the new site's first cache policy revision in the create; cond_origin is {\"routes\": [...]} of conditional origin rules (as the site's conditional origin document) whose pool_id is the placeholder \"@default\", replaced by the new site's own default origin pool (no origin addresses are stored); block_region is abrord_inc (block outside mainland China, Hong Kong, Macao and Taiwan included), abrord_no_inc (outside CN/HK/MO/TW), china_inc (CN, HK, MO and TW), china_not_inc (CN only) or none, the competitor's values: a preset adds one WAF rule on the client's country (by the node's IP intelligence library) to the new site's WAF library as block_proxy does, none adds nothing; ssl_cipher_preset is modern, compatible, legacy or custom; ssl_cipher_suites is the custom preset's colon-separated suite list (the same whitelist and rules as the site's tls_cipher_suites), and a custom ssl_cipher_preset applies to a new site only together with it; the rest are 1 (on) or 0 (off)."
+     },
+     {
+      "name": "setting_value",
+      "type": "string",
+      "required": true,
+      "description": "at most 256, req_header 8192, proxy_cache and cond_origin 65536"
+     },
+     {
+      "name": "scope_name",
+      "type": "string: global / group"
+     },
+     {
+      "name": "group_id",
+      "type": "string(uuid) | null(uuid)",
+      "description": "required when scope_name is group"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "setting_name",
+       "type": "string",
+       "required": true,
+       "description": "Ports are space separated; balance_way is round_robin, ip_hash, url_hash, least_conn or random; backend_https_port 1-65535; ups_keepalive_timeout seconds 1-300; cc_ban_seconds 1-86400 and cc_pass_seconds 60-604800 (filled into a new CC policy that names none); dns_provider is the ID of a verified DNS account of the scope (checked when saved; a create that names none uses it when the creator has dns.manage, and skips the records if it is no longer usable); cc_policy, waf_policy and acl_policy are the ID of one of the owner's own rule libraries of that kind (not a subscribed one; checked when saved), copied into a library of the new site's own and bound to it in the create (later changes of the library or the default leave existing sites alone; a library gone by then, or a package without the feature, skips the copy); block_proxy 1 adds rules blocking requests with a Via, X-Forwarded-For or Forwarded header to the new site's WAF library (identified by proxy headers: users behind a corporate proxy are blocked too); req_header is one \"Name: value\" per line (up to 8192 characters), set on requests to the origin; post_size_limit is the upload limit in MB 1-1024 (client_max_body_size). req_header and post_size_limit become the new site's HTTP policy when the creator has http_policies.manage; http2, http3 and ssl_prefer_server_ciphers fill the new site's http2_enabled, http3_enabled and tls_prefer_server_ciphers; proxy_cache is a cache policy document (JSON, the document of /v1/cache-policies/{site_id}; up to 65536 characters) written as the new site's first cache policy revision in the create; cond_origin is {\"routes\": [...]} of conditional origin rules (as the site's conditional origin document) whose pool_id is the placeholder \"@default\", replaced by the new site's own default origin pool (no origin addresses are stored); block_region is abrord_inc (block outside mainland China, Hong Kong, Macao and Taiwan included), abrord_no_inc (outside CN/HK/MO/TW), china_inc (CN, HK, MO and TW), china_not_inc (CN only) or none, the competitor's values: a preset adds one WAF rule on the client's country (by the node's IP intelligence library) to the new site's WAF library as block_proxy does, none adds nothing; ssl_cipher_preset is modern, compatible, legacy or custom; ssl_cipher_suites is the custom preset's colon-separated suite list (the same whitelist and rules as the site's tls_cipher_suites), and a custom ssl_cipher_preset applies to a new site only together with it; the rest are 1 (on) or 0 (off)."
+      },
+      {
+       "name": "setting_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_name",
+       "type": "string: global / group",
+       "required": true
+      },
+      {
+       "name": "group_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "group_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateSiteDefault",
+   "method": "PATCH",
+   "path": "/v1/site-defaults/{id}",
+   "summary": "Change a site default's value or enable / disable it",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and Idempotency-Key; another tenant's ID is 404.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_version",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "setting_value",
+      "type": "string",
+      "description": "at most 256, req_header 8192, proxy_cache and cond_origin 65536"
+     },
+     {
+      "name": "enabled",
+      "type": "boolean"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "setting_name",
+       "type": "string",
+       "required": true,
+       "description": "Ports are space separated; balance_way is round_robin, ip_hash, url_hash, least_conn or random; backend_https_port 1-65535; ups_keepalive_timeout seconds 1-300; cc_ban_seconds 1-86400 and cc_pass_seconds 60-604800 (filled into a new CC policy that names none); dns_provider is the ID of a verified DNS account of the scope (checked when saved; a create that names none uses it when the creator has dns.manage, and skips the records if it is no longer usable); cc_policy, waf_policy and acl_policy are the ID of one of the owner's own rule libraries of that kind (not a subscribed one; checked when saved), copied into a library of the new site's own and bound to it in the create (later changes of the library or the default leave existing sites alone; a library gone by then, or a package without the feature, skips the copy); block_proxy 1 adds rules blocking requests with a Via, X-Forwarded-For or Forwarded header to the new site's WAF library (identified by proxy headers: users behind a corporate proxy are blocked too); req_header is one \"Name: value\" per line (up to 8192 characters), set on requests to the origin; post_size_limit is the upload limit in MB 1-1024 (client_max_body_size). req_header and post_size_limit become the new site's HTTP policy when the creator has http_policies.manage; http2, http3 and ssl_prefer_server_ciphers fill the new site's http2_enabled, http3_enabled and tls_prefer_server_ciphers; proxy_cache is a cache policy document (JSON, the document of /v1/cache-policies/{site_id}; up to 65536 characters) written as the new site's first cache policy revision in the create; cond_origin is {\"routes\": [...]} of conditional origin rules (as the site's conditional origin document) whose pool_id is the placeholder \"@default\", replaced by the new site's own default origin pool (no origin addresses are stored); block_region is abrord_inc (block outside mainland China, Hong Kong, Macao and Taiwan included), abrord_no_inc (outside CN/HK/MO/TW), china_inc (CN, HK, MO and TW), china_not_inc (CN only) or none, the competitor's values: a preset adds one WAF rule on the client's country (by the node's IP intelligence library) to the new site's WAF library as block_proxy does, none adds nothing; ssl_cipher_preset is modern, compatible, legacy or custom; ssl_cipher_suites is the custom preset's colon-separated suite list (the same whitelist and rules as the site's tls_cipher_suites), and a custom ssl_cipher_preset applies to a new site only together with it; the rest are 1 (on) or 0 (off)."
+      },
+      {
+       "name": "setting_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_name",
+       "type": "string: global / group",
+       "required": true
+      },
+      {
+       "name": "group_id",
+       "type": "string(uuid) | null(uuid)",
+       "required": true
+      },
+      {
+       "name": "group_name",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "409",
+     "description": "Domain, version, idempotency, website lock-state, or origin-section conflict."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteSiteDefault",
+   "method": "DELETE",
+   "path": "/v1/site-defaults/{id}",
+   "summary": "Delete a site default",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires sites.manage and Idempotency-Key; another tenant's ID is 404.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable per-actor key. Reuse with different normalized input returns 409 idempotency_conflict."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "400",
+     "description": "Invalid JSON, field, or query input."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "The principal lacks sites.read or sites.manage."
+    },
+    {
+     "status": "404",
+     "description": "The site is absent, deleted, or outside the tenant scope."
+    },
+    {
+     "status": "500",
+     "description": "The operation failed without exposing internal details."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,694 @@
+{
+ "id": "admin-account",
+ "prefix": "/v1/admin/account",
+ "operations": [
+  {
+   "operation_id": "listAccountOrderUsers",
+   "method": "GET",
+   "path": "/v1/admin/account/order-users",
+   "summary": "Search active users for order entry",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform administrators only (billing.adjustments.manage); searches active tenant users for order entry.",
+   "params": [
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Matching active users",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AccountOrderUser>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request fields"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Required permission is absent"
+    },
+    {
+     "status": "503",
+     "description": "Account order service unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "createAccountOrder",
+   "method": "POST",
+   "path": "/v1/admin/account/orders",
+   "summary": "Enter an audited compatibility order record",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform administrators only (live platform session with billing.adjustments.manage); tenants have no order-record write API. This does not mutate package, recharge, payment, or balance-ledger facts.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "user_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "type",
+      "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change",
+      "required": true
+     },
+     {
+      "name": "note",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "original_amount_minor",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "paid_amount_minor",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "payment_method",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "merchant_order_number",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "transaction_number",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "status",
+      "type": "string: paid / unpaid",
+      "required": true
+     },
+     {
+      "name": "created_at",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "paid_at",
+      "type": "string(date-time) | null",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created record",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Positive tenant-scope identifier allocated independently for each source resource type. Use source plus display_id as the visible identity; UUID remains canonical for links and writes."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_display_id",
+       "type": "string",
+       "required": true,
+       "description": "Stable short identifier of the order owner. UUID remains canonical for authorization and writes."
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "user_display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "source",
+       "type": "string: manual / package / addon / recharge",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change",
+       "required": true
+      },
+      {
+       "name": "note",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "original_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "paid_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "details",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "payment_method",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "merchant_order_number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "transaction_number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: paid / unpaid",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "paid_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "editable",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request fields"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Required permission is absent"
+    },
+    {
+     "status": "409",
+     "description": "Revision or idempotency conflict"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be application/json"
+    },
+    {
+     "status": "503",
+     "description": "Account order service unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "updateAccountOrder",
+   "method": "PATCH",
+   "path": "/v1/admin/account/orders/{id}",
+   "summary": "Edit an audited compatibility order record",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform administrators only (billing.adjustments.manage). Only records whose source is manual are editable. Package and recharge facts remain immutable.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "user_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "type",
+      "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change",
+      "required": true
+     },
+     {
+      "name": "note",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "original_amount_minor",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "paid_amount_minor",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "payment_method",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "merchant_order_number",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "transaction_number",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "status",
+      "type": "string: paid / unpaid",
+      "required": true
+     },
+     {
+      "name": "created_at",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "paid_at",
+      "type": "string(date-time) | null",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated record",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Positive tenant-scope identifier allocated independently for each source resource type. Use source plus display_id as the visible identity; UUID remains canonical for links and writes."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_display_id",
+       "type": "string",
+       "required": true,
+       "description": "Stable short identifier of the order owner. UUID remains canonical for authorization and writes."
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "user_display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "source",
+       "type": "string: manual / package / addon / recharge",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change",
+       "required": true
+      },
+      {
+       "name": "note",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "original_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "paid_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "details",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "payment_method",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "merchant_order_number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "transaction_number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: paid / unpaid",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "paid_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "editable",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request fields"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Required permission is absent"
+    },
+    {
+     "status": "404",
+     "description": "Record not found"
+    },
+    {
+     "status": "409",
+     "description": "Revision or idempotency conflict"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be application/json"
+    },
+    {
+     "status": "503",
+     "description": "Account order service unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteAccountOrder",
+   "method": "DELETE",
+   "path": "/v1/admin/account/orders/{id}",
+   "summary": "Archive an audited compatibility order record",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Archives the editable head while retaining its append-only event, receipt, and audit facts.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Archived record",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Positive tenant-scope identifier allocated independently for each source resource type. Use source plus display_id as the visible identity; UUID remains canonical for links and writes."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "user_display_id",
+       "type": "string",
+       "required": true,
+       "description": "Stable short identifier of the order owner. UUID remains canonical for authorization and writes."
+      },
+      {
+       "name": "username",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "user_display_name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "source",
+       "type": "string: manual / package / addon / recharge",
+       "required": true
+      },
+      {
+       "name": "type",
+       "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change",
+       "required": true
+      },
+      {
+       "name": "note",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "original_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "paid_amount_minor",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "details",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "payment_method",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "merchant_order_number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "transaction_number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: paid / unpaid",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "paid_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "editable",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request fields"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Required permission is absent"
+    },
+    {
+     "status": "404",
+     "description": "Record not found"
+    },
+    {
+     "status": "409",
+     "description": "Revision or idempotency conflict"
+    },
+    {
+     "status": "503",
+     "description": "Account order service unavailable"
+    }
+   ]
+  }
+ ]
+}

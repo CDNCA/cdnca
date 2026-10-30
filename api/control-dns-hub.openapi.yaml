@@ -1,0 +1,380 @@
+openapi: 3.1.0
+info:
+  title: Tenant DNS hub API (用户端域名解析)
+  version: 1.0.0
+  description: >-
+    ADR 0020 §3. The tenant's own DNS accounts (managed_by=tenant; the platform copy never appears),
+    their hosted domains and the domains' A/AAAA/CNAME/TXT records, read live from the DNS provider.
+    Tenant session only (a platform session gets 403). Another tenant's account, domain or record reads
+    as 404 dns_hub_not_found.
+paths:
+  /v1/dns/hub/domains:
+    get:
+      operationId: listTenantDNSHubDomains
+      summary: Own DNS accounts and one page of their cached hosted domains
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.read]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {name: provider_id, in: query, schema: {type: string, format: uuid}}
+        - {name: q, in: query, description: "domain substring", schema: {type: string, maxLength: 253}}
+        - {name: cursor, in: query, schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      responses:
+        '200':
+          description: Accounts and domains
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DomainPage'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /v1/dns/hub/domains/refresh:
+    post:
+      operationId: refreshTenantDNSHubDomains
+      summary: Re-list hosted domains (each account at most once a minute)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                provider_id: {type: string, format: uuid, description: "omitted = every own account"}
+      responses:
+        '200':
+          description: Per-account outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items: {$ref: '#/components/schemas/RefreshResult'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /v1/dns/hub/domains/{provider_id}/{apex}/records:
+    get:
+      operationId: listTenantDNSHubRecords
+      summary: Live A/AAAA/CNAME/TXT records of a hosted domain
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.read]
+      parameters:
+        - {$ref: '#/components/parameters/ProviderID'}
+        - {$ref: '#/components/parameters/Apex'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {name: type, in: query, schema: {$ref: '#/components/schemas/RecordType'}}
+        - {name: q, in: query, description: "host or value substring", schema: {type: string}}
+      responses:
+        '200':
+          description: Records
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RecordList'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+    post:
+      operationId: createTenantDNSHubRecord
+      summary: Create a record and read it back
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - {$ref: '#/components/parameters/ProviderID'}
+        - {$ref: '#/components/parameters/Apex'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RecordInput'}
+      responses:
+        '201': {$ref: '#/components/responses/Mutation'}
+        '202': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+  /v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}:
+    patch:
+      operationId: updateTenantDNSHubRecord
+      summary: Change a record if it still holds expected
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - {$ref: '#/components/parameters/ProviderID'}
+        - {$ref: '#/components/parameters/Apex'}
+        - {$ref: '#/components/parameters/RecordRef'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/RecordInput'}
+                - {required: [expected]}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '202': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+    delete:
+      operationId: deleteTenantDNSHubRecord
+      summary: Delete a record if it still holds expected
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - {$ref: '#/components/parameters/ProviderID'}
+        - {$ref: '#/components/parameters/Apex'}
+        - {$ref: '#/components/parameters/RecordRef'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected]
+              properties:
+                expected: {$ref: '#/components/schemas/RecordValue'}
+                confirm_managed: {type: boolean, default: false}
+      responses:
+        '200': {$ref: '#/components/responses/Mutation'}
+        '202': {$ref: '#/components/responses/Mutation'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+  /v1/dns/hub/records/batch:
+    post:
+      operationId: batchTenantDNSHubRecords
+      summary: Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    allOf:
+                      - {$ref: '#/components/schemas/RecordInput'}
+                      - type: object
+                        required: [provider_id, apex, action]
+                        properties:
+                          provider_id: {type: string, format: uuid}
+                          apex: {type: string}
+                          action: {type: string, enum: [create, update, delete]}
+                          record_ref: {type: string}
+      responses:
+        '200':
+          description: Per-item results
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [results]
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      required: [index, status, error]
+                      properties:
+                        index: {type: integer}
+                        status: {type: integer}
+                        op_id: {type: string, format: uuid}
+                        state: {type: string, enum: [applied, uncertain]}
+                        record: {$ref: '#/components/schemas/Record'}
+                        error:
+                          oneOf:
+                            - {type: 'null'}
+                            - {$ref: '#/components/schemas/ErrorBody'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    RequestID: {name: X-Request-ID, in: header, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+    ProviderID: {name: provider_id, in: path, required: true, schema: {type: string, format: uuid}}
+    Apex: {name: apex, in: path, required: true, schema: {type: string, maxLength: 253}}
+    RecordRef: {name: record_ref, in: path, required: true, description: "opaque, from a listed record", schema: {type: string}}
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error: {$ref: '#/components/schemas/ErrorBody'}
+    Mutation:
+      description: 200/201 applied (read back); 202 uncertain (sent, not confirmed by read-back; reload the records)
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [op_id, state, record]
+            properties:
+              op_id: {type: string, format: uuid}
+              state: {type: string, enum: [applied, uncertain]}
+              record:
+                oneOf:
+                  - {type: 'null'}
+                  - {$ref: '#/components/schemas/Record'}
+  schemas:
+    RecordType: {type: string, enum: [A, AAAA, CNAME, TXT]}
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [unauthorized, permission_denied, validation_error, invalid_request, unsupported_media_type, request_too_large,
+            dns_hub_not_found, idempotency_conflict, dns_record_changed, dns_record_managed, dns_record_conflict,
+            dns_record_unsupported, dns_provider_error, dns_hub_unavailable]
+        message: {type: string}
+        request_id: {type: string}
+        field: {type: string, description: "validation_error only"}
+        current:
+          description: dns_record_changed only; null = the record no longer exists
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/Record'}
+        managed: {$ref: '#/components/schemas/Managed'}
+        provider_code: {type: string, description: "dns_provider_error only (e.g. rate_limited, credentials_rejected)"}
+        retry_after_seconds: {type: integer}
+    Account:
+      type: object
+      required: [provider_id, name, provider_type, status, last_listed_at, list_error, domain_count, supported_lines, supports_weight, record_types]
+      properties:
+        provider_id: {type: string, format: uuid}
+        name: {type: string}
+        provider_type: {type: string}
+        status: {type: string, enum: [unverified, verified, disabled]}
+        last_listed_at: {type: ['string', 'null'], format: date-time}
+        list_error: {type: string}
+        domain_count: {type: integer}
+        supported_lines: {type: array, items: {type: string}}
+        supports_weight: {type: boolean}
+        record_types: {type: array, items: {$ref: '#/components/schemas/RecordType'}}
+    Domain:
+      type: object
+      required: [provider_id, provider_name, provider_type, apex, record_count, last_listed_at, list_error]
+      properties:
+        provider_id: {type: string, format: uuid}
+        provider_name: {type: string}
+        provider_type: {type: string}
+        apex: {type: string}
+        record_count: {type: ['integer', 'null']}
+        last_listed_at: {type: string, format: date-time}
+        list_error: {type: string}
+    DomainPage:
+      type: object
+      required: [accounts, items, next_cursor]
+      properties:
+        accounts: {type: array, items: {$ref: '#/components/schemas/Account'}}
+        items: {type: array, items: {$ref: '#/components/schemas/Domain'}}
+        next_cursor: {type: string}
+    RefreshResult:
+      type: object
+      required: [provider_id, state, domain_count, error, retry_after_seconds]
+      properties:
+        provider_id: {type: string, format: uuid}
+        state: {type: string, enum: [refreshed, throttled, failed, skipped]}
+        domain_count: {type: integer}
+        error: {type: string}
+        retry_after_seconds: {type: integer}
+    Managed:
+      type: object
+      required: [kind, site_id, site_domain]
+      properties:
+        kind: {type: string, enum: [site_cname, site_auto_dns, cdn_validation, acme_challenge]}
+        site_id: {type: string}
+        site_domain: {type: string}
+    Record:
+      type: object
+      required: [record_ref, name, fqdn, type, value, ttl, line, weight, managed]
+      properties:
+        record_ref: {type: string}
+        name: {type: string, description: "relative host, @ for the domain itself"}
+        fqdn: {type: string}
+        type: {$ref: '#/components/schemas/RecordType'}
+        value: {type: string, description: "CNAME without the trailing dot; TXT unquoted"}
+        ttl: {type: integer}
+        line: {type: string}
+        weight: {type: integer}
+        managed:
+          oneOf:
+            - {type: 'null'}
+            - {$ref: '#/components/schemas/Managed'}
+    RecordList:
+      type: object
+      required: [provider_id, apex, items, skipped]
+      properties:
+        provider_id: {type: string, format: uuid}
+        apex: {type: string}
+        items: {type: array, items: {$ref: '#/components/schemas/Record'}}
+        skipped: {type: integer, description: "listed records the page cannot show (wildcard owners)"}
+    RecordValue:
+      type: object
+      additionalProperties: false
+      required: [name, type, value, ttl]
+      properties:
+        name: {type: string, description: "relative host, @ or empty = the domain itself"}
+        type: {$ref: '#/components/schemas/RecordType'}
+        value: {type: string, description: 'TXT: 1-255 bytes, no control characters, quote or backslash'}
+        ttl: {type: integer, minimum: 1, maximum: 604800}
+        line: {type: string, default: 默认}
+        weight: {type: integer, minimum: 0, maximum: 100, default: 0}
+    RecordInput:
+      allOf:
+        - {$ref: '#/components/schemas/RecordValue'}
+        - type: object
+          properties:
+            expected: {$ref: '#/components/schemas/RecordValue'}
+            confirm_managed: {type: boolean, default: false}

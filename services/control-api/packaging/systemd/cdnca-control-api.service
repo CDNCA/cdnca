@@ -1,0 +1,25 @@
+[Unit]
+Description=CDNCA customer control API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cdnca
+Group=cdnca
+EnvironmentFile=/etc/cdnca/control-api.env
+ExecStart=/opt/cdnca/control-api/current/control-api serve
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=120s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cdnca /var/log/cdnca
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

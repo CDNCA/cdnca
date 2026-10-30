@@ -1,0 +1,107 @@
+.cname-allocations-page {
+  min-width: 0;
+}
+
+.cname-allocations-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+}
+
+.cname-allocations-header .ant-typography {
+  margin: 0;
+}
+
+.cname-allocations-header .ant-typography-title {
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.cname-allocations-header .ant-typography-paragraph {
+  max-width: 720px;
+  margin-top: 4px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.cname-allocations-toolbar {
+  min-height: 32px;
+  margin-bottom: 14px;
+}
+
+.cname-allocations-toolbar .ant-input {
+  width: 280px;
+}
+
+.cname-allocations-toolbar .ant-btn {
+  height: 32px;
+}
+
+.cname-allocations-page > .identity-pagination {
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+
+.cname-allocations-page > .identity-pagination .ant-btn {
+  width: 32px;
+  padding-inline: 0;
+}
+
+.cname-allocations-diagnosis {
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+}
+
+.cname-allocations-diagnosis .ant-typography-title {
+  margin: 0 0 12px;
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.cname-allocations-diagnosis ul {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+@media (max-width: 767px) {
+  .app-main > .identity-page.cname-allocations-page {
+    margin: 24px;
+  }
+
+  .cname-allocations-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cname-allocations-header > .ant-btn {
+    width: 100%;
+  }
+
+  .cname-allocations-toolbar {
+    align-items: stretch;
+  }
+
+  .cname-allocations-toolbar .ant-input,
+  .cname-allocations-toolbar .ant-btn {
+    width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .cname-allocations-page > .identity-pagination {
+    overflow-x: auto;
+  }
+}

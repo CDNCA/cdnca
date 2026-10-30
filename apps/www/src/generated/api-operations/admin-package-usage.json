@@ -1,0 +1,194 @@
+{
+ "id": "admin-package-usage",
+ "prefix": "/v1/admin/package-usage",
+ "operations": [
+  {
+   "operation_id": "queryAdminPackageUsage",
+   "method": "GET",
+   "path": "/v1/admin/package-usage",
+   "summary": "查询指定租户套餐用量",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Optional for platform administrators. When omitted, the control API resolves the subscription's owning tenant from subscription_id before authorizing the usage query."
+    },
+    {
+     "name": "subscription_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "timezone",
+     "in": "query",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "bucket",
+     "in": "query",
+     "type": "string: hour / day",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "使用冻结数据快照计算的套餐用量",
+     "fields": [
+      {
+       "name": "metric_schema_version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "subscription_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "from",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "to",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "timezone",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "bucket",
+       "type": "string: hour / day",
+       "required": true
+      },
+      {
+       "name": "traffic_bytes",
+       "type": "string",
+       "required": true,
+       "description": "七层与四层合计（http_traffic_bytes + l4_traffic_bytes）。"
+      },
+      {
+       "name": "http_traffic_bytes",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "l4_traffic_bytes",
+       "type": "string",
+       "required": true,
+       "description": "四层转发字节；带 site_id 筛选时恒为 0（四层转发不属于网站）。"
+      },
+      {
+       "name": "peak_bandwidth_bps",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "bandwidth_95th_bps",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "connections",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "source_watermark",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "finalized_through",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "delayed",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "series",
+       "type": "array<PackageUsagePoint>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "404",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "408",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "502",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误信封"
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,18 @@
+{
+  "example_only": true,
+  "service_account": {
+    "credential_type": "oauth2_client_credentials",
+    "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+    "token_ttl_seconds": 900
+  },
+  "granted_scopes": [
+    "events.site.read"
+  ],
+  "webhook_subscription": {
+    "event_types": [
+      "io.cdnca.site.v1.updated"
+    ],
+    "endpoint_path": "/webhooks/cdnca/v1",
+    "secret_delivery": "out_of_band_once"
+  }
+}

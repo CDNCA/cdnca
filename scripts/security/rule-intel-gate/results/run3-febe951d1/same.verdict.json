@@ -1,0 +1,97 @@
+{
+  "schema": "cdnca.waf-gate-verdict/v1",
+  "passed": true,
+  "reasons": [],
+  "base_report_sha256": "25631718fd774ebd07fadaac80c74a7dd5a37af5afcd485cc952090b3ba89edd",
+  "candidate_report_sha256": "0cf323a6ecb671531a71a1e4fac05775c989a94388e572d6261b141730f914ff",
+  "standard_pack_id": "system/crs-pl1",
+  "corpus_sha256": "adc530e4a786310e9c23a18b2a4822970a99b9f8df007923b2ca9924635e0189",
+  "samples": 3774,
+  "tiers": [
+    {
+      "pack_id": "system/crs-pl1-log",
+      "name": "仅记录",
+      "base": {
+        "attacks": 3522,
+        "blocked": 0,
+        "benign": 252,
+        "false_positives": 0,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 0,
+        "benign": 252,
+        "false_positives": 0,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl1",
+      "name": "标准防护",
+      "base": {
+        "attacks": 3522,
+        "blocked": 1351,
+        "benign": 252,
+        "false_positives": 29,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 1351,
+        "benign": 252,
+        "false_positives": 29,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl2",
+      "name": "严格防护",
+      "base": {
+        "attacks": 3522,
+        "blocked": 2589,
+        "benign": 252,
+        "false_positives": 53,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 2589,
+        "benign": 252,
+        "false_positives": 53,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl3",
+      "name": "极严格防护",
+      "base": {
+        "attacks": 3522,
+        "blocked": 2671,
+        "benign": 252,
+        "false_positives": 68,
+        "errors": 0,
+        "excluded": 0
+      },
+      "candidate": {
+        "attacks": 3522,
+        "blocked": 2671,
+        "benign": 252,
+        "false_positives": 68,
+        "errors": 0,
+        "excluded": 0
+      },
+      "changed": 0
+    }
+  ],
+  "changes": []
+}

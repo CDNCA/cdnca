@@ -1,0 +1,14 @@
+{
+  "billing_models": ["daily_bundle", "traffic", "bandwidth_95", "bandwidth_daily_peak", "committed_plus_overage"],
+  "settlement_modes": ["direct"],
+  "commission_markets": ["plugin", "node"],
+  "commission_rate_kinds": ["percent", "fixed", "per_unit"],
+  "commission_bases": ["percent_of_charge", "per_subscription_day", "per_node_day", "node_tiers", "per_traffic_gb", "per_p95_mbps"],
+  "commission_per_unit_bases": ["per_subscription_day", "per_node_day", "node_tiers", "per_traffic_gb", "per_p95_mbps"],
+  "plugin_price_kinds": ["free", "one_time", "subscription", "trial"],
+  "holdback_modes": ["holdback", "deposit"],
+  "holdback_forfeit_reasons": ["abrupt_exit", "fraud"],
+  "holdback_deposit_markets": ["plugin", "node"],
+  "benchmark_grades": ["s", "a", "b", "c"],
+  "quality_tiers": ["insufficient", "low", "standard", "high"]
+}

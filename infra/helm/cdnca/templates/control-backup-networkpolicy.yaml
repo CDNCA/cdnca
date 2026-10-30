@@ -1,0 +1,109 @@
+{{- if and .Values.controlBackupNetworkPolicy.enabled (or .Values.controlBackup.enabled .Values.controlRestore.enabled) }}
+{{- if and .Values.controlBackup.enabled (lt (len .Values.controlBackupNetworkPolicy.kubernetesAPI.cidrs) 1) }}
+{{- fail "controlBackupNetworkPolicy.kubernetesAPI.cidrs must identify the Kubernetes API when backup is enabled" }}
+{{- end }}
+{{- if and .Values.controlRestore.enabled (lt (len .Values.controlBackupNetworkPolicy.agentProbe.cidrs) 1) }}
+{{- fail "controlBackupNetworkPolicy.agentProbe.cidrs must identify the HTTPS reconnect endpoint when restore is enabled" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" "control-backup-restore") }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" "control-backup-restore") | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: In
+        values:
+          {{- if .Values.controlBackup.enabled }}
+          - control-backup
+          {{- end }}
+          {{- if .Values.controlRestore.enabled }}
+          - control-restore
+          {{- end }}
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              {{- toYaml .Values.controlBackupNetworkPolicy.dns.namespaceSelector | nindent 14 }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.controlBackupNetworkPolicy.dns.podSelector | nindent 14 }}
+      ports:
+        - {port: 53, protocol: UDP}
+        - {port: 53, protocol: TCP}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.controlBackupNetworkPolicy.postgresql.podSelector | nindent 14 }}
+          {{- with .Values.controlBackupNetworkPolicy.postgresql.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+        {{- range .Values.controlBackupNetworkPolicy.postgresql.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.controlBackupNetworkPolicy.postgresql.port }}
+          protocol: TCP
+    {{- if or (and .Values.controlBackup.enabled .Values.controlBackup.clickhouse.enabled) (and .Values.controlRestore.enabled .Values.controlRestore.clickhouse.enabled) }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.controlBackupNetworkPolicy.clickhouse.podSelector | nindent 14 }}
+          {{- with .Values.controlBackupNetworkPolicy.clickhouse.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+        {{- range .Values.controlBackupNetworkPolicy.clickhouse.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.controlBackupNetworkPolicy.clickhouse.port }}
+          protocol: TCP
+    {{- end }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- toYaml .Values.controlBackupNetworkPolicy.nats.podSelector | nindent 14 }}
+          {{- with .Values.controlBackupNetworkPolicy.nats.namespaceSelector }}
+          namespaceSelector:
+            matchLabels:
+              {{- toYaml . | nindent 14 }}
+          {{- end }}
+        {{- range .Values.controlBackupNetworkPolicy.nats.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.controlBackupNetworkPolicy.nats.port }}
+          protocol: TCP
+    {{- if .Values.controlBackup.enabled }}
+    - to:
+        {{- range .Values.controlBackupNetworkPolicy.kubernetesAPI.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.controlBackupNetworkPolicy.kubernetesAPI.port }}
+          protocol: TCP
+    {{- end }}
+    {{- if .Values.controlRestore.enabled }}
+    - to:
+        {{- range .Values.controlBackupNetworkPolicy.agentProbe.cidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - port: {{ .Values.controlBackupNetworkPolicy.agentProbe.port }}
+          protocol: TCP
+    {{- end }}
+{{- end }}

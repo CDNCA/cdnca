@@ -1,0 +1,105 @@
+{
+ "id": "admin-cache-operation-requests",
+ "prefix": "/v1/admin/cache-operation-requests",
+ "operations": [
+  {
+   "operation_id": "getPlatformCacheWriteReceipt",
+   "method": "GET",
+   "path": "/v1/admin/cache-operation-requests/{idempotency_key}",
+   "summary": "What the server did with a cache write sent with this Idempotency-Key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "For a write whose response was lost (network, timeout, 5xx): accepted with the operation (the new one of a create or re-submit), or rejected with the error code the write was refused with. 404 means the server has no record of the key for the authenticated actor in the scope: the write was not received and may be sent again with the same key and body. Another actor's key is the same 404 (existence is never disclosed). Not-found and permission refusals of the write itself are not kept and also read as 404. Writes nothing.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "idempotency_key",
+     "in": "path",
+     "type": "string",
+     "required": true,
+     "description": "The Idempotency-Key the write was sent with (the batch key of a re-submit)."
+    },
+    {
+     "name": "action",
+     "in": "query",
+     "type": "string: create / retry / cancel / resubmit",
+     "required": true
+    },
+    {
+     "name": "operation_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "The operation a retry, cancel or re-submit acts on; required for those, absent for create."
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Explicit active tenant scope; platform scope is never implied."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The write was decided.",
+     "fields": [
+      {
+       "name": "status",
+       "type": "string: accepted / rejected",
+       "required": true
+      },
+      {
+       "name": "decided_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "operation",
+       "type": "object",
+       "description": "Present when accepted."
+      },
+      {
+       "name": "rejection",
+       "type": "object",
+       "description": "Present when rejected; code is the error code the write was answered with."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  }
+ ]
+}

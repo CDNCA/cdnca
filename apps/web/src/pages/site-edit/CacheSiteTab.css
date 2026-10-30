@@ -1,0 +1,540 @@
+.cache-policy-tab {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  gap: 14px;
+  padding: 16px 20px 24px;
+  overflow-x: clip;
+  color: var(--cdnca-color-text);
+}
+
+.cache-policy-heading,
+.cache-policy-section-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cache-policy-heading h2,
+.cache-policy-section h3,
+.cache-policy-history h3 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.cache-policy-heading p,
+.cache-policy-section-heading p {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cache-policy-loading {
+  display: flex;
+  min-height: 220px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cache-policy-status {
+  min-height: 20px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.cache-policy-section,
+.cache-policy-history {
+  min-width: 0;
+  max-width: 100%;
+  padding: 14px 0 18px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.cache-policy-section > .ant-radio-group {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  margin-top: 12px;
+}
+
+.cache-policy-section .ant-radio-wrapper {
+  max-width: 100%;
+  align-items: flex-start;
+  white-space: normal;
+}
+
+.cache-policy-section .ant-radio-wrapper small {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--cdnca-color-text-secondary);
+  line-height: 18px;
+}
+
+.cache-policy-rules {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cache-policy-rule {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 52px repeat(3, minmax(0, 1fr)) minmax(110px, 0.55fr) max-content;
+  /* start: the browser TTL help text must not push its row's inputs up */
+  align-items: start;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cdnca-color-border-light, #f0f0f0);
+}
+
+.cache-policy-form-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.cache-policy-form-grid > h3 {
+  grid-column: 1 / -1;
+}
+
+.cache-policy-rule label,
+.cache-policy-form-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.cache-policy-rule label > span,
+.cache-policy-form-grid label > span {
+  overflow-wrap: anywhere;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cache-policy-rule .ant-input-number,
+.cache-policy-form-grid .ant-input-number,
+.cache-policy-rule .ant-select,
+.cache-policy-form-grid .ant-select {
+  width: 100%;
+  min-width: 0;
+}
+
+.cache-policy-rule-actions {
+  min-height: 32px;
+}
+
+/* schema v2 action: spans the order column and the next one (52px is too narrow) */
+.cache-policy-rule-action {
+  grid-column: 1 / span 2;
+}
+
+.cache-policy-rule-help {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cache-policy-rule > .cache-policy-rule-actions {
+  margin-top: 22px;
+}
+
+.cache-policy-comparison {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 18px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  background: var(--cdnca-color-table-header);
+  border: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.cache-policy-comparison > strong {
+  grid-column: 1 / -1;
+}
+
+.cache-policy-comparison-panel {
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px;
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.cache-policy-comparison-panel h4 {
+  margin: 0 0 6px;
+  color: var(--cdnca-color-title);
+  font-size: 13px;
+}
+
+.cache-policy-comparison-panel dl {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  margin: 0;
+}
+
+.cache-policy-comparison-panel dl > div {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(88px, 0.45fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.cache-policy-comparison-panel dt,
+.cache-policy-comparison-panel dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.cache-policy-comparison-panel dt {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.cache-policy-comparison-rules {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cache-policy-comparison-rules li {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--cdnca-color-border-light, #f0f0f0);
+}
+
+.cache-policy-history .ant-table-wrapper {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.cache-policy-history .ant-table-cell {
+  overflow-wrap: anywhere;
+}
+
+.cache-policy-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cache-policy-history-detail {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.cache-policy-history-detail code {
+  min-width: 0;
+  max-width: 100%;
+  padding: 10px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  background: var(--cdnca-color-table-header);
+}
+
+@media (max-width: 720px) {
+  .cache-policy-tab {
+    padding: 14px 16px 20px;
+  }
+
+  .cache-policy-heading,
+  .cache-policy-section-heading {
+    flex-direction: column;
+  }
+
+  .cache-policy-heading > .ant-space,
+  .cache-policy-heading > .ant-space .ant-space-item,
+  .cache-policy-heading > .ant-space .ant-btn {
+    max-width: 100%;
+  }
+
+  .cache-policy-rule,
+  .cache-policy-form-grid,
+  .cache-policy-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cache-policy-form-grid > h3 {
+    grid-column: auto;
+  }
+
+  .cache-policy-comparison-panel dl > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .cache-policy-rule-actions {
+    justify-self: start;
+  }
+
+  .cache-policy-rule-action {
+    grid-column: auto;
+  }
+
+  .cache-policy-rule > .cache-policy-rule-actions {
+    margin-top: 0;
+  }
+
+  .cache-policy-history .ant-table-cell {
+    padding-inline: 6px;
+    font-size: 12px;
+  }
+
+  .cache-policy-history-col-created-by,
+  .cache-policy-history-col-request-id {
+    display: none;
+  }
+}
+
+/* 响应头显示缓存状态 (CacheStatusHeaderSwitch), above the cache policy */
+.cache-status-header-row {
+  margin: 16px 20px 0;
+}
+
+/* A Switch in a grid label stretches to the cell width (justify-items: stretch). */
+.cache-policy-form-grid label.cache-policy-switch > .ant-switch {
+  justify-self: start;
+}
+
+/* Layout — "缓存规则 N 条" title line with 新增规则 /
+   快速设置缓存 on the right, a dashed empty state, then 其他设置. */
+.cache-policy-title-line {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cache-policy-title-line > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.cache-policy-empty {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding: 24px 16px;
+  border: 1px dashed var(--cdnca-color-border-secondary);
+  border-radius: var(--cdnca-border-radius);
+  text-align: center;
+}
+
+.cache-policy-empty .ant-empty-description {
+  display: grid;
+  gap: 4px;
+}
+
+.cache-policy-empty .ant-empty-description > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.cache-policy-rules-section {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.cache-policy-mode {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.cache-policy-mode > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cache-policy-mode > .ant-radio-group {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.cache-policy-section .cache-status-header-row {
+  margin-bottom: 12px;
+}
+
+/* 新增缓存规则 dialog (tp-b3c-be) */
+.cache-rule-dialog-section {
+  margin: 16px 0 10px;
+  font-size: 14px;
+  color: var(--cdnca-color-title);
+}
+.cache-rule-dialog-field {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-bottom: 12px;
+}
+.cache-rule-dialog-field > span {
+  padding-top: 5px;
+  color: var(--cdnca-color-text-secondary);
+  text-align: right;
+}
+.cache-rule-dialog-scope-input,
+.cache-rule-dialog-presets {
+  margin-top: 8px;
+}
+.cache-rule-dialog-card {
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+.cache-rule-dialog-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+.cache-rule-dialog-row + .cache-rule-dialog-row {
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+.cache-rule-dialog-row__main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.cache-rule-dialog-row__title {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  font-weight: 600;
+  color: var(--cdnca-color-title);
+}
+.cache-rule-dialog-row__desc,
+.cache-rule-dialog-conditions p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cdnca-color-text-secondary);
+}
+.cache-rule-dialog-help {
+  color: var(--cdnca-color-text-secondary);
+  cursor: help;
+}
+.cache-rule-dialog-toggle {
+  display: flex;
+  justify-content: center;
+  margin: 12px 0 0;
+}
+.cache-rule-dialog-conditions {
+  margin-top: 14px;
+}
+.cache-rule-dialog-conditions__head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.cache-rule-dialog-conditions__head span {
+  font-size: 12px;
+  color: var(--cdnca-color-text-secondary);
+}
+.cache-rule-dialog-conditions__empty {
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px dashed var(--cdnca-color-border);
+  border-radius: 6px;
+}
+.cache-rule-dialog-conditions__list {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+.cache-rule-dialog-conditions__list li {
+  display: grid;
+  grid-template-columns: minmax(0, 140px) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.cache-rule-dialog-conditions__list code {
+  overflow-wrap: anywhere;
+}
+.cache-rule-dialog-conditions__add {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.cache-rule-dialog-conditions__add:has(> .ant-input:nth-of-type(2)) {
+  grid-template-columns: minmax(120px, 160px) minmax(0, 0.7fr) minmax(0, 1fr) auto;
+}
+.cache-rule-dialog-more {
+  display: grid;
+  gap: 10px;
+}
+.cache-rule-dialog-more label {
+  display: grid;
+  gap: 4px;
+}
+.cache-rule-dialog-error {
+  margin-top: 12px;
+}
+@media (max-width: 560px) {
+  .cache-rule-dialog-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .cache-rule-dialog-field > span {
+    text-align: left;
+  }
+  .cache-rule-dialog-conditions__add,
+  .cache-rule-dialog-conditions__add:has(> .ant-input:nth-of-type(2)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Fields with a size and its unit, or a tags select, are a
+   div (one label cannot hold two controls); same layout as the labels. */
+.cache-policy-form-grid .cache-policy-field {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.cache-policy-form-grid .cache-policy-field > span {
+  overflow-wrap: anywhere;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.cache-policy-form-grid .cache-policy-field .ant-space-compact {
+  display: flex;
+  min-width: 0;
+}
+
+.cache-policy-form-grid .cache-policy-field .ant-space-compact > .ant-select {
+  flex: 0 0 80px;
+  width: 80px;
+}

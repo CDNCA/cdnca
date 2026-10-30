@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Analytics Geo Evidence API
+  version: 1.0.0
+paths:
+  /v1/admin/analytics/logs/{kind}/geo-evidence/{event_id}:
+    get:
+      operationId: getPlatformAnalyticsGeoEvidence
+      summary: Reconcile one tenant log fact against a verified GeoIP catalog
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - {$ref: '#/components/parameters/Kind'}
+        - {$ref: '#/components/parameters/EventID'}
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/TenantID'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/NodeID'}
+        - {$ref: '#/components/parameters/ClientIP'}
+        - {$ref: '#/components/parameters/DatabaseVersion'}
+      responses:
+        '200': {$ref: '#/components/responses/OK'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        '504': {$ref: '#/components/responses/Error'}
+  /v1/analytics/logs/{kind}/geo-evidence/{event_id}:
+    get:
+      operationId: getTenantAnalyticsGeoEvidence
+      summary: Reconcile one authenticated tenant log fact against a verified GeoIP catalog
+      description: tenant_id is forbidden; the tenant comes only from authenticated identity. The raw address is never returned.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - {$ref: '#/components/parameters/Kind'}
+        - {$ref: '#/components/parameters/EventID'}
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/NodeID'}
+        - {$ref: '#/components/parameters/ClientIP'}
+        - {$ref: '#/components/parameters/DatabaseVersion'}
+      responses:
+        '200': {$ref: '#/components/responses/OK'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        '504': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+    cdncaApiKey: {type: apiKey, in: header, name: X-API-Key}
+  parameters:
+    Kind: {name: kind, in: path, required: true, schema: {type: string, enum: [access, block]}}
+    EventID: {name: event_id, in: path, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+    From: {name: from, in: query, required: true, schema: {type: string, format: date-time}}
+    To: {name: to, in: query, required: true, schema: {type: string, format: date-time}}
+    TenantID: {name: tenant_id, in: query, required: true, schema: {type: string, format: uuid}}
+    SiteID: {name: site_id, in: query, required: true, schema: {type: string, format: uuid}}
+    NodeID: {name: node_id, in: query, required: true, schema: {type: string, format: uuid}}
+    ClientIP: {name: client_ip, in: query, required: true, schema: {type: string, format: ip}}
+    DatabaseVersion: {name: database_version, in: query, required: false, schema: {type: string, minLength: 1, maxLength: 64}}
+  schemas:
+    Evidence:
+      type: object
+      additionalProperties: false
+      required: [event_id, occurred_at, site_id, node_id, source_country_code, source_carrier, country_code, region, city, carrier, asn, address_family, lookup_reason, resolution, reconciliation, prefix_length, database_version, database_provider, database_sha256, database_published_at, database_effective_at]
+      properties:
+        event_id: {type: string, minLength: 1, maxLength: 128}
+        occurred_at: {type: string, format: date-time}
+        site_id: {type: string, format: uuid}
+        node_id: {type: string, format: uuid}
+        source_country_code: {type: string, maxLength: 8}
+        source_carrier: {type: string, maxLength: 128}
+        country_code: {type: string, minLength: 1, maxLength: 16}
+        region: {type: string, minLength: 1, maxLength: 64}
+        city: {type: string, minLength: 1, maxLength: 128}
+        carrier: {type: string, minLength: 1, maxLength: 128}
+        asn: {type: integer, minimum: 0, maximum: 4294967295}
+        address_family: {type: string, enum: [ipv4, ipv6]}
+        lookup_reason: {type: string, enum: [prefix_match, no_prefix_match]}
+        resolution: {type: string, enum: [matched, unknown]}
+        reconciliation: {type: string, enum: [match, mismatch, unverified]}
+        prefix_length: {type: integer, minimum: 0, maximum: 128}
+        database_version: {type: string, minLength: 1, maxLength: 64}
+        database_provider: {type: string, minLength: 1, maxLength: 128}
+        database_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        database_published_at: {type: string, format: date-time}
+        database_effective_at: {type: string, format: date-time}
+    Response:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: {data: {$ref: '#/components/schemas/Evidence'}}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties: {code: {type: string}, message: {type: string}}
+  responses:
+    OK:
+      description: Verified bounded geo evidence.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Response'}}}
+    Invalid:
+      description: Invalid request.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error:
+      description: Stable error envelope.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

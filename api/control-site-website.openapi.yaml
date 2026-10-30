@@ -1,0 +1,390 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Plane Website API
+  version: 0.1.0
+  description: >-
+    The control plane's public website (官网, apps/control-site): content edited
+    as a draft and published, uploaded images, and the website theme plugins
+    (官网主题插件, cdnca.site-theme/v1) that lay it out. Content is stored apart
+    from plugins: brand and contact rail are shared, navigation, footer and pages
+    are kept per layout renderer (jidun|xmf), so switching plugins never loses
+    content. A layout without content shows the active plugin's seed. Admin
+    routes need a platform session with system_configuration.read (reads) or
+    system_configuration.manage (writes).
+servers: [{url: /}]
+paths:
+  /v1/control-site/content:
+    get:
+      operationId: readControlSiteContent
+      security: []
+      description: The published website as the active plugin lays it out; {schema, enabled:false} while nothing is published.
+      responses:
+        '200': {description: Published view, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/View'}}}}
+        '304': {description: Not modified}
+        '503': {description: Unavailable}
+  /v1/control-site/assets/{sha256}:
+    parameters: [{name: sha256, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
+    get:
+      operationId: readControlSiteAsset
+      security: []
+      description: An uploaded image, a built-in illustration or a website theme plugin image; immutable, served with a sandboxing CSP.
+      responses:
+        '200': {description: Image bytes}
+        '304': {description: Not modified}
+        '404': {description: Not found}
+  /v1/control-site/packages:
+    get:
+      operationId: listControlSitePackages
+      security: []
+      description: >-
+        The platform's purchasable packages for the website's plan blocks:
+        published, enabled, in visible groups and on sale, in package sort order, at most 24.
+        Display fields only (no product ID, CNAME, region or purchase policy); -1 limits mean
+        unlimited, prices are minor units of prices.currency. Empty when none are on sale.
+      responses:
+        '200': {description: Package list, content: {application/json: {schema: {$ref: '#/components/schemas/PublicPackageList'}}}}
+        '503': {description: Unavailable}
+  /v1/admin/control-site:
+    get:
+      operationId: getControlSite
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: Draft, published copy and assets, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+    put:
+      operationId: saveControlSiteDraft
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/RequestID'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false, required: [draft], properties: {draft: {$ref: '#/components/schemas/Document'}}}}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}}
+        '400': {description: Invalid content or unknown image}
+        '403': {description: Permission denied}
+        '409': {description: Revision or idempotency conflict}
+  /v1/admin/control-site/publish:
+    post:
+      operationId: publishControlSite
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/RequestID'}]
+      responses:
+        '200': {description: Published, content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}}
+        '403': {description: Permission denied}
+        '409': {description: Revision conflict or nothing to publish}
+  /v1/admin/control-site/assets:
+    post:
+      operationId: uploadControlSiteAsset
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/RequestID'}]
+      requestBody:
+        required: true
+        content:
+          image/png: {schema: {type: string, format: binary}}
+          image/jpeg: {schema: {type: string, format: binary}}
+          image/webp: {schema: {type: string, format: binary}}
+          image/svg+xml: {schema: {type: string, format: binary}}
+          image/x-icon: {schema: {type: string, format: binary}}
+      responses:
+        '200': {description: Stored image, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
+        '400': {description: Not an accepted image or an unsafe SVG}
+        '413': {description: Larger than 2 MiB}
+  /v1/admin/control-site/themes:
+    get:
+      operationId: listWebsiteThemes
+      security: [{bearerAuth: []}]
+      description: Built-in, uploaded and market website theme plugins (installed or available) and the active one.
+      responses:
+        '200': {description: Catalog, headers: {ETag: {description: Activation revision, schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
+        '403': {description: Permission denied}
+    post:
+      operationId: uploadWebsiteTheme
+      security: [{bearerAuth: []}]
+      description: Validates and installs an uploaded package (id custom.*); an upload with the same id is replaced and keeps its parameters.
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ThemePackage'}}}
+      responses:
+        '200': {description: Installed, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
+        '400': {description: 'control_site_theme_invalid with reason and field', content: {application/json: {schema: {$ref: '#/components/schemas/ThemeInvalid'}}}}
+        '403': {description: Permission denied}
+        '413': {description: Larger than 8 MiB}
+  /v1/admin/control-site/themes/{theme_id}:
+    parameters: [{$ref: '#/components/parameters/ThemeID'}]
+    delete:
+      operationId: uninstallWebsiteTheme
+      security: [{bearerAuth: []}]
+      description: Uninstalls a plugin that is not active and drops its parameters; website content is kept. A market plugin stays available to install.
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      responses:
+        '200': {description: Uninstalled, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
+        '404': {description: Unknown theme}
+        '409': {description: 'control_site_theme_active or control_site_theme_not_installed'}
+  /v1/admin/control-site/themes/{theme_id}/install:
+    parameters: [{$ref: '#/components/parameters/ThemeID'}]
+    post:
+      operationId: installWebsiteTheme
+      security: [{bearerAuth: []}]
+      description: Installs a built-in plugin, or a market plugin this installation is authorized for.
+      parameters: [{$ref: '#/components/parameters/RequestID'}]
+      responses:
+        '200': {description: Installed, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
+        '403': {description: 'Permission denied, or control_site_theme_withdrawn'}
+        '404': {description: Unknown theme}
+        '409': {description: control_site_theme_unchanged (already installed)}
+  /v1/admin/control-site/themes/{theme_id}/activate:
+    parameters: [{$ref: '#/components/parameters/ThemeID'}]
+    post:
+      operationId: activateWebsiteTheme
+      security: [{bearerAuth: []}]
+      description: Makes an installed plugin the website's theme. The website reads the new layout's content (or the plugin seed); other layouts' content is kept.
+      parameters:
+        - {name: If-Match, in: header, required: true, description: 'Activation revision seen ("0" before any activation)', schema: {type: string, pattern: '^"[0-9]+"$'}}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {description: Activated, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
+        '403': {description: 'Permission denied, or control_site_theme_withdrawn'}
+        '409': {description: 'Revision conflict, control_site_theme_not_installed or control_site_theme_unchanged'}
+  /v1/admin/control-site/themes/{theme_id}/customization:
+    parameters: [{$ref: '#/components/parameters/ThemeID'}]
+    put:
+      operationId: customizeWebsiteTheme
+      security: [{bearerAuth: []}]
+      description: Token overrides (the layout whitelist) and replacement images per plugin slot (uploaded images). Empty maps restore the plugin defaults. Applies at once.
+      parameters:
+        - {name: If-Match, in: header, required: true, description: 'Customization revision seen ("0" for none)', schema: {type: string, pattern: '^"[0-9]+"$'}}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                tokens: {type: object, maxProperties: 64, additionalProperties: {type: string}}
+                images: {type: object, maxProperties: 64, additionalProperties: {$ref: '#/components/schemas/AssetRef'}}
+      responses:
+        '200': {description: Saved, content: {application/json: {schema: {$ref: '#/components/schemas/ThemeCatalog'}}}}
+        '400': {description: Unknown token, invalid value, unknown slot or missing image}
+        '409': {description: Revision conflict or not installed}
+  /v1/admin/control-site/themes/{theme_id}/seed:
+    parameters: [{$ref: '#/components/parameters/ThemeID'}]
+    get:
+      operationId: readWebsiteThemeSeed
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {description: The plugin's default content, content: {application/json: {schema: {$ref: '#/components/schemas/SeedContent'}}}}
+        '404': {description: Unknown theme}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+    RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+    ThemeID: {name: theme_id, in: path, required: true, schema: {$ref: '#/components/schemas/ThemeID'}}
+  schemas:
+    SHA256: {type: string, pattern: '^[0-9a-f]{64}$'}
+    AssetRef: {type: string, pattern: '^asset:[0-9a-f]{64}$'}
+    ImageRef:
+      type: string
+      description: '"asset:<sha256>" (an uploaded or built-in image) or "theme:<slot>" (the active plugin image of that slot); empty for none.'
+      pattern: '^(|asset:[0-9a-f]{64}|theme:[a-z0-9][a-z0-9-]{0,47})$'
+    ThemeID:
+      type: string
+      maxLength: 128
+      description: official.site-<name> (built-in), custom.<name> (uploaded), market.<plugin id> (plugin market).
+      pattern: '^(official\.site-[a-z][a-z0-9-]{0,31}|custom\.[a-z][a-z0-9-]{0,31}|market\.[a-z][a-z0-9]*([.-][a-z0-9]+)+)$'
+    Layout: {type: string, enum: [jidun, xmf]}
+    I18nText: {type: object, required: [zh-CN], propertyNames: {enum: [zh-CN, zh-TW, en-US]}, additionalProperties: {type: string, minLength: 1}}
+    Link: {type: object, properties: {label: {type: string}, href: {type: string}}}
+    Brand:
+      type: object
+      properties:
+        name: {type: string, minLength: 1, maxLength: 40}
+        logo: {$ref: '#/components/schemas/ImageRef'}
+        logo_dark: {$ref: '#/components/schemas/ImageRef'}
+        favicon: {$ref: '#/components/schemas/ImageRef'}
+        title: {type: string}
+        description: {type: string}
+        keywords: {type: string}
+    Contact: {type: object, properties: {enabled: {type: boolean}, items: {type: [array, 'null'], maxItems: 8, items: {type: object}}}}
+    LayoutContent:
+      type: object
+      description: The navigation, header buttons, footer and pages of one layout (pages include "/").
+      properties:
+        nav: {type: [array, 'null'], maxItems: 10, items: {type: object}}
+        actions: {type: [array, 'null'], maxItems: 3, items: {$ref: '#/components/schemas/Link'}}
+        footer: {type: object}
+        pages: {type: [array, 'null'], maxItems: 40, items: {type: object}}
+    Document:
+      type: object
+      required: [schema, enabled, brand, contact, layouts]
+      properties:
+        schema: {const: cdnca.control-site/v1}
+        enabled: {type: boolean}
+        brand: {$ref: '#/components/schemas/Brand'}
+        contact: {$ref: '#/components/schemas/Contact'}
+        layouts: {type: [object, 'null'], propertyNames: {$ref: '#/components/schemas/Layout'}, additionalProperties: {$ref: '#/components/schemas/LayoutContent'}}
+    ThemeView:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/ThemeID'}
+        version: {type: string}
+        layout: {$ref: '#/components/schemas/Layout'}
+        name: {$ref: '#/components/schemas/I18nText'}
+        tokens: {type: object, additionalProperties: {type: string}, description: Effective tokens (layout defaults, package, administrator).}
+        images: {type: object, additionalProperties: {$ref: '#/components/schemas/AssetRef'}, description: Effective image per slot.}
+    View:
+      allOf:
+        - {$ref: '#/components/schemas/LayoutContent'}
+        - type: object
+          properties:
+            schema: {const: cdnca.control-site/v1}
+            enabled: {type: boolean}
+            layout: {$ref: '#/components/schemas/Layout'}
+            theme: {$ref: '#/components/schemas/ThemeView'}
+            brand: {$ref: '#/components/schemas/Brand'}
+            contact: {$ref: '#/components/schemas/Contact'}
+    PublicPackageList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 24
+          items:
+            type: object
+            required: [name, description, groups, limits, protection, prices]
+            properties:
+              name: {type: string}
+              description: {type: string}
+              groups: {type: array, items: {type: string}, description: Names of the package's visible groups.}
+              limits:
+                type: object
+                properties:
+                  monthly_traffic_bytes: {type: integer}
+                  bandwidth_bps: {type: integer}
+                  connections: {type: integer}
+                  stream_ports: {type: integer}
+                  domains: {type: integer}
+                  root_domains: {type: integer}
+                  http_ports: {type: integer}
+                  custom_cc: {type: boolean}
+                  websocket: {type: boolean}
+                  http3: {type: boolean}
+                  l2_origin: {type: boolean}
+              protection: {type: object, properties: {cc: {type: string}, ddos: {type: string}}}
+              prices:
+                type: object
+                properties:
+                  currency: {type: string}
+                  monthly_minor: {type: integer}
+                  quarterly_minor: {type: integer}
+                  yearly_minor: {type: integer}
+    Asset:
+      type: object
+      properties:
+        sha256: {$ref: '#/components/schemas/SHA256'}
+        reference: {$ref: '#/components/schemas/AssetRef'}
+        url: {type: string}
+        mime_type: {type: string}
+        size_bytes: {type: integer}
+        created_at: {type: string, format: date-time}
+    State:
+      type: object
+      properties:
+        schema: {const: cdnca.control-site/v1}
+        revision: {type: integer, minimum: 0}
+        theme: {oneOf: [{$ref: '#/components/schemas/ThemeView'}, {type: 'null'}]}
+        draft: {$ref: '#/components/schemas/Document'}
+        published: {oneOf: [{$ref: '#/components/schemas/Document'}, {type: 'null'}]}
+        published_revision: {type: [integer, 'null']}
+        dirty: {type: boolean}
+        seeded: {type: boolean}
+        updated_at: {type: [string, 'null'], format: date-time}
+        published_at: {type: [string, 'null'], format: date-time}
+        assets: {type: array, items: {$ref: '#/components/schemas/Asset'}}
+    SeedContent:
+      allOf:
+        - {$ref: '#/components/schemas/LayoutContent'}
+        - {type: object, properties: {brand: {$ref: '#/components/schemas/Brand'}, contact: {$ref: '#/components/schemas/Contact'}}}
+    ThemePackage:
+      type: object
+      description: >-
+        cdnca.site-theme/v1, declarative only: no script, no external reference,
+        no CSP change. Tokens come from the layout's whitelist (colors #rrggbb,
+        borderRadius 0–24px, fontFamily); images are embedded base64 by slot
+        (SVG without script, handlers, foreign content or external references);
+        the seed may reference images only as theme:<slot> of its own slots.
+      additionalProperties: false
+      required: [schema, id, version, name, layout, seed]
+      properties:
+        schema: {const: cdnca.site-theme/v1}
+        id: {$ref: '#/components/schemas/ThemeID'}
+        version: {type: string, pattern: '^(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})$'}
+        name: {$ref: '#/components/schemas/I18nText'}
+        description: {$ref: '#/components/schemas/I18nText'}
+        layout: {$ref: '#/components/schemas/Layout'}
+        tokens: {type: object, additionalProperties: {type: string}}
+        images:
+          type: object
+          maxProperties: 64
+          propertyNames: {pattern: '^[a-z0-9][a-z0-9-]{0,47}$'}
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [mime_type, body_base64]
+            properties:
+              mime_type: {enum: [image/png, image/jpeg, image/webp, image/svg+xml, image/x-icon]}
+              body_base64: {type: string, contentEncoding: base64}
+        seed: {$ref: '#/components/schemas/SeedContent'}
+    TokenSpec: {type: object, properties: {name: {type: string}, kind: {enum: [color, length, font_family]}, default: {type: string}}}
+    ThemeEntry:
+      type: object
+      properties:
+        id: {$ref: '#/components/schemas/ThemeID'}
+        version: {type: string}
+        source: {enum: [builtin, upload, market]}
+        layout: {$ref: '#/components/schemas/Layout'}
+        name: {$ref: '#/components/schemas/I18nText'}
+        description: {type: object}
+        installed: {type: boolean}
+        active: {type: boolean}
+        installed_at: {type: [string, 'null'], format: date-time}
+        tokens: {type: object, additionalProperties: {type: string}}
+        images: {type: object, additionalProperties: {$ref: '#/components/schemas/AssetRef'}}
+        customization:
+          type: object
+          properties:
+            revision: {type: integer, minimum: 0}
+            tokens: {type: object, additionalProperties: {type: string}}
+            images: {type: object, additionalProperties: {$ref: '#/components/schemas/AssetRef'}}
+        token_specs: {type: array, items: {$ref: '#/components/schemas/TokenSpec'}}
+        preview_url:
+          type: string
+          pattern: '^/v1/control-site/assets/[0-9a-f]{64}$'
+          description: >-
+            The theme card's home page screenshot (package image slot "preview": v1 images.preview, v2 preview;
+            png/jpeg/webp, at most 512 KiB). Public and content-addressed (Cache-Control immutable). Absent when the
+            package has none. Not part of images.
+    ThemeCatalog:
+      type: object
+      properties:
+        themes: {type: array, items: {$ref: '#/components/schemas/ThemeEntry'}}
+        active_theme_id: {$ref: '#/components/schemas/ThemeID'}
+        activation_revision: {type: integer, minimum: 0, description: 0 while no plugin was activated (the built-in default is used).}
+    ThemeInvalid:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: {const: control_site_theme_invalid}
+            message: {type: string}
+            request_id: {type: string}
+            reason: {enum: [package_size, package_json, schema, id, version, layout, token, images, image_slot, image_body, seed, i18n_required, i18n_value]}
+            field: {type: string}

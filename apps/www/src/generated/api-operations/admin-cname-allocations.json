@@ -1,0 +1,363 @@
+{
+ "id": "admin-cname-allocations",
+ "prefix": "/v1/admin/cname-allocations",
+ "operations": [
+  {
+   "operation_id": "adminListCnameAllocations",
+   "method": "GET",
+   "path": "/v1/admin/cname-allocations",
+   "summary": "List CNAME allocation authority in a selected tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable CNAME allocation page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Allocation>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string(uuid)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid canonical query."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission is required."
+    },
+    {
+     "status": "404",
+     "description": "The scope-bound authority was not found."
+    },
+    {
+     "status": "405",
+     "description": "Only GET is supported."
+    },
+    {
+     "status": "408",
+     "description": "The bounded read timed out."
+    },
+    {
+     "status": "503",
+     "description": "The authority reader is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminDiagnoseCnameAllocation",
+   "method": "GET",
+   "path": "/v1/admin/cname-allocations/diagnose",
+   "summary": "Diagnose CNAME authority for one site in a selected tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "hostname",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Repeatable-read CNAME authority diagnosis.",
+     "fields": [
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "mode",
+       "type": "string: site / package"
+      },
+      {
+       "name": "owner_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "allocation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "binding_allocation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "lkg_allocation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "provider_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "zone_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "domain",
+       "type": "string"
+      },
+      {
+       "name": "hostname",
+       "type": "string"
+      },
+      {
+       "name": "state",
+       "type": "string: pending / failed / done"
+      },
+      {
+       "name": "ready",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "reason_codes",
+       "type": "array<string>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid canonical query."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission is required."
+    },
+    {
+     "status": "404",
+     "description": "The scope-bound authority was not found."
+    },
+    {
+     "status": "405",
+     "description": "Only GET is supported."
+    },
+    {
+     "status": "408",
+     "description": "The bounded read timed out."
+    },
+    {
+     "status": "503",
+     "description": "The authority reader is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "adminGetCnameAllocation",
+   "method": "GET",
+   "path": "/v1/admin/cname-allocations/{allocation_id}",
+   "summary": "Get one CNAME allocation in a selected tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "allocation_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One scope-bound CNAME allocation.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "mode",
+       "type": "string: site / package",
+       "required": true
+      },
+      {
+       "name": "owner_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "provider_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "zone_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "domain",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "hostname",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "explicit_hostname",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: pending / failed / done",
+       "required": true
+      },
+      {
+       "name": "failure_code",
+       "type": "string"
+      },
+      {
+       "name": "job_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "generation",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "current_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "lkg_revision",
+       "type": "integer(int64)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid canonical query."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission is required."
+    },
+    {
+     "status": "404",
+     "description": "The scope-bound authority was not found."
+    },
+    {
+     "status": "405",
+     "description": "Only GET is supported."
+    },
+    {
+     "status": "408",
+     "description": "The bounded read timed out."
+    },
+    {
+     "status": "503",
+     "description": "The authority reader is unavailable."
+    }
+   ]
+  }
+ ]
+}

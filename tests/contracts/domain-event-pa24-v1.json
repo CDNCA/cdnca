@@ -1,0 +1,115 @@
+[
+  {
+    "specversion": "1.0",
+    "id": "019b143c-7e64-7cc6-b886-a1354a006301",
+    "source": "/control-plane/plugin-webhooks",
+    "type": "io.cdnca.certificate.v1.status_changed",
+    "subject": "certificate_order/019b143c-7e64-7cc6-b886-a1354a006501",
+    "time": "2026-07-22T08:30:00Z",
+    "datacontenttype": "application/json",
+    "dataschema": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+    "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+    "request_id": "019b143c-7e64-7cc6-b886-a1354a006401",
+    "sequence": 21,
+    "data": {
+      "subscription_id": "019b143c-7e64-7cc6-b886-a1354a006285",
+      "subject_sequence": 1,
+      "order_id": "019b143c-7e64-7cc6-b886-a1354a006501",
+      "status": "active",
+      "previous_status": "issued",
+      "revision": 5,
+      "not_after": "2026-10-20T08:30:00Z"
+    }
+  },
+  {
+    "specversion": "1.0",
+    "id": "019b143c-7e64-7cc6-b886-a1354a006307",
+    "source": "/control-plane/plugin-webhooks",
+    "type": "io.cdnca.certificate.v1.expiry_reached",
+    "subject": "certificate_asset/019b143c-7e64-7cc6-b886-a1354a006507",
+    "time": "2026-10-13T08:30:00Z",
+    "datacontenttype": "application/json",
+    "dataschema": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+    "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+    "request_id": "019b143c-7e64-7cc6-b886-a1354a006407",
+    "sequence": 27,
+    "data": {
+      "subscription_id": "019b143c-7e64-7cc6-b886-a1354a006285",
+      "subject_sequence": 2,
+      "asset_id": "019b143c-7e64-7cc6-b886-a1354a006507",
+      "version_id": "019b143c-7e64-7cc6-b886-a1354a006508",
+      "stage": "expiring_7d",
+      "not_after": "2026-10-20T08:30:00Z",
+      "source": "acme",
+      "renewal_order_id": "019b143c-7e64-7cc6-b886-a1354a006501"
+    }
+  },
+  {
+    "specversion": "1.0",
+    "id": "019b143c-7e64-7cc6-b886-a1354a006302",
+    "source": "/control-plane/plugin-webhooks",
+    "type": "io.cdnca.node.v1.status_changed",
+    "subject": "node/019b143c-7e64-7cc6-b886-a1354a006502",
+    "time": "2026-07-22T08:30:00Z",
+    "datacontenttype": "application/json",
+    "dataschema": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+    "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+    "request_id": "019b143c-7e64-7cc6-b886-a1354a006402",
+    "sequence": 22,
+    "data": {
+      "subscription_id": "019b143c-7e64-7cc6-b886-a1354a006285",
+      "subject_sequence": 1,
+      "node_id": "019b143c-7e64-7cc6-b886-a1354a006502",
+      "kind": "presence",
+      "status": "offline",
+      "previous_status": "online",
+      "revision": 42
+    }
+  },
+  {
+    "specversion": "1.0",
+    "id": "019b143c-7e64-7cc6-b886-a1354a006303",
+    "source": "/control-plane/plugin-webhooks",
+    "type": "io.cdnca.usage.v1.threshold_reached",
+    "subject": "package_subscription/019b143c-7e64-7cc6-b886-a1354a006503",
+    "time": "2026-07-22T08:30:00Z",
+    "datacontenttype": "application/json",
+    "dataschema": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+    "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+    "request_id": "019b143c-7e64-7cc6-b886-a1354a006403",
+    "sequence": 23,
+    "data": {
+      "subscription_id": "019b143c-7e64-7cc6-b886-a1354a006285",
+      "subject_sequence": 1,
+      "package_subscription_id": "019b143c-7e64-7cc6-b886-a1354a006503",
+      "source": "monitor",
+      "metric": "traffic_bytes",
+      "phase": "triggered",
+      "period_key": "2026-07",
+      "observed_value": 1099511627776,
+      "revision": 2
+    }
+  },
+  {
+    "specversion": "1.0",
+    "id": "019b143c-7e64-7cc6-b886-a1354a006304",
+    "source": "/control-plane/plugin-webhooks",
+    "type": "io.cdnca.security.v1.incident_detected",
+    "subject": "site/019b143c-7e64-7cc6-b886-a1354a006504",
+    "time": "2026-07-22T08:30:00Z",
+    "datacontenttype": "application/json",
+    "dataschema": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+    "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+    "request_id": "019b143c-7e64-7cc6-b886-a1354a006404",
+    "sequence": 24,
+    "data": {
+      "subscription_id": "019b143c-7e64-7cc6-b886-a1354a006285",
+      "subject_sequence": 1,
+      "site_id": "019b143c-7e64-7cc6-b886-a1354a006504",
+      "category": "cc_auto_switch",
+      "incident_sequence": 3,
+      "node_id": "019b143c-7e64-7cc6-b886-a1354a006505",
+      "started_at": "2026-07-22T08:29:55Z"
+    }
+  }
+]

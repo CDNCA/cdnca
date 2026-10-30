@@ -1,0 +1,610 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/bot-dd-scraper",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "采集/AI/安全扫描 Bot（device-detector）",
+ "description": "UA 含采集爬虫、AI 数据采集/助手、安全扫描类 Bot 标识即记录，可改为拦截或挑战。",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "dd-scraper-00",
+  "dd-scraper-01",
+  "dd-scraper-02",
+  "dd-scraper-03",
+  "dd-scraper-04",
+  "dd-scraper-05",
+  "dd-scraper-r00",
+  "dd-scraper-r01",
+  "dd-scraper-r02",
+  "dd-scraper-r03",
+  "dd-scraper-r04",
+  "dd-scraper-r05"
+ ],
+ "rules": [
+  {
+   "id": "dd-scraper-00",
+   "name": "采集/AI/安全扫描 Bot 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "1001firmsbot",
+        "2ip bot",
+        "abuse.xmco.fr",
+        "accessiblewebbot",
+        "accompanybot",
+        "adauth",
+        "adbeat",
+        "adstxtcrawler/",
+        "adstxtlab.com",
+        "afb",
+        "affiliatespybot",
+        "affsignalcrawler",
+        "amazonadbot",
+        "anthropic-claude",
+        "apachebench",
+        "arachni",
+        "archivebox",
+        "archiveteam archivebot",
+        "asana",
+        "assetnote",
+        "automattic analytics crawler",
+        "backupland",
+        "bard-ai",
+        "bitlybot",
+        "bitsightbot",
+        "bl.uk_ldfc_bot",
+        "bloglines",
+        "botify",
+        "brandverity",
+        "brightedge crawler",
+        "bubing",
+        "careerbot",
+        "castopod",
+        "character-ai",
+        "charlotte",
+        "chatgpt-browser",
+        "checkmarknetwork",
+        "choosito",
+        "cincraw",
+        "cispa web analyzer",
+        "classla",
+        "clickagy",
+        "cloudflare-amp",
+        "cms-experiment",
+        "cohere-command",
+        "cohere-training",
+        "collection@infegy.com",
+        "colly",
+        "cookiebot",
+        "copyviodetector",
+        "crawldad",
+        "crawlora-research",
+        "crawlson",
+        "crawlyprojectcrawler",
+        "crowdtanglebot",
+        "crystalsemanticsbot",
+        "cybaabot",
+        "cyberscan.io",
+        "cypex.ai",
+        "daspeedbot",
+        "datanyze",
+        "deepcrawl.com",
+        "deepnoc",
+        "depspid"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-01",
+   "name": "采集/AI/安全扫描 Bot 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "disqusadstxtcrawler",
+        "dnesakcebot",
+        "dnt-policy@eff.org",
+        "domain re-animator bot",
+        "domain research project",
+        "domaindrift",
+        "dubbotbot",
+        "ducks.party",
+        "duplexweb-google",
+        "eff dnt policy checker",
+        "email exractor",
+        "emailwolf",
+        "embedly",
+        "entferbot",
+        "ev-crawler",
+        "exaleadcloudview",
+        "example3",
+        "exchange check",
+        "eyeotabot",
+        "ez publish link validator",
+        "e~arsnova-filter-system",
+        "fast-webcrawler",
+        "faveeo.com",
+        "fhms-its-research-scanner",
+        "findfiles.net",
+        "findxbot",
+        "fontradar",
+        "fragfinn",
+        "functionize",
+        "gaisbot",
+        "gdnplus.com",
+        "geedoshopproductfinder",
+        "gemini-ai",
+        "github-camo",
+        "githubcopilotchat",
+        "gluten free crawler",
+        "gobuster",
+        "gochitchat.ai",
+        "golfe",
+        "google favicon",
+        "google search console",
+        "google-area120-privacypolicyfetcher",
+        "google-cloud-scheduler",
+        "google-ilp",
+        "google-read-aloud",
+        "googleagent-search",
+        "gowikibot",
+        "gozlebot",
+        "groq-bot",
+        "gtmetrix",
+        "hatena-favicon",
+        "heurekabot-feed",
+        "htmlyse",
+        "http banner detection (https://security.ipip.net)",
+        "https://securitytxt-scan.cs.hm.edu/",
+        "httpx",
+        "huaweiwebcatbot",
+        "hubspot ",
+        "hubspotcontentsearchbot",
+        "huggingface-bot",
+        "hypestat",
+        "ias_crawler",
+        "ias_wombles",
+        "iboubot"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-02",
+   "name": "采集/AI/安全扫描 Bot 第 3 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "iframely",
+        "iisbot",
+        "imagesift",
+        "inetdex-bot",
+        "infoguarddisclosureresearch",
+        "infotigerbot",
+        "inspici",
+        "insytfulbot",
+        "intelx.io_bot",
+        "ip-guide.com",
+        "itms",
+        "jobboersebot",
+        "junglekeythumbnail",
+        "k6/",
+        "kaspersky lab cfr link resolver",
+        "kaupr",
+        "keys-so-bot",
+        "komodiabot",
+        "konturbot",
+        "kozmonavt.",
+        "kstandbot",
+        "leak.info",
+        "letsearchbot",
+        "linkbloom",
+        "lumewebscan",
+        "lumtelbot",
+        "lycos",
+        "macocu",
+        "madbbot",
+        "makemerrybot",
+        "mariadb-mysql-kbs-bot",
+        "marketgoo",
+        "mbcrawler",
+        "mediumbot",
+        "meltwaternews",
+        "metainspector",
+        "metajobbot",
+        "microadbot",
+        "mixrankbot",
+        "modatscanner",
+        "morningscore",
+        "muckrack",
+        "muscatferret",
+        "mycellar",
+        "najdu.s.holubem.eu",
+        "nalezenczbot",
+        "nbertaupete95(at)gmail.com",
+        "netpeakcheckerbot",
+        "netresearchserver",
+        "netzzappen",
+        "newslitbot",
+        "newspaper",
+        "nicecrawler",
+        "nlcrawler",
+        "nrsbot",
+        "nuzzel",
+        "obsrvr.net",
+        "odklbot",
+        "oi-crawler",
+        "onalyticabot",
+        "online-webceo-bot",
+        "opengraph.io",
+        "ortc.me",
+        "oszkbot"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-03",
+   "name": "采集/AI/安全扫描 Bot 第 4 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "owler",
+        "pageburst",
+        "pagepeeker",
+        "paqlebot",
+        "parse.ly scraper",
+        "peer39_crawler",
+        "pigafetta",
+        "pipericbot",
+        "piplbot",
+        "playstore-google",
+        "plukkie",
+        "pompos",
+        "prerender",
+        "prittorrent",
+        "probely",
+        "project-resonance",
+        "project_patchwatch",
+        "prorata",
+        "proxychecker",
+        "punkmap",
+        "quora link preview",
+        "quora-bot",
+        "qwantbot",
+        "qwantify",
+        "rainmeter",
+        "ramblermail",
+        "rankpulsebot",
+        "ravencrawler",
+        "recordedfuture",
+        "renovatebot",
+        "replicate-bot",
+        "repolookoutbot",
+        "research jlu",
+        "research@pdrlabs.net",
+        "researchcyber.net",
+        "researchscan.comsys.rwth-aachen.de",
+        "riddler",
+        "roi hunter",
+        "rootevidence",
+        "rsiteauditor",
+        "rssradio (push notification scanner;support@dorada.co.uk)",
+        "ruby, twurly v",
+        "runpod-bot",
+        "ryowlengine",
+        "sabsimbot",
+        "safednsbot",
+        "sandobacrawler",
+        "scamadviserexternalhit",
+        "scooter",
+        "search.marginalia.nu",
+        "securityheaders",
+        "sellers.guide crawler by primis",
+        "semaltbot",
+        "semantic-visions.com",
+        "semanticscholarbot",
+        "sensikabot",
+        "serankingbacklinksbot",
+        "serendeputybot",
+        "server density service monitoring",
+        "seznamemailproxy",
+        "shopalike",
+        "shopify-partner-homepage-scraper",
+        "shopwiki",
+        "simbiat software"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-04",
+   "name": "采集/AI/安全扫描 Bot 第 5 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "sirdatabot",
+        "sitebulb",
+        "sitemapparser-vipnytt",
+        "siteone-crawler",
+        "sitescorebot",
+        "slack-imgproxy",
+        "slackbot",
+        "slurp",
+        "snapchatads",
+        "snoopsecinspect",
+        "socialpushbot",
+        "sparkler",
+        "spawning-ai",
+        "special_archiver",
+        "sprinklr",
+        "sputnikimagebot",
+        "sqalix",
+        "stackscopebot",
+        "startmebot",
+        "statista.com",
+        "statonlinerubot",
+        "stractbot",
+        "sublinq",
+        "substackcontentfetch",
+        "suggestbot",
+        "support@domainreanimator.com",
+        "surdotlybot",
+        "swisscows favicons",
+        "synapse",
+        "s~snapchat-proxy",
+        "s~virustotalcloud",
+        "t3versionsbot",
+        "taboolabot",
+        "tactiscout",
+        "taginspector",
+        "tchelebi",
+        "testcrawler",
+        "tigerbot",
+        "tineye",
+        "tlsprobe",
+        "together-bot",
+        "trendsmapresolver",
+        "trustbot",
+        "ttd-content",
+        "tweetedtimes",
+        "tweetmemebot",
+        "twingly recon",
+        "ucsbnetworkmeasurement",
+        "udv-ai-research",
+        "ugaresearchagent",
+        "urlappendbot",
+        "urlsumabot",
+        "vertexwp",
+        "veryhip",
+        "via ggpht.com googleimageproxy",
+        "via secureurl.fwdcdn.com",
+        "visionheight.com",
+        "vkshare; ",
+        "vortex/",
+        "vsmcrawler",
+        "vu-server-health-scanner",
+        "wanscannerbot",
+        "wappalyzer",
+        "webatlabot"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-05",
+   "name": "采集/AI/安全扫描 Bot 第 6 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "contains",
+       "values": [
+        "webbcrawler",
+        "webdatastats",
+        "website-info.net",
+        "webthumbnail",
+        "webtru_crawler",
+        "webwikibot",
+        "webzio",
+        "wevikabot",
+        "whatcms",
+        "wheregoes.com redirect checker",
+        "who.is",
+        "wibybot",
+        "willow internet crawler",
+        "workona",
+        "wpmu dev",
+        "xai-bot",
+        "xovibot",
+        "y!j",
+        "yahoo link preview",
+        "yahoo:linkexpander:slingstone",
+        "yahoocachesystem",
+        "yourls",
+        "zaldamosearchbot",
+        "zao/",
+        "zookabot"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-r00",
+   "name": "采集/AI/安全扫描 Bot 正则第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:(Google-(?:GeminiNotebook|NotebookLM))|.*masscan|Octopus [\\d.]+|SEOENG(?:World)?Bot|compatible; (?:SISTRIX )?Optimizer|^Turnitin(?:Bot)?|WordPress.+isitwp\\.com|Y!J-(ASR|BR[IJOWY]|[BPW]SC)|YandexBot.+MirrorDetector)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-r01",
+   "name": "采集/AI/安全扫描 Bot 正则第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:Yahoo Ad monitoring.*yahoo-ad-monitoring-SLN24857|.*Java.*outbrain|HubPages.*crawlingpolicy)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-r02",
+   "name": "采集/AI/安全扫描 Bot 正则第 3 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:Pinterest(?:bot)?/.*www\\.pinterest\\.com|Speedy ?Spider|AdMantX.*admantx\\.com|^Spotify/[\\d.]+$|IDG/(?:EU|IT|RU|UK)|CyberFind ?Crawler|(?:BuiltWith|BW/)|.*\\.oast\\.|(?:expanseinc|paloaltonetworks)\\.com|Hatena-?Bookmark)"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-r03",
+   "name": "采集/AI/安全扫描 Bot 正则第 4 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:l9scan/|^Lkx-.*/|Seolyt(?:Bot)?|um-(?:ANS|CC|FC|IC|LN)|(?:Birdcrawlerbot|CrawlaDeBot)|KlarnaBot-(?:DownloadProductImage|EnrichProducts|PriceWatcher)|.+diffbot|Ant(?:\\.com beta|Bot)|^pdrl\\.fm|Mixnode(?:Cache)?|Shareaholic(?:bot)?|^Zeno$|^ds9|scan@aegis.network|(?:hgf|OS)AlphaXCrawl|xtate/(\\d+\\.[.\\d]+)|(GoGuides(?:Crawler|DiscoveryBot))|(GreenWebChecker|gwf-carbon-txt-crawler))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-r04",
+   "name": "采集/AI/安全扫描 Bot 正则第 5 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:(ABEvalBot|AdsTxtCrawlerTP|ArtelLeadRadar|DNSResearchBot|Dormouse|FinderGo|FormFinder|GitCrawlerBot|HanaleiBot|HubSeedsBot|ImportDomains|KenyaDomainScorer|LetrixLabs|PhishBucketRust|PostitLeadDiscovery|PrivacyPolicyBot|ProductLookoutBot|Robozilla|Secweb-Sectxt|SeoCherryBot|ShopifyChecker|SitemapCrawler\\.de|SleepBot|StudyBot|The Knowledge AI|Thinkbot|ThinkChaos|TprAdsTxtCrawler|WATCrawler|ProspectorBR))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "dd-scraper-r05",
+   "name": "采集/AI/安全扫描 Bot 正则第 6 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:^|[^A-Z0-9_-]|[^A-Z0-9-]_|sprd-|MZ-)(?:(CheckerProxy|CMSLookup|CSE-Scanner|DomainProbe|FreePBX-Scanner|Goosee-Audit|NetScope-DomainScanner|SecurityScanner|Shodan-Pull|TLM-Audit-Scanner|wp2shell-check))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

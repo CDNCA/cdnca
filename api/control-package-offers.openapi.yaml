@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Package Offer Publication API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Versioned platform publication commands for immutable package product
+    revisions. Both commands are authenticated, permission checked, audited,
+    idempotent, and revision preconditioned.
+servers:
+  - url: /
+tags:
+  - name: Package offer publication
+paths:
+  /v1/admin/packages/{id}/publish:
+    post:
+      tags: [Package offer publication]
+      operationId: publishPackageOffer
+      summary: Publish the current immutable package product revision
+      security: [{bearerAuth: []}]
+      x-required-permissions: [packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': {$ref: '#/components/responses/PublicationOK'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/packages/{id}/withdraw:
+    post:
+      tags: [Package offer publication]
+      operationId: withdrawPackageOffer
+      summary: Withdraw the exact immutable package revision named by If-Match
+      description: >-
+        If-Match binds the previously published product revision, not a newer
+        mutable draft revision. Existing sold subscriptions remain unchanged.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200': {$ref: '#/components/responses/PublicationOK'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '422': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ProductID:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Quoted positive immutable product revision.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Exact retries reuse this key with the same action, product, and revision.
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    PackageOfferPublication:
+      type: object
+      additionalProperties: false
+      required: [product_id, product_revision, lifecycle_revision, state, published_at]
+      properties:
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        lifecycle_revision: {type: integer, format: int64, minimum: 1}
+        state: {type: string, enum: [published, withdrawn]}
+        published_at: {type: string, format: date-time}
+        withdrawn_at: {type: string, format: date-time}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+            message: {type: string}
+            request_id: {type: string}
+  responses:
+    PublicationOK:
+      description: Current durable publication head or identical committed replay.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PackageOfferPublication'}
+    Error:
+      description: Stable package publication error.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

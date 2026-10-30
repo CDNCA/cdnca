@@ -1,0 +1,1022 @@
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 16px 20px;
+  overflow-x: hidden;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 3px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs {
+  width: 100%;
+  margin: 0 0 8px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav {
+  margin: 0;
+  padding: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav::before {
+  border-bottom-color: var(--cdnca-color-border);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav-wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav-list {
+  flex: 0 0 auto;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-tab {
+  min-height: 35px;
+  margin: 0 16px 0 0;
+  padding: 7px 15px 8px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  background: transparent;
+  border-radius: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-tab-active {
+  color: var(--cdnca-color-primary);
+  font-weight: 400;
+  background: transparent;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-ink-bar {
+  display: block;
+  height: 2px;
+  background: var(--cdnca-color-primary);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > [data-testid^='system-settings-baseline-'],
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-panel,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form {
+  width: 100%;
+  min-width: 0;
+  max-width: none !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  margin: 12px 0 8px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2::before,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title::before {
+  display: none;
+  content: none;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2::after,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title::after {
+  display: block;
+  flex: 1 1 auto;
+  height: 1px;
+  margin-left: 12px;
+  background: var(--cdnca-color-border-secondary);
+  content: '';
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page [data-testid='system-settings-baseline-system'] .system-settings-system-info > h2,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page [data-testid='system-settings-baseline-system'] .system-settings-system-brand > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item {
+  max-width: 840px;
+  min-width: 0;
+  margin-bottom: 0;
+  padding: 9px 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-label {
+  flex: 0 0 170px;
+  padding: 5px 16px 5px 0;
+  color: var(--cdnca-color-text);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-label > label {
+  color: var(--cdnca-color-text);
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-control {
+  flex: 0 0 330px;
+  width: 330px;
+  min-width: 0;
+  max-width: 330px;
+}
+
+/* The control column is a vertical flex container in Ant Form. Applying the
+ * 330px column basis to its inner row accidentally made every field 330px
+ * tall. Keep the width on the column and let the inner controls size to their
+ * own compact 32px height. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-control-input {
+  flex: 0 0 auto;
+  width: 330px;
+  min-width: 0;
+  max-width: 330px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-control-input-content {
+  flex: 0 0 auto;
+  width: 330px;
+  min-width: 0;
+  max-width: 330px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav {
+  position: static;
+  z-index: auto;
+  width: 100%;
+  max-width: none;
+  margin: 0 0 8px;
+  padding: 0 2px 6px;
+  overflow-x: auto;
+  background: var(--cdnca-color-bg-container, #fff);
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-btn {
+  color: var(--cdnca-color-text);
+  font-weight: 400;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-grid {
+  display: block;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-payment-grid {
+  width: 100%;
+  max-width: 840px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-payment-card {
+  background: var(--cdnca-color-bg-container, #fff);
+  border-color: var(--cdnca-color-border-secondary);
+  border-radius: 3px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-number,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-selector,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page textarea.ant-input {
+  box-sizing: border-box;
+  min-height: 32px;
+  border-color: var(--cdnca-color-border);
+  border-radius: 3px;
+}
+
+/* A field refused on save (fix-fielderr-be2) keeps antd's error border; the
+ * neutral border above would otherwise leave only the red text under it. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-status-error,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-number-status-error,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-status-error .ant-select-selector {
+  border-color: var(--cdnca-color-error);
+}
+
+/* Keep every compact control on the same 32px baseline as the reference.
+ * Ant's default vertical padding varies between Input, InputNumber and
+ * Select; making the single-line controls explicit prevents text and the
+ * trailing unit/refresh controls from drifting toward the top edge. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page input.ant-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-affix-wrapper,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-number,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-selector,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-btn {
+  height: 32px;
+  line-height: 30px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page input.ant-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-affix-wrapper {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-number {
+  display: inline-flex;
+  align-items: center;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-number-input {
+  height: 30px;
+  line-height: 30px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select {
+  width: 100%;
+}
+
+.system-settings-baseline-select-popup {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.system-settings-baseline-select-popup .ant-select-item {
+  min-height: 32px;
+  padding: 5px 12px;
+  border-radius: 0;
+}
+
+.system-settings-baseline-select-popup .ant-select-item-option-active:not(.ant-select-item-option-disabled) {
+  background: var(--cdnca-color-bg-hover, #f3f3f3);
+}
+
+.system-settings-baseline-select-popup .ant-select-item-option-selected:not(.ant-select-item-option-disabled) {
+  color: var(--cdnca-color-primary);
+  font-weight: 400;
+  background: var(--cdnca-color-info-bg, #f0faff);
+}
+
+.system-settings-baseline-select-popup .ant-select-item-option-disabled {
+  color: var(--cdnca-color-placeholder);
+  cursor: not-allowed;
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+@media (max-width: 767px) {
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+    width: 100%;
+    margin: 0 !important;
+    padding: 12px;
+    overflow-x: hidden;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-tab {
+    margin-right: 8px;
+    padding-inline: 12px;
+    white-space: nowrap;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card {
+    padding: 0 0 10px;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item {
+    width: 100%;
+    max-width: none;
+    padding: 8px 0;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-row {
+    display: block;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-label {
+    width: 100% !important;
+    max-width: calc(100% - 48px) !important;
+    padding: 0 0 5px;
+    text-align: start;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-control,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-control-input,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-form-item-control-input-content,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page textarea.ant-input {
+    flex: none !important;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-input-number,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-select,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-space-compact,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form textarea {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-payment-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-space {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-space {
+    max-width: 100%;
+  }
+}
+
+/* System settings controls use the same centered 32px rhythm as other admin pages. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-btn,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-selector {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-btn-icon,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-btn > .anticon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-selection-item,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-selection-placeholder {
+  line-height: 30px !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-arrow {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page textarea.ant-input {
+  height: auto;
+  min-height: 32px;
+  line-height: 21px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-form-item-control-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-form-item-control-input-content {
+  display: flex;
+  align-items: center;
+}
+
+/* The shared shell gives content pages a 24px inset.  The reference settings
+ * page starts directly beside the 256px sidebar and keeps a narrow, even
+ * gutter around the white panel instead.  Scope this adjustment to the
+ * settings baseline page so other admin pages retain the shell spacing. */
+@media (min-width: 768px) {
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+    width: auto;
+    max-width: calc(100% - 48px) !important;
+    /* The shared shell reserves a 256px sidebar; the reference panel starts
+     * exactly one 24px gutter after that rail and keeps the same gutter on all
+     * remaining edges (x=280/y=88 at 1440px desktop). */
+    margin: 24px !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form .ant-form-item-row {
+    align-items: center;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form .ant-form-item-control,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form .ant-form-item-control-input,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form .ant-form-item-control-input-content {
+    display: flex;
+    align-items: center;
+  }
+}
+
+/* The first reference tab is one flat form.  System information and brand
+ * rows flow continuously; separators appear only between the functional
+ * groups shown in the reference capture. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page
+  [data-testid="system-settings-baseline-system"] .system-settings-baseline-form > section:nth-of-type(1),
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page
+  [data-testid="system-settings-baseline-system"] .system-settings-baseline-form > section:nth-of-type(2) {
+  border-bottom: 0 !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page
+  [data-testid="system-settings-baseline-system"] .system-settings-baseline-form > section:nth-of-type(3),
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page
+  [data-testid="system-settings-baseline-system"] .system-settings-baseline-form > section:nth-of-type(4),
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page
+  [data-testid="system-settings-baseline-system"] .system-settings-baseline-form > section:nth-of-type(5) {
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+  padding-top: 12px;
+}
+
+/* Reference geometry for the global settings page. Keep this scoped to
+ * the canonical route because the other settings panels intentionally use
+ * their own density and information architecture. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+  box-sizing: border-box;
+  padding: 18px 20px 20px !important;
+  border: 1px solid transparent !important;
+  border-radius: 10px;
+  box-shadow: 0 3px 8px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 6%, transparent), 0 16px 34px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 8%, transparent);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs {
+  margin: 0 0 18px !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-panel,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  display: flex;
+  width: 100%;
+  height: 47px;
+  box-sizing: border-box;
+  align-items: flex-start;
+  padding: 0 2px 8px;
+  margin: 0 0 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: var(--cdnca-color-bg-container, #fff);
+  border-bottom: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-space {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  flex-wrap: nowrap;
+  gap: 24px !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-space-item {
+  flex: 0 0 auto;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-btn {
+  position: relative;
+  display: block;
+  height: 38px !important;
+  padding: 0 2px !important;
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 38px !important;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-btn.is-active {
+  color: var(--cdnca-color-primary);
+  font-weight: 500;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-btn.is-active::after {
+  position: absolute;
+  right: 2px;
+  bottom: -9px;
+  left: 2px;
+  display: block;
+  height: 2px;
+  background: var(--cdnca-color-primary);
+  content: '';
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none !important;
+  padding: 18px 20px !important;
+  margin: 0 0 16px !important;
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-muted, #dfe4ec) !important;
+  border-radius: 8px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-system-info > h2,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-system-brand > h2 {
+  position: static !important;
+  display: inline-flex !important;
+  width: auto !important;
+  height: auto !important;
+  align-items: center;
+  padding: 0 !important;
+  margin: 0 0 14px !important;
+  overflow: visible !important;
+  clip: auto !important;
+  color: var(--cdnca-color-title);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+  white-space: normal;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title::before {
+  display: block !important;
+  width: 4px;
+  height: 16px;
+  margin-right: 8px;
+  background: var(--cdnca-color-primary);
+  content: '';
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title::after,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2::after {
+  display: none !important;
+  content: none;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item {
+  width: 960px;
+  max-width: 100%;
+  margin: 0;
+  padding: 12px 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-label {
+  flex: 0 0 170px;
+  width: 170px;
+  padding: 5px 16px 5px 0;
+  color: var(--cdnca-color-text);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control {
+  flex: 0 0 760px !important;
+  width: 760px !important;
+  max-width: 760px !important;
+  min-width: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input-content {
+  width: 760px !important;
+  max-width: 760px !important;
+  min-width: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-extra {
+  width: 760px;
+  max-width: 100%;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-form-hint {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-grid {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-card {
+  box-sizing: border-box;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--cdnca-color-border-muted, #dfe4ec);
+  border-radius: 8px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  line-height: 21px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-title {
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-meta {
+  flex: 0 0 auto;
+  color: var(--cdnca-color-text-faint, #98a2b3);
+  font-size: 12px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview > .ant-upload-wrapper,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview .ant-upload-select,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview .ant-upload {
+  display: block;
+  width: 100%;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview {
+  display: flex;
+  width: 100%;
+  height: 58px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 58px;
+  object-fit: contain;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview--favicon img {
+  width: auto;
+  max-width: 32px;
+  max-height: 32px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview--logo img {
+  max-width: 180px;
+  max-height: 44px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview--login_ad img {
+  max-width: 220px;
+  max-height: 58px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item {
+  width: auto;
+  max-width: none;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item-control {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  max-width: none !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item-control-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid .ant-form-item-control-input-content {
+  width: auto !important;
+  max-width: none !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-purchase-notice {
+  width: 960px !important;
+  max-width: 100% !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-purchase-notice textarea.ant-input {
+  min-height: 188px;
+}
+
+@media (max-width: 767px) {
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+    width: auto;
+    max-width: none !important;
+    padding: 12px !important;
+    margin: 24px !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs {
+    margin-bottom: 18px !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav {
+    height: 58px;
+    padding: 12px 0 8px;
+    margin-bottom: 12px;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-section-nav .ant-space {
+    min-width: max-content;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card {
+    padding: 14px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-purchase-notice {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 12px !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-row {
+    display: block;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-label {
+    width: 100% !important;
+    max-width: none !important;
+    padding: 0 0 5px;
+    text-align: start;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input-content,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .ant-form-item-extra {
+    flex: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-toggle-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-card {
+    padding: 14px;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview {
+    min-height: 58px;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-input-number,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-select,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form .ant-space-compact,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form textarea.ant-input {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card {
+  border-top: 1px solid var(--cdnca-color-border-muted, #dfe4ec) !important;
+  border-right: 1px solid var(--cdnca-color-border-muted, #dfe4ec) !important;
+  border-bottom: 1px solid var(--cdnca-color-border-muted, #dfe4ec) !important;
+  border-left: 1px solid var(--cdnca-color-border-muted, #dfe4ec) !important;
+}
+
+@media (max-width: 767px) {
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .system-settings-toggle-grid .ant-form-item-control {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  max-width: none !important;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .system-settings-toggle-grid .ant-form-item-control-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-form > .system-settings-config-card .system-settings-toggle-grid .ant-form-item-control-input-content {
+  width: auto !important;
+  max-width: none !important;
+}
+
+/* Canonical settings refinements. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+  position: relative;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-nav::before {
+  border-bottom: 0;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-tab {
+  min-height: 32px;
+  margin: 0 6px 0 0;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-tab-active {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+  background: var(--cdnca-color-blue13, #edf5ff);
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page > .ant-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-baseline-panel {
+  position: relative;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-feedback-stack {
+  position: absolute;
+  z-index: 20;
+  top: -54px;
+  right: 0;
+  display: grid;
+  width: min(430px, 40vw);
+  gap: 8px;
+  pointer-events: none;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-feedback-stack:empty {
+  display: none;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-feedback-stack > * {
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--cdnca-color-title, #17233d) 12%, transparent);
+  pointer-events: auto;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-feedback-stack > .ant-alert-success {
+  pointer-events: none;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card > h2::before,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-config-card-title::before {
+  display: block !important;
+  width: 4px;
+  height: 16px;
+  margin-right: 8px;
+  background: var(--cdnca-color-primary);
+  content: '';
+}
+
+@media (min-width: 768px) {
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form > .system-settings-config-card .ant-form-item-row,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page
+    .system-settings-baseline-form > .system-settings-config-card .ant-form-item-control-input-content {
+    align-items: flex-start;
+  }
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-form-warning {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 19.8px;
+  background: var(--cdnca-color-orange2, #fff8e6);
+  border: 1px solid var(--cdnca-color-orange4, #ffd591);
+  border-radius: 4px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview {
+  justify-content: flex-start;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview > .ant-upload-wrapper,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview .ant-upload-select,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview .ant-upload {
+  width: auto;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview {
+  width: 88px;
+  height: 58px;
+  padding: 6px;
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+  border: 1px dashed var(--cdnca-color-blue25, #d9e2ef);
+  border-radius: 6px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview--favicon img {
+  max-width: 32px;
+  max-height: 32px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview--logo img,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview--login_ad img {
+  max-width: 74px;
+  max-height: 44px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-https-instructions {
+  width: 760px;
+  max-width: calc(100% - 170px);
+  margin: 4px 0 2px 170px;
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+  line-height: 22px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-https-instructions p {
+  margin: 0 0 4px;
+}
+
+@media (max-width: 767px) {
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page {
+    margin: 12px !important;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-feedback-stack {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    width: auto;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-head {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-asset-preview,
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-brand-preview {
+    min-height: 58px;
+  }
+
+  .system-settings-baseline-page.sys-setting.sys-setting-reference-page .system-settings-https-instructions {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+  }
+}
+
+/* Form typography and control rhythm. */
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page
+  .system-settings-baseline-form .ant-form-item-label > label {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page input.ant-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-affix-wrapper,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-number,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-select-selector,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page textarea.ant-input {
+  border-radius: 5px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page input.ant-input,
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page .ant-input-affix-wrapper {
+  padding: 4px 7px;
+  line-height: 21px;
+}
+
+.system-settings-baseline-page.sys-setting.sys-setting-reference-page textarea.ant-input {
+  padding: 4px 7px;
+  line-height: 22.4px;
+}

@@ -1,0 +1,83 @@
+# linux/amd64 扩展包（测试密钥签名；正式签名由统一发布做）
+download_path: waf-crs-module/3.0.17-1.0.4-1/openresty-1.31.1.1/linux-amd64/
+300 SHA256SUMS
+2443683 cdnca-waf-crs-module-3.0.17-1.0.4-1-openresty-1.31.1.1-linux-amd64.tar.gz
+2191 manifest.json
+64 manifest.sig
+## manifest.json
+{
+  "schema": "cdnca.edge.waf-crs-module/v1",
+  "component": "waf-crs-module",
+  "version": "3.0.17-1.0.4-1",
+  "openresty_version": "1.31.1.1",
+  "platform": "linux",
+  "architecture": "amd64",
+  "key_id": "test-release",
+  "payload": {
+    "name": "cdnca-waf-crs-module-3.0.17-1.0.4-1-openresty-1.31.1.1-linux-amd64.tar.gz",
+    "sha256": "3b088e13c530a7ffd9be3b71f444e5119c6fff8a8a2811782cebdcf1291c99e6",
+    "size": 2443683
+  },
+  "files": [
+    {
+      "path": "LICENSE.libmodsecurity",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "size": 11357,
+      "mode": 292
+    },
+    {
+      "path": "LICENSE.libxml2",
+      "sha256": "5d4873884a890122a4b9b20ad56ac6f7da1d796a5bfcf04a427970ac96217626",
+      "size": 1314,
+      "mode": 292
+    },
+    {
+      "path": "LICENSE.yajl",
+      "sha256": "054bf2c11686c5442850b1da58ad592e3d1d2a236a362e67279b957f8e662f5a",
+      "size": 751,
+      "mode": 292
+    },
+    {
+      "path": "lib/libgcc_s.so.1",
+      "sha256": "0f3c933942935150d3864bcd3b20b7922c8d95a66959fe1da5e2da73ba986e8a",
+      "size": 173920,
+      "mode": 365
+    },
+    {
+      "path": "lib/libmodsecurity.so.3",
+      "sha256": "42c04a447038099fde16acb1b8168b9f87663c651fd05601d975e2971e2e43e9",
+      "size": 2683225,
+      "mode": 365
+    },
+    {
+      "path": "lib/libstdc++.so.6",
+      "sha256": "ae81a1dd9b4fbab42a1014dda6b9ed13834610583781fe562f84e3cf65ea669b",
+      "size": 2804104,
+      "mode": 365
+    },
+    {
+      "path": "lib/libxml2.so.16",
+      "sha256": "42481f8b37b7fe08e86825ddcd0a8508c572b51d601a2b85fb2b325e8156b447",
+      "size": 1284473,
+      "mode": 365
+    },
+    {
+      "path": "lib/libyajl.so.2",
+      "sha256": "24c4a40145c81f98c402d35d57eadc5b510ddb6f8f01248b291072c49548206f",
+      "size": 55465,
+      "mode": 365
+    },
+    {
+      "path": "modules/ngx_http_modsecurity_module.so",
+      "sha256": "8feec7f7a39e3d57ec90345a6f7fb627906d3eaa56cfd1ea2e7fd2551b709528",
+      "size": 30985,
+      "mode": 365
+    },
+    {
+      "path": "unicode.mapping",
+      "sha256": "5e4500ef82e45c49d8edd9513648939710d6c8cc2d5997513b32866dc5d9be23",
+      "size": 53146,
+      "mode": 292
+    }
+  ]
+}

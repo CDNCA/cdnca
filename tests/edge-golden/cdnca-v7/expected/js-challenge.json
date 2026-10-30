@@ -1,0 +1,209 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "js-challenge",
+  "scenario_sha256": "d9138cc8fe22e6f120f12643227cbb60f90473afe71a93a764410e90040827d0",
+  "steps": [
+    {
+      "id": "page",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, no-cache, must-revalidate, private, max-age=0",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src '<masked>'; script-src 'none'; connect-src 'none'",
+            "content-type": "text/html; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "DENY"
+          },
+          "body": {
+            "length": 2706,
+            "sha256": "34885d841bd10aca2ca146011f52acaff5fe845298680d1cea75da366e987cd5",
+            "text": "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>请确认您正在访问此网站</title><style <masked>>\n*{box-sizing:border-box}html,body{min-height:100%;margin:0}body{display:grid;place-items:center;padding:24px;background:#f4f6f8;color:#17202a;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;letter-spacing:0}main{width:min(100%,560px);padding:34px 0;border-top:4px solid #c7352c}h1{margin:0 0 14px;font-size:28px;line-height:1.3;font-weight:650}p{margin:0 0 18px;font-size:16px;line-height:1.75;color:#475467}.status{display:flex;align-items:center;gap:10px;margin:24px 0;color:#17202a;font-weight:600}.mark{width:14px;height:14px;background:#16865c;border-radius:50%;flex:0 0 auto}form{display:grid;gap:16px}label{display:grid;gap:8px;font-weight:600}input[type=text]{width:100%;min-height:48px;padding:0 12px;border:1px solid #98a2b3;border-radius:4px;background:#fff;color:#17202a;font:inherit;font-size:18px;text-transform:uppercase}input[type=range]{width:100%;min-height:44px;accent-color:#16865c}.captcha{display:inline-flex;align-items:center;justify-content:center;min-height:58px;padding:8px 18px;border:1px solid #98a2b3;background:#fff;font:700 24px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:0}output{font-variant-numeric:tabular-nums}button,.link{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;border:0;border-radius:4px;background:#17202a;color:#fff;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}button:hover,.link:hover{background:#294052}button:focus-visible,.link:focus-visible,input:focus-visible{outline:3px solid #f2b84b;outline-offset:3px}button:disabled{background:#98a2b3;cursor:wait}.detail{font-size:14px;color:#667085}.error{padding:12px 14px;border-left:3px solid #c7352c;background:#fff1f0;color:#8a1c16}@media(max-width:480px){body{padding:20px}main{padding-top:26px}h1{font-size:24px}p{font-size:15px}button,.link{width:100%}}\n</style></head><body><main><h1>请确认您正在访问此网站</h1><p>点击下方按钮提交一次性确认。</p><div class=\"status\" aria-live=\"polite\"><span class=\"mark\" aria-hidden=\"true\"></span><span id=\"status\">等待完成验证</span></div><form id=\"challenge-form\" method=\"post\" action=\"/.cdnca/challenge/verify\"><input type=\"hidden\" name=\"nonce\" value=\"<masked>\"><button name=\"response\" <masked> type=\"submit\">确认并继续</button></form><p class=\"detail\">安全检查不会读取或记录您的请求正文。</p></main></body></html>",
+            "masked": true
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "alias-page",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, no-cache, must-revalidate, private, max-age=0",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src '<masked>'; script-src 'none'; connect-src 'none'",
+            "content-type": "text/html; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "DENY"
+          },
+          "body": {
+            "length": 2706,
+            "sha256": "34885d841bd10aca2ca146011f52acaff5fe845298680d1cea75da366e987cd5",
+            "text": "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>请确认您正在访问此网站</title><style <masked>>\n*{box-sizing:border-box}html,body{min-height:100%;margin:0}body{display:grid;place-items:center;padding:24px;background:#f4f6f8;color:#17202a;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;letter-spacing:0}main{width:min(100%,560px);padding:34px 0;border-top:4px solid #c7352c}h1{margin:0 0 14px;font-size:28px;line-height:1.3;font-weight:650}p{margin:0 0 18px;font-size:16px;line-height:1.75;color:#475467}.status{display:flex;align-items:center;gap:10px;margin:24px 0;color:#17202a;font-weight:600}.mark{width:14px;height:14px;background:#16865c;border-radius:50%;flex:0 0 auto}form{display:grid;gap:16px}label{display:grid;gap:8px;font-weight:600}input[type=text]{width:100%;min-height:48px;padding:0 12px;border:1px solid #98a2b3;border-radius:4px;background:#fff;color:#17202a;font:inherit;font-size:18px;text-transform:uppercase}input[type=range]{width:100%;min-height:44px;accent-color:#16865c}.captcha{display:inline-flex;align-items:center;justify-content:center;min-height:58px;padding:8px 18px;border:1px solid #98a2b3;background:#fff;font:700 24px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:0}output{font-variant-numeric:tabular-nums}button,.link{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;border:0;border-radius:4px;background:#17202a;color:#fff;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}button:hover,.link:hover{background:#294052}button:focus-visible,.link:focus-visible,input:focus-visible{outline:3px solid #f2b84b;outline-offset:3px}button:disabled{background:#98a2b3;cursor:wait}.detail{font-size:14px;color:#667085}.error{padding:12px 14px;border-left:3px solid #c7352c;background:#fff1f0;color:#8a1c16}@media(max-width:480px){body{padding:20px}main{padding-top:26px}h1{font-size:24px}p{font-size:15px}button,.link{width:100%}}\n</style></head><body><main><h1>请确认您正在访问此网站</h1><p>点击下方按钮提交一次性确认。</p><div class=\"status\" aria-live=\"polite\"><span class=\"mark\" aria-hidden=\"true\"></span><span id=\"status\">等待完成验证</span></div><form id=\"challenge-form\" method=\"post\" action=\"/.cdnca/challenge/verify\"><input type=\"hidden\" name=\"nonce\" value=\"<masked>\"><button name=\"response\" <masked> type=\"submit\">确认并继续</button></form><p class=\"detail\">安全检查不会读取或记录您的请求正文。</p></main></body></html>",
+            "masked": true
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "bypass-exact",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "48",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 48,
+            "sha256": "18948ab06e2b6b9deb5d145141235c98b7433b3a78fb99d53ec4a376c34b91ea",
+            "text": "challenge challenge.example.test /healthz-origin"
+          },
+          "origin": [
+            {
+              "origin": "challenge",
+              "method": "GET",
+              "uri": "/healthz-origin",
+              "host": "challenge.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "accept": "text/html",
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bypass-prefix",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "47",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 47,
+            "sha256": "e14432566ea69ac312a8c10573d26d8a08248d14efaac9a544a9b23495a2aaaa",
+            "text": "challenge challenge.example.test /static/app.js"
+          },
+          "origin": [
+            {
+              "origin": "challenge",
+              "method": "GET",
+              "uri": "/static/app.js",
+              "host": "challenge.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "accept": "text/html",
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api-accept",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "37",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 37,
+            "sha256": "0302806f82d4ac39edef0e64cb74d1c63161a5532ff527f6bb9bd396fcb731a3",
+            "text": "challenge challenge.example.test /api"
+          },
+          "origin": [
+            {
+              "origin": "challenge",
+              "method": "GET",
+              "uri": "/api",
+              "host": "challenge.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "accept": "application/json",
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bad-cookie",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, no-cache, must-revalidate, private, max-age=0",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; style-src '<masked>'; script-src 'none'; connect-src 'none'",
+            "content-type": "text/html; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "set-cookie": "<masked>",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "DENY"
+          },
+          "body": {
+            "length": 2706,
+            "sha256": "34885d841bd10aca2ca146011f52acaff5fe845298680d1cea75da366e987cd5",
+            "text": "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>请确认您正在访问此网站</title><style <masked>>\n*{box-sizing:border-box}html,body{min-height:100%;margin:0}body{display:grid;place-items:center;padding:24px;background:#f4f6f8;color:#17202a;font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif;letter-spacing:0}main{width:min(100%,560px);padding:34px 0;border-top:4px solid #c7352c}h1{margin:0 0 14px;font-size:28px;line-height:1.3;font-weight:650}p{margin:0 0 18px;font-size:16px;line-height:1.75;color:#475467}.status{display:flex;align-items:center;gap:10px;margin:24px 0;color:#17202a;font-weight:600}.mark{width:14px;height:14px;background:#16865c;border-radius:50%;flex:0 0 auto}form{display:grid;gap:16px}label{display:grid;gap:8px;font-weight:600}input[type=text]{width:100%;min-height:48px;padding:0 12px;border:1px solid #98a2b3;border-radius:4px;background:#fff;color:#17202a;font:inherit;font-size:18px;text-transform:uppercase}input[type=range]{width:100%;min-height:44px;accent-color:#16865c}.captcha{display:inline-flex;align-items:center;justify-content:center;min-height:58px;padding:8px 18px;border:1px solid #98a2b3;background:#fff;font:700 24px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:0}output{font-variant-numeric:tabular-nums}button,.link{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;border:0;border-radius:4px;background:#17202a;color:#fff;font:inherit;font-weight:650;text-decoration:none;cursor:pointer}button:hover,.link:hover{background:#294052}button:focus-visible,.link:focus-visible,input:focus-visible{outline:3px solid #f2b84b;outline-offset:3px}button:disabled{background:#98a2b3;cursor:wait}.detail{font-size:14px;color:#667085}.error{padding:12px 14px;border-left:3px solid #c7352c;background:#fff1f0;color:#8a1c16}@media(max-width:480px){body{padding:20px}main{padding-top:26px}h1{font-size:24px}p{font-size:15px}button,.link{width:100%}}\n</style></head><body><main><h1>请确认您正在访问此网站</h1><p>点击下方按钮提交一次性确认。</p><div class=\"status\" aria-live=\"polite\"><span class=\"mark\" aria-hidden=\"true\"></span><span id=\"status\">等待完成验证</span></div><form id=\"challenge-form\" method=\"post\" action=\"/.cdnca/challenge/verify\"><input type=\"hidden\" name=\"nonce\" value=\"<masked>\"><button name=\"response\" <masked> type=\"submit\">确认并继续</button></form><p class=\"detail\">安全检查不会读取或记录您的请求正文。</p></main></body></html>",
+            "masked": true
+          },
+          "origin": []
+        }
+      ]
+    }
+  ]
+}

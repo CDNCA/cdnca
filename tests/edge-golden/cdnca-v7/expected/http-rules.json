@@ -1,0 +1,220 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "http-rules",
+  "scenario_sha256": "e8d307022a9ed95d50723ea74218282f894335b5c9e12dd67e3124eee4230980",
+  "steps": [
+    {
+      "id": "rewrite-regex",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "46",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdnca-http-policy-version": "3"
+          },
+          "body": {
+            "length": 46,
+            "sha256": "175fcbbdd32ad314e87f755562485c443590e66cab870f91872e206cc15424e7",
+            "text": "policy policy.example.test /items/shoes/42?c=1"
+          },
+          "origin": [
+            {
+              "origin": "policy",
+              "method": "GET",
+              "uri": "/items/shoes/42?c=1",
+              "host": "policy.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rewrite-regex-miss",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "40",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdnca-http-policy-version": "3"
+          },
+          "body": {
+            "length": 40,
+            "sha256": "7e3516d7b9875fe5c0aaaabcb4f0d8f8a85eb74423ffb06967041148d89b6e32",
+            "text": "policy policy.example.test /item/x/shoes"
+          },
+          "origin": [
+            {
+              "origin": "policy",
+              "method": "GET",
+              "uri": "/item/x/shoes",
+              "host": "policy.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "redirect-regex",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 301,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "166",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "https://new.example.test/users/a%20b",
+            "server": "openresty",
+            "x-cdnca-http-policy-version": "3"
+          },
+          "body": {
+            "length": 166,
+            "sha256": "87a9323ac85ce28867d5d7ce590c8f29b8d1a999961fca71bb33adef48683691",
+            "text": "<html>\r\n<head><title>301 Moved Permanently</title></head>\r\n<body>\r\n<center><h1>301 Moved Permanently</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "redirect-keep-path",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 302,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "142",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "https://new.example.test/manual/guide/intro.html?x=1",
+            "server": "openresty",
+            "x-cdnca-http-policy-version": "3"
+          },
+          "body": {
+            "length": 142,
+            "sha256": "745173bcc5c57ce9751dd019606e877e0aae13b60372fdb090f3db0470c3a43c",
+            "text": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "redirect-keep-root",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 302,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "142",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "https://new.example.test/manual/",
+            "server": "openresty",
+            "x-cdnca-http-policy-version": "3"
+          },
+          "body": {
+            "length": 142,
+            "sha256": "745173bcc5c57ce9751dd019606e877e0aae13b60372fdb090f3db0470c3a43c",
+            "text": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "redirect-prefix-fixed",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 302,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store",
+            "content-length": "142",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "location": "https://new.example.test/landing",
+            "server": "openresty",
+            "x-cdnca-http-policy-version": "3"
+          },
+          "body": {
+            "length": 142,
+            "sha256": "745173bcc5c57ce9751dd019606e877e0aae13b60372fdb090f3db0470c3a43c",
+            "text": "<html>\r\n<head><title>302 Found</title></head>\r\n<body>\r\n<center><h1>302 Found</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "other-site",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "39",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 39,
+            "sha256": "a4b4414a129bb00990473e92d36614125337c08ab08300df10c85dc5fbab37e6",
+            "text": "plain nopolicy.example.test /docs/guide"
+          },
+          "origin": [
+            {
+              "origin": "plain",
+              "method": "GET",
+              "uri": "/docs/guide",
+              "host": "nopolicy.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+--    anchor (minute of day, IANA time zone) define the pull times.
+-- HTTP file proof) ends a verified proof. Proofs a recheck had expired stay
+-- Restore the 303 recheck columns; every verified proof is due 30 days after
+-- Runtime authorization remains fail closed and is rechecked for every command.
+-- The 30-day recheck, its failure counter and the expiry it led to are gone;
+-- anchored "^/" pattern; the target names its capture groups $1..$9), and a
+-- checkpoint (the checkpoint row anchors the chain and stays).
+-- the accumulated usage to the period anchor, traffic types and excluded NICs;
+-- 认领（089）校验的"锚"统一成 dns_reconcile_anchor_507：网站锚与 089 逐位相同（存量认领仍有效）；

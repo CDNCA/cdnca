@@ -1,0 +1,19 @@
+{
+  "schema_version": "cdnca.edge.waf/v1",
+  "policy_version": 1,
+  "rules": [
+    {"rule_id":"allow.match","priority":1,"action":"allow","flow":"stop","match":{"path":{"kind":"exact","value":"/allow"}}},
+    {"rule_id":"log.match","priority":2,"action":"log","flow":"stop","match":{"path":{"kind":"exact","value":"/log"}}},
+    {"rule_id":"block.match","priority":3,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/block"}}},
+    {"rule_id":"continue.log","priority":4,"action":"log","flow":"continue","match":{"path":{"kind":"exact","value":"/continue-stop"}}},
+    {"rule_id":"continue.block","priority":5,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/continue-stop"}}},
+    {"rule_id":"stop.allow","priority":6,"action":"allow","flow":"stop","match":{"path":{"kind":"exact","value":"/stop"}}},
+    {"rule_id":"stop.block","priority":7,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/stop"}}},
+    {"rule_id":"disabled.block","priority":8,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/disabled-block"}}},
+    {"rule_id":"legacy.block","priority":9,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/legacy-block"}}},
+    {"rule_id":"missing.allow","priority":10,"action":"allow","flow":"stop","match":{"path":{"kind":"exact","value":"/missing-vars-allow"}}},
+    {"rule_id":"missing.block","priority":11,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/missing-vars-block"}}},
+    {"rule_id":"sink.block","priority":12,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/sink-block"}}},
+    {"rule_id":"access-port-block","priority":14,"action":"block","flow":"stop","match":{"path":{"kind":"exact","value":"/access-port"},"port":18080,"source_cidr":{"family":4,"network":[127,0,0,1],"prefix_length":32}}}
+  ]
+}

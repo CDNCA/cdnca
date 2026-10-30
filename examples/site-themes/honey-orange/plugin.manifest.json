@@ -1,0 +1,44 @@
+{
+  "api_version": "marketplace.cdnca.io/v1",
+  "kind": "Plugin",
+  "metadata": {
+    "id": "acme.dev.honey-orange",
+    "version": "1.0.0",
+    "name": {
+      "zh-CN": "蜜橙",
+      "en-US": "Honey Orange"
+    },
+    "description": {
+      "zh-CN": "暖橙亲和风官网与用户端主题（开发者文档示例）"
+    },
+    "publisher": {
+      "id": "acme.dev",
+      "name": "Acme 示例",
+      "support_url": "https://example.com/support"
+    }
+  },
+  "spec": {
+    "categories": [
+      "theme"
+    ],
+    "compatibility": {
+      "control_api": ">=1.0.35 <2.0.0"
+    },
+    "entrypoint": {
+      "type": "theme",
+      "path": "theme.json",
+      "sha256": "<pack 自动填写>"
+    },
+    "permissions": [
+      "platform.themes.provide"
+    ],
+    "configuration_schema": {
+      "path": "schemas/config.schema.json",
+      "sha256": "<pack 自动填写>"
+    },
+    "supply_chain": {
+      "sbom_sha256": "<SBOM 的 SHA-256>",
+      "provenance_sha256": "<构建来源证明的 SHA-256>"
+    }
+  }
+}

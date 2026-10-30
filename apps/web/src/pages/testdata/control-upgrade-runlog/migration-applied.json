@@ -1,0 +1,262 @@
+{
+  "schema": "cdnca.control-plane-upgrade-runlog/v1",
+  "plan_id": "00000000-0000-4000-8000-000000000002",
+  "sequence": 42,
+  "started_at": 1800000060,
+  "attempts": 1,
+  "dropped": 0,
+  "entries": [
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "run_started",
+      "version": "1.5.0",
+      "attempt": 1
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "expand"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "services_verified",
+      "version": "1.4.0"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "artifact_cached",
+      "version": "1.5.0",
+      "bytes": 20480
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "lineage_verified",
+      "version": "1.5.0"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "release_staged",
+      "version": "1.5.0",
+      "count": 16
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "expand"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "preflight"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "candidate_version_checked",
+      "version": "1.5.0"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "preflight"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "drain"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "migrations_pending",
+      "count": 2,
+      "migrations": [
+        "004_step_4",
+        "005_step_5"
+      ]
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "maintenance_draining"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "drain"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "control_stop"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "control_stop"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "database_backup"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "database_backed_up",
+      "bytes": 10,
+      "duration_ms": 19
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "database_backup"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "database_migrate"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "database_migrated",
+      "duration_ms": 5,
+      "count": 2,
+      "migrations": [
+        "004_step_4",
+        "005_step_5"
+      ]
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "database_migrate"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "activate"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "release_switched",
+      "version": "1.5.0"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "services_restarted",
+      "unit": "cdnca-control-api.service"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "activate"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "health"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "health_check_started",
+      "version": "1.5.0",
+      "duration_ms": 40
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "health_check_passed",
+      "version": "1.5.0",
+      "count": 1
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "health"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "contract"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "contract"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "resume"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "maintenance_active",
+      "version": "1.5.0"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_succeeded",
+      "step": "resume"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "run_completed"
+    }
+  ],
+  "programs": [
+    {
+      "unit": "cdnca-control-api.service",
+      "captured_at": 1800000060,
+      "trigger": "run_completed",
+      "unavailable": true,
+      "lines": []
+    },
+    {
+      "unit": "cdnca-agent-gateway.service",
+      "captured_at": 1800000060,
+      "trigger": "run_completed",
+      "unavailable": true,
+      "lines": []
+    },
+    {
+      "unit": "control-upgrade-runner",
+      "captured_at": 1800000060,
+      "trigger": "run_completed",
+      "unavailable": true,
+      "lines": []
+    }
+  ]
+}

@@ -1,0 +1,110 @@
+.analytics-realtime-page .analytics-realtime-chart-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.analytics-realtime-page .analytics-realtime-chart {
+  min-height: 350px;
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+}
+
+.analytics-realtime-page .analytics-realtime-chart-canvas {
+  position: relative;
+}
+
+.analytics-realtime-page .analytics-realtime-chart-canvas svg:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid var(--cdnca-color-primary);
+  outline-offset: 2px;
+}
+
+.analytics-realtime-page .analytics-realtime-no-data {
+  position: absolute;
+  inset: 42% 18px auto 78px;
+  color: var(--cdnca-color-text-secondary);
+  text-align: center;
+  line-height: 1.6;
+  pointer-events: none;
+}
+
+.analytics-realtime-page .analytics-realtime-tooltip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+  padding: 8px 12px;
+  border: 1px solid var(--cdnca-color-border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cdnca-color-bg-container, #ffffff) 96%, transparent);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--cdnca-color-neutral80, #000000) 12%, transparent);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+.analytics-realtime-page .analytics-realtime-tooltip strong {
+  font-weight: 500;
+}
+
+.analytics-realtime-page .analytics-realtime-hover-line {
+  stroke: var(--cdnca-color-neutral48, #aab3c2);
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.analytics-realtime-page .analytics-realtime-range-hint,
+.analytics-realtime-page .analytics-realtime-diagnostics {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.analytics-realtime-page .analytics-realtime-range-hint {
+  margin: -6px 0 12px;
+}
+
+.analytics-realtime-page .analytics-realtime-diagnostics {
+  margin-top: 16px;
+}
+
+.analytics-realtime-page .analytics-realtime-diagnostics summary {
+  cursor: pointer;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.app-shell.is-dark .analytics-realtime-page .analytics-panel,
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-chart,
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-filter-bar,
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-tooltip {
+  color: var(--cdnca-color-scale2-dark, #d1d5db);
+  background: var(--cdnca-color-scale8-dark, #202731);
+  border-color: var(--cdnca-color-scale3-dark, #374151);
+}
+
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-chart h2,
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-ranking h2 {
+  color: var(--cdnca-color-text-dark, #e5e7eb);
+}
+
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-grid-line,
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-axis-line {
+  stroke: var(--cdnca-color-scale3-dark, #374151);
+}
+
+.app-shell.is-dark .analytics-realtime-page .analytics-realtime-series-dot {
+  fill: var(--cdnca-color-scale8-dark, #202731);
+}
+
+@media (max-width: 1340px) {
+  .analytics-realtime-page .analytics-realtime-chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .analytics-realtime-page .analytics-realtime-chart {
+    min-height: 300px;
+  }
+}

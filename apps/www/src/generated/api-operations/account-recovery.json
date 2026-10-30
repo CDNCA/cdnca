@@ -1,0 +1,157 @@
+{
+ "id": "account-recovery",
+ "prefix": "/v1/account-recovery",
+ "operations": [
+  {
+   "operation_id": "confirmAccountRecovery",
+   "method": "POST",
+   "path": "/v1/account-recovery/confirmations",
+   "summary": "Replace a password with a delivered recovery link",
+   "auth": [
+    "none"
+   ],
+   "description": "recovery_context is an opaque server-signed value bound to the token, tenant, scope, challenge, and expiry. The server verifies it before invoking the password reset CAS. Tampered, cross-token, expired, revoked, consumed, and unknown links fail closed. Authorization and API-key headers are ignored.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable key for this operation and payload. Reusing a key with different input returns account_recovery_idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "token",
+      "type": "string",
+      "required": true,
+      "description": "Opaque 32-byte URL-safe unpadded recovery token."
+     },
+     {
+      "name": "recovery_context",
+      "type": "string",
+      "required": true,
+      "description": "Opaque signed v1 recovery context. Clients must not parse or generate it."
+     },
+     {
+      "name": "new_password",
+      "type": "string(password)",
+      "required": true,
+      "description": "New password; 8 to 1024 printable ASCII characters (no space) with at least two of upper case, lower case, digits and symbols; otherwise password_policy_unmet."
+     },
+     {
+      "name": "confirm_password",
+      "type": "string(password)",
+      "required": true,
+      "description": "Must exactly match new_password and is subject to the same password policy."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "204",
+     "description": "Password replaced and all refresh sessions revoked, or an exact idempotent replay."
+    },
+    {
+     "status": "400",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "408",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "409",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "422",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "503",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "504",
+     "description": "Stable public error without a raw service message or sensitive input."
+    }
+   ]
+  },
+  {
+   "operation_id": "requestAccountRecovery",
+   "method": "POST",
+   "path": "/v1/account-recovery/requests",
+   "summary": "Request a password recovery link",
+   "auth": [
+    "none"
+   ],
+   "description": "Always returns the same 202 representation for an existing active account, an unknown username, a disabled account, or a suspended membership. No response field reports account existence, identity, challenge, token, expiry, channel, or delivery state. Authorization and API-key headers are ignored. JSON is limited to the configured 8 KiB default; duplicate or unknown fields, media type parameters, and trailing values are rejected.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable key for this operation and payload. Reusing a key with different input returns account_recovery_idempotency_conflict."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "username",
+      "type": "string",
+      "required": true,
+      "description": "Username only. The handler trims surrounding whitespace and enforces 1 to 1024 UTF-8 bytes. Email and phone lookup are not part of this contract."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Uniform recovery request acceptance response.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "408",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "409",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "429",
+     "description": "Stable recovery rate-limit response without identifying the limiting dimension."
+    },
+    {
+     "status": "503",
+     "description": "Stable public error without a raw service message or sensitive input."
+    },
+    {
+     "status": "504",
+     "description": "Stable public error without a raw service message or sensitive input."
+    }
+   ]
+  }
+ ]
+}

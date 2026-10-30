@@ -1,0 +1,15 @@
+.cache-policy-history-page > .site-cache-tabs {
+  margin-bottom: 18px;
+}
+
+.cache-policy-history-page .cache-page-subtitle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}

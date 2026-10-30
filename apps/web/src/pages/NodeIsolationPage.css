@@ -1,0 +1,113 @@
+.node-isolation-page {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  overflow: hidden;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--cdnca-color-neutral80, #000000) 4%, transparent);
+}
+
+.node-isolation-heading,
+.node-isolation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.node-isolation-heading {
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.node-isolation-heading h1 {
+  margin: 0;
+  color: var(--cdnca-color-text);
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 32px;
+  letter-spacing: 0;
+}
+
+.node-isolation-heading .ant-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 4px;
+}
+
+.node-isolation-page > .ant-alert {
+  margin: 0;
+}
+
+.node-isolation-toolbar {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.node-isolation-toolbar .ant-segmented {
+  min-height: 32px;
+  border-radius: 4px;
+}
+
+.node-isolation-toolbar .ant-input-search {
+  width: min(320px, 100%);
+}
+
+.node-isolation-toolbar .ant-input,
+.node-isolation-toolbar .ant-input-search-button {
+  height: 32px;
+}
+
+.node-isolation-page > .ant-table-wrapper {
+  min-width: 0;
+}
+
+.node-isolation-page > .ant-table-wrapper .ant-table-thead > tr > th {
+  height: 41px;
+  padding: 8px 12px;
+  color: var(--cdnca-color-text);
+  font-weight: 600;
+  background: var(--cdnca-color-table-header);
+  white-space: nowrap;
+}
+
+.node-isolation-page > .ant-table-wrapper .ant-table-tbody > tr > td {
+  height: 48px;
+  padding: 8px 12px;
+}
+
+.node-isolation-page .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 4px;
+}
+
+.node-isolation-state {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+}
+
+@media (max-width: 720px) {
+  .app-main > .node-isolation-page {
+    margin: 24px;
+  }
+
+  .node-isolation-page {
+    padding: 12px;
+  }
+
+  .node-isolation-heading,
+  .node-isolation-toolbar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .node-isolation-toolbar .ant-segmented,
+  .node-isolation-toolbar .ant-input-search {
+    width: 100%;
+  }
+}

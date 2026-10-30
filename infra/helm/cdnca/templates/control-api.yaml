@@ -1,0 +1,963 @@
+{{- if .Values.controlApi.enabled }}
+{{- $component := "control-api" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  {{- if not .Values.controlApi.autoscaling.enabled }}
+  replicas: {{ .Values.controlApi.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 5
+  progressDeadlineSeconds: 600
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+      annotations:
+        cdnca.io/secret-rollout: {{ .Values.controlApi.rolloutNonce | quote }}
+    spec:
+      serviceAccountName: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.controlApi.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- include "cdnca.podSecurityContext" . | nindent 8 }}
+      topologySpreadConstraints:
+        {{- include "cdnca.topologySpreadConstraints" (dict "root" . "component" $component) | trim | nindent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      {{- include "cdnca.imagePullSecrets" . | trim | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: control-api
+          image: {{ include "cdnca.image" .Values.controlApi.image | quote }}
+          imagePullPolicy: {{ .Values.controlApi.image.pullPolicy }}
+          args: ["serve"]
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.controlApi.service.httpPort }}
+              protocol: TCP
+            - name: internal-grpc
+              containerPort: {{ .Values.controlApi.service.internalGRPCPort }}
+              protocol: TCP
+            {{- if .Values.controlApi.trafficPackage.workload.enabled }}
+            - name: traffic-package
+              containerPort: {{ .Values.controlApi.trafficPackage.workload.port }}
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.controlApi.dnsReconcile.enabled }}
+            - name: dns-reconcile
+              containerPort: {{ .Values.controlApi.dnsReconcile.workloadPort }}
+              protocol: TCP
+            {{- end }}
+            {{- if .Values.controlApi.identityVerification.issuer.enabled }}
+            - name: identity-issuer
+              containerPort: {{ .Values.controlApi.identityVerification.issuer.servicePort }}
+              protocol: TCP
+            {{- end }}
+          env:
+            - name: HTTP_ADDR
+              value: ":{{ .Values.controlApi.service.httpPort }}"
+            - name: CONTROL_INTERNAL_GRPC_ADDR
+              value: ":{{ .Values.controlApi.service.internalGRPCPort }}"
+            - name: CONTROL_INTERNAL_GATEWAY_WORKLOAD_URI_SAN
+              value: {{ .Values.agentGateway.workloadURISAN | quote }}
+            - name: CONTROL_INSTALLATION_NAME
+              value: {{ .Values.controlApi.installationName | quote }}
+            - name: CONTROL_VERSION
+              value: {{ .Values.controlApi.controlVersion | quote }}
+            - name: CONTROL_ARTIFACT_SHA256
+              value: {{ trimPrefix "sha256:" .Values.controlApi.image.digest | quote }}
+            {{- if .Values.controlUpgradeRunner.enabled }}
+            - {name: CONTROL_UPGRADE_PLAN_WRITER_ENABLED, value: "true"}
+            - {name: CONTROL_UPGRADE_SYSTEMD_PLAN_SOURCE_ENABLED, value: "true"}
+            - name: CONTROL_UPGRADE_REPLICA_ID
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: CONTROL_UPGRADE_KUBERNETES_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - {name: CONTROL_UPGRADE_EXPECTED_REPLICAS, value: {{ .Values.controlUpgradeRunner.expectedReplicas | quote }}}
+            - {name: CONTROL_UPGRADE_QUORUM, value: {{ .Values.controlUpgradeRunner.quorum | quote }}}
+            - {name: CONTROL_UPGRADE_PROTOCOL_VERSION, value: {{ .Values.controlUpgradeRunner.protocolVersion | quote }}}
+            - {name: CONTROL_UPGRADE_KUBERNETES_API, value: "https://kubernetes.default.svc"}
+            - {name: CONTROL_UPGRADE_PLAN_SECRET, value: {{ .Values.controlUpgradeRunner.planSecret.existingSecret | quote }}}
+            - {name: CONTROL_UPGRADE_PLAN_SECRET_KEY, value: {{ .Values.controlUpgradeRunner.planSecret.key | quote }}}
+            - {name: CONTROL_UPGRADE_STATE_SECRET_KEY, value: {{ .Values.controlUpgradeRunner.stateKey | quote }}}
+            - {name: CONTROL_UPGRADE_INTERNAL_TOKEN_FILE, value: /var/run/secrets/cdnca/control-upgrade-plan-source/internal-token}
+            - {name: CONTROL_UPGRADE_KUBERNETES_TOKEN_FILE, value: /var/run/secrets/cdnca/control-upgrade-kubernetes/token}
+            - {name: CONTROL_UPGRADE_KUBERNETES_CA_FILE, value: /var/run/secrets/cdnca/control-upgrade-kubernetes/ca.crt}
+            {{- end }}
+            - name: COOKIE_SECURE
+              value: "true"
+            - name: NODE_SCHEDULING_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.nodeScheduling.enabled | quote }}
+            - name: SYSTEM_CONFIGURATION_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.systemConfiguration.enabled | quote }}
+            - name: ANALYTICS_INGEST_ENABLED
+              value: {{ .Values.controlApi.analyticsIngest.enabled | quote }}
+            {{- if .Values.controlApi.analyticsIngest.enabled }}
+            - name: ANALYTICS_INGEST_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.natsURL }}
+            - name: ANALYTICS_INGEST_NATS_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.analyticsIngestNATSUser }}
+            - name: ANALYTICS_INGEST_NATS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.analyticsIngestNATSPassword }}
+            - name: ANALYTICS_INGEST_CLICKHOUSE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.clickhouseURL }}
+            - name: ANALYTICS_INGEST_CLICKHOUSE_DATABASE
+              value: {{ .Values.controlApi.analyticsIngest.clickhouseDatabase | quote }}
+            - name: ANALYTICS_INGEST_CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.analyticsIngestClickHouseUser }}
+            - name: ANALYTICS_INGEST_CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.analyticsIngestClickHousePassword }}
+            - name: ANALYTICS_INGEST_STREAM
+              value: {{ .Values.controlApi.analyticsIngest.stream | quote }}
+            - name: ANALYTICS_INGEST_DURABLE
+              value: {{ .Values.controlApi.analyticsIngest.durable | quote }}
+            - name: ANALYTICS_INGEST_ISOLATION_STREAM
+              value: {{ .Values.controlApi.analyticsIngest.isolationStream | quote }}
+            - name: ANALYTICS_INGEST_ISOLATION_MAX_BYTES
+              value: {{ printf "%d" (int64 .Values.controlApi.analyticsIngest.isolationMaxBytes) | quote }}
+            - name: ANALYTICS_INGEST_REPLICAS
+              value: {{ printf "%d" (int .Values.controlApi.analyticsIngest.replicas) | quote }}
+            - name: ANALYTICS_INGEST_ISOLATION_WRAPPING_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.analyticsIngestIsolationWrappingKeyID }}
+            - name: ANALYTICS_INGEST_ISOLATION_WRAPPING_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.analyticsIngestIsolationWrappingKey }}
+            {{- end }}
+            {{- if or .Values.controlApi.automaticPublication.enabled .Values.controlApi.packageCommerce.worker.enabled .Values.pluginWebhook.enabled }}
+            - name: POD_UID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.uid
+            {{- end }}
+            - name: EDGE_PUBLISH_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.securityActivation.enabled | quote }}
+            - name: EDGE_AUTOMATIC_PUBLICATION_ENABLED
+              value: {{ .Values.controlApi.automaticPublication.enabled | quote }}
+            {{- if .Values.controlApi.automaticPublication.enabled }}
+            - name: EDGE_AUTOMATIC_PUBLICATION_WORKER_ID
+              value: automatic-publication-$(POD_UID)
+            - name: EDGE_AUTOMATIC_PUBLICATION_POLL_INTERVAL
+              value: {{ .Values.controlApi.automaticPublication.pollInterval | quote }}
+            - name: EDGE_AUTOMATIC_PUBLICATION_ERROR_BACKOFF
+              value: {{ .Values.controlApi.automaticPublication.errorBackoff | quote }}
+            - name: EDGE_AUTOMATIC_PUBLICATION_OPERATION_TIMEOUT
+              value: {{ .Values.controlApi.automaticPublication.operationTimeout | quote }}
+            - name: EDGE_AUTOMATIC_PUBLICATION_LEASE_DURATION
+              value: {{ .Values.controlApi.automaticPublication.leaseDuration | quote }}
+            - name: EDGE_AUTOMATIC_PUBLICATION_RETRY_DELAY
+              value: {{ .Values.controlApi.automaticPublication.retryDelay | quote }}
+            {{- end }}
+            - name: CDNCA_SECURITY_ACTIVATION_ENABLED
+              value: {{ .Values.controlApi.securityActivation.enabled | quote }}
+            {{- if .Values.controlApi.securityActivation.enabled }}
+            - name: EDGE_PUBLISH_SIGNER_PROVIDER
+              value: {{ .Values.controlApi.securityActivation.signer.provider | quote }}
+            - name: EDGE_PUBLISH_CURSOR_ACTIVE_KEY_ID
+              value: {{ .Values.controlApi.securityActivation.edgePublishCursorActiveKeyID | quote }}
+            - name: EDGE_PUBLISH_CURSOR_KEYS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.edgePublishCursorKeys }}
+            - name: EDGE_PUBLISH_SIGNING_KEY_ID
+              value: {{ .Values.controlApi.securityActivation.edgePublishSigningKeyID | quote }}
+            {{- if eq .Values.controlApi.securityActivation.signer.provider "file" }}
+            - name: EDGE_PUBLISH_SIGNING_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/control/edge-publish-signing-private-key
+            {{- end }}
+            {{- if eq .Values.controlApi.securityActivation.signer.provider "remote" }}
+            - name: EDGE_PUBLISH_SIGNING_PUBLIC_KEY_FILE
+              value: /var/run/secrets/cdnca/control-edge-publish-signer/public-key.pem
+            - name: EDGE_PUBLISH_SIGNER_REMOTE_ENDPOINT
+              value: {{ .Values.controlApi.securityActivation.signer.remote.endpoint | quote }}
+            - name: EDGE_PUBLISH_SIGNER_REMOTE_CA_FILE
+              value: /var/run/secrets/cdnca/control-edge-publish-signer/ca.pem
+            - name: EDGE_PUBLISH_SIGNER_REMOTE_BEARER_TOKEN_FILE
+              value: /var/run/secrets/cdnca/control-edge-publish-signer/bearer-token
+            - name: EDGE_PUBLISH_SIGNER_REMOTE_TIMEOUT
+              value: {{ .Values.controlApi.securityActivation.signer.remote.timeout | quote }}
+            {{- end }}
+            - name: CDNCA_SECURITY_ACTIVATION_RECONCILE_INTERVAL
+              value: {{ .Values.controlApi.securityActivation.reconcileInterval | quote }}
+            - name: CDNCA_SECURITY_ACTIVATION_CANDIDATE_TTL
+              value: {{ .Values.controlApi.securityActivation.candidateTTL | quote }}
+            - name: CDNCA_SECURITY_ACTIVATION_REQUIRED_WAF_API_VERSION
+              value: {{ .Values.controlApi.securityActivation.requiredWAFAPIVersion | quote }}
+            - name: CDNCA_SECURITY_ACTIVATION_REQUIRED_CC_API_VERSION
+              value: {{ .Values.controlApi.securityActivation.requiredCCAPIVersion | quote }}
+            {{- end }}
+            - name: TRAFFIC_PACKAGE_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.trafficPackage.enabled | quote }}
+            - name: TRAFFIC_PACKAGE_WORKLOAD_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.trafficPackage.workload.enabled | quote }}
+            {{- if or .Values.controlApi.trafficPackage.enabled .Values.controlApi.trafficPackage.workload.enabled }}
+            - name: TRAFFIC_PACKAGE_CURSOR_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.trafficPackage.cursorKeySecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.trafficPackage.cursorKeySecret.key | quote }}
+            {{- end }}
+            {{- if .Values.controlApi.trafficPackage.workload.enabled }}
+            - name: TRAFFIC_PACKAGE_WORKLOAD_MTLS_LISTEN_ADDR
+              value: "0.0.0.0:{{ .Values.controlApi.trafficPackage.workload.port }}"
+            - name: TRAFFIC_PACKAGE_WORKLOAD_MTLS_SERVER_CERT_FILE
+              value: /var/run/secrets/cdnca/traffic-package-workload/server.crt
+            - name: TRAFFIC_PACKAGE_WORKLOAD_MTLS_SERVER_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/traffic-package-workload/server.key
+            - name: TRAFFIC_PACKAGE_WORKLOAD_MTLS_CLIENT_CA_FILE
+              value: /var/run/secrets/cdnca/traffic-package-workload/client-ca.crt
+            {{- end }}
+            - name: DNS_RECONCILE_ENABLED
+              value: {{ .Values.controlApi.dnsReconcile.enabled | quote }}
+            {{- if .Values.controlApi.dnsReconcile.enabled }}
+            - name: DNS_RECONCILE_RESOLVER_ENDPOINTS
+              value: {{ join "," .Values.controlApi.dnsReconcile.resolverEndpoints | quote }}
+            - name: DNS_RECONCILE_AUTHORITATIVE_RESOLVERS
+              value: {{ join "," .Values.controlApi.dnsReconcile.authoritativeResolvers | quote }}
+            - name: DNS_RECONCILE_PUBLIC_RESOLVERS
+              value: {{ join "," .Values.controlApi.dnsReconcile.publicResolvers | quote }}
+            - name: DNS_RECONCILE_WORKLOAD_IDENTITIES
+              value: {{ join "," .Values.controlApi.dnsReconcile.workloadIdentities | quote }}
+            - name: DNS_RECONCILE_WORKLOAD_MTLS_LISTEN_ADDR
+              value: "0.0.0.0:{{ .Values.controlApi.dnsReconcile.workloadPort }}"
+            - name: DNS_RECONCILE_WORKLOAD_MTLS_SERVER_CERT_FILE
+              value: /var/run/secrets/cdnca/dns-reconcile-workload/server.crt
+            - name: DNS_RECONCILE_WORKLOAD_MTLS_SERVER_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/dns-reconcile-workload/server.key
+            - name: DNS_RECONCILE_WORKLOAD_MTLS_CLIENT_CA_FILE
+              value: /var/run/secrets/cdnca/dns-reconcile-workload/client-ca.crt
+            {{- end }}
+            - name: ACME_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.acme.enabled | quote }}
+            {{- if .Values.controlApi.acme.enabled }}
+            - name: CERTIFICATE_PUBLICATION_CURSOR_ACTIVE_KEY_ID
+              value: {{ .Values.controlApi.acme.publicationCursorActiveKeyID | quote }}
+            - name: CERTIFICATE_PUBLICATION_CURSOR_KEYS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.acme.runtimeSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.acme.runtimeSecret.keys.publicationCursorKeys | quote }}
+            - name: ACME_DIRECTORY_URL
+              value: {{ .Values.controlApi.acme.directoryURL | quote }}
+            - name: ACME_CONTACTS
+              value: {{ join "," .Values.controlApi.acme.contacts | quote }}
+            - name: ACME_POLL_INTERVAL
+              value: {{ .Values.controlApi.acme.pollInterval | quote }}
+            - name: ACME_LEASE_DURATION
+              value: {{ .Values.controlApi.acme.leaseDuration | quote }}
+            - name: ACME_SETTLE_TIMEOUT
+              value: {{ .Values.controlApi.acme.settleTimeout | quote }}
+            - name: ACME_RETRY_BASE
+              value: {{ .Values.controlApi.acme.retryBase | quote }}
+            - name: ACME_RETRY_MAXIMUM
+              value: {{ .Values.controlApi.acme.retryMaximum | quote }}
+            - name: ACME_MAX_ATTEMPTS
+              value: {{ printf "%d" (int .Values.controlApi.acme.maxAttempts) | quote }}
+            - name: ACME_ERROR_BACKOFF_MIN
+              value: {{ .Values.controlApi.acme.errorBackoffMin | quote }}
+            - name: ACME_ERROR_BACKOFF_MAX
+              value: {{ .Values.controlApi.acme.errorBackoffMax | quote }}
+            - name: ACME_WRAPPING_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.acme.runtimeSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.acme.runtimeSecret.keys.wrappingKeyID | quote }}
+            - name: ACME_WRAPPING_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.acme.runtimeSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.acme.runtimeSecret.keys.wrappingKey | quote }}
+            - name: ACME_DNS_HANDLE_ACTIVE_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.acme.runtimeSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.acme.runtimeSecret.keys.dnsHandleActiveKeyID | quote }}
+            - name: ACME_DNS_HANDLE_ACTIVE_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.acme.runtimeSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.acme.runtimeSecret.keys.dnsHandleActiveKey | quote }}
+            - name: ACME_DNS_HANDLE_VERIFY_ONLY_KEYS_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.acme.runtimeSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.acme.runtimeSecret.keys.dnsHandleVerifyOnlyKeys | quote }}
+                  optional: true
+            {{- end }}
+            {{- if .Values.controlApi.licenseServiceURL }}
+            - name: LICENSE_SERVICE_URL
+              value: {{ .Values.controlApi.licenseServiceURL | quote }}
+            {{- end }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.databaseURL }}
+            - name: EDGE_DEPLOYMENT_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.natsURL }}
+            - name: NODE_PORT_TRANSITION_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.nodePortTransition.enabled | quote }}
+            - name: NODE_PRESENCE_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.natsURL }}
+            - name: NODE_PRESENCE_REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.redisURL }}
+            - name: CACHE_CONTROL_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.cacheControl.enabled | quote }}
+            {{- if .Values.controlApi.cacheControl.enabled }}
+            - name: CACHE_CONTROL_RUNTIME_NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.natsURL }}
+            - name: CACHE_CONTROL_RUNTIME_NATS_NAME
+              value: {{ .Values.controlApi.cacheControl.natsName | quote }}
+            - name: CACHE_CONTROL_RUNTIME_NATS_CONNECT_TIMEOUT
+              value: {{ .Values.controlApi.cacheControl.natsConnectTimeout | quote }}
+            - name: CACHE_CONTROL_RUNTIME_NATS_RECONNECT_WAIT
+              value: {{ .Values.controlApi.cacheControl.natsReconnectWait | quote }}
+            - name: CACHE_CONTROL_RUNTIME_NATS_DRAIN_TIMEOUT
+              value: {{ .Values.controlApi.cacheControl.natsDrainTimeout | quote }}
+            - name: CACHE_CONTROL_RUNTIME_CURSOR_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.cacheControlCursorKey }}
+            - name: CACHE_CONTROL_RUNTIME_COMMAND_STREAM
+              value: {{ .Values.controlApi.cacheControl.commandStream | quote }}
+            - name: CACHE_CONTROL_RUNTIME_STATUS_STREAM
+              value: {{ .Values.controlApi.cacheControl.statusStream | quote }}
+            - name: CACHE_CONTROL_RUNTIME_COMMAND_SUBJECT_PREFIX
+              value: {{ .Values.controlApi.cacheControl.commandSubjectPrefix | quote }}
+            - name: CACHE_CONTROL_RUNTIME_STATUS_SUBJECT_PREFIX
+              value: {{ .Values.controlApi.cacheControl.statusSubjectPrefix | quote }}
+            - name: CACHE_CONTROL_RUNTIME_DLQ_SUBJECT_PREFIX
+              value: {{ .Values.controlApi.cacheControl.dlqSubjectPrefix | quote }}
+            - name: CACHE_CONTROL_RUNTIME_DURABLE
+              value: {{ .Values.controlApi.cacheControl.durable | quote }}
+            - name: CACHE_CONTROL_RUNTIME_WORKER_ID
+              value: {{ .Values.controlApi.cacheControl.workerID | quote }}
+            - name: CACHE_CONTROL_RUNTIME_POLL_INTERVAL
+              value: {{ .Values.controlApi.cacheControl.pollInterval | quote }}
+            - name: CACHE_CONTROL_RUNTIME_FETCH_TIMEOUT
+              value: {{ .Values.controlApi.cacheControl.fetchTimeout | quote }}
+            - name: CACHE_CONTROL_RUNTIME_OPERATION_TIMEOUT
+              value: {{ .Values.controlApi.cacheControl.operationTimeout | quote }}
+            - name: CACHE_CONTROL_RUNTIME_LEASE_DURATION
+              value: {{ .Values.controlApi.cacheControl.leaseDuration | quote }}
+            - name: CACHE_CONTROL_RUNTIME_ACK_WAIT
+              value: {{ .Values.controlApi.cacheControl.ackWait | quote }}
+            - name: CACHE_CONTROL_RUNTIME_NAK_BASE_DELAY
+              value: {{ .Values.controlApi.cacheControl.nakBaseDelay | quote }}
+            - name: CACHE_CONTROL_RUNTIME_NAK_MAXIMUM_DELAY
+              value: {{ .Values.controlApi.cacheControl.nakMaximumDelay | quote }}
+            - name: CACHE_CONTROL_RUNTIME_CLAIM_BATCH
+              value: {{ printf "%d" (int .Values.controlApi.cacheControl.claimBatch) | quote }}
+            - name: CACHE_CONTROL_RUNTIME_MAX_DELIVER
+              value: {{ printf "%d" (int .Values.controlApi.cacheControl.maxDeliver) | quote }}
+            - name: CACHE_CONTROL_RUNTIME_MAX_ACK_PENDING
+              value: {{ printf "%d" (int .Values.controlApi.cacheControl.maxAckPending) | quote }}
+            - name: CACHE_CONTROL_RUNTIME_MAX_WAITING
+              value: {{ printf "%d" (int .Values.controlApi.cacheControl.maxWaiting) | quote }}
+            - name: CACHE_CONTROL_RUNTIME_MAX_PAYLOAD_BYTES
+              value: {{ printf "%d" (int .Values.controlApi.cacheControl.maxPayloadBytes) | quote }}
+            - name: CACHE_CONTROL_RUNTIME_STREAM_REPLICAS
+              value: {{ printf "%d" (int .Values.controlApi.cacheControl.streamReplicas) | quote }}
+            {{- end }}
+            - name: PACKAGE_COMMERCE_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.packageCommerce.enabled | quote }}
+            - name: PACKAGE_COMMERCE_PROVIDER_CALLBACKS_ENABLED
+              value: {{ .Values.controlApi.packageCommerce.providerCallbacks.enabled | quote }}
+            {{- if .Values.controlApi.packageCommerce.providerCallbacks.enabled }}
+            - name: PACKAGE_COMMERCE_PROVIDER_KEYRING_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.packageCommerce.providerCallbacks.keyringSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.packageCommerce.providerCallbacks.keyringSecret.key | quote }}
+            {{- end }}
+            {{- if .Values.controlApi.packageCommerce.enabled }}
+            - name: PACKAGE_COMMERCE_CURSOR_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.packageCommerceCursorKey }}
+            {{- end }}
+            - name: PACKAGE_MONITOR_HTTP_ENABLED
+              value: {{ .Values.controlApi.packageMonitor.enabled | quote }}
+            {{- if .Values.controlApi.packageMonitor.enabled }}
+            - name: PACKAGE_MONITOR_HTTP_CURSOR_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.packageMonitor.cursorKeySecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.packageMonitor.cursorKeySecret.key | quote }}
+            {{- end }}
+            - name: IDENTITY_VERIFICATION_RUNTIME_ENABLED
+              value: {{ .Values.controlApi.identityVerification.enabled | quote }}
+            - name: IDENTITY_VERIFICATION_SETTLEMENT_WORKER_ENABLED
+              value: {{ .Values.controlApi.identityVerification.settlement.workerEnabled | quote }}
+            {{- if .Values.controlApi.identityVerification.enabled }}
+            - name: IDENTITY_VERIFICATION_CURSOR_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.identityVerification.cursorKeySecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.identityVerification.cursorKeySecret.key | quote }}
+            - name: IDENTITY_VERIFICATION_RESOLVER_NAME
+              value: {{ .Values.controlApi.identityVerification.resolverName | quote }}
+            - name: IDENTITY_VERIFICATION_REVIEW_TTL
+              value: {{ .Values.controlApi.identityVerification.reviewTTL | quote }}
+            - name: IDENTITY_VERIFICATION_RETENTION_PERIOD
+              value: {{ .Values.controlApi.identityVerification.retentionPeriod | quote }}
+            - name: IDENTITY_VERIFICATION_SETTLEMENT_LEASE_DURATION
+              value: {{ .Values.controlApi.identityVerification.settlement.leaseDuration | quote }}
+            - name: IDENTITY_VERIFICATION_SETTLEMENT_RETRY_DELAY
+              value: {{ .Values.controlApi.identityVerification.settlement.retryDelay | quote }}
+            - name: IDENTITY_VERIFICATION_SETTLEMENT_MAX_ATTEMPTS
+              value: {{ printf "%d" (int .Values.controlApi.identityVerification.settlement.maxAttempts) | quote }}
+            - name: IDENTITY_VERIFICATION_SETTLEMENT_WORKER_IDLE_POLL
+              value: {{ .Values.controlApi.identityVerification.settlement.idlePoll | quote }}
+            - name: IDENTITY_VERIFICATION_SETTLEMENT_WORKER_ERROR_BACKOFF
+              value: {{ .Values.controlApi.identityVerification.settlement.errorBackoff | quote }}
+            {{- if .Values.controlApi.identityVerification.provider.enabled }}
+            - name: IDENTITY_VERIFICATION_KYC_PROVIDER_NAME
+              value: {{ .Values.controlApi.identityVerification.provider.name | quote }}
+            - name: IDENTITY_VERIFICATION_KYC_ENDPOINT
+              value: {{ .Values.controlApi.identityVerification.provider.endpoint | quote }}
+            - name: IDENTITY_VERIFICATION_KYC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.identityVerification.provider.apiKeySecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.identityVerification.provider.apiKeySecret.key | quote }}
+            - name: IDENTITY_VERIFICATION_KYC_CALLBACK_KEY_ID
+              value: {{ .Values.controlApi.identityVerification.provider.callbackKeyId | quote }}
+            - name: IDENTITY_VERIFICATION_KYC_CALLBACK_HMAC_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.identityVerification.provider.callbackHMACSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.identityVerification.provider.callbackHMACSecret.key | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_ENDPOINT
+              value: {{ .Values.controlApi.identityVerification.provider.objectStore.endpoint | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_REGION
+              value: {{ .Values.controlApi.identityVerification.provider.objectStore.region | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_BUCKET
+              value: {{ .Values.controlApi.identityVerification.provider.objectStore.bucket | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_PREFIX
+              value: {{ .Values.controlApi.identityVerification.provider.objectStore.prefix | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.identityVerification.provider.objectStore.credentialsSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.identityVerification.provider.objectStore.credentialsSecret.keys.accessKeyId | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.identityVerification.provider.objectStore.credentialsSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.identityVerification.provider.objectStore.credentialsSecret.keys.secretAccessKey | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_SESSION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.identityVerification.provider.objectStore.credentialsSecret.existingSecret | quote }}
+                  key: {{ .Values.controlApi.identityVerification.provider.objectStore.credentialsSecret.keys.sessionToken | quote }}
+            - name: IDENTITY_VERIFICATION_OBJECT_KMS_KEY_ID
+              value: {{ .Values.controlApi.identityVerification.provider.objectStore.kmsKeyId | quote }}
+            {{- end }}
+            - name: IDENTITY_VERIFICATION_ISSUER_ENABLED
+              value: {{ .Values.controlApi.identityVerification.issuer.enabled | quote }}
+            {{- if .Values.controlApi.identityVerification.issuer.enabled }}
+            - name: IDENTITY_VERIFICATION_ISSUER_MTLS_LISTEN_ADDR
+              value: {{ .Values.controlApi.identityVerification.issuer.listenAddress | quote }}
+            - name: IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_CERT_FILE
+              value: /var/run/secrets/cdnca/identity-verification-issuer/server.crt
+            - name: IDENTITY_VERIFICATION_ISSUER_MTLS_SERVER_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/identity-verification-issuer/server.key
+            - name: IDENTITY_VERIFICATION_ISSUER_MTLS_CLIENT_CA_FILE
+              value: /var/run/secrets/cdnca/identity-verification-issuer/client-ca.crt
+            - name: IDENTITY_VERIFICATION_ISSUER_WORKLOAD_IDENTITIES
+              value: {{ .Values.controlApi.identityVerification.issuer.workloadIdentities | quote }}
+            - name: IDENTITY_VERIFICATION_ISSUER_KMS_ENDPOINT
+              value: {{ .Values.controlApi.identityVerification.issuer.kmsEndpoint | quote }}
+            {{- end }}
+            {{- end }}
+            - name: PACKAGE_COMMERCE_WORKER_ENABLED
+              value: {{ .Values.controlApi.packageCommerce.worker.enabled | quote }}
+            {{- if .Values.controlApi.packageCommerce.worker.enabled }}
+            - name: PACKAGE_COMMERCE_WORKER_NATS_URL
+              value: {{ .Values.controlApi.packageCommerce.worker.nats.url | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_NATS_NAME
+              value: cdnca-package-commerce-worker-$(POD_UID)
+            - name: PACKAGE_COMMERCE_WORKER_NATS_CREDS_FILE
+              value: /var/run/secrets/cdnca/package-commerce-worker-nats/runtime.creds
+            - name: PACKAGE_COMMERCE_WORKER_NATS_CA_FILE
+              value: /var/run/secrets/cdnca/package-commerce-worker-nats/ca.crt
+            - name: PACKAGE_COMMERCE_WORKER_NATS_STREAM
+              value: {{ .Values.controlApi.packageCommerce.worker.nats.stream | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_OWNER
+              value: package-commerce-worker-$(POD_UID)
+            - name: PACKAGE_COMMERCE_WORKER_NATS_CONNECT_TIMEOUT
+              value: {{ .Values.controlApi.packageCommerce.worker.nats.connectTimeout | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_NATS_OPERATION_TIMEOUT
+              value: {{ .Values.controlApi.packageCommerce.worker.nats.operationTimeout | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_NATS_RECONNECT_WAIT
+              value: {{ .Values.controlApi.packageCommerce.worker.nats.reconnectWait | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_NATS_DRAIN_TIMEOUT
+              value: {{ .Values.controlApi.packageCommerce.worker.nats.drainTimeout | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_BATCH_SIZE
+              value: {{ printf "%d" (int .Values.controlApi.packageCommerce.worker.batchSize) | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_LEASE_DURATION
+              value: {{ .Values.controlApi.packageCommerce.worker.leaseDuration | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_PUBLISH_TIMEOUT
+              value: {{ .Values.controlApi.packageCommerce.worker.publishTimeout | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_SETTLE_TIMEOUT
+              value: {{ .Values.controlApi.packageCommerce.worker.settleTimeout | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_RETRY_MAX_ATTEMPTS
+              value: {{ printf "%d" (int .Values.controlApi.packageCommerce.worker.retryMaxAttempts) | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_RETRY_BASE_DELAY
+              value: {{ .Values.controlApi.packageCommerce.worker.retryBaseDelay | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_RETRY_MAX_DELAY
+              value: {{ .Values.controlApi.packageCommerce.worker.retryMaxDelay | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_IDLE_POLL
+              value: {{ .Values.controlApi.packageCommerce.worker.idlePoll | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_ERROR_BACKOFF
+              value: {{ .Values.controlApi.packageCommerce.worker.errorBackoff | quote }}
+            - name: PACKAGE_COMMERCE_WORKER_SHUTDOWN_TIMEOUT
+              value: {{ .Values.controlApi.packageCommerce.worker.shutdownTimeout | quote }}
+            {{- end }}
+            {{- if .Values.pluginWebhook.enabled }}
+            - name: PLUGIN_WEBHOOK_RUNTIME_ENABLED
+              value: "true"
+            - name: PLUGIN_WEBHOOK_NATS_URL
+              value: {{ .Values.pluginWebhook.nats.url | quote }}
+            - name: PLUGIN_WEBHOOK_REPLICAS
+              value: {{ .Values.pluginWebhook.nats.jetStreamReplicas | quote }}
+            - name: PLUGIN_WEBHOOK_NATS_CREDS_FILE
+              value: /var/run/secrets/cdnca/plugin-webhook-nats/runtime.creds
+            - name: PLUGIN_WEBHOOK_NATS_CA_FILE
+              value: /var/run/secrets/cdnca/plugin-webhook-nats/ca.crt
+            - name: PLUGIN_WEBHOOK_NATS_NAME
+              value: cdnca-plugin-webhook-runtime-$(POD_UID)
+            - name: PLUGIN_WEBHOOK_NATS_RECONNECT_MIN
+              value: {{ .Values.pluginWebhook.nats.reconnect.min | quote }}
+            - name: PLUGIN_WEBHOOK_NATS_RECONNECT_MAX
+              value: {{ .Values.pluginWebhook.nats.reconnect.max | quote }}
+            - name: PLUGIN_WEBHOOK_SECRET_KEY_ID
+              value: {{ .Values.pluginWebhook.wrappingKey.id | quote }}
+            - name: PLUGIN_WEBHOOK_SECRET_KEY_FILE
+              value: /var/run/secrets/cdnca/plugin-webhook/wrapping.key
+            - name: PLUGIN_WEBHOOK_ATTESTATION_KEY_ID
+              value: {{ required "pluginWebhook.attestationKey.id is required" .Values.pluginWebhook.attestationKey.id | quote }}
+            - name: PLUGIN_WEBHOOK_ATTESTATION_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/plugin-webhook-attestation/attestation.pem
+            {{- if .Values.pluginWebhook.attestationKey.next.id }}
+            - name: PLUGIN_WEBHOOK_ATTESTATION_NEXT_KEY_ID
+              value: {{ .Values.pluginWebhook.attestationKey.next.id | quote }}
+            - name: PLUGIN_WEBHOOK_ATTESTATION_NEXT_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/plugin-webhook-attestation-next/attestation.pem
+            {{- end }}
+            {{- end }}
+            - name: CLICKHOUSE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+                  key: {{ .Values.controlApi.dataStoresSecret.keys.clickhouseURL }}
+            - name: ACCESS_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.accessTokenSecret }}
+            - name: API_KEY_PEPPER_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.apiKeyPepper }}
+            - name: DNS_CREDENTIAL_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.dnsCredentialKeyID }}
+            - name: DNS_CREDENTIAL_KEY_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.dnsCredentialKey }}
+            - name: CONTROL_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+                  key: {{ .Values.controlApi.runtimeSecret.keys.installationID }}
+            - name: ENTITLEMENT_TRUSTED_KEYS_FILE
+              value: /var/run/secrets/cdnca/control/entitlement-trusted-keys.json
+            - name: CONTROL_INSTALLATION_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/control/installation-private-key.pem
+            - name: CONTROL_ACTIVATION_CREDENTIAL_FILE
+              value: /var/run/secrets/cdnca/control/activation-credential
+            - name: CONTROL_INTERNAL_SERVER_CERT_FILE
+              value: /var/run/secrets/cdnca/control/control-server.crt
+            - name: CONTROL_INTERNAL_SERVER_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/control/control-server.key
+            - name: CONTROL_INTERNAL_GATEWAY_CLIENT_CA_FILE
+              value: /var/run/secrets/cdnca/control/gateway-client-ca.crt
+            - name: NODE_CA_CERTIFICATE_CHAIN_FILE
+              value: /var/run/secrets/cdnca/control/node-ca-chain.crt
+            - name: NODE_CA_PRIVATE_KEY_FILE
+              value: /var/run/secrets/cdnca/control/node-ca.key
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+            successThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.controlApi.resources | nindent 12 }}
+          volumeMounts:
+            - name: runtime
+              mountPath: /var/run/secrets/cdnca/control
+              readOnly: true
+            {{- if .Values.controlUpgradeRunner.enabled }}
+            - name: control-upgrade-plan-source
+              mountPath: /var/run/secrets/cdnca/control-upgrade-plan-source
+              readOnly: true
+            - name: control-upgrade-kubernetes
+              mountPath: /var/run/secrets/cdnca/control-upgrade-kubernetes
+              readOnly: true
+            {{- end }}
+            {{- if .Values.controlApi.trafficPackage.workload.enabled }}
+            - name: traffic-package-workload
+              mountPath: /var/run/secrets/cdnca/traffic-package-workload
+              readOnly: true
+            {{- end }}
+            {{- if .Values.controlApi.dnsReconcile.enabled }}
+            - name: dns-reconcile-workload
+              mountPath: /var/run/secrets/cdnca/dns-reconcile-workload
+              readOnly: true
+            {{- end }}
+            {{- if .Values.pluginWebhook.enabled }}
+            - name: plugin-webhook-nats
+              mountPath: /var/run/secrets/cdnca/plugin-webhook-nats
+              readOnly: true
+            - name: plugin-webhook-wrapping-key
+              mountPath: /var/run/secrets/cdnca/plugin-webhook
+              readOnly: true
+            - name: plugin-webhook-attestation-key
+              mountPath: /var/run/secrets/cdnca/plugin-webhook-attestation
+              readOnly: true
+            {{- if .Values.pluginWebhook.attestationKey.next.id }}
+            - name: plugin-webhook-attestation-next-key
+              mountPath: /var/run/secrets/cdnca/plugin-webhook-attestation-next
+              readOnly: true
+            {{- end }}
+            {{- end }}
+            {{- if .Values.controlApi.packageCommerce.worker.enabled }}
+            - name: package-commerce-worker-nats
+              mountPath: /var/run/secrets/cdnca/package-commerce-worker-nats
+              readOnly: true
+            {{- end }}
+            {{- if .Values.controlApi.identityVerification.issuer.enabled }}
+            - name: identity-verification-issuer
+              mountPath: /var/run/secrets/cdnca/identity-verification-issuer
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: runtime
+          secret:
+            secretName: {{ .Values.controlApi.runtimeSecret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.controlApi.runtimeSecret.keys.entitlementTrustedKeys }}
+                path: entitlement-trusted-keys.json
+              - key: {{ .Values.controlApi.runtimeSecret.keys.installationPrivateKey }}
+                path: installation-private-key.pem
+              - key: {{ .Values.controlApi.runtimeSecret.keys.activationCredential }}
+                path: activation-credential
+              - key: {{ .Values.controlApi.runtimeSecret.keys.controlServerCertificate }}
+                path: control-server.crt
+              - key: {{ .Values.controlApi.runtimeSecret.keys.controlServerPrivateKey }}
+                path: control-server.key
+              - key: {{ .Values.controlApi.runtimeSecret.keys.gatewayClientCA }}
+                path: gateway-client-ca.crt
+              - key: {{ .Values.controlApi.runtimeSecret.keys.nodeCACertificateChain }}
+                path: node-ca-chain.crt
+              - key: {{ .Values.controlApi.runtimeSecret.keys.nodeCAPrivateKey }}
+                path: node-ca.key
+              {{- if and .Values.controlApi.securityActivation.enabled (eq .Values.controlApi.securityActivation.signer.provider "file") }}
+              - key: {{ .Values.controlApi.runtimeSecret.keys.edgePublishSigningPrivateKey }}
+                path: edge-publish-signing-private-key
+              {{- end }}
+        {{- if and .Values.controlApi.securityActivation.enabled (eq .Values.controlApi.securityActivation.signer.provider "remote") }}
+        - name: edge-publish-remote-signer
+          projected:
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: {{ .Values.controlApi.securityActivation.signer.publicKeySecret.existingSecret | quote }}
+                  items:
+                    - key: {{ .Values.controlApi.securityActivation.signer.publicKeySecret.key | quote }}
+                      path: public-key.pem
+                      mode: 0440
+              - secret:
+                  name: {{ .Values.controlApi.securityActivation.signer.remote.caSecret.existingSecret | quote }}
+                  items:
+                    - key: {{ .Values.controlApi.securityActivation.signer.remote.caSecret.key | quote }}
+                      path: ca.pem
+                      mode: 0440
+              - secret:
+                  name: {{ .Values.controlApi.securityActivation.signer.remote.bearerTokenSecret.existingSecret | quote }}
+                  items:
+                    - key: {{ .Values.controlApi.securityActivation.signer.remote.bearerTokenSecret.key | quote }}
+                      path: bearer-token
+                      mode: 0600
+        {{- end }}
+        {{- if .Values.controlUpgradeRunner.enabled }}
+        - name: control-upgrade-plan-source
+          secret:
+            secretName: {{ .Values.controlUpgradeRunner.planSource.existingSecret | quote }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.controlUpgradeRunner.planSource.keys.internalToken | quote }}
+                path: internal-token
+        - name: control-upgrade-kubernetes
+          projected:
+            defaultMode: 0400
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: https://kubernetes.default.svc
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - {key: ca.crt, path: ca.crt}
+        {{- end }}
+        {{- if .Values.controlApi.trafficPackage.workload.enabled }}
+        - name: traffic-package-workload
+          secret:
+            secretName: {{ .Values.controlApi.trafficPackage.workload.mtlsSecret.existingSecret | quote }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.controlApi.trafficPackage.workload.mtlsSecret.keys.serverCertificate | quote }}
+                path: server.crt
+              - key: {{ .Values.controlApi.trafficPackage.workload.mtlsSecret.keys.serverPrivateKey | quote }}
+                path: server.key
+              - key: {{ .Values.controlApi.trafficPackage.workload.mtlsSecret.keys.clientCA | quote }}
+                path: client-ca.crt
+        {{- end }}
+        {{- if .Values.controlApi.dnsReconcile.enabled }}
+        - name: dns-reconcile-workload
+          secret:
+            secretName: {{ .Values.controlApi.dnsReconcile.workloadMTLSSecret.existingSecret | quote }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.controlApi.dnsReconcile.workloadMTLSSecret.keys.serverCertificate | quote }}
+                path: server.crt
+              - key: {{ .Values.controlApi.dnsReconcile.workloadMTLSSecret.keys.serverPrivateKey | quote }}
+                path: server.key
+              - key: {{ .Values.controlApi.dnsReconcile.workloadMTLSSecret.keys.clientCA | quote }}
+                path: client-ca.crt
+        {{- end }}
+        {{- if .Values.pluginWebhook.enabled }}
+        - name: plugin-webhook-nats
+          projected:
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: {{ .Values.pluginWebhook.nats.credentialsSecret.name | quote }}
+                  items:
+                    - key: {{ .Values.pluginWebhook.nats.credentialsSecret.key | quote }}
+                      path: runtime.creds
+              - secret:
+                  name: {{ .Values.pluginWebhook.nats.caSecret.name | quote }}
+                  items:
+                    - key: {{ .Values.pluginWebhook.nats.caSecret.key | quote }}
+                      path: ca.crt
+        - name: plugin-webhook-wrapping-key
+          secret:
+            secretName: {{ .Values.pluginWebhook.wrappingKey.secret.name | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.pluginWebhook.wrappingKey.secret.key | quote }}
+                path: wrapping.key
+        - name: plugin-webhook-attestation-key
+          secret:
+            secretName: {{ required "pluginWebhook.attestationKey.secret.name is required" .Values.pluginWebhook.attestationKey.secret.name | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.pluginWebhook.attestationKey.secret.key | quote }}
+                path: attestation.pem
+        {{- if .Values.pluginWebhook.attestationKey.next.id }}
+        - name: plugin-webhook-attestation-next-key
+          secret:
+            secretName: {{ .Values.pluginWebhook.attestationKey.next.secret.name | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.pluginWebhook.attestationKey.next.secret.key | quote }}
+                path: attestation.pem
+        {{- end }}
+        {{- end }}
+        {{- if .Values.controlApi.packageCommerce.worker.enabled }}
+        - name: package-commerce-worker-nats
+          projected:
+            defaultMode: 0440
+            sources:
+              - secret:
+                  name: {{ .Values.controlApi.packageCommerce.worker.nats.credentialsSecret.existingSecret | quote }}
+                  items:
+                    - key: {{ .Values.controlApi.packageCommerce.worker.nats.credentialsSecret.key | quote }}
+                      path: runtime.creds
+              - secret:
+                  name: {{ .Values.controlApi.packageCommerce.worker.nats.caSecret.existingSecret | quote }}
+                  items:
+                    - key: {{ .Values.controlApi.packageCommerce.worker.nats.caSecret.key | quote }}
+                      path: ca.crt
+        {{- end }}
+        {{- if .Values.controlApi.identityVerification.issuer.enabled }}
+        - name: identity-verification-issuer
+          secret:
+            secretName: {{ .Values.controlApi.identityVerification.issuer.mtlsSecret.existingSecret | quote }}
+            defaultMode: 0400
+            items:
+              - key: {{ .Values.controlApi.identityVerification.issuer.mtlsSecret.keys.serverCertificate | quote }}
+                path: server.crt
+              - key: {{ .Values.controlApi.identityVerification.issuer.mtlsSecret.keys.serverPrivateKey | quote }}
+                path: server.key
+              - key: {{ .Values.controlApi.identityVerification.issuer.mtlsSecret.keys.clientCA | quote }}
+                path: client-ca.crt
+        {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  type: {{ .Values.controlApi.service.type }}
+  selector:
+    {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.controlApi.service.httpPort }}
+      targetPort: http
+      protocol: TCP
+    - name: internal-grpc
+      port: {{ .Values.controlApi.service.internalGRPCPort }}
+      targetPort: internal-grpc
+      protocol: TCP
+{{- if .Values.controlApi.dnsReconcile.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}-dns-reconcile-workload
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 4 }}
+  ports:
+    - name: dns-reconcile
+      port: {{ .Values.controlApi.dnsReconcile.workloadPort }}
+      targetPort: dns-reconcile
+      protocol: TCP
+{{- end }}
+{{- if .Values.controlApi.trafficPackage.workload.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}-traffic-package-workload
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 4 }}
+  ports:
+    - name: traffic-package
+      port: {{ .Values.controlApi.trafficPackage.workload.port }}
+      targetPort: traffic-package
+      protocol: TCP
+{{- end }}
+{{- if .Values.controlApi.identityVerification.issuer.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" . "component" $component) }}-identity-verification-issuer
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 4 }}
+  ports:
+    - name: identity-issuer
+      port: {{ .Values.controlApi.identityVerification.issuer.servicePort }}
+      targetPort: identity-issuer
+      protocol: TCP
+{{- end }}
+{{- end }}

@@ -1,0 +1,413 @@
+{
+ "id": "escalate",
+ "prefix": "/v1/escalate",
+ "operations": [
+  {
+   "operation_id": "listEscalateGrantees",
+   "method": "GET",
+   "path": "/v1/escalate/grantees",
+   "summary": "Active resellers the session scope may grant line groups to",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The platform gets the active resellers (an active tenant with an active reseller profile); a tenant (reseller) gets an empty list, as 1.0.35 has one level. Replaces GET /v1/admin/tenant-scopes in the grant dialog.",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Short tenant ID, or a case-insensitive substring of the tenant name or scope UUID."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "At most 200 resellers ordered by name.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Grantee>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "listEscalateLineGroups",
+   "method": "GET",
+   "path": "/v1/escalate/line-groups",
+   "summary": "List the line groups the session scope may use for B/C (own and granted) with their tier",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "node_scheduling.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Usable line groups.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<UsableLineGroup>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "listEscalateLineGroupGrants",
+   "method": "GET",
+   "path": "/v1/escalate/line-groups/grants",
+   "summary": "The grants the session scope made, newest first, revoked ones included",
+   "auth": [
+    "bearer"
+   ],
+   "description": "NODE-N05. Cursor paged by (created_at, id) descending; next_cursor is empty on the last page. Only the session scope's own grants (grantor_scope_id); a reseller gets none, as 1.0.35 has one level. Revoked grants carry revoked_at so the history stays visible; only live ones can be revoked.",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "A page of grants.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<GrantRecord>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "grantEscalateLineGroup",
+   "method": "POST",
+   "path": "/v1/escalate/line-groups/grants",
+   "summary": "Grant a platform line group to an active reseller",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only the platform grants, only its own line groups, and only to an active reseller (GET /v1/escalate/grantees). 1.0.35 has one reseller level, so may_regrant must be false (422 escalate_regrant_unsupported); a grantee that is not an active reseller is 422 escalate_grantee_not_reseller; a tenant caller or a line group the platform does not own is 403 escalate_grant_denied.",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "features": [
+    "module.escalate"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "owner_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "line_group_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "grantee_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "may_regrant",
+      "type": "boolean",
+      "required": true,
+      "description": "Must be false in 1.0.35."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "The grant.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "line_group_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "grantor_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "grantee_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "may_regrant",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    },
+    {
+     "status": "422",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "revokeEscalateLineGroupGrant",
+   "method": "DELETE",
+   "path": "/v1/escalate/line-groups/grants/{grant_id}",
+   "summary": "Revoke a grant; the reseller's packages using the line group are withdrawn and their B/C cleared",
+   "auth": [
+    "bearer"
+   ],
+   "description": "In one transaction: the grant (and anything passed on) is revoked, every published package of the reseller that uses the line group is withdrawn, and B/C pointing at it are cleared (audited in the reseller's scope as package.escalate_policy.grant_revoked). Sold subscriptions keep their snapshot until they expire.",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "features": [
+    "module.escalate"
+   ],
+   "params": [
+    {
+     "name": "grant_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "What the revocation did.",
+     "fields": [
+      {
+       "name": "revoked",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "withdrawn_products",
+       "type": "array<string(uuid)>",
+       "required": true
+      },
+      {
+       "name": "cleared_policies",
+       "type": "array<string(uuid)>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "putEscalateLineGroupTier",
+   "method": "PUT",
+   "path": "/v1/escalate/line-groups/{line_group_id}/tier",
+   "summary": "Mark one of the session scope's own line groups 普通 / 高防 / 无限防",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "features": [
+    "module.escalate"
+   ],
+   "params": [
+    {
+     "name": "line_group_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tier",
+      "type": "string: normal / high_defense / unlimited",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The tier written.",
+     "fields": [
+      {
+       "name": "line_group_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tier",
+       "type": "string: normal / high_defense / unlimited",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  }
+ ]
+}

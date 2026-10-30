@@ -1,0 +1,12 @@
+<clickhouse>
+    <listen_host>0.0.0.0</listen_host>
+    <remote_servers>
+        <cdnca_analytics>
+            <shard><internal_replication>true</internal_replication><replica><host>cdnca-f11-ch1</host><port>9000</port></replica></shard>
+            <shard><internal_replication>true</internal_replication><replica><host>cdnca-f11-ch2</host><port>9000</port></replica></shard>
+        </cdnca_analytics>
+    </remote_servers>
+    <zookeeper><node><host>cdnca-f11-keeper</host><port>9181</port></node></zookeeper>
+    <macros><shard>01</shard><replica>replica-1</replica></macros>
+    <distributed_ddl><path>/clickhouse/task_queue/ddl</path></distributed_ddl>
+</clickhouse>

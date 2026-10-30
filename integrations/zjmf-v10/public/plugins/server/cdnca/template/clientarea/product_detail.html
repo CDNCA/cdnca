@@ -1,0 +1,66 @@
+<!-- CDNCA CDN 前台产品内页（Cdnca::clientArea，ThinkPHP 模板，{$var} 默认 HTML 转义） -->
+<style>
+  .cdnca-detail { max-width: 760px; padding: 20px 24px; font-size: 14px; color: #303133; background: #fff; border-radius: 6px; }
+  .cdnca-detail h3 { margin: 0 0 16px; font-size: 16px; font-weight: 600; }
+  .cdnca-detail dl { display: grid; grid-template-columns: 140px 1fr; row-gap: 12px; margin: 0 0 20px; }
+  .cdnca-detail dt { color: #909399; }
+  .cdnca-detail dd { margin: 0; }
+  .cdnca-detail .muted { color: #909399; font-size: 12px; }
+  .cdnca-detail .btn { padding: 8px 20px; border: 0; border-radius: 4px; background: #2f6bff; color: #fff; cursor: pointer; font-size: 14px; }
+  .cdnca-detail .btn:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
+  .cdnca-detail .btn[disabled] { opacity: .6; cursor: not-allowed; }
+  .cdnca-detail .alert { padding: 12px 16px; border-radius: 4px; background: #fdf6ec; color: #b88230; }
+  .cdnca-detail .err { margin-top: 8px; color: #f56c6c; }
+</style>
+<div class="cdnca-detail">
+  <h3>CDN 服务</h3>
+  {if $cdnca_ok}
+  <dl>
+    <dt>套餐</dt><dd>{$cdnca_product} <span class="muted">{$cdnca_period}</span></dd>
+    <dt>状态</dt><dd>{$cdnca_status}</dd>
+    <dt>到期时间</dt><dd>{$cdnca_ends_at}</dd>
+    <dt>CDN 用户名</dt><dd>{$cdnca_username}</dd>
+    <dt>本周期流量</dt><dd>{$cdnca_traffic} <span class="muted">{$cdnca_usage_window}</span></dd>
+  </dl>
+  {if $cdnca_can_login}
+  <button type="button" class="btn" id="cdnca-login" data-host="{$cdnca_host_id}">登录 CDN 控制台</button>
+  <div class="err" id="cdnca-login-error" role="alert" aria-live="polite"></div>
+  {else /}
+  <p class="muted">服务当前不可登录（{$cdnca_status}）。</p>
+  {/if}
+  {else /}
+  <div class="alert" role="alert">暂时无法读取 CDN 服务信息：{$cdnca_error}</div>
+  {/if}
+</div>
+<script>
+(function () {
+  var button = document.getElementById('cdnca-login');
+  if (!button) { return; }
+  var errorBox = document.getElementById('cdnca-login-error');
+  button.addEventListener('click', function () {
+    errorBox.textContent = '';
+    // 前台接口靠 Authorization: Bearer <localStorage.jwt> 鉴权，浏览器直接跳转带不上该头，
+    // 所以先 POST 拿一次性链接再打开；先同步开窗口，避免被拦截弹窗。
+    var win = window.open('', '_blank');
+    button.disabled = true;
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/console/v1/cdnca/host/' + encodeURIComponent(button.getAttribute('data-host')) + '/sso');
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    var jwt = window.localStorage ? localStorage.getItem('jwt') : '';
+    if (jwt) { xhr.setRequestHeader('Authorization', 'Bearer ' + jwt); }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      button.disabled = false;
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      if (data && data.status === 200 && data.data && data.data.url) {
+        if (win) { win.location.href = data.data.url; } else { window.location.href = data.data.url; }
+        return;
+      }
+      if (win) { win.close(); }
+      errorBox.textContent = (data && data.msg) || ('登录失败（HTTP ' + xhr.status + '）');
+    };
+    xhr.send('{}');
+  });
+})();
+</script>

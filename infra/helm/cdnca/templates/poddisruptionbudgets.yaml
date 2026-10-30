@@ -1,0 +1,23 @@
+{{- $root := . -}}
+{{- $components := list
+  (dict "component" "control-api" "values" .Values.controlApi)
+  (dict "component" "agent-gateway" "values" .Values.agentGateway)
+  (dict "component" "web" "values" .Values.web)
+-}}
+{{- range $item := $components }}
+{{- if and $item.values.enabled $item.values.pdb.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "cdnca.componentFullname" (dict "root" $root "component" $item.component) }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" $root "component" $item.component) | nindent 4 }}
+spec:
+  minAvailable: {{ $item.values.pdb.minAvailable }}
+  unhealthyPodEvictionPolicy: AlwaysAllow
+  selector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" $root "component" $item.component) | nindent 6 }}
+{{- end }}
+{{- end }}

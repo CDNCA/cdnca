@@ -1,0 +1,1749 @@
+{
+ "id": "identity-verification",
+ "prefix": "/v1/identity-verification",
+ "operations": [
+  {
+   "operation_id": "listPlatformIdentityVerificationCases",
+   "method": "GET",
+   "path": "/v1/identity-verification/admin/cases",
+   "summary": "List every tenant's identity verification cases (platform administrator)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Admin console identity review entry. Platform sessions only, and the administrator must hold platform.admin in the platform scope (tenantaccess rule); tenant sessions and other platform members get 403. Rows carry the tenant scope, tenant display name and applicant username; reviewing one case uses the reviewer routes with tenant_scope_id. The HMAC cursor is bound to the platform scope and exact kind/status filters; tenant_scope_id is rejected.",
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Tenant- and filter-bound HMAC cursor returned by the preceding page."
+    },
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string: personal_initial / personal_reverification / enterprise"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: draft / submitted / reviewing / approved / rejected / withdrawn / expired"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform administrator cross-tenant case page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AdminCaseSummary>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "createMyIdentityVerificationDraft",
+   "method": "POST",
+   "path": "/v1/identity-verification/cases",
+   "summary": "Create a draft from trusted server-resolved evidence",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires identity_verification.self.manage. The evidence token must be bound by the resolver to the authenticated tenant and user. A missing resolver fails service construction; client-supplied fingerprint or material metadata is rejected as an unknown field. Live IAM is checked without business writes before reserving evidence, then checked again inside the create transaction before idempotency, locks, DML, or audit.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "kind",
+      "type": "string: personal_initial / personal_reverification / enterprise",
+      "required": true
+     },
+     {
+      "name": "evidence_token",
+      "type": "string",
+      "required": true,
+      "description": "Opaque one-time trusted resolver handle; never a fingerprint or document value."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Draft created.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "applicant_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: personal_initial / personal_reverification / enterprise",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / submitted / reviewing / approved / rejected / withdrawn / expired",
+       "required": true
+      },
+      {
+       "name": "decision_reason_code",
+       "type": "string: evidence_verified / identity_mismatch / evidence_incomplete / evidence_unreadable / organization_mismatch / authorization_invalid / suspected_fraud",
+       "description": "Stable review fact reason. Present only for approved or rejected cases."
+      },
+      {
+       "name": "agent_relationship",
+       "type": "string: legal_person / employee / authorized_representative"
+      },
+      {
+       "name": "reviewer_user_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "submitted_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "terminal_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "retention",
+       "type": "RetentionView",
+       "required": true
+      },
+      {
+       "name": "materials",
+       "type": "array<MaterialView>",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Sanitized case projection. A replayed write returns replayed=true.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "applicant_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: personal_initial / personal_reverification / enterprise",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / submitted / reviewing / approved / rejected / withdrawn / expired",
+       "required": true
+      },
+      {
+       "name": "decision_reason_code",
+       "type": "string: evidence_verified / identity_mismatch / evidence_incomplete / evidence_unreadable / organization_mismatch / authorization_invalid / suspected_fraud",
+       "description": "Stable review fact reason. Present only for approved or rejected cases."
+      },
+      {
+       "name": "agent_relationship",
+       "type": "string: legal_person / employee / authorized_representative"
+      },
+      {
+       "name": "reviewer_user_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "submitted_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "terminal_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "retention",
+       "type": "RetentionView",
+       "required": true
+      },
+      {
+       "name": "materials",
+       "type": "array<MaterialView>",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency payload, active review, or state transition conflict."
+    },
+    {
+     "status": "422",
+     "description": "Trusted evidence does not match the previously approved stable identity."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "getMyIdentityVerificationCase",
+   "method": "GET",
+   "path": "/v1/identity-verification/cases/{case_id}",
+   "summary": "Read a case owned by the authenticated user",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A different-user or different-tenant case returns the same 404 as an unknown case.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "case_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the identity verification case."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized case projection. A replayed write returns replayed=true.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "applicant_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: personal_initial / personal_reverification / enterprise",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / submitted / reviewing / approved / rejected / withdrawn / expired",
+       "required": true
+      },
+      {
+       "name": "decision_reason_code",
+       "type": "string: evidence_verified / identity_mismatch / evidence_incomplete / evidence_unreadable / organization_mismatch / authorization_invalid / suspected_fraud",
+       "description": "Stable review fact reason. Present only for approved or rejected cases."
+      },
+      {
+       "name": "agent_relationship",
+       "type": "string: legal_person / employee / authorized_representative"
+      },
+      {
+       "name": "reviewer_user_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "submitted_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "terminal_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "retention",
+       "type": "RetentionView",
+       "required": true
+      },
+      {
+       "name": "materials",
+       "type": "array<MaterialView>",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "404",
+     "description": "Case is missing or outside the actor's user/tenant visibility boundary."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "expireMyIdentityVerificationCase",
+   "method": "POST",
+   "path": "/v1/identity-verification/cases/{case_id}/expire",
+   "summary": "Expire an owned submitted or reviewing case after its deadline",
+   "auth": [
+    "bearer"
+   ],
+   "description": "It is not a reviewer, administrator, or scheduler endpoint and cannot substitute another actor.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "case_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the identity verification case."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current case revision, for example `\"2\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ]
+  },
+  {
+   "operation_id": "submitMyIdentityVerificationCase",
+   "method": "POST",
+   "path": "/v1/identity-verification/cases/{case_id}/submit",
+   "summary": "Submit an owned draft for review",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "case_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the identity verification case."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current case revision, for example `\"2\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized case projection. A replayed write returns replayed=true.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "applicant_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: personal_initial / personal_reverification / enterprise",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / submitted / reviewing / approved / rejected / withdrawn / expired",
+       "required": true
+      },
+      {
+       "name": "decision_reason_code",
+       "type": "string: evidence_verified / identity_mismatch / evidence_incomplete / evidence_unreadable / organization_mismatch / authorization_invalid / suspected_fraud",
+       "description": "Stable review fact reason. Present only for approved or rejected cases."
+      },
+      {
+       "name": "agent_relationship",
+       "type": "string: legal_person / employee / authorized_representative"
+      },
+      {
+       "name": "reviewer_user_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "submitted_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "terminal_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "retention",
+       "type": "RetentionView",
+       "required": true
+      },
+      {
+       "name": "materials",
+       "type": "array<MaterialView>",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "404",
+     "description": "Case is missing or outside the actor's user/tenant visibility boundary."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency payload, active review, or state transition conflict."
+    },
+    {
+     "status": "422",
+     "description": "Trusted evidence does not match the previously approved stable identity."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "withdrawMyIdentityVerificationCase",
+   "method": "POST",
+   "path": "/v1/identity-verification/cases/{case_id}/withdraw",
+   "summary": "Withdraw an owned draft or submitted case",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "case_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the identity verification case."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current case revision, for example `\"2\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ]
+  },
+  {
+   "operation_id": "acceptIdentityVerificationProviderCallback",
+   "method": "POST",
+   "path": "/v1/identity-verification/provider-callbacks/{provider}",
+   "summary": "Accept a signed replay-safe provider callback",
+   "auth": [
+    "none"
+   ],
+   "description": "Bearer and actor headers are rejected. The callback signature covers timestamp, nonce and the exact body. Timestamp freshness, unique nonce, unique event, local session ID and external provider session ID are all checked before monotonic state application. The stable replay conflict code is identity_verification_provider_callback_replay_conflict.",
+   "params": [
+    {
+     "name": "provider",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-KYC-Timestamp",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-KYC-Nonce",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-KYC-Key-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-KYC-Signature",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Signed callback application result.",
+     "fields": [
+      {
+       "name": "session_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "applied",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency payload, active review, or state transition conflict."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "startIdentityVerificationProviderSession",
+   "method": "POST",
+   "path": "/v1/identity-verification/provider-sessions",
+   "summary": "Start or retry a durable KYC provider session",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a live tenant session and identity_verification.self.manage. The durable local intent is committed before the HTTPS provider call; an unknown provider outcome is retried with the exact provider request identity.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "kind",
+      "type": "string: personal_initial / personal_reverification / enterprise",
+      "required": true
+     },
+     {
+      "name": "provider",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Durable provider session projection.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: personal_initial / personal_reverification / enterprise",
+       "required": true
+      },
+      {
+       "name": "provider",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: creating / pending / processing / succeeded / failed / canceled / expired / unknown",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "evidence_token",
+       "type": "string",
+       "description": "Opaque session-bound handle; material facts are never exposed."
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Durable provider session projection.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: personal_initial / personal_reverification / enterprise",
+       "required": true
+      },
+      {
+       "name": "provider",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: creating / pending / processing / succeeded / failed / canceled / expired / unknown",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "evidence_token",
+       "type": "string",
+       "description": "Opaque session-bound handle; material facts are never exposed."
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency payload, active review, or state transition conflict."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "createIdentityVerificationPrivateUpload",
+   "method": "POST",
+   "path": "/v1/identity-verification/provider-sessions/{session_id}/uploads",
+   "summary": "Create a bound private object store upload",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns a short-lived presigned PUT whose signed headers bind the exact digest, size, content type, KMS encryption_key_id and private object key. Material bytes never pass through or enter the control database.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "session_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "material_kind",
+      "type": "string: identity_document / liveness_evidence / business_license / legal_person_identity / agent_identity / authorization_letter / supplementary",
+      "required": true
+     },
+     {
+      "name": "content_type",
+      "type": "string: image/jpeg / image/png / application/pdf / video/mp4",
+      "required": true
+     },
+     {
+      "name": "size_bytes",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "sha256",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Private upload projection; object key and object_version remain server-side facts.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "session_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "material_kind",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: issued / finalized / erase_pending / erased",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "upload_url",
+       "type": "string(uri)",
+       "description": "Short-lived private object store PUT URL."
+      },
+      {
+       "name": "required_headers",
+       "type": "object"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "200",
+     "description": "Private upload projection; object key and object_version remain server-side facts.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "session_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "material_kind",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: issued / finalized / erase_pending / erased",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "upload_url",
+       "type": "string(uri)",
+       "description": "Short-lived private object store PUT URL."
+      },
+      {
+       "name": "required_headers",
+       "type": "object"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "404",
+     "description": "Case is missing or outside the actor's user/tenant visibility boundary."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency payload, active review, or state transition conflict."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "finalizeIdentityVerificationPrivateUpload",
+   "method": "POST",
+   "path": "/v1/identity-verification/provider-sessions/{session_id}/uploads/{upload_id}/finalize",
+   "summary": "Finalize exact immutable private object facts",
+   "auth": [
+    "bearer"
+   ],
+   "description": "HEAD verification must return the expected object_version, SHA-256, size, content type and encryption_key_id before the upload is finalized.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "params": [
+    {
+     "name": "session_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "upload_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current case revision, for example `\"2\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Private upload projection; object key and object_version remain server-side facts.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "session_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "material_kind",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: issued / finalized / erase_pending / erased",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "upload_url",
+       "type": "string(uri)",
+       "description": "Short-lived private object store PUT URL."
+      },
+      {
+       "name": "required_headers",
+       "type": "object"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "404",
+     "description": "Case is missing or outside the actor's user/tenant visibility boundary."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency payload, active review, or state transition conflict."
+    },
+    {
+     "status": "422",
+     "description": "Trusted evidence does not match the previously approved stable identity."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantIdentityVerificationCases",
+   "method": "GET",
+   "path": "/v1/identity-verification/reviewer/cases",
+   "summary": "List the authenticated tenant's review cases",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires live active membership, active user, identity_verification.read, and identity_verification.review. The HMAC cursor is bound to the authenticated tenant and exact kind/status filters. tenant_id, applicant_id, and reviewer_id query parameters are rejected.",
+   "permissions": [
+    "identity_verification.read",
+    "identity_verification.review"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Tenant- and filter-bound HMAC cursor returned by the preceding page."
+    },
+    {
+     "name": "kind",
+     "in": "query",
+     "type": "string: personal_initial / personal_reverification / enterprise"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: draft / submitted / reviewing / approved / rejected / withdrawn / expired"
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform administrator sessions only: the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable reviewer queue page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<CaseSummary>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantIdentityVerificationCase",
+   "method": "GET",
+   "path": "/v1/identity-verification/reviewer/cases/{case_id}",
+   "summary": "Read one case in the authenticated reviewer tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A different-tenant case returns the same 404 as an unknown case.",
+   "permissions": [
+    "identity_verification.read",
+    "identity_verification.review"
+   ],
+   "params": [
+    {
+     "name": "case_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the identity verification case."
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform administrator sessions only: the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized case projection. A replayed write returns replayed=true.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "applicant_user_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "kind",
+       "type": "string: personal_initial / personal_reverification / enterprise",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: draft / submitted / reviewing / approved / rejected / withdrawn / expired",
+       "required": true
+      },
+      {
+       "name": "decision_reason_code",
+       "type": "string: evidence_verified / identity_mismatch / evidence_incomplete / evidence_unreadable / organization_mismatch / authorization_invalid / suspected_fraud",
+       "description": "Stable review fact reason. Present only for approved or rejected cases."
+      },
+      {
+       "name": "agent_relationship",
+       "type": "string: legal_person / employee / authorized_representative"
+      },
+      {
+       "name": "reviewer_user_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "state_changed_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "submitted_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "terminal_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "retention",
+       "type": "RetentionView",
+       "required": true
+      },
+      {
+       "name": "materials",
+       "type": "array<MaterialView>",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "404",
+     "description": "Case is missing or outside the actor's user/tenant visibility boundary."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  },
+  {
+   "operation_id": "claimTenantIdentityVerificationCase",
+   "method": "POST",
+   "path": "/v1/identity-verification/reviewer/cases/{case_id}/claim",
+   "summary": "Atomically claim a submitted case as the authenticated reviewer",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity_verification.read",
+    "identity_verification.review"
+   ],
+   "params": [
+    {
+     "name": "case_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the identity verification case."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current case revision, for example `\"2\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform administrator sessions only: the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+    }
+   ]
+  },
+  {
+   "operation_id": "decideTenantIdentityVerificationCase",
+   "method": "POST",
+   "path": "/v1/identity-verification/reviewer/cases/{case_id}/decision",
+   "summary": "Approve or reject a case assigned to the authenticated reviewer",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Free-text review notes are not accepted. Only stable decision and reason codes are persisted.",
+   "permissions": [
+    "identity_verification.read",
+    "identity_verification.review"
+   ],
+   "params": [
+    {
+     "name": "case_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Canonical lower-case UUID of the identity verification case."
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current case revision, for example `\"2\"`."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "tenant_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform administrator sessions only: the tenant scope whose cases are reviewed. Required for a platform session, rejected with 400 for a tenant session. The administrator must hold platform.admin and the tenant must be active; the administrator acts and is audited as themself (payload actor_scope_kind=platform)."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "decision",
+      "type": "string: approved / rejected",
+      "required": true
+     },
+     {
+      "name": "reason_code",
+      "type": "string: evidence_verified / identity_mismatch / evidence_incomplete / evidence_unreadable / organization_mismatch / authorization_invalid / suspected_fraud",
+      "required": true
+     }
+    ]
+   }
+  },
+  {
+   "operation_id": "getMyIdentityVerificationStatus",
+   "method": "GET",
+   "path": "/v1/identity-verification/status",
+   "summary": "Read the authenticated user's own verification status",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Read-only profile badge source for the authenticated tenant user. An approved initial personal identity keeps status verified; otherwise a submitted or reviewing latest case is pending, a rejected latest case is rejected, and no case, draft, withdrawn, or expired is unverified. The response never carries a document number, name, organization, fingerprint, material, or reviewer identity. Requires the same live identity_verification.self.manage check as reading an owned case.",
+   "permissions": [
+    "identity_verification.self.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The authenticated user's own verification status.",
+     "fields": [
+      {
+       "name": "status",
+       "type": "string: unverified / pending / verified / rejected",
+       "required": true
+      },
+      {
+       "name": "verified_at",
+       "type": "string(date-time)",
+       "description": "Approval time of the initial personal identity; present only when verified by it."
+      },
+      {
+       "name": "latest_case",
+       "type": "StatusCase"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, body, or trusted material validation failed."
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or did not produce a tenant Actor."
+    },
+    {
+     "status": "403",
+     "description": "Live tenant membership/RBAC, self-review, or assignment check denied the operation."
+    },
+    {
+     "status": "405",
+     "description": "The path exists but the HTTP method is not supported; the response includes Allow."
+    },
+    {
+     "status": "408",
+     "description": "Request context was canceled."
+    },
+    {
+     "status": "503",
+     "description": "Resolver, core store, read store, audit append, or bounded response is unavailable. No raw cause is returned."
+    },
+    {
+     "status": "504",
+     "description": "Bounded command or query timeout elapsed."
+    }
+   ]
+  }
+ ]
+}

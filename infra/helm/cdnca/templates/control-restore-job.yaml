@@ -1,0 +1,166 @@
+{{- if .Values.controlRestore.enabled }}
+{{- if not (regexMatch "^sha256:[0-9a-f]{64}$" .Values.controlBackupTool.image.digest) }}
+{{- fail "controlBackupTool.image.digest must be pinned when controlRestore is enabled" }}
+{{- end }}
+{{- if not .Values.controlRestore.clickhouse.enabled }}
+{{- fail "controlRestore.clickhouse.enabled must be true for the three-component recovery point" }}
+{{- end }}
+{{- if not (regexMatch "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$" .Values.controlRestore.backupId) }}
+{{- fail "controlRestore.backupId must be the exact immutable backup UUID" }}
+{{- end }}
+{{- if not (regexMatch "^[0-9a-f]{64}$" .Values.controlRestore.manifestSHA256) }}
+{{- fail "controlRestore.manifestSHA256 must be the exact lowercase manifest digest" }}
+{{- end }}
+{{- $component := "control-restore" -}}
+{{- $suffix := printf "%s:%s" .Values.controlRestore.backupId .Values.controlRestore.manifestSHA256 | sha256sum | trunc 10 -}}
+{{- $name := printf "%s-%s" (include "cdnca.componentFullname" (dict "root" . "component" $component) | trunc 41 | trimSuffix "-") $suffix -}}
+{{- $controlAPI := include "cdnca.componentFullname" (dict "root" . "component" "control-api") -}}
+{{- $agentGateway := include "cdnca.componentFullname" (dict "root" . "component" "agent-gateway") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-plans
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+immutable: true
+data:
+  restore-plan.json: |-
+    {"schema":"cdnca.control-restore.plan/v2","operation_id":{{ .Values.controlRestore.operationId | toJson }},"target_id":{{ .Values.controlRestore.targetId | toJson }},"max_schema_version":{{ .Values.controlRestore.maxSchemaVersion }},"expected_backup_id":{{ .Values.controlRestore.backupId | toJson }},"expected_source_cluster_id":{{ .Values.controlBackupTool.sourceClusterId | toJson }},"expected_app_version":{{ .Values.controlBackupTool.appVersion | toJson }},"expected_manifest_sha256":{{ .Values.controlRestore.manifestSHA256 | toJson }},"expected_core_manifest_sha256":{{ .Values.controlBackupTool.recovery.coreManifestSHA256 | toJson }},"expected_envelope_key":{{ .Values.controlBackupTool.recovery.envelopeKey | toJson }},"signed_manifest_file":{{ printf "%s/%s.signed.json" .Values.controlBackupTool.recovery.driver.manifestDirectory .Values.controlRestore.backupId | toJson }},"signing_key_id":{{ .Values.controlBackupTool.signingKeyId | toJson }},"signing_public_key_file":"/var/run/recovery/runtime/source/manifest-signing-public.pem","driver_path":{{ .Values.controlBackupTool.recovery.driver.path | toJson }},"receipt_directory":{{ .Values.controlBackupTool.recovery.driver.receiptDirectory | toJson }}}
+  driver-plan.json: |-
+    {"schema":"cdnca.control-recovery-driver.plan/v1","state_directory":{{ .Values.controlBackupTool.recovery.driver.stateDirectory | toJson }},"artifact_directory":{{ .Values.controlBackupTool.recovery.driver.artifactDirectory | toJson }},"operation_timeout_seconds":{{ .Values.controlBackupTool.recovery.driver.operationTimeoutSeconds }},"kubernetes":{"api_server":"https://kubernetes.default.svc","namespace_file":"/var/run/recovery/runtime/namespace","token_file":"/var/run/recovery/runtime/kubernetes-token","ca_file":"/var/run/recovery/runtime/kubernetes-ca.crt","settle_timeout_seconds":{{ .Values.controlBackupTool.recovery.driver.kubernetesSettleTimeoutSeconds }},"workloads":[{"name":{{ $controlAPI | toJson }}},{"name":{{ $agentGateway | toJson }}}]},"components":{"postgresql":{"preflight":{"path":{{ .Values.controlBackupTool.recovery.components.postgresql.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.postgresql.preflightArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.postgresql.environment | toJson }}},"capture":{"path":{{ .Values.controlBackupTool.recovery.components.postgresql.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.postgresql.captureArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.postgresql.environment | toJson }}},"restore":{"path":{{ .Values.controlBackupTool.recovery.components.postgresql.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.postgresql.restoreArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.postgresql.environment | toJson }}},"compensate":{"path":{{ .Values.controlBackupTool.recovery.components.postgresql.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.postgresql.compensateArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.postgresql.environment | toJson }}}},"clickhouse":{"preflight":{"path":{{ .Values.controlBackupTool.recovery.components.clickhouse.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.clickhouse.preflightArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.clickhouse.environment | toJson }}},"capture":{"path":{{ .Values.controlBackupTool.recovery.components.clickhouse.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.clickhouse.captureArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.clickhouse.environment | toJson }}},"restore":{"path":{{ .Values.controlBackupTool.recovery.components.clickhouse.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.clickhouse.restoreArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.clickhouse.environment | toJson }}},"compensate":{"path":{{ .Values.controlBackupTool.recovery.components.clickhouse.path | toJson }},"arguments":{{ .Values.controlBackupTool.recovery.components.clickhouse.compensateArguments | toJson }},"environment":{{ .Values.controlBackupTool.recovery.components.clickhouse.environment | toJson }}}}},"jetstream":{"url":{{ .Values.controlBackupTool.recovery.jetStream.url | toJson }},"credentials_file":"/var/run/recovery/runtime/nats.creds","ca_file":"/var/run/recovery/runtime/nats-ca.crt","client_cert_file":"/var/run/recovery/runtime/nats-client.crt","client_key_file":"/var/run/recovery/runtime/nats-client.key","topology_file":{{ .Values.controlBackupTool.recovery.jetStream.topologyFile | toJson }},"node_id":{{ .Values.controlBackupTool.recovery.jetStream.nodeId | toJson }},"node_id_underscore":{{ .Values.controlBackupTool.recovery.jetStream.nodeIdUnderscore | toJson }},"request_timeout_seconds":{{ .Values.controlBackupTool.recovery.jetStream.requestTimeoutSeconds }}},"dns_probe":{"hostname":{{ .Values.controlBackupTool.recovery.dnsProbe.hostname | toJson }},"expected_addresses":{{ .Values.controlBackupTool.recovery.dnsProbe.expectedAddresses | toJson }},"timeout_seconds":{{ .Values.controlBackupTool.recovery.dnsProbe.timeoutSeconds }},"interval_seconds":{{ .Values.controlBackupTool.recovery.dnsProbe.intervalSeconds }}},"agent_probe":{"url":{{ .Values.controlBackupTool.recovery.agentProbe.url | toJson }},"ca_file":"/var/run/recovery/runtime/agent-ca.crt","client_cert_file":"/var/run/recovery/runtime/agent-client.crt","client_key_file":"/var/run/recovery/runtime/agent-client.key","bearer_token_file":"/var/run/recovery/runtime/agent-token","expected_nodes":{{ .Values.controlBackupTool.recovery.agentProbe.expectedNodes }},"timeout_seconds":{{ .Values.controlBackupTool.recovery.agentProbe.timeoutSeconds }},"interval_seconds":{{ .Values.controlBackupTool.recovery.agentProbe.intervalSeconds }} } }
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+  annotations:
+    cdnca.io/backup-id: {{ .Values.controlRestore.backupId | quote }}
+    cdnca.io/manifest-sha256: {{ .Values.controlRestore.manifestSHA256 | quote }}
+spec:
+  activeDeadlineSeconds: {{ .Values.controlRestore.activeDeadlineSeconds }}
+  backoffLimit: {{ .Values.controlRestore.backoffLimit }}
+  ttlSecondsAfterFinished: {{ .Values.controlRestore.ttlSecondsAfterFinished }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+      annotations:
+        cdnca.io/backup-id: {{ .Values.controlRestore.backupId | quote }}
+        cdnca.io/manifest-sha256: {{ .Values.controlRestore.manifestSHA256 | quote }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- include "cdnca.podSecurityContext" . | nindent 8 }}
+      {{- include "cdnca.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: prepare-recovery-inputs
+          image: {{ include "cdnca.image" .Values.controlBackupTool.image | quote }}
+          imagePullPolicy: {{ .Values.controlBackupTool.image.pullPolicy }}
+          command: ["/bin/sh", "-ceu", "--"]
+          args:
+            - |
+              umask 077
+              mkdir -p {{ .Values.controlBackupTool.recovery.driver.stateDirectory | quote }} {{ .Values.controlBackupTool.recovery.driver.artifactDirectory | quote }} {{ .Values.controlBackupTool.recovery.driver.manifestDirectory | quote }} {{ .Values.controlBackupTool.recovery.driver.receiptDirectory | quote }} /var/run/recovery/runtime/source
+              chmod 0700 {{ .Values.controlBackupTool.recovery.driver.stateDirectory | quote }} {{ .Values.controlBackupTool.recovery.driver.artifactDirectory | quote }} {{ .Values.controlBackupTool.recovery.driver.manifestDirectory | quote }} {{ .Values.controlBackupTool.recovery.driver.receiptDirectory | quote }} /var/run/recovery/runtime/source
+              cp /etc/recovery-plan-source/restore-plan.json /var/run/recovery/runtime/restore-plan.json
+              cp /etc/recovery-plan-source/driver-plan.json /var/run/recovery/runtime/driver-plan.json
+              cp /var/run/recovery/source-readonly/* /var/run/recovery/runtime/source/
+              cp /var/run/recovery/nats-readonly/* /var/run/recovery/runtime/
+              cp /var/run/recovery/agent-readonly/* /var/run/recovery/runtime/
+              cp /var/run/recovery/kubernetes-readonly/* /var/run/recovery/runtime/
+              find /var/run/recovery/runtime -type f -exec chmod 0400 {} +
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.controlBackupTool.initResources | nindent 12 }}
+          volumeMounts:
+            - {name: recovery-storage, mountPath: {{ .Values.controlBackupTool.storage.mountPath | quote }}}
+            - {name: plan-source, mountPath: /etc/recovery-plan-source, readOnly: true}
+            - {name: source-secrets, mountPath: /var/run/recovery/source-readonly, readOnly: true}
+            - {name: nats-secrets, mountPath: /var/run/recovery/nats-readonly, readOnly: true}
+            - {name: agent-secrets, mountPath: /var/run/recovery/agent-readonly, readOnly: true}
+            - {name: kubernetes-identity, mountPath: /var/run/recovery/kubernetes-readonly, readOnly: true}
+            - {name: runtime-inputs, mountPath: /var/run/recovery/runtime}
+            - {name: scratch, mountPath: /tmp}
+      containers:
+        - name: control-restore
+          # Binary contract: control-restore --plan /var/run/recovery/runtime/restore-plan.json
+          image: {{ include "cdnca.image" .Values.controlBackupTool.image | quote }}
+          imagePullPolicy: {{ .Values.controlBackupTool.image.pullPolicy }}
+          command: [{{ .Values.controlBackupTool.recovery.driver.restorePath | quote }}]
+          args: ["--plan", "/var/run/recovery/runtime/restore-plan.json"]
+          env:
+            - name: CONTROL_RECOVERY_DRIVER_PLAN
+              value: /var/run/recovery/runtime/driver-plan.json
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.controlBackupTool.resources | nindent 12 }}
+          volumeMounts:
+            - {name: recovery-storage, mountPath: {{ .Values.controlBackupTool.storage.mountPath | quote }}}
+            - {name: runtime-inputs, mountPath: /var/run/recovery/runtime, readOnly: true}
+            - {name: scratch, mountPath: /tmp}
+      volumes:
+        - name: recovery-storage
+          persistentVolumeClaim: {claimName: {{ .Values.controlBackupTool.storage.existingClaim | quote }}}
+        - name: plan-source
+          configMap: {name: {{ $name }}-plans, defaultMode: 0440}
+        - name: source-secrets
+          secret:
+            secretName: {{ .Values.controlRestore.secret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - {key: {{ .Values.controlRestore.secret.keys.postgresHost }}, path: postgres-host}
+              - {key: {{ .Values.controlRestore.secret.keys.postgresPort }}, path: postgres-port}
+              - {key: {{ .Values.controlRestore.secret.keys.postgresUser }}, path: postgres-user}
+              - {key: {{ .Values.controlRestore.secret.keys.postgresDatabase }}, path: postgres-database}
+              - {key: {{ .Values.controlRestore.secret.keys.postgresPassword }}, path: postgres-password}
+              - {key: {{ .Values.controlRestore.secret.keys.clickhouseHost }}, path: clickhouse-host}
+              - {key: {{ .Values.controlRestore.secret.keys.clickhousePort }}, path: clickhouse-port}
+              - {key: {{ .Values.controlRestore.secret.keys.clickhouseUser }}, path: clickhouse-user}
+              - {key: {{ .Values.controlRestore.secret.keys.clickhouseDatabase }}, path: clickhouse-database}
+              - {key: {{ .Values.controlRestore.secret.keys.clickhousePassword }}, path: clickhouse-password}
+              - {key: {{ .Values.controlRestore.secret.keys.manifestSigningPublicKey }}, path: manifest-signing-public.pem}
+        - name: nats-secrets
+          secret:
+            secretName: {{ .Values.controlBackupTool.recovery.jetStream.secret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - {key: {{ .Values.controlBackupTool.recovery.jetStream.secret.keys.credentials }}, path: nats.creds}
+              - {key: {{ .Values.controlBackupTool.recovery.jetStream.secret.keys.ca }}, path: nats-ca.crt}
+              - {key: {{ .Values.controlBackupTool.recovery.jetStream.secret.keys.clientCertificate }}, path: nats-client.crt}
+              - {key: {{ .Values.controlBackupTool.recovery.jetStream.secret.keys.clientPrivateKey }}, path: nats-client.key}
+        - name: agent-secrets
+          secret:
+            secretName: {{ .Values.controlBackupTool.recovery.agentProbe.secret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - {key: {{ .Values.controlBackupTool.recovery.agentProbe.secret.keys.ca }}, path: agent-ca.crt}
+              - {key: {{ .Values.controlBackupTool.recovery.agentProbe.secret.keys.clientCertificate }}, path: agent-client.crt}
+              - {key: {{ .Values.controlBackupTool.recovery.agentProbe.secret.keys.clientPrivateKey }}, path: agent-client.key}
+              - {key: {{ .Values.controlBackupTool.recovery.agentProbe.secret.keys.bearerToken }}, path: agent-token}
+        - name: kubernetes-identity
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken: {path: kubernetes-token, expirationSeconds: 3600}
+              - configMap: {name: kube-root-ca.crt, items: [{key: ca.crt, path: kubernetes-ca.crt}]}
+              - downwardAPI: {items: [{path: namespace, fieldRef: {fieldPath: metadata.namespace}}]}
+        - name: runtime-inputs
+          emptyDir: {medium: Memory, sizeLimit: 2Mi}
+        - name: scratch
+          emptyDir: {sizeLimit: {{ .Values.controlBackupTool.scratchSizeLimit }}}
+{{- end }}

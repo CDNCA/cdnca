@@ -1,0 +1,43 @@
+/* TECH-04: 基本页分两个保存区块（站点与监听 / 源站与故障切换），各自带未保存标记和保存按钮。 */
+.site-basic-block + .site-basic-block {
+  margin-top: 8px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.site-basic-block-head {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 16px;
+}
+
+.site-basic-block-head h2 {
+  margin: 0 auto 0 0;
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.site-basic-block-head .ant-tag {
+  margin-inline-end: 0;
+}
+
+/* 区块内小节标题沿用原来小节 h2 的样式 */
+.site-basic-block .site-basic-section h3 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+/* fix-weighthint：新增/编辑源站弹窗里随权重实时变化的占比 */
+.site-basic-weight-share {
+  margin: 4px 0 0;
+  color: var(--cdnca-color-primary);
+  font-size: 12px;
+  font-weight: 500;
+}

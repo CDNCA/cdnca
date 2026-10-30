@@ -1,0 +1,5 @@
+openapi: 3.1.0
+info: {title: b, version: '1'}
+paths:
+  /v1/x:
+    $ref: '../../ext.openapi.yaml#/paths/~1v1~1missing'

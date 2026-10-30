@@ -1,0 +1,138 @@
+name: cdnca
+
+services:
+  postgres:
+    image: postgres:17.5-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    networks:
+      - control
+
+  redis:
+    image: redis:7.4.4-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - control
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.3.6.56-alpine
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:?set CLICKHOUSE_DB}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:?set CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?set CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "127.0.0.1:${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          clickhouse-client --user "$$CLICKHOUSE_USER" --password "$$CLICKHOUSE_PASSWORD"
+          --query "SELECT 1" | grep -q '^1$$'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks:
+      - control
+
+  nats:
+    image: nats:2.11.4-alpine
+    restart: unless-stopped
+    labels:
+      io.cdnca.local.transport-revision: "2"
+    environment:
+      NATS_STORE_DIR: /data
+      NATS_PREPROVISION_USERNAME: ${NATS_PREPROVISION_USERNAME:?set NATS_PREPROVISION_USERNAME}
+      NATS_PREPROVISION_PASSWORD: "\"${NATS_PREPROVISION_PASSWORD:?set NATS_PREPROVISION_PASSWORD}\""
+      NATS_CONTROL_CONSUMER_USERNAME: ${NATS_CONTROL_CONSUMER_USERNAME:?set NATS_CONTROL_CONSUMER_USERNAME}
+      NATS_CONTROL_CONSUMER_PASSWORD: "\"${NATS_CONTROL_CONSUMER_PASSWORD:?set NATS_CONTROL_CONSUMER_PASSWORD}\""
+      NATS_GATEWAY_PUBLISHER_USERNAME: ${NATS_GATEWAY_PUBLISHER_USERNAME:?set NATS_GATEWAY_PUBLISHER_USERNAME}
+      NATS_GATEWAY_PUBLISHER_PASSWORD: "\"${NATS_GATEWAY_PUBLISHER_PASSWORD:?set NATS_GATEWAY_PUBLISHER_PASSWORD}\""
+    command:
+      - -c
+      - /etc/nats/analytics-server.conf
+    ports:
+      - "127.0.0.1:${NATS_CLIENT_PORT:-4222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
+    volumes:
+      - nats_data:/data
+      - ./infra/nats/analytics-server.conf:/etc/nats/analytics-server.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- 'http://127.0.0.1:8222/healthz?js-enabled-only=true' | grep -q '\"status\":\"ok\"'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - control
+
+  nats-analytics-preprovision:
+    image: natsio/nats-box:0.19.1
+    restart: "no"
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      NATS_URL: nats://nats:4222
+      NATS_PREPROVISION_USERNAME: ${NATS_PREPROVISION_USERNAME:?set NATS_PREPROVISION_USERNAME}
+      NATS_PREPROVISION_PASSWORD: ${NATS_PREPROVISION_PASSWORD:?set NATS_PREPROVISION_PASSWORD}
+      ANALYTICS_INGEST_STREAM: ${ANALYTICS_INGEST_STREAM:-ANALYTICS_INGEST_V1}
+      ANALYTICS_INGEST_DURABLE: ${ANALYTICS_INGEST_DURABLE:-control_api_analytics_ingest_v1}
+      ANALYTICS_ISOLATION_STREAM: ${ANALYTICS_ISOLATION_STREAM:-ANALYTICS_ISOLATION_V1}
+      ANALYTICS_ISOLATION_MAX_BYTES: ${ANALYTICS_ISOLATION_MAX_BYTES:-1073741824}
+      ANALYTICS_CONNECTIONS_STREAM: ${ANALYTICS_CONNECTIONS_STREAM:-CONNECTIONS_INGEST_V1}
+      ANALYTICS_CONNECTIONS_DURABLE: ${ANALYTICS_CONNECTIONS_DURABLE:-control_api_connections}
+      ANALYTICS_INGEST_REPLICAS: ${ANALYTICS_INGEST_REPLICAS:-1}
+    entrypoint: ["/bin/sh", "/opt/cdnca/analytics-preprovision.sh"]
+    volumes:
+      - ./infra/nats/analytics-preprovision.sh:/opt/cdnca/analytics-preprovision.sh:ro
+    networks:
+      - control
+
+networks:
+  control:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  clickhouse_data:
+  clickhouse_logs:
+  nats_data:

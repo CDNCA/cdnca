@@ -1,0 +1,708 @@
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+production:
+  enabled: false
+  metricsServerAvailable: false
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+
+networkPolicy:
+  enabled: true
+  ingressController:
+    namespaceSelector:
+      kubernetes.io/metadata.name: ingress-nginx
+    podSelector:
+      app.kubernetes.io/name: ingress-nginx
+  dns:
+    namespaceSelector:
+      kubernetes.io/metadata.name: kube-system
+  gatewaySourceCIDRs: []
+  controlExternalEgress:
+    cidrs: []
+    ports: [443, 5432, 6379, 4222, 8123, 9440]
+  gatewayExternalEgress:
+    cidrs: []
+    ports: [6379, 4222]
+  dataStores:
+    postgresql: {cidrs: [], port: 5432}
+    redis: {cidrs: [], port: 6379}
+    nats: {cidrs: [], port: 4222}
+    clickhouse: {cidrs: [], port: 8123}
+
+analyticsNATSPreprovision:
+  enabled: false
+  image:
+    repository: natsio/nats-box
+    tag: "0.19.1"
+    digest: ""
+    pullPolicy: IfNotPresent
+  adminSecret:
+    existingSecret: cdnca-analytics-nats-preprovision
+    keys:
+      url: nats-url
+      username: username
+      password: password
+  activeDeadlineSeconds: 300
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 86400
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}
+
+# Ledgered ClickHouse analytics migrations as a pre-install/pre-upgrade hook
+# (docs/runbooks/clickhouse-migrate-deploy.md). The secret holds the migration
+# identity only; runtime identities never receive schema privileges.
+clickhouseMigrations:
+  enabled: false
+  image:
+    repository: registry.example.invalid/cdnca/clickhouse-migrate
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  # migrate (default) or dry-run / check, which change nothing.
+  action: migrate
+  database: cdnca
+  # Non-empty: every DDL runs ON CLUSTER <cluster> with Replicated engines.
+  cluster: ""
+  # Optional: re-assert the least-privilege runtime grants after migrating.
+  grantUsers:
+    query: ""
+    ingest: ""
+    rollup: ""
+  secret:
+    existingSecret: cdnca-clickhouse-migrate
+    keys:
+      url: url
+      username: username
+      password: password
+  # Optional CA bundle (Secret key) for https ClickHouse.
+  caSecret:
+    existingSecret: ""
+    key: ca.pem
+  activeDeadlineSeconds: 3600
+  ttlSecondsAfterFinished: 86400
+  resources:
+    requests: {cpu: 10m, memory: 32Mi}
+    limits: {cpu: 200m, memory: 128Mi}
+
+pluginWebhook:
+  enabled: false
+  wrappingKey:
+    id: ""
+    secret:
+      name: ""
+      key: wrapping.key
+  # Ed25519 PKCS#8 PEM key signing NATS publication attestations (migration 084).
+  # Required when enabled; create it with `openssl genpkey -algorithm ED25519`
+  # (docs/runbooks/plugin-webhook-key.md). The chart never creates Secrets.
+  attestationKey:
+    id: ""
+    secret:
+      name: ""
+      key: attestation.pem
+    # Optional key staged for rotation: set it, roll out, then run
+    # `control-api plugin-webhook-attestation-key rotate`.
+    next:
+      id: ""
+      secret:
+        name: ""
+        key: attestation.pem
+  nats:
+    url: ""
+    credentialsSecret:
+      name: ""
+      key: runtime.creds
+    caSecret:
+      name: ""
+      key: ca.crt
+    jetStreamReplicas: 1
+    reconnect:
+      min: 250ms
+      max: 5s
+    egressCIDRs: []
+
+controlBackupTool:
+  image:
+    repository: registry.example.invalid/cdnca/control-backup
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  appVersion: "0.1.0"
+  # Copy the stable installation ID from this control API installation; never use a Pod/node ID.
+  installationId: ""
+  sourceClusterId: customer-control
+  signingKeyId: control-backup-signing-2026-01
+  storage:
+    existingClaim: cdnca-control-recovery
+    mountPath: /var/lib/cdnca/recovery
+  recovery:
+    # Set the actual applied control API database migration version before enabling recovery jobs.
+    schemaVersion: 0
+    coreManifestSHA256: "0000000000000000000000000000000000000000000000000000000000000000"
+    envelopeKey:
+      provider: kms
+      name: control-backup/customer-control
+      version: unconfigured-1
+    targetRPOSeconds: 86400
+    targetRTOSeconds: 7200
+    driver:
+      backupPath: /usr/local/bin/control-backup
+      restorePath: /usr/local/bin/control-restore
+      path: /usr/local/bin/control-recovery-driver
+      operationTimeoutSeconds: 7200
+      kubernetesSettleTimeoutSeconds: 300
+      stateDirectory: /var/lib/cdnca/recovery/state
+      artifactDirectory: /var/lib/cdnca/recovery/artifacts
+      manifestDirectory: /var/lib/cdnca/recovery/manifests
+      receiptDirectory: /var/lib/cdnca/recovery/receipts
+    components:
+      postgresql:
+        path: /usr/local/bin/cdnca-postgresql-recovery
+        preflightArguments: [preflight, --artifact, "{artifact}", --target-id, "{target_id}", --host-file, /var/run/recovery/runtime/source/postgres-host, --port-file, /var/run/recovery/runtime/source/postgres-port, --user-file, /var/run/recovery/runtime/source/postgres-user, --database-file, /var/run/recovery/runtime/source/postgres-database]
+        captureArguments: [capture, --artifact, "{artifact}", --backup-id, "{backup_id}", --freeze-id, "{freeze_id}", --host-file, /var/run/recovery/runtime/source/postgres-host, --port-file, /var/run/recovery/runtime/source/postgres-port, --user-file, /var/run/recovery/runtime/source/postgres-user, --database-file, /var/run/recovery/runtime/source/postgres-database]
+        restoreArguments: [restore, --artifact, "{artifact}", --target-id, "{target_id}", --host-file, /var/run/recovery/runtime/source/postgres-host, --port-file, /var/run/recovery/runtime/source/postgres-port, --user-file, /var/run/recovery/runtime/source/postgres-user, --database-file, /var/run/recovery/runtime/source/postgres-database]
+        compensateArguments: [compensate, --target-id, "{target_id}", --host-file, /var/run/recovery/runtime/source/postgres-host, --port-file, /var/run/recovery/runtime/source/postgres-port, --user-file, /var/run/recovery/runtime/source/postgres-user, --database-file, /var/run/recovery/runtime/source/postgres-database]
+        environment:
+          PGPASSFILE: /var/run/recovery/runtime/source/postgres-password
+      clickhouse:
+        path: /usr/local/bin/cdnca-clickhouse-recovery
+        preflightArguments: [preflight, --artifact, "{artifact}", --target-id, "{target_id}", --host-file, /var/run/recovery/runtime/source/clickhouse-host, --port-file, /var/run/recovery/runtime/source/clickhouse-port, --user-file, /var/run/recovery/runtime/source/clickhouse-user, --database-file, /var/run/recovery/runtime/source/clickhouse-database]
+        captureArguments: [capture, --artifact, "{artifact}", --backup-id, "{backup_id}", --freeze-id, "{freeze_id}", --host-file, /var/run/recovery/runtime/source/clickhouse-host, --port-file, /var/run/recovery/runtime/source/clickhouse-port, --user-file, /var/run/recovery/runtime/source/clickhouse-user, --database-file, /var/run/recovery/runtime/source/clickhouse-database]
+        restoreArguments: [restore, --artifact, "{artifact}", --target-id, "{target_id}", --host-file, /var/run/recovery/runtime/source/clickhouse-host, --port-file, /var/run/recovery/runtime/source/clickhouse-port, --user-file, /var/run/recovery/runtime/source/clickhouse-user, --database-file, /var/run/recovery/runtime/source/clickhouse-database]
+        compensateArguments: [compensate, --target-id, "{target_id}", --host-file, /var/run/recovery/runtime/source/clickhouse-host, --port-file, /var/run/recovery/runtime/source/clickhouse-port, --user-file, /var/run/recovery/runtime/source/clickhouse-user, --database-file, /var/run/recovery/runtime/source/clickhouse-database]
+        environment:
+          CLICKHOUSE_PASSWORD_FILE: /var/run/recovery/runtime/source/clickhouse-password
+    jetStream:
+      url: tls://nats.cdnca.svc.cluster.local:4222
+      topologyFile: /opt/cdnca/contracts/nats-resources.json
+      nodeId: 00000000-0000-4000-8000-000000000001
+      nodeIdUnderscore: "00000000_0000_4000_8000_000000000001"
+      requestTimeoutSeconds: 30
+      secret:
+        existingSecret: cdnca-control-recovery-nats
+        keys:
+          credentials: client.creds
+          ca: ca.crt
+          clientCertificate: tls.crt
+          clientPrivateKey: tls.key
+    dnsProbe:
+      hostname: control.example.invalid
+      expectedAddresses: [192.0.2.10]
+      timeoutSeconds: 300
+      intervalSeconds: 5
+    agentProbe:
+      url: https://control-api.cdnca.svc.cluster.local/v1/internal/recovery/agent-reconnect
+      expectedNodes: 1
+      timeoutSeconds: 600
+      intervalSeconds: 5
+      secret:
+        existingSecret: cdnca-control-recovery-agent-probe
+        keys:
+          ca: ca.crt
+          clientCertificate: tls.crt
+          clientPrivateKey: tls.key
+          bearerToken: bearer-token
+  scratchSizeLimit: 8Gi
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+  initResources:
+    requests: {cpu: 10m, memory: 16Mi}
+    limits: {cpu: 100m, memory: 64Mi}
+
+controlBackup:
+  enabled: false
+  schedule: "15 2 * * *"
+  startingDeadlineSeconds: 600
+  activeDeadlineSeconds: 7200
+  backoffLimit: 1
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  ttlSecondsAfterFinished: 604800
+  secret:
+    existingSecret: cdnca-control-backup-source
+    keys:
+      postgresHost: postgres-host
+      postgresPort: postgres-port
+      postgresUser: postgres-user
+      postgresDatabase: postgres-database
+      postgresPassword: postgres-password
+      clickhouseHost: clickhouse-host
+      clickhousePort: clickhouse-port
+      clickhouseUser: clickhouse-user
+      clickhouseDatabase: clickhouse-database
+      clickhousePassword: clickhouse-password
+      manifestSigningPrivateKey: manifest-signing-private.pem
+  clickhouse:
+    enabled: true
+
+controlRestore:
+  enabled: false
+  backupId: ""
+  manifestSHA256: ""
+  operationId: ""
+  targetId: ""
+  maxSchemaVersion: 176
+  activeDeadlineSeconds: 7200
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 604800
+  secret:
+    existingSecret: cdnca-control-restore-target
+    keys:
+      postgresHost: postgres-host
+      postgresPort: postgres-port
+      postgresUser: postgres-user
+      postgresDatabase: postgres-database
+      postgresPassword: postgres-password
+      clickhouseHost: clickhouse-host
+      clickhousePort: clickhouse-port
+      clickhouseUser: clickhouse-user
+      clickhouseDatabase: clickhouse-database
+      clickhousePassword: clickhouse-password
+      manifestSigningPublicKey: manifest-signing-public.pem
+  clickhouse:
+    enabled: true
+
+controlBackupNetworkPolicy:
+  enabled: true
+  dns:
+    namespaceSelector:
+      kubernetes.io/metadata.name: kube-system
+    podSelector:
+      k8s-app: kube-dns
+  postgresql:
+    namespaceSelector: {}
+    podSelector:
+      app.kubernetes.io/name: postgresql
+    cidrs: []
+    port: 5432
+  clickhouse:
+    namespaceSelector: {}
+    podSelector:
+      app.kubernetes.io/name: clickhouse
+    cidrs: []
+    port: 9000
+  nats:
+    namespaceSelector: {}
+    podSelector:
+      app.kubernetes.io/name: nats
+    cidrs: []
+    port: 4222
+  kubernetesAPI:
+    cidrs: []
+    port: 443
+  agentProbe:
+    cidrs: []
+    port: 443
+
+customerIngress:
+  enabled: false
+  className: nginx
+  annotations: {}
+  host: customer.example.invalid
+  tls:
+    enabled: false
+    existingSecret: ""
+
+controlUpgradeRunner:
+  enabled: false
+  protocolVersion: "2"
+  pollInterval: 5s
+  stepTimeout: 3m
+  healthTimeout: 10m
+  expectedReplicas: 1
+  quorum: 1
+  stateKey: control-state.json
+  internalTokenKey: internal-token
+  installationSecret:
+    existingSecret: cdnca-control-api-runtime
+    key: installation-id
+  trustSecret:
+    existingSecret: cdnca-control-api-runtime
+    key: entitlement-trusted-keys.json
+  planSecret:
+    existingSecret: cdnca-control-upgrade-plan
+    key: bundle.json
+  planSource:
+    url: https://control.internal.example.invalid/v1/internal/control-upgrade/plan
+    timeout: 10s
+    maxBytes: 262144
+    existingSecret: replace-with-control-upgrade-plan-source
+    keys:
+      ca: ca.crt
+      clientCertificate: tls.crt
+      clientPrivateKey: tls.key
+      internalToken: internal-token
+  state:
+    existingClaim: ""
+    storageClass: ""
+    size: 1Gi
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+
+controlApi:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: registry.example.invalid/cdnca/control-api
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  rolloutNonce: ""
+  installationName: customer-control
+  controlVersion: "0.1.0"
+  # External license service HTTPS origin (not part of the community edition).
+  # Empty disables entitlement sync; feature gates then deny until a lease is
+  # imported with control-api install-entitlement.
+  licenseServiceURL: ""
+  service:
+    type: ClusterIP
+    httpPort: 8080
+    internalGRPCPort: 9091
+  trafficPackage:
+    enabled: false
+    cursorKeySecret:
+      existingSecret: ""
+      key: cursor-key-base64
+    workload:
+      enabled: false
+      port: 9544
+      mtlsSecret:
+        existingSecret: ""
+        keys:
+          serverCertificate: server.crt
+          serverPrivateKey: server.key
+          clientCA: client-ca.crt
+  dnsReconcile:
+    enabled: false
+    workloadPort: 9543
+    resolverEndpoints: []
+    authoritativeResolvers: []
+    publicResolvers: []
+    workloadIdentities: []
+    workloadMTLSSecret:
+      existingSecret: cdnca-dns-reconcile-workload-mtls
+      keys:
+        serverCertificate: server.crt
+        serverPrivateKey: server.key
+        clientCA: client-ca.crt
+  nodeScheduling:
+    enabled: false
+  nodePortTransition:
+    enabled: true
+  systemConfiguration:
+    enabled: false
+  securityActivation:
+    enabled: false
+    reconcileInterval: 2s
+    candidateTTL: 15m
+    requiredWAFAPIVersion: 1
+    requiredCCAPIVersion: 2
+    edgePublishCursorActiveKeyID: ""
+    edgePublishSigningKeyID: ""
+    signer:
+      provider: file
+      publicKeySecret:
+        existingSecret: ""
+        key: edge-publish-signing-public-key.pem
+      remote:
+        endpoint: ""
+        caSecret:
+          existingSecret: ""
+          key: ca.pem
+        bearerTokenSecret:
+          existingSecret: ""
+          key: bearer-token
+        timeout: 3s
+  automaticPublication:
+    enabled: false
+    pollInterval: 250ms
+    errorBackoff: 1s
+    operationTimeout: 30s
+    leaseDuration: 1m
+    retryDelay: 5s
+  analyticsIngest:
+    enabled: false
+    clickhouseDatabase: cdnca
+    stream: ANALYTICS_INGEST_V1
+    durable: control_api_analytics_ingest_v1
+    isolationStream: ANALYTICS_ISOLATION_V1
+    isolationMaxBytes: 1073741824
+    ccCoordinationStream: SECURITY_CC_COORDINATION_V1
+    ccCoordinationDurable: control_api_cc_coordination_v1
+    replicas: 1
+  acme:
+    enabled: false
+    publicationCursorActiveKeyID: ""
+    directoryURL: ""
+    contacts: []
+    pollInterval: 1s
+    leaseDuration: 10m
+    settleTimeout: 30s
+    retryBase: 1m
+    retryMaximum: 1h
+    maxAttempts: 10
+    errorBackoffMin: 1s
+    errorBackoffMax: 30s
+    runtimeSecret:
+      existingSecret: cdnca-control-api-acme
+      keys:
+        wrappingKeyID: wrapping-key-id
+        wrappingKey: wrapping-key-base64
+        dnsHandleActiveKeyID: dns-handle-active-key-id
+        dnsHandleActiveKey: dns-handle-active-key-base64
+        dnsHandleVerifyOnlyKeys: dns-handle-verify-only-keys-json
+        publicationCursorKeys: certificate-publication-cursor-keys-json
+  runtimeSecret:
+    existingSecret: cdnca-control-api-runtime
+    keys:
+      accessTokenSecret: access-token-secret
+      apiKeyPepper: api-key-pepper-base64
+      dnsCredentialKeyID: dns-credential-key-id
+      dnsCredentialKey: dns-credential-key-base64
+      entitlementTrustedKeys: entitlement-trusted-keys.json
+      installationID: installation-id
+      installationPrivateKey: installation-private-key.pem
+      activationCredential: activation-credential
+      controlServerCertificate: control-server.crt
+      controlServerPrivateKey: control-server.key
+      gatewayClientCA: gateway-client-ca.crt
+      nodeCACertificateChain: node-ca-chain.crt
+      nodeCAPrivateKey: node-ca.key
+      cacheControlCursorKey: cache-control-cursor-key-base64
+      packageCommerceCursorKey: package-commerce-cursor-key-base64
+      edgePublishCursorKeys: edge-publish-cursor-keys-json
+      edgePublishSigningPrivateKey: edge-publish-signing-private-key
+      analyticsIngestNATSUser: analytics-ingest-nats-user
+      analyticsIngestNATSPassword: analytics-ingest-nats-password
+      analyticsIngestClickHouseUser: analytics-ingest-clickhouse-user
+      analyticsIngestClickHousePassword: analytics-ingest-clickhouse-password
+      analyticsIngestIsolationWrappingKeyID: analytics-ingest-isolation-wrapping-key-id
+      analyticsIngestIsolationWrappingKey: analytics-ingest-isolation-wrapping-key-base64
+  dataStoresSecret:
+    existingSecret: cdnca-customer-datastores
+    keys:
+      databaseURL: database-url
+      redisURL: redis-url
+      natsURL: nats-url
+      clickhouseURL: clickhouse-url
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+  pdb:
+    enabled: true
+    minAvailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  terminationGracePeriodSeconds: 45
+  migrations:
+    enabled: true
+    activeDeadlineSeconds: 600
+    ttlSecondsAfterFinished: 86400
+  packageCommerce:
+    enabled: false
+    providerCallbacks:
+      enabled: false
+      keyringSecret:
+        existingSecret: ""
+        key: keyring.json
+    worker:
+      enabled: false
+      nats:
+        url: ""
+        stream: PACKAGE_COMMERCE
+        credentialsSecret:
+          existingSecret: ""
+          key: runtime.creds
+        caSecret:
+          existingSecret: ""
+          key: ca.crt
+        connectTimeout: 5s
+        operationTimeout: 5s
+        reconnectWait: 1s
+        drainTimeout: 10s
+      batchSize: 64
+      leaseDuration: 1m
+      publishTimeout: 5s
+      settleTimeout: 5s
+      retryMaxAttempts: 5
+      retryBaseDelay: 1s
+      retryMaxDelay: 30s
+      idlePoll: 250ms
+      errorBackoff: 1s
+      shutdownTimeout: 30s
+  packageMonitor:
+    enabled: false
+    cursorKeySecret:
+      existingSecret: ""
+      key: cursor-hmac-key-base64
+  identityVerification:
+    enabled: false
+    resolverName: ""
+    reviewTTL: 72h
+    retentionPeriod: 52560h
+    cursorKeySecret:
+      existingSecret: ""
+      key: cursor-hmac-key-base64
+    settlement:
+      workerEnabled: false
+      leaseDuration: 1m
+      retryDelay: 1m
+      maxAttempts: 8
+      idlePoll: 250ms
+      errorBackoff: 1s
+    provider:
+      enabled: false
+      name: ""
+      endpoint: ""
+      apiKeySecret:
+        existingSecret: ""
+        key: api-key
+      callbackKeyId: ""
+      callbackHMACSecret:
+        existingSecret: ""
+        key: callback-hmac-base64
+      objectStore:
+        endpoint: ""
+        region: ""
+        bucket: ""
+        prefix: identity-verification
+        kmsKeyId: ""
+        credentialsSecret:
+          existingSecret: ""
+          keys:
+            accessKeyId: access-key-id
+            secretAccessKey: secret-access-key
+            sessionToken: session-token
+    issuer:
+      enabled: false
+      listenAddress: 0.0.0.0:9444
+      servicePort: 9444
+      workloadIdentities: ""
+      kmsEndpoint: ""
+      mtlsSecret:
+        existingSecret: ""
+        keys:
+          serverCertificate: server.crt
+          serverPrivateKey: server.key
+          clientCA: client-ca.crt
+  cacheControl:
+    # Cache purge/prewarm run on the shared Agent streams the Gateway uses.
+    enabled: true
+    natsName: cdnca-control-api-cache-control
+    natsConnectTimeout: 5s
+    natsReconnectWait: 1s
+    natsDrainTimeout: 5s
+    commandStream: AGENT_COMMANDS
+    statusStream: AGENT_DEPLOYMENT_STATUS
+    # Minimum replicas the shared streams must carry; values-ha/production set 3.
+    streamReplicas: 1
+    commandSubjectPrefix: cdnca.agent.commands.cache
+    statusSubjectPrefix: cdnca.agent.deployment-status.cache
+    dlqSubjectPrefix: cdnca.agent.deployment-status.cache-dlq
+    durable: control_api_cache_status
+    workerID: control-api-cache-runtime
+    pollInterval: 500ms
+    fetchTimeout: 2s
+    operationTimeout: 5s
+    leaseDuration: 1h
+    ackWait: 2m
+    nakBaseDelay: 1s
+    nakMaximumDelay: 30s
+    claimBatch: 16
+    maxDeliver: 5
+    maxAckPending: 64
+    maxWaiting: 16
+    maxPayloadBytes: 1048576
+
+agentGateway:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: registry.example.invalid/cdnca/agent-gateway
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  rolloutNonce: ""
+  gatewayVersion: "0.1.0"
+  workloadURISAN: spiffe://cdnca.local/gateway
+  controlServerName: ""
+  agentPublicEndpoint: gateway.example.invalid:19444
+  service:
+    type: ClusterIP
+    enrollmentPort: 19443
+    agentPort: 19444
+    healthPort: 8082
+    annotations: {}
+    externalTrafficPolicy: Cluster
+    loadBalancerSourceRanges: []
+  runtimeSecret:
+    existingSecret: cdnca-agent-gateway-runtime
+    keys:
+      serverCertificate: tls.crt
+      serverPrivateKey: tls.key
+      agentClientCA: agent-client-ca.crt
+      controlClientCertificate: control-client.crt
+      controlClientPrivateKey: control-client.key
+      controlServerCA: control-server-ca.crt
+  dataStoresSecret:
+    existingSecret: cdnca-customer-datastores
+    keys:
+      redisURL: redis-url
+      natsURL: nats-url
+  telemetryNATSSecret:
+    existingSecret: cdnca-analytics-nats-publisher
+    keys:
+      url: nats-url
+      username: username
+      password: password
+  resources:
+    requests: {cpu: 250m, memory: 256Mi}
+    limits: {cpu: "2", memory: 1Gi}
+  pdb:
+    enabled: true
+    minAvailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  terminationGracePeriodSeconds: 45
+
+web:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: registry.example.invalid/cdnca/web
+    tag: "0.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  rolloutNonce: ""
+  service:
+    type: ClusterIP
+    httpPort: 8080
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits: {cpu: 500m, memory: 256Mi}
+  pdb:
+    enabled: true
+    minAvailable: 1
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  terminationGracePeriodSeconds: 30

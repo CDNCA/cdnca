@@ -1,0 +1,631 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild API Key Management API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Session-only API key management contract. Tenant users manage their own
+    keys and platform operators may create pending keys or revoke keys for an
+    explicit user. API key credentials are never accepted by these endpoints.
+    IP allowlists contain canonical, non-overlapping IPv4 or IPv6 CIDR prefixes;
+    an empty list preserves unrestricted compatibility. Key secrets are returned
+    only by owner create, activate, and rotate responses.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: API keys
+    description: Tenant and platform API key lifecycle management.
+paths:
+  /v1/account/api-keys:
+    get:
+      tags: [API keys]
+      operationId: listSelfAPIKeys
+      summary: List the current tenant user's API keys
+      description: >-
+        Requires api_keys.self.manage. Secrets are never returned. Pagination is
+        read-only and safe to retry with the same filters and opaque cursor after
+        an unknown result.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/ListLimit'
+        - $ref: '#/components/parameters/APIKeyStatusFilter'
+        - $ref: '#/components/parameters/APIKeyNameFilter'
+        - $ref: '#/components/parameters/APIKeyIDFilter'
+        - $ref: '#/components/parameters/ListCursor'
+        - $ref: '#/components/parameters/ListOffset'
+      responses:
+        '200': {$ref: '#/components/responses/APIKeyListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [API keys]
+      operationId: createSelfAPIKey
+      summary: Create and activate an API key
+      description: >-
+        Requires api_keys.self.manage. The secret is returned only in this
+        response. An unknown result must be retried with the unchanged body,
+        If-Match revision, and Idempotency-Key; same-input replay returns the
+        frozen result and another payload returns idempotency_conflict.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CollectionIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/APIKeyFieldsRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/IssuedAPIKeyCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/account/api-keys/{key_id}:
+    parameters:
+      - $ref: '#/components/parameters/APIKeyID'
+    get:
+      tags: [API keys]
+      operationId: getSelfAPIKey
+      summary: Read one owned API key
+      description: Requires api_keys.self.manage. Secret material is never returned.
+      security: [{bearerAuth: []}]
+      responses:
+        '200': {$ref: '#/components/responses/APIKeyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    patch:
+      tags: [API keys]
+      operationId: updateSelfAPIKey
+      summary: Update one owned API key
+      description: >-
+        Requires api_keys.self.manage. An unknown result must be retried with
+        the unchanged body, If-Match revision, and Idempotency-Key.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/APIKeyFieldsRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/APIKeyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/account/api-keys/{key_id}/activate:
+    parameters:
+      - $ref: '#/components/parameters/APIKeyID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      tags: [API keys]
+      operationId: activateSelfAPIKey
+      summary: Activate a pending owned API key
+      description: >-
+        Requires api_keys.self.manage. The body carries the exact persisted
+        allowlist and is bound to revision and idempotency. An unknown result
+        must be retried with all three values unchanged. The secret is returned
+        only in this response.
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/APIKeyMutation'}
+      responses:
+        '200': {$ref: '#/components/responses/IssuedAPIKeyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/account/api-keys/{key_id}/rotate:
+    parameters:
+      - $ref: '#/components/parameters/APIKeyID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      tags: [API keys]
+      operationId: rotateSelfAPIKey
+      summary: Rotate an active owned API key
+      description: >-
+        Requires api_keys.self.manage. The body carries the exact persisted
+        allowlist and is bound to revision and idempotency. An unknown result
+        must be retried with all three values unchanged. The replacement secret
+        is returned only in this response.
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/APIKeyMutation'}
+      responses:
+        '200': {$ref: '#/components/responses/IssuedAPIKeyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/account/api-keys/{key_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/APIKeyID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      tags: [API keys]
+      operationId: revokeSelfAPIKey
+      summary: Revoke an owned API key
+      description: >-
+        Requires api_keys.self.manage. The body carries the exact persisted
+        allowlist and is bound to revision and idempotency. An unknown result
+        must be retried with all three values unchanged.
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/APIKeyMutation'}
+      responses:
+        '200': {$ref: '#/components/responses/APIKeyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/users/{user_id}/api-keys:
+    parameters:
+      - $ref: '#/components/parameters/UserID'
+      - $ref: '#/components/parameters/TenantScopeID'
+    get:
+      tags: [API keys]
+      operationId: adminListUserAPIKeys
+      summary: List one user's API keys as a platform operator
+      description: >-
+        Requires api_keys.admin.manage. Secrets are never returned. Pagination is
+        read-only and safe to retry with the same target, filters, and opaque
+        cursor after an unknown result.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/ListLimit'
+        - $ref: '#/components/parameters/APIKeyStatusFilter'
+        - $ref: '#/components/parameters/APIKeyNameFilter'
+        - $ref: '#/components/parameters/APIKeyIDFilter'
+        - $ref: '#/components/parameters/ListCursor'
+        - $ref: '#/components/parameters/ListOffset'
+      responses:
+        '200': {$ref: '#/components/responses/APIKeyListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      tags: [API keys]
+      operationId: adminCreateUserAPIKey
+      summary: Create a pending API key as a platform operator
+      description: >-
+        Requires api_keys.admin.manage. No secret is created. An unknown result
+        must be retried with the unchanged body, If-Match revision, and
+        Idempotency-Key.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/CollectionIfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminCreateAPIKeyRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/APIKeyCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/users/{user_id}/api-keys/{key_id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/UserID'
+      - $ref: '#/components/parameters/APIKeyID'
+      - $ref: '#/components/parameters/TenantScopeID'
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/IfMatch'
+    post:
+      tags: [API keys]
+      operationId: adminRevokeUserAPIKey
+      summary: Revoke one user's API key as a platform operator
+      description: >-
+        Requires api_keys.admin.manage. The body carries the exact persisted
+        allowlist and is bound to revision and idempotency. An unknown result
+        must be retried with all three values unchanged.
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: '#/components/requestBodies/APIKeyMutation'}
+      responses:
+        '200': {$ref: '#/components/responses/APIKeyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api-session
+      description: >-
+        Exactly one live control-api Bearer session is required. CdncaKey API
+        credentials are rejected so a key cannot manage its own lifecycle.
+  parameters:
+    APIKeyID:
+      name: key_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    UserID:
+      name: user_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    TenantScopeID:
+      name: tenant_scope_id
+      in: query
+      required: true
+      description: Exact tenant scope selected by the platform administrator.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    ListLimit:
+      name: limit
+      in: query
+      description: Maximum number of API keys returned in one page.
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    APIKeyStatusFilter:
+      name: status
+      in: query
+      description: Match one exact API key lifecycle status.
+      schema: {$ref: '#/components/schemas/APIKeyStatus'}
+    APIKeyNameFilter:
+      name: name
+      in: query
+      description: Case-insensitive exact API key name match.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    APIKeyIDFilter:
+      name: key_id
+      in: query
+      description: Match one exact public API key identifier.
+      schema: {type: string, pattern: '^cfk_[A-Za-z0-9_-]{22}$'}
+    ListCursor:
+      name: cursor
+      in: query
+      description: >-
+        Opaque signed cursor from the preceding page. It is bound to the route,
+        authenticated actor and scope, target user, filters, limit, ordering,
+        and original snapshot. Invalid or mismatched cursors return validation_error.
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    ListOffset:
+      name: offset
+      in: query
+      description: >-
+        Page-number access (canonical non-negative integer, 0-10000). Cannot be
+        combined with cursor; an offset past the end returns empty items with total.
+      schema: {type: integer, minimum: 0, maximum: 10000}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Operation-scoped durable key. Retry an unknown result only with the
+        unchanged request body, If-Match revision, and this same value.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Current positive revision encoded as a quoted decimal ETag.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+        maxLength: 21
+    CollectionIfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Collection creation revision, always exactly "0".
+      schema:
+        type: string
+        const: '"0"'
+  requestBodies:
+    APIKeyMutation:
+      required: true
+      description: >-
+        Exact current IP allowlist. It participates in revision and
+        idempotency binding and must remain unchanged when retrying.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/APIKeyMutationRequest'}
+  headers:
+    RevisionETag:
+      description: Current positive API key revision as a quoted decimal ETag.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+  responses:
+    APIKeyListOK:
+      description: API key metadata list with each exact persisted IP allowlist.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/APIKeyList'}
+    APIKeyOK:
+      description: API key metadata with the exact persisted IP allowlist.
+      headers:
+        ETag: {$ref: '#/components/headers/RevisionETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/APIKey'}
+    APIKeyCreated:
+      description: Pending API key metadata without secret material.
+      headers:
+        ETag: {$ref: '#/components/headers/RevisionETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/APIKey'}
+    IssuedAPIKeyOK:
+      description: API key metadata plus the one-time secret.
+      headers:
+        ETag: {$ref: '#/components/headers/RevisionETag'}
+        Cache-Control:
+          description: Always no-store for secret-bearing responses.
+          schema: {type: string, const: no-store}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/IssuedAPIKey'}
+    IssuedAPIKeyCreated:
+      description: Created API key metadata plus the one-time secret.
+      headers:
+        ETag: {$ref: '#/components/headers/RevisionETag'}
+        Cache-Control:
+          description: Always no-store for secret-bearing responses.
+          schema: {type: string, const: no-store}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/IssuedAPIKey'}
+    BadRequest:
+      description: >-
+        Malformed query, cursor, JSON, UUID, revision, CIDR, duplicate or
+        overlapping prefix, or more than 32 prefixes. Validation params expose
+        only field indexes and counts, never any submitted CIDR or matching prefix.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unauthorized:
+      description: Session authentication is missing, invalid, expired, or revoked.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Forbidden:
+      description: The authenticated session lacks the required scope or permission.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    NotFound:
+      description: The authorized API key or managed user does not exist.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Conflict:
+      description: Revision, state, or idempotency binding conflicts.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    ServiceUnavailable:
+      description: Identity, API key storage, or another required dependency is unavailable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    MetadataID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    IPAllowlist:
+      type: array
+      maxItems: 32
+      uniqueItems: true
+      default: []
+      description: >-
+        Canonical network CIDRs only: no host bits, zones, IPv4-mapped IPv6,
+        duplicate prefixes, or overlaps. Empty means unrestricted.
+      items:
+        type: string
+        minLength: 3
+        maxLength: 43
+        pattern: '^(?:[0-9]{1,3}(?:\.[0-9]{1,3}){3}/(?:[0-9]|[12][0-9]|3[0-2])|[0-9a-f:]+/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))$'
+    APIKeyFieldsRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scopes]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
+        ip_allowlist: {$ref: '#/components/schemas/IPAllowlist'}
+        expires_at:
+          type: string
+          format: date-time
+          description: Must be in the future and no more than 366 days from the server clock.
+    AdminCreateAPIKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scopes]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
+        ip_allowlist: {$ref: '#/components/schemas/IPAllowlist'}
+        expires_at:
+          type: string
+          format: date-time
+          description: Must be in the future and no more than 366 days from the server clock.
+        pending_ttl_seconds:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2592000
+          default: 604800
+    APIKeyMutationRequest:
+      type: object
+      additionalProperties: false
+      required: [ip_allowlist]
+      properties:
+        ip_allowlist: {$ref: '#/components/schemas/IPAllowlist'}
+        grant_all_scopes:
+          type: boolean
+          default: false
+          description: >-
+            Rotate only. When true, the rotation also replaces the key scopes with
+            every permission the current session may grant to an API key (the
+            simple-mode "reset key"). It is part of the idempotency binding.
+            Other operations reject true with 400 invalid_request.
+    APIKeyStatus:
+      type: string
+      enum: [pending_activation, active, revoked]
+    APIKey:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - key_id
+        - key_prefix
+        - scope_id
+        - tenant_id
+        - user_id
+        - name
+        - scopes
+        - ip_allowlist
+        - status
+        - revision
+        - created_at
+        - updated_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        key_id: {type: string, pattern: '^cfk_[A-Za-z0-9_-]{22}$'}
+        key_prefix: {type: string, pattern: '^cfk_[A-Za-z0-9_-]{22}\.$'}
+        scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
+        ip_allowlist: {$ref: '#/components/schemas/IPAllowlist'}
+        status: {$ref: '#/components/schemas/APIKeyStatus'}
+        pending_expires_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        last_used_at: {type: string, format: date-time}
+        activated_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    APIKeyList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, has_more]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/APIKey'}
+        next_cursor:
+          type: string
+          maxLength: 4096
+          description: Empty on the terminal page; otherwise pass unchanged to the next request.
+        has_more:
+          type: boolean
+          description: True exactly when next_cursor is non-empty.
+        total:
+          type: integer
+          minimum: 0
+          description: >-
+            Filtered key count at the page snapshot. Present on the first page and
+            on offset pages; omitted on cursor continuation pages.
+    IssuedAPIKey:
+      type: object
+      additionalProperties: false
+      required: [key, secret]
+      properties:
+        key: {$ref: '#/components/schemas/APIKey'}
+        secret:
+          type: string
+          writeOnly: true
+          format: password
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: One-time secret. It is never repeated outside an idempotent replay.
+    APIKeyValidationCode:
+      type: string
+      enum:
+        - api_key_ip_allowlist_invalid_cidr
+        - api_key_ip_allowlist_unsupported_prefix
+        - api_key_ip_allowlist_duplicate
+        - api_key_ip_allowlist_overlap
+        - api_key_ip_allowlist_too_many
+        - invalid_request
+        - validation_error
+        - invalid_session
+        - permission_denied
+        - api_key_not_found
+        - version_conflict
+        - idempotency_conflict
+        - api_key_state_conflict
+        - api_key_unavailable
+    ErrorParams:
+      type: object
+      additionalProperties: false
+      description: >-
+        Validation metadata only. It never contains secrets, credential digests,
+        submitted CIDRs, matched CIDRs, or matching network prefixes.
+      properties:
+        field: {type: string, const: ip_allowlist}
+        index: {type: integer, minimum: 0, maximum: 31}
+        duplicate_of: {type: integer, minimum: 0, maximum: 31}
+        overlaps: {type: integer, minimum: 0, maximum: 31}
+        maximum: {type: integer, const: 32}
+        actual: {type: integer, minimum: 33}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {$ref: '#/components/schemas/APIKeyValidationCode'}
+            message: {type: string, minLength: 1, maxLength: 256}
+            request_id: {$ref: '#/components/schemas/MetadataID'}
+            params: {$ref: '#/components/schemas/ErrorParams'}

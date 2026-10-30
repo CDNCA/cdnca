@@ -1,0 +1,121 @@
+{
+ "id": "recharge-identity-policy",
+ "prefix": "/v1/recharge-identity-policy",
+ "operations": [
+  {
+   "operation_id": "getTenantRechargeIdentityPolicy",
+   "method": "GET",
+   "path": "/v1/recharge-identity-policy",
+   "summary": "Read the current tenant recharge identity policy",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity_verification.review"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current policy or exact completed replay.",
+     "fields": [
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "require_real_name",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error without raw service messages."
+    },
+    {
+     "status": "401",
+     "description": "Stable error without raw service messages."
+    },
+    {
+     "status": "403",
+     "description": "Stable error without raw service messages."
+    },
+    {
+     "status": "405",
+     "description": "Stable error without raw service messages."
+    },
+    {
+     "status": "409",
+     "description": "Stable error without raw service messages."
+    },
+    {
+     "status": "503",
+     "description": "Stable error without raw service messages."
+    }
+   ]
+  },
+  {
+   "operation_id": "updateTenantRechargeIdentityPolicy",
+   "method": "PUT",
+   "path": "/v1/recharge-identity-policy",
+   "summary": "CAS update the current tenant recharge identity policy",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity_verification.review"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Strong quoted current revision; use \"0\" while no explicit policy exists."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "require_real_name",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   }
+  }
+ ]
+}

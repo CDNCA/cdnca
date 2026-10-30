@@ -1,0 +1,157 @@
+{
+ "id": "admin-inbox",
+ "prefix": "/v1/admin/inbox",
+ "operations": [
+  {
+   "operation_id": "listAdminInbox",
+   "method": "GET",
+   "path": "/v1/admin/inbox",
+   "summary": "List the platform administrator's messages, newest first",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform operations events addressed to the caller (node offline/recovered, ACME HTTP-01 epoch drift, staff ticket events). Every platform-scope session reads only its own messages. params holds the event's public template values; the console renders the text per language.",
+   "params": [
+    {
+     "name": "unread",
+     "in": "query",
+     "type": "string: true"
+    },
+    {
+     "name": "page_size",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "unread",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "unread_only",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "page_size",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "markAllAdminInboxMessagesRead",
+   "method": "POST",
+   "path": "/v1/admin/inbox/read-all",
+   "summary": "Mark all the caller's messages read (audited admin.inbox.read_all); read messages older than 180 days are pruned",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Number of messages marked.",
+     "fields": [
+      {
+       "name": "marked",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminInboxUnreadCount",
+   "method": "GET",
+   "path": "/v1/admin/inbox/unread-count",
+   "summary": "Unread message count for the header badge",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Count.",
+     "fields": [
+      {
+       "name": "unread",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    }
+   ]
+  },
+  {
+   "operation_id": "markAdminInboxMessageRead",
+   "method": "POST",
+   "path": "/v1/admin/inbox/{message_id}/read",
+   "summary": "Mark one message read",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "message_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Read."
+    },
+    {
+     "status": "404",
+     "description": "admin_inbox_message_not_found (not the caller's message)."
+    }
+   ]
+  }
+ ]
+}

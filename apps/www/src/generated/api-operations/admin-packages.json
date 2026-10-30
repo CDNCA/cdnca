@@ -1,0 +1,1306 @@
+{
+ "id": "admin-packages",
+ "prefix": "/v1/admin/packages",
+ "operations": [
+  {
+   "operation_id": "listPackages",
+   "method": "GET",
+   "path": "/v1/admin/packages",
+   "summary": "List and filter package products",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. Unknown or repeated query parameters are rejected.",
+   "params": [
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Case-insensitive substring match against the product name."
+    },
+    {
+     "name": "group_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Return products whose group_ids contain this exact group UUID."
+    },
+    {
+     "name": "enabled",
+     "in": "query",
+     "type": "boolean"
+    },
+    {
+     "name": "published",
+     "in": "query",
+     "type": "boolean",
+     "description": "true keeps only products whose current revision is published (purchasable); false only the others."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable product page ordered by sort order and then name.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PackageProduct>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createPackage",
+   "method": "POST",
+   "path": "/v1/admin/packages",
+   "summary": "Create a versioned package product",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. Referenced package groups must exist and be active. Region and node-group UUIDs are currently opaque configuration references and are not validated against region or node-group resources. A reseller's main and backup line groups must be platform line groups granted to it (scope_may_use_line_group_460); an ungranted one returns 400 package_line_group_not_granted. A reseller price below the wholesale price of its line groups in its price list returns 400 package_price_below_wholesale with details period, price_minor, wholesale_minor and price_list.",
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "description",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "group_ids",
+      "type": "array<string(uuid)>",
+      "required": true,
+      "description": "Active package-group UUIDs. These references are validated by the catalog service."
+     },
+     {
+      "name": "region_id",
+      "type": "string(uuid)",
+      "required": true,
+      "description": "Opaque non-zero region UUID. The current catalog does not validate a backing region resource."
+     },
+     {
+      "name": "node_group_id",
+      "type": "string(uuid)",
+      "required": true,
+      "description": "Opaque non-zero primary node-group UUID. The current catalog does not validate a backing node-group resource."
+     },
+     {
+      "name": "backup_node_group_id",
+      "type": "string(uuid) | null(uuid)",
+      "required": true,
+      "description": "Optional opaque backup node-group UUID; when set it must differ from node_group_id. No backing resource existence check is implemented yet."
+     },
+     {
+      "name": "limits",
+      "type": "PackageResourceLimits",
+      "required": true
+     },
+     {
+      "name": "protection",
+      "type": "PackageProtectionDescription",
+      "required": true
+     },
+     {
+      "name": "prices",
+      "type": "PackagePrices",
+      "required": true
+     },
+     {
+      "name": "cname",
+      "type": "PackageCNAMEPolicy",
+      "required": true
+     },
+     {
+      "name": "purchase",
+      "type": "PackagePurchasePolicy",
+      "required": true
+     },
+     {
+      "name": "sort_order",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true,
+      "description": "Set false to disable the package in the product catalog."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Product and immutable revision-one snapshot created, or an identical idempotent request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The platform scope or the reseller tenant scope that owns the package; names are unique per owner."
+      },
+      {
+       "name": "spec",
+       "type": "PackageProductSpec",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "cname_sync_job_id",
+       "type": "string(uuid)",
+       "description": "Only on the update response that changed the CNAME of a package with sold subscriptions; poll GET /v1/admin/packages/{id}/cname-sync/{job_id}."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPackage",
+   "method": "GET",
+   "path": "/v1/admin/packages/{id}",
+   "summary": "Get one active package product",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package group or package product UUID."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current product specification and revision.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The platform scope or the reseller tenant scope that owns the package; names are unique per owner."
+      },
+      {
+       "name": "spec",
+       "type": "PackageProductSpec",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "cname_sync_job_id",
+       "type": "string(uuid)",
+       "description": "Only on the update response that changed the CNAME of a package with sold subscriptions; poll GET /v1/admin/packages/{id}/cname-sync/{job_id}."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "updatePackage",
+   "method": "PATCH",
+   "path": "/v1/admin/packages/{id}",
+   "summary": "Replace a package specification, including enable or disable state",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. expected_revision is checked atomically, and every successful change creates a new immutable revision snapshot. Region and node-group UUIDs remain opaque configuration references without resource existence validation. A reseller's main and backup line groups must be platform line groups granted to it (scope_may_use_line_group_460); an ungranted one returns 400 package_line_group_not_granted. A reseller price below the wholesale price of its line groups in its price list returns 400 package_price_below_wholesale with details period, price_minor, wholesale_minor and price_list.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package group or package product UUID."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "spec",
+      "type": "PackageProductSpec",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Product specification replaced and revision incremented, or an identical idempotent request replayed.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true,
+       "description": "The platform scope or the reseller tenant scope that owns the package; names are unique per owner."
+      },
+      {
+       "name": "spec",
+       "type": "PackageProductSpec",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "cname_sync_job_id",
+       "type": "string(uuid)",
+       "description": "Only on the update response that changed the CNAME of a package with sold subscriptions; poll GET /v1/admin/packages/{id}/cname-sync/{job_id}."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "deletePackage",
+   "method": "DELETE",
+   "path": "/v1/admin/packages/{id}",
+   "summary": "Soft-delete a package product",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. If-Match supplies the expected revision, and the deletion is recorded as the next immutable product snapshot.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package group or package product UUID."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Product soft-deleted, or an identical idempotent request replayed."
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPackageCNAMESync",
+   "method": "GET",
+   "path": "/v1/admin/packages/{id}/cname-sync/{job_id}",
+   "summary": "Progress of the sync of a package CNAME change to its sold subscriptions",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. The job is created by the package update that changed the CNAME (cname_sync_job_id). skipped lists at most 200 subscriptions; skipped_count is the total.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package group or package product UUID."
+    },
+    {
+     "name": "job_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package CNAME sync job UUID (cname_sync_job_id of the package update response)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sync job counters and skipped subscriptions.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / failed",
+       "required": true
+      },
+      {
+       "name": "synced_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "site_count",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Sites asked to regenerate their CNAME."
+      },
+      {
+       "name": "skipped_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "last_error_code",
+       "type": "string | null",
+       "required": true,
+       "description": "actor_session_ended or actor_permission_denied stop the job until retried; sync_failed is retried with backoff."
+      },
+      {
+       "name": "skipped",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "retryPackageCNAMESync",
+   "method": "POST",
+   "path": "/v1/admin/packages/{id}/cname-sync/{job_id}/retry",
+   "summary": "Retry a failed package CNAME sync with the caller's session",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; each scope sees and changes only the groups and packages it owns (owner_scope_id), and another owner's package returns permission_denied. Only a failed job (for example actor_session_ended) can be retried; already processed subscriptions are not processed again.",
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package group or package product UUID."
+    },
+    {
+     "name": "job_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package CNAME sync job UUID (cname_sync_job_id of the package update response)."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Job requeued.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / failed",
+       "required": true
+      },
+      {
+       "name": "synced_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "site_count",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Sites asked to regenerate their CNAME."
+      },
+      {
+       "name": "skipped_count",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "attempt",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "last_error_code",
+       "type": "string | null",
+       "required": true,
+       "description": "actor_session_ended or actor_permission_denied stop the job until retried; sync_failed is retried with backoff."
+      },
+      {
+       "name": "skipped",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  },
+  {
+   "operation_id": "publishPackageOffer",
+   "method": "POST",
+   "path": "/v1/admin/packages/{id}/publish",
+   "summary": "Publish the current immutable package product revision",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The platform needs packages.manage; an active reseller tenant may publish only its own package with reseller.packages.manage. A reseller package whose line group grant was revoked, or whose price fell below the wholesale price, cannot be published again (400 package_line_group_not_granted / package_price_below_wholesale). packages.count counts the owner's published packages.",
+   "permissions": [
+    "packages.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive immutable product revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exact retries reuse this key with the same action, product, and revision."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current durable publication head or identical committed replay.",
+     "fields": [
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "401",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "403",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "404",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "409",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "412",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "422",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "503",
+     "description": "Stable package publication error."
+    }
+   ]
+  },
+  {
+   "operation_id": "withdrawPackageOffer",
+   "method": "POST",
+   "path": "/v1/admin/packages/{id}/withdraw",
+   "summary": "Withdraw the exact immutable package revision named by If-Match",
+   "auth": [
+    "bearer"
+   ],
+   "description": "If-Match binds the previously published product revision, not a newer mutable draft revision. Existing sold subscriptions remain unchanged. An active reseller tenant may withdraw only its own package (reseller.packages.manage); revoking a line group grant withdraws the reseller packages that use it.",
+   "permissions": [
+    "packages.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive immutable product revision."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Exact retries reuse this key with the same action, product, and revision."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current durable publication head or identical committed replay.",
+     "fields": [
+      {
+       "name": "product_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "product_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "lifecycle_revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: published / withdrawn",
+       "required": true
+      },
+      {
+       "name": "published_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "withdrawn_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "401",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "403",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "404",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "409",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "412",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "422",
+     "description": "Stable package publication error."
+    },
+    {
+     "status": "503",
+     "description": "Stable package publication error."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPackageEscalatePolicy",
+   "method": "GET",
+   "path": "/v1/admin/packages/{product_id}/escalate-policy",
+   "summary": "Read a package's attack escalation policy",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; only the package owner (owner_scope_id) reads it, another owner's package returns 403 escalate_permission_denied.",
+   "permissions": [
+    "packages.manage",
+    "reseller.packages.manage"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The package policy.",
+     "fields": [
+      {
+       "name": "product_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "b",
+       "type": "LineGroupRef | null",
+       "required": true
+      },
+      {
+       "name": "c",
+       "type": "LineGroupRef | null",
+       "required": true
+      },
+      {
+       "name": "c_cloudflare",
+       "type": "boolean",
+       "required": true,
+       "description": "C may use the site owner's Cloudflare when bound and synced."
+      },
+      {
+       "name": "blackhole_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "thresholds",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "sustain_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recover_permille",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "min_dwell_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "b_line_group_name",
+       "type": "string",
+       "description": "Name of B's line group, filled on every read; absent when B is null. A write ignores it."
+      },
+      {
+       "name": "c_line_group_name",
+       "type": "string",
+       "description": "Name of C's line group, filled on every read; absent when C is null. A write ignores it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "putPackageEscalatePolicy",
+   "method": "PUT",
+   "path": "/v1/admin/packages/{product_id}/escalate-policy",
+   "summary": "Write a package's B/C line groups, Cloudflare and blackhole switches and threshold ranges",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant scope; only the package owner (owner_scope_id) writes it, another owner's package returns 403 escalate_permission_denied. A is the package's main line group. B must be a high defense line group and C an unlimited one the package owner may use (its own or granted to the reseller, 422 escalate_line_group_unusable otherwise). revision is the current revision (0 creates).",
+   "permissions": [
+    "packages.manage",
+    "reseller.packages.manage"
+   ],
+   "features": [
+    "module.escalate"
+   ],
+   "params": [
+    {
+     "name": "product_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "product_id",
+      "type": "string(uuid)"
+     },
+     {
+      "name": "b",
+      "type": "LineGroupRef | null",
+      "required": true
+     },
+     {
+      "name": "c",
+      "type": "LineGroupRef | null",
+      "required": true
+     },
+     {
+      "name": "c_cloudflare",
+      "type": "boolean",
+      "required": true,
+      "description": "C may use the site owner's Cloudflare when bound and synced."
+     },
+     {
+      "name": "blackhole_enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "thresholds",
+      "type": "object",
+      "required": true
+     },
+     {
+      "name": "sustain_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "recover_permille",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "min_dwell_seconds",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "b_line_group_name",
+      "type": "string",
+      "description": "Name of B's line group, filled on every read; absent when B is null. A write ignores it."
+     },
+     {
+      "name": "c_line_group_name",
+      "type": "string",
+      "description": "Name of C's line group, filled on every read; absent when C is null. A write ignores it."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The package policy.",
+     "fields": [
+      {
+       "name": "product_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "b",
+       "type": "LineGroupRef | null",
+       "required": true
+      },
+      {
+       "name": "c",
+       "type": "LineGroupRef | null",
+       "required": true
+      },
+      {
+       "name": "c_cloudflare",
+       "type": "boolean",
+       "required": true,
+       "description": "C may use the site owner's Cloudflare when bound and synced."
+      },
+      {
+       "name": "blackhole_enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "thresholds",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "sustain_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recover_permille",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "min_dwell_seconds",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "b_line_group_name",
+       "type": "string",
+       "description": "Name of B's line group, filled on every read; absent when B is null. A write ignores it."
+      },
+      {
+       "name": "c_line_group_name",
+       "type": "string",
+       "description": "Name of C's line group, filled on every read; absent when C is null. A write ignores it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "404",
+     "description": "Error."
+    },
+    {
+     "status": "409",
+     "description": "Error."
+    },
+    {
+     "status": "422",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  }
+ ]
+}

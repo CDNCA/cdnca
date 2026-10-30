@@ -1,0 +1,89 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "origin-tls",
+  "scenario_sha256": "f0a069f1a4f95edbe99048f50919eee11eaaa181f7264524bec0e023dde62fa9",
+  "steps": [
+    {
+      "id": "trusted",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "31",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 31,
+            "sha256": "2f601c78ef947994709db583580f3130407cdc9ed383029bdb54100a21f6c908",
+            "text": "trusted trusted.example.test /t"
+          },
+          "origin": [
+            {
+              "origin": "trusted",
+              "method": "GET",
+              "uri": "/t",
+              "host": "trusted.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1",
+              "sni": "origin.example.test"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "untrusted-ca",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 502,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "154",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 154,
+            "sha256": "bf4d0c2fe5252a3e32908499c90a4da5f961c7a7d989c5ef37b406d145929f1b",
+            "text": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "wrong-sni",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 502,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "154",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 154,
+            "sha256": "bf4d0c2fe5252a3e32908499c90a4da5f961c7a7d989c5ef37b406d145929f1b",
+            "text": "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    }
+  ]
+}

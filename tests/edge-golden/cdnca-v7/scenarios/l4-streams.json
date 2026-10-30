@@ -1,0 +1,915 @@
+{
+  "name": "l4-streams",
+  "description": "四层 TCP/UDP（gap-sweep G4，D13-c0 动态路由承载 v2 四层）：同一作用域网站 + 四层转发，经 agent 的 dynroute.Runtime 与节点 L4 运行时（第二个 OpenResty，root 容器）。独占 TCP/UDP 端口转发到源站；TLS 透传与 TLS 网站共用 18243——按 SNI 透传到自行终结 TLS 的源站（客户端看到源站证书），网站名字经 L4 分派器交给骨架（PROXY 协议），站点证书与回源不变、客户端地址仍为真实地址；明文网站端口不受影响；发布改 TCP 源站后新连接到新源站；删除 TCP 与透传后端口释放（拒连）、共享端口回到骨架直接监听、网站照常。",
+  "covers": [
+    "四层 TCP",
+    "四层 UDP",
+    "TLS 透传按 SNI",
+    "四层与网站共用端口",
+    "四层发布切源站",
+    "四层删除释放端口"
+  ],
+  "requires": [
+    "l4"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b20a0-0000-4000-8000-000000000001",
+      "source_revision": 1,
+      "config_version_id": "0a1b20a0-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "http2",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "ipv6",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 7
+        },
+        {
+          "name": "tcp",
+          "api_version": 4
+        },
+        {
+          "name": "udp",
+          "api_version": 4
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b20a0-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "web.l4.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "http-18200",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18200,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "web",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19151,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b20a0-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "secure.l4.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18243",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18243,
+              "protocols": [
+                "http1",
+                "http2"
+              ],
+              "tls": {
+                "certificate_version_id": "0a1b20a0-0000-4000-8000-0000000000a2"
+              }
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "secure",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19152,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        }
+      ],
+      "streams": {
+        "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+        "streams_v2": [
+          {
+            "schema_version": "cdnca.edge.l4/v2",
+            "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+            "stream_id": "0a1b20a0-0000-4000-8000-000000000401",
+            "revision": 1,
+            "listener": {
+              "protocol": "tcp",
+              "address": "*",
+              "port": 18210
+            },
+            "endpoint": {
+              "address": "127.0.0.1",
+              "port": 19161
+            },
+            "geo": {
+              "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+              "stream_id": "0a1b20a0-0000-4000-8000-000000000401",
+              "revision": 1,
+              "unknown_region_action": "allow"
+            },
+            "connect_timeout_ms": 1000,
+            "response_timeout_ms": 5000,
+            "max_connections_per_client": 50,
+            "drain_timeout_ms": 30000
+          },
+          {
+            "schema_version": "cdnca.edge.l4/v2",
+            "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+            "stream_id": "0a1b20a0-0000-4000-8000-000000000402",
+            "revision": 1,
+            "listener": {
+              "protocol": "udp",
+              "address": "*",
+              "port": 18211
+            },
+            "endpoint": {
+              "address": "127.0.0.1",
+              "port": 19162
+            },
+            "geo": {
+              "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+              "stream_id": "0a1b20a0-0000-4000-8000-000000000402",
+              "revision": 1,
+              "unknown_region_action": "allow"
+            },
+            "connect_timeout_ms": 1000,
+            "response_timeout_ms": 5000,
+            "max_connections_per_client": 50,
+            "drain_timeout_ms": 30000
+          },
+          {
+            "schema_version": "cdnca.edge.l4/v2",
+            "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+            "stream_id": "0a1b20a0-0000-4000-8000-000000000403",
+            "revision": 1,
+            "listener": {
+              "protocol": "tcp",
+              "address": "*",
+              "port": 18243
+            },
+            "endpoint": {
+              "address": "127.0.0.1",
+              "port": 19163
+            },
+            "geo": {
+              "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+              "stream_id": "0a1b20a0-0000-4000-8000-000000000403",
+              "revision": 1,
+              "unknown_region_action": "allow"
+            },
+            "connect_timeout_ms": 1000,
+            "response_timeout_ms": 5000,
+            "max_connections_per_client": 50,
+            "drain_timeout_ms": 30000,
+            "tls_passthrough": true,
+            "server_names": [
+              "db.l4.example.test"
+            ]
+          }
+        ]
+      }
+    },
+    "node": {
+      "health_port": 18999,
+      "certificates": [
+        {
+          "site_id": "0a1b20a0-0000-4000-8000-000000000102",
+          "version_id": "0a1b20a0-0000-4000-8000-0000000000a2",
+          "revision": 1,
+          "serial": 1102,
+          "names": [
+            "secure.l4.example.test"
+          ]
+        }
+      ]
+    }
+  },
+  "origins": [
+    {
+      "name": "web",
+      "address": "127.0.0.1:19151"
+    },
+    {
+      "name": "secure",
+      "address": "127.0.0.1:19152"
+    },
+    {
+      "name": "tcp-a",
+      "address": "127.0.0.1:19161",
+      "stream": "tcp"
+    },
+    {
+      "name": "udp-a",
+      "address": "127.0.0.1:19162",
+      "stream": "udp"
+    },
+    {
+      "name": "pass",
+      "address": "127.0.0.1:19163",
+      "stream": "tcp",
+      "tls": {
+        "ca": "origin",
+        "names": [
+          "db.l4.example.test"
+        ]
+      }
+    },
+    {
+      "name": "tcp-b",
+      "address": "127.0.0.1:19164",
+      "stream": "tcp"
+    }
+  ],
+  "steps": [
+    {
+      "id": "tcp",
+      "kind": "tcp",
+      "port": 18210,
+      "message": "hello"
+    },
+    {
+      "id": "tcp-again",
+      "kind": "tcp",
+      "port": 18210,
+      "message": "again",
+      "source": "127.0.0.9"
+    },
+    {
+      "id": "udp",
+      "kind": "udp",
+      "port": 18211,
+      "message": "ping"
+    },
+    {
+      "id": "passthrough",
+      "kind": "tcp",
+      "port": 18243,
+      "message": "through",
+      "scheme": "https",
+      "host": "db.l4.example.test"
+    },
+    {
+      "id": "shared-site",
+      "scheme": "https",
+      "port": 18243,
+      "host": "secure.l4.example.test",
+      "path": "/shared"
+    },
+    {
+      "id": "shared-site-h1",
+      "scheme": "https",
+      "port": 18243,
+      "host": "secure.l4.example.test",
+      "path": "/h1",
+      "alpn": [
+        "http/1.1"
+      ],
+      "source": "127.0.0.7"
+    },
+    {
+      "id": "shared-unknown-sni",
+      "kind": "tls",
+      "port": 18243,
+      "host": "nobody.l4.example.test"
+    },
+    {
+      "id": "plain-site",
+      "port": 18200,
+      "host": "web.l4.example.test",
+      "path": "/p"
+    },
+    {
+      "id": "switch-tcp-origin",
+      "kind": "publish",
+      "publish": {
+        "document": {
+          "schema": "cdnca.edge.site-runtime/v2",
+          "configuration_scope_id": "0a1b20a0-0000-4000-8000-000000000001",
+          "source_revision": 2,
+          "config_version_id": "0a1b20a0-0000-4000-8000-0000000000c2",
+          "required_capabilities": [
+            {
+              "name": "http1",
+              "api_version": 1
+            },
+            {
+              "name": "http2",
+              "api_version": 1
+            },
+            {
+              "name": "ipv4",
+              "api_version": 1
+            },
+            {
+              "name": "ipv6",
+              "api_version": 1
+            },
+            {
+              "name": "site_runtime",
+              "api_version": 7
+            },
+            {
+              "name": "tcp",
+              "api_version": 4
+            },
+            {
+              "name": "udp",
+              "api_version": 4
+            }
+          ],
+          "sites": [
+            {
+              "id": "0a1b20a0-0000-4000-8000-000000000101",
+              "revision": 1,
+              "domains": [
+                "web.l4.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "http-18200",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18200,
+                  "protocols": [
+                    "http1"
+                  ]
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "web",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19151,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            },
+            {
+              "id": "0a1b20a0-0000-4000-8000-000000000102",
+              "revision": 1,
+              "domains": [
+                "secure.l4.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "l-18243",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18243,
+                  "protocols": [
+                    "http1",
+                    "http2"
+                  ],
+                  "tls": {
+                    "certificate_version_id": "0a1b20a0-0000-4000-8000-0000000000a2"
+                  }
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "secure",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19152,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            }
+          ],
+          "streams": {
+            "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+            "streams_v2": [
+              {
+                "schema_version": "cdnca.edge.l4/v2",
+                "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                "stream_id": "0a1b20a0-0000-4000-8000-000000000401",
+                "revision": 2,
+                "listener": {
+                  "protocol": "tcp",
+                  "address": "*",
+                  "port": 18210
+                },
+                "endpoint": {
+                  "address": "127.0.0.1",
+                  "port": 19164
+                },
+                "geo": {
+                  "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                  "stream_id": "0a1b20a0-0000-4000-8000-000000000401",
+                  "revision": 2,
+                  "unknown_region_action": "allow"
+                },
+                "connect_timeout_ms": 1000,
+                "response_timeout_ms": 5000,
+                "max_connections_per_client": 50,
+                "drain_timeout_ms": 30000
+              },
+              {
+                "schema_version": "cdnca.edge.l4/v2",
+                "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                "stream_id": "0a1b20a0-0000-4000-8000-000000000402",
+                "revision": 1,
+                "listener": {
+                  "protocol": "udp",
+                  "address": "*",
+                  "port": 18211
+                },
+                "endpoint": {
+                  "address": "127.0.0.1",
+                  "port": 19162
+                },
+                "geo": {
+                  "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                  "stream_id": "0a1b20a0-0000-4000-8000-000000000402",
+                  "revision": 1,
+                  "unknown_region_action": "allow"
+                },
+                "connect_timeout_ms": 1000,
+                "response_timeout_ms": 5000,
+                "max_connections_per_client": 50,
+                "drain_timeout_ms": 30000
+              },
+              {
+                "schema_version": "cdnca.edge.l4/v2",
+                "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                "stream_id": "0a1b20a0-0000-4000-8000-000000000403",
+                "revision": 1,
+                "listener": {
+                  "protocol": "tcp",
+                  "address": "*",
+                  "port": 18243
+                },
+                "endpoint": {
+                  "address": "127.0.0.1",
+                  "port": 19163
+                },
+                "geo": {
+                  "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                  "stream_id": "0a1b20a0-0000-4000-8000-000000000403",
+                  "revision": 1,
+                  "unknown_region_action": "allow"
+                },
+                "connect_timeout_ms": 1000,
+                "response_timeout_ms": 5000,
+                "max_connections_per_client": 50,
+                "drain_timeout_ms": 30000,
+                "tls_passthrough": true,
+                "server_names": [
+                  "db.l4.example.test"
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "tcp-after-switch",
+      "kind": "tcp",
+      "port": 18210,
+      "message": "switched"
+    },
+    {
+      "id": "udp-after-switch",
+      "kind": "udp",
+      "port": 18211,
+      "message": "still"
+    },
+    {
+      "id": "remove-tcp-and-passthrough",
+      "kind": "publish",
+      "publish": {
+        "document": {
+          "schema": "cdnca.edge.site-runtime/v2",
+          "configuration_scope_id": "0a1b20a0-0000-4000-8000-000000000001",
+          "source_revision": 3,
+          "config_version_id": "0a1b20a0-0000-4000-8000-0000000000c3",
+          "required_capabilities": [
+            {
+              "name": "http1",
+              "api_version": 1
+            },
+            {
+              "name": "http2",
+              "api_version": 1
+            },
+            {
+              "name": "ipv4",
+              "api_version": 1
+            },
+            {
+              "name": "ipv6",
+              "api_version": 1
+            },
+            {
+              "name": "site_runtime",
+              "api_version": 7
+            },
+            {
+              "name": "tcp",
+              "api_version": 4
+            },
+            {
+              "name": "udp",
+              "api_version": 4
+            }
+          ],
+          "sites": [
+            {
+              "id": "0a1b20a0-0000-4000-8000-000000000101",
+              "revision": 1,
+              "domains": [
+                "web.l4.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "http-18200",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18200,
+                  "protocols": [
+                    "http1"
+                  ]
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "web",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19151,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            },
+            {
+              "id": "0a1b20a0-0000-4000-8000-000000000102",
+              "revision": 1,
+              "domains": [
+                "secure.l4.example.test"
+              ],
+              "listeners": [
+                {
+                  "id": "l-18243",
+                  "position": 0,
+                  "address_family": "dual_stack",
+                  "port": 18243,
+                  "protocols": [
+                    "http1",
+                    "http2"
+                  ],
+                  "tls": {
+                    "certificate_version_id": "0a1b20a0-0000-4000-8000-0000000000a2"
+                  }
+                }
+              ],
+              "origin_pools": [
+                {
+                  "id": "primary",
+                  "position": 0,
+                  "kind": "origin",
+                  "algorithm": "round_robin",
+                  "origins": [
+                    {
+                      "id": "secure",
+                      "position": 0,
+                      "tier": "origin",
+                      "scheme": "http",
+                      "host": "127.0.0.1",
+                      "port": 19152,
+                      "weight": 1
+                    }
+                  ],
+                  "retry": {
+                    "methods": [
+                      "GET",
+                      "HEAD"
+                    ],
+                    "bodyless_only": true,
+                    "response_not_started": true,
+                    "retry_on": [
+                      "connect_error",
+                      "connect_timeout",
+                      "read_timeout",
+                      "http_502",
+                      "http_503",
+                      "http_504"
+                    ],
+                    "max_attempts": 1,
+                    "connect_timeout_ms": 2000,
+                    "read_timeout_ms": 5000,
+                    "total_budget_ms": 10000
+                  }
+                }
+              ],
+              "default_pool_id": "primary",
+              "websocket": false,
+              "range": false,
+              "l2": {
+                "enabled": false,
+                "probe_interval_ms": 10000,
+                "failure_threshold": 3,
+                "recovery_threshold": 3,
+                "single_half_open_probe": true,
+                "max_hops": 1
+              }
+            }
+          ],
+          "streams": {
+            "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+            "streams_v2": [
+              {
+                "schema_version": "cdnca.edge.l4/v2",
+                "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                "stream_id": "0a1b20a0-0000-4000-8000-000000000402",
+                "revision": 1,
+                "listener": {
+                  "protocol": "udp",
+                  "address": "*",
+                  "port": 18211
+                },
+                "endpoint": {
+                  "address": "127.0.0.1",
+                  "port": 19162
+                },
+                "geo": {
+                  "tenant_id": "0a1b20a0-0000-4000-8000-0000000000b2",
+                  "stream_id": "0a1b20a0-0000-4000-8000-000000000402",
+                  "revision": 1,
+                  "unknown_region_action": "allow"
+                },
+                "connect_timeout_ms": 1000,
+                "response_timeout_ms": 5000,
+                "max_connections_per_client": 50,
+                "drain_timeout_ms": 30000
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "tcp-removed",
+      "kind": "tcp",
+      "port": 18210,
+      "message": "gone"
+    },
+    {
+      "id": "udp-kept",
+      "kind": "udp",
+      "port": 18211,
+      "message": "kept"
+    },
+    {
+      "id": "passthrough-removed",
+      "kind": "tcp",
+      "port": 18243,
+      "message": "gone",
+      "scheme": "https",
+      "host": "db.l4.example.test"
+    },
+    {
+      "id": "shared-site-back",
+      "scheme": "https",
+      "port": 18243,
+      "host": "secure.l4.example.test",
+      "path": "/back"
+    },
+    {
+      "id": "plain-site-after",
+      "port": 18200,
+      "host": "web.l4.example.test",
+      "path": "/p2"
+    }
+  ]
+}

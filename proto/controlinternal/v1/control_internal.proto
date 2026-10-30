@@ -1,0 +1,323 @@
+syntax = "proto3";
+
+package controlinternal.v1;
+
+import "agent/v1/types.proto";
+import "common/v1/common.proto";
+import "google/protobuf/timestamp.proto";
+
+// NodeAdministrativeState maps exactly to the documented PostgreSQL Node state.
+// UNSPECIFIED is a wire sentinel and is never a valid persisted domain state.
+enum NodeAdministrativeState {
+  NODE_ADMINISTRATIVE_STATE_UNSPECIFIED = 0;
+  NODE_ADMINISTRATIVE_STATE_PENDING = 1;
+  NODE_ADMINISTRATIVE_STATE_ACTIVE = 2;
+  NODE_ADMINISTRATIVE_STATE_DRAINING = 3;
+  NODE_ADMINISTRATIVE_STATE_DISABLED = 4;
+  NODE_ADMINISTRATIVE_STATE_RETIRED = 5;
+}
+
+// AuthorizeEnrollmentRequest is sent only by an authenticated Gateway service.
+// enrollment_token and CSR bytes are sensitive and must never be logged.
+message AuthorizeEnrollmentRequest {
+  common.v1.RequestMetadata request = 1;
+  string enrollment_token = 2;
+  bytes certificate_signing_request_der = 3;
+  bytes machine_fingerprint_sha256 = 4;
+  common.v1.ProtocolVersionRange supported_protocol_versions = 5;
+  agent.v1.AgentCapabilities capabilities = 6;
+  string gateway_instance_id = 7;
+  optional string peer_ip = 8;
+  bytes artifact_encryption_public_key = 9;
+}
+
+// AuthorizeEnrollmentResponse represents the atomic token-consumption result.
+message AuthorizeEnrollmentResponse {
+  string authorization_id = 1;
+  string node_id = 2;
+  bytes certificate_signing_request_sha256 = 3;
+  common.v1.ProtocolVersion selected_protocol_version = 4;
+  google.protobuf.Timestamp authorization_expiration_time = 5;
+  // replayed is true only for the same request ID and request digest.
+  bool replayed = 6;
+  string artifact_encryption_key_id = 7;
+}
+
+// CompleteEnrollmentRequest asks control-api to sign/finalize an authorization.
+// The Gateway never receives a CA private key or signer credential.
+message CompleteEnrollmentRequest {
+  common.v1.RequestMetadata request = 1;
+  string authorization_id = 2;
+  string gateway_instance_id = 3;
+}
+
+// CompleteEnrollmentResponse is idempotent for authorization_id and CSR digest.
+message CompleteEnrollmentResponse {
+  string node_id = 1;
+  agent.v1.CertificateBundle certificate = 2;
+  string artifact_encryption_key_id = 3;
+}
+
+// RenewNodeCertificateRequest binds a new CSR to the authenticated node identity.
+message RenewNodeCertificateRequest {
+  common.v1.RequestMetadata request = 1;
+  string node_id = 2;
+  string current_serial_number = 3;
+  bytes certificate_signing_request_der = 4;
+  string gateway_instance_id = 5;
+  // SHA-256 of the verified current mTLS leaf certificate DER.
+  bytes current_certificate_sha256 = 6;
+}
+
+// RenewNodeCertificateResponse returns public certificate material only.
+message RenewNodeCertificateResponse {
+  agent.v1.CertificateBundle certificate = 1;
+}
+
+// RecoverNodeCertificateRequest forwards an Agent's signed recovery request.
+// The control plane verifies the signature itself; the Gateway only adds the
+// transport facts it observed.
+message RecoverNodeCertificateRequest {
+  agent.v1.RecoverCertificateRequest recovery = 1;
+  string gateway_instance_id = 2;
+  optional string peer_ip = 3;
+}
+
+message RecoverNodeCertificateResponse {
+  agent.v1.CertificateBundle certificate = 1;
+}
+
+// Gateway-attested transport identity. Node and peer fields are derived from
+// the verified client certificate and socket, never from forwarding headers.
+message ReportNodeNetworkInventoryV1Request {
+  agent.v1.ReportNodeNetworkInventoryV1Request inventory = 1;
+  string node_id = 2;
+  string certificate_serial_number = 3;
+  bytes certificate_sha256 = 4;
+  string gateway_instance_id = 5;
+  optional string peer_ip = 6;
+  // peer_ip_source says where peer_ip came from (ADR 0013 §4.4): "tcp" (the
+  // TCP peer) or "trusted_proxy" (the forwarded header of a trusted CDN
+  // back-to-origin range on a tunnel upgrade). Empty = tcp.
+  string peer_ip_source = 7;
+}
+
+message ReportNodeNetworkInventoryV1Response {
+  agent.v1.ReportNodeNetworkInventoryV1Response receipt = 1;
+}
+
+// GetNodeAuthorizationRequest identifies the certificate and Gateway session.
+message GetNodeAuthorizationRequest {
+  common.v1.RequestMetadata request = 1;
+  string node_id = 2;
+  string certificate_serial_number = 3;
+  string gateway_instance_id = 4;
+  // SHA-256 of the verified mTLS leaf certificate DER (x509.Certificate.Raw).
+  bytes certificate_sha256 = 5;
+  // Optional Connect facts, supplied only by the authenticated Gateway after
+  // acquiring the fenced session epoch. Never accepted from an Agent RPC.
+  GatewaySessionFactsV1 session_facts = 6;
+}
+
+// Immutable session evidence, bound to the actual verified Agent certificate.
+// Capabilities use deterministic protobuf encoding and strictly ordered features.
+message GatewaySessionFactsV1 {
+  uint32 schema_version = 1;
+  string node_id = 2;
+  uint64 session_epoch = 3;
+  bytes certificate_sha256 = 4;
+  common.v1.ProtocolVersion selected_protocol_version = 5;
+  string artifact_encryption_key_id = 6;
+  agent.v1.AgentCapabilities capabilities = 7;
+}
+
+// TelemetrySiteScope is an authoritative site-to-tenant binding used only to
+// validate edge telemetry. It comes from the certificate owner scope and the
+// same database snapshot as GetNodeAuthorizationResponse.
+message TelemetrySiteScope {
+  string site_id = 1;
+  string tenant_id = 2;
+  // config_version_id binds the site to one immutable activated configuration.
+  string config_version_id = 3;
+  // package_subscription_id is the optional event-time package attribution
+  // captured by this immutable config version.
+  string package_subscription_id = 4;
+  // configuration_scope_id is the access scope that published this config
+  // version (DeploymentCommand.configuration_scope_id), distinct from
+  // tenant_id. Required for every site when the Agent negotiated
+  // scoped_records: records are narrowed by scope and attributed to tenant_id.
+  // A scope maps to exactly one tenant.
+  string configuration_scope_id = 5;
+}
+
+// GetNodeAuthorizationResponse is a bounded-cache authorization snapshot. The
+// Gateway must deny or refresh after snapshot_expiration_time.
+message GetNodeAuthorizationResponse {
+  string node_id = 1;
+  uint64 authorization_revision = 2;
+  NodeAdministrativeState administrative_state = 3;
+  bool connection_allowed = 4;
+  bool deployments_allowed = 5;
+  bool certificate_revoked = 6;
+  google.protobuf.Timestamp certificate_expiration_time = 7;
+  common.v1.ProtocolVersionRange accepted_protocol_versions = 8;
+  google.protobuf.Timestamp snapshot_expiration_time = 9;
+  // artifact_encryption_key_id is the enrollment-bound key expected in
+  // AgentHello. It is authorization metadata, never private key material.
+  string artifact_encryption_key_id = 10;
+  // installation_id is derived from the authenticated certificate binding,
+  // never from an Agent request or telemetry payload.
+  string installation_id = 11;
+  // tenant_id is derived from the certificate owner scope database snapshot.
+  string tenant_id = 12;
+  // telemetry_site_scopes contains at most 10,000 authoritative bindings from
+  // the same database snapshot. The Gateway rejects sites outside this set.
+  repeated TelemetrySiteScope telemetry_site_scopes = 13;
+  // SHA-256 of the exact deterministic session_facts committed by this request.
+  // Empty on read-only requests and legacy Control implementations.
+  bytes session_facts_sha256 = 14;
+  // node_scope_id is the scope that owns the node (nodes.scope_id): the
+  // platform scope for a shared platform node, the tenant scope for a tenant's
+  // own node. Host firewall rules of a scope apply only on nodes it owns (A08).
+  string node_scope_id = 15;
+}
+
+// FetchArtifactRequest authorizes every byte range against a node deployment.
+// It contains the original command event ID and complete retry identity.
+message FetchArtifactRequest {
+  common.v1.RequestMetadata request = 1;
+  string event_id = 2;
+  string node_id = 3;
+  string deployment_id = 4;
+  uint32 attempt = 5;
+  string artifact_id = 6;
+  uint64 offset = 7;
+  string gateway_instance_id = 8;
+  // cleanup_only is set by the Gateway when the node's session does not allow
+  // deployments: Control then serves only the artifact of a CLEANUP_ONLY
+  // ACME HTTP-01 overlay generation (ADR-0003) and refuses everything else.
+  bool cleanup_only = 9;
+}
+
+// FetchArtifactResponse contains a chunk that the Gateway forwards unchanged.
+message FetchArtifactResponse {
+  agent.v1.ArtifactChunk chunk = 1;
+}
+
+// FetchSiteObjectsRequest authorizes site objects (ADR 0009 section 8.3) of
+// the site_runtime 8 release a node deployment delivers. node_id is the
+// Gateway-authenticated node; the other identity fields are the Agent's
+// agent.v1.FetchSiteObjectsRequest. At most 256 distinct digests (lower case
+// hex SHA-256 of the object plaintext), each a member of the publication
+// whose root is root_sha256.
+message FetchSiteObjectsRequest {
+  common.v1.RequestMetadata request = 1;
+  string event_id = 2;
+  string node_id = 3;
+  string deployment_id = 4;
+  uint32 attempt = 5;
+  string root_sha256 = 6;
+  repeated string sha256 = 7;
+  string gateway_instance_id = 8;
+}
+
+// FetchSiteObjectsResponse contains a chunk that the Gateway forwards unchanged.
+message FetchSiteObjectsResponse {
+  agent.v1.SiteObjectChunk chunk = 1;
+}
+
+// ReportGatewayReadyRequest is sent once by a started Gateway after its
+// listeners and Redis/NATS/ControlInternal health checks passed (ADR 0013
+// §3.2 step 5). gateway_instance_id is the Gateway's own ID: for a bound
+// Gateway it must equal the gateway_id in its client certificate URI SAN.
+message ReportGatewayReadyRequest {
+  common.v1.RequestMetadata request = 1;
+  string gateway_instance_id = 2;
+  string version = 3;
+}
+
+// ReportGatewayReadyResponse returns the installation the Gateway serves:
+// installation_id is the audience of node tunnel upgrade tokens (§4.6).
+message ReportGatewayReadyResponse {
+  string installation_id = 1;
+}
+
+// RenewGatewayCertificateRequest renews a bound Gateway's client (kind
+// "client") or node channel server (kind "server") certificate. The CSR must
+// carry the same public key as the current certificate of that kind.
+message RenewGatewayCertificateRequest {
+  common.v1.RequestMetadata request = 1;
+  string gateway_instance_id = 2;
+  string kind = 3;
+  bytes certificate_signing_request_der = 4;
+}
+
+message RenewGatewayCertificateResponse {
+  bytes certificate_pem = 1;
+  google.protobuf.Timestamp expiration_time = 2;
+  google.protobuf.Timestamp renewal_time = 3;
+}
+
+// GetGatewaySettingsRequest is polled by every Gateway (co-located or bound)
+// after ReportGatewayReady (GW-06/GW-07).
+message GetGatewaySettingsRequest {
+  common.v1.RequestMetadata request = 1;
+  string gateway_instance_id = 2;
+}
+
+// GatewayTrustedProxyRangeV1 is one trusted CDN back-to-origin range and the
+// forwarded header bound to it (ADR 0013 §4.4).
+message GatewayTrustedProxyRangeV1 {
+  string cidr = 1;
+  string header = 2;
+}
+
+// GetGatewaySettingsResponse is what the Gateway management page publishes:
+// the trusted CDN ranges (replaced atomically on the Gateway) and the node
+// endpoint list the Gateway hands out in GatewayHello.
+message GetGatewaySettingsResponse {
+  repeated GatewayTrustedProxyRangeV1 trusted_proxies = 1;
+  repeated agent.v1.GatewayEndpointV1 endpoints = 2;
+  string endpoints_version = 3;
+  // disabled: an administrator disabled this Gateway (ADR 0013 §5.2). It
+  // stops accepting nodes, asks connected ones to migrate and closes the
+  // rest after 30 minutes; the control plane serves it only for that window.
+  bool disabled = 4;
+}
+
+// ControlInternalService is reachable only from authenticated Gateway service
+// identities. It is not exposed to Agents or public API clients.
+service ControlInternalService {
+  // ReportGatewayReady marks a bound Gateway online and returns the
+  // installation ID (GW-08).
+  rpc ReportGatewayReady(ReportGatewayReadyRequest) returns (ReportGatewayReadyResponse);
+  // RenewGatewayCertificate renews a bound Gateway's own certificates (GW-08).
+  rpc RenewGatewayCertificate(RenewGatewayCertificateRequest) returns (RenewGatewayCertificateResponse);
+  // GetGatewaySettings returns the trusted CDN ranges and node endpoint list.
+  rpc GetGatewaySettings(GetGatewaySettingsRequest) returns (GetGatewaySettingsResponse);
+  rpc ReportNodeNetworkInventoryV1(ReportNodeNetworkInventoryV1Request) returns (ReportNodeNetworkInventoryV1Response);
+  // AuthorizeEnrollment atomically consumes a one-time token or returns the
+  // prior result for the same request ID and request digest.
+  rpc AuthorizeEnrollment(AuthorizeEnrollmentRequest) returns (AuthorizeEnrollmentResponse);
+
+  // CompleteEnrollment performs idempotent CA signing/finalization inside the
+  // control-api trust boundary.
+  rpc CompleteEnrollment(CompleteEnrollmentRequest) returns (CompleteEnrollmentResponse);
+
+  // RenewNodeCertificate validates node/certificate state before signing.
+  rpc RenewNodeCertificate(RenewNodeCertificateRequest) returns (RenewNodeCertificateResponse);
+
+  // RecoverNodeCertificate re-issues an expired certificate for the same key
+  // within the recovery window (ADR 0013 section 6.1 b).
+  rpc RecoverNodeCertificate(RecoverNodeCertificateRequest) returns (RecoverNodeCertificateResponse);
+
+  // GetNodeAuthorization returns a short-lived snapshot for Connect admission.
+  rpc GetNodeAuthorization(GetNodeAuthorizationRequest) returns (GetNodeAuthorizationResponse);
+
+  // FetchArtifact validates node/deployment/artifact binding before streaming.
+  rpc FetchArtifact(FetchArtifactRequest) returns (stream FetchArtifactResponse);
+
+  // FetchSiteObjects validates the node deployment and the release's object
+  // membership before streaming object ciphertext in request order.
+  rpc FetchSiteObjects(FetchSiteObjectsRequest) returns (stream FetchSiteObjectsResponse);
+}

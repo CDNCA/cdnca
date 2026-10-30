@@ -1,0 +1,333 @@
+{
+ "id": "admin-tcp-billing",
+ "prefix": "/v1/admin/tcp-billing",
+ "operations": [
+  {
+   "operation_id": "getTCPBillingOverview",
+   "method": "GET",
+   "path": "/v1/admin/tcp-billing",
+   "summary": "读取 TCP 流量计费策略与不可变结算快照",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "TCP 计费概览",
+     "fields": [
+      {
+       "name": "current",
+       "type": "PolicyRevision",
+       "required": true
+      },
+      {
+       "name": "scheduled",
+       "type": "array<PolicyRevision>",
+       "required": true
+      },
+      {
+       "name": "history",
+       "type": "array<PolicyRevision>",
+       "required": true
+      },
+      {
+       "name": "settlements",
+       "type": "array<Settlement>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "会话无效"
+    },
+    {
+     "status": "403",
+     "description": "权限不足"
+    },
+    {
+     "status": "503",
+     "description": "服务暂不可用"
+    }
+   ]
+  },
+  {
+   "operation_id": "scheduleTCPBillingFactorRevision",
+   "method": "POST",
+   "path": "/v1/admin/tcp-billing/factor-revisions",
+   "summary": "新建仅在目标结算周期开始时生效的 TCP 系数修订",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "expected_head_revision 的强 ETag，例如 \"1\""
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "factor",
+      "type": "string: 1.0 / 1.1",
+      "required": true
+     },
+     {
+      "name": "effective_at",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "已建立新修订；相同请求重放通过 Idempotency-Replayed 标识",
+     "fields": [
+      {
+       "name": "policy",
+       "type": "PolicyRevision",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "输入无效"
+    },
+    {
+     "status": "409",
+     "description": "tcp_billing_revision_conflict 或 tcp_billing_idempotency_conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "settleTCPBillingCycle",
+   "method": "POST",
+   "path": "/v1/admin/tcp-billing/settlements",
+   "summary": "使用已冻结的最终计量证据结算一个 TCP 流量周期",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "tenant_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "subscription_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "cycle_key",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "cycle_starts_at",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "cycle_ends_at",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "timezone",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "metric_version",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "source_watermark",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "finalized_through",
+      "type": "string(date-time)",
+      "required": true
+     },
+     {
+      "name": "evidence_sha256",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "raw_tcp_bytes",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "已写入不可变结算快照",
+     "fields": [
+      {
+       "name": "settlement",
+       "type": "Settlement",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "输入无效"
+    },
+    {
+     "status": "409",
+     "description": "tcp_billing_revision_conflict 或 tcp_billing_idempotency_conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "adjustTCPBillingSettlement",
+   "method": "POST",
+   "path": "/v1/admin/tcp-billing/settlements/{settlement_id}/adjustments",
+   "summary": "追加退款或全额撤销事实，不修改原结算",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "settlement_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "operation",
+      "type": "string: refund / void",
+      "required": true
+     },
+     {
+      "name": "amount_bytes",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "已追加调整事实",
+     "fields": [
+      {
+       "name": "adjustment",
+       "type": "Adjustment",
+       "required": true
+      },
+      {
+       "name": "settlement",
+       "type": "Settlement",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "输入无效"
+    },
+    {
+     "status": "404",
+     "description": "资源不存在"
+    },
+    {
+     "status": "409",
+     "description": "tcp_billing_revision_conflict 或 tcp_billing_idempotency_conflict"
+    }
+   ]
+  }
+ ]
+}

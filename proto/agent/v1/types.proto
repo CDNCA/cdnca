@@ -1,0 +1,2338 @@
+syntax = "proto3";
+
+package agent.v1;
+
+import "agent/v1/connections.proto";
+import "common/v1/common.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+// CapabilityName is a feature that can affect config compatibility.
+enum CapabilityName {
+  CAPABILITY_NAME_UNSPECIFIED = 0;
+  CAPABILITY_NAME_HTTP_1_1 = 1;
+  CAPABILITY_NAME_HTTP_2 = 2;
+  CAPABILITY_NAME_HTTP_3 = 3;
+  CAPABILITY_NAME_WEBSOCKET = 4;
+  CAPABILITY_NAME_TCP_PROXY = 5;
+  CAPABILITY_NAME_UDP_PROXY = 6;
+  CAPABILITY_NAME_PROXY_PROTOCOL = 7;
+  CAPABILITY_NAME_IPV4 = 8;
+  CAPABILITY_NAME_IPV6 = 9;
+  CAPABILITY_NAME_NFTABLES = 10;
+  CAPABILITY_NAME_IPSET = 11;
+  CAPABILITY_NAME_ATOMIC_RELEASE = 12;
+  CAPABILITY_NAME_CONFIG_PRECHECK = 13;
+  CAPABILITY_NAME_CACHE_CONTROL = 14;
+  CAPABILITY_NAME_WAF = 15;
+  CAPABILITY_NAME_JA4 = 16;
+  CAPABILITY_NAME_ACME_HTTP01_OVERLAY = 17;
+  CAPABILITY_NAME_ACTIVE_CONFIG_IDENTITY = 18;
+  CAPABILITY_NAME_DEPLOYMENT_STATUS_ACK_RECEIPT = 19;
+  CAPABILITY_NAME_CC = 20;
+  CAPABILITY_NAME_SITE_RUNTIME = 21;
+  CAPABILITY_NAME_EDGE_UPGRADE = 22;
+  CAPABILITY_NAME_EDGE_UPGRADE_STATUS_PUBACK = 23;
+  CAPABILITY_NAME_EDGE_UPGRADE_STATUS_ACK_RECEIPT = 24;
+  CAPABILITY_NAME_EDGE_UPGRADE_PREPARE_ACTIVATE = 25;
+  CAPABILITY_NAME_FIREWALL_CONTROL = 26;
+  CAPABILITY_NAME_DRAIN_CONTROL = 27;
+  CAPABILITY_NAME_NODE_MONITORING = 28;
+  CAPABILITY_NAME_GATEWAY_PORT_TRANSITION = 29;
+  // 30 was NODE_PLUGINS (node plugin bundles), removed by ADR 0007; never reuse.
+  reserved 30;
+  reserved "CAPABILITY_NAME_NODE_PLUGINS";
+  // MARKET_PROBE v2: the default HTTP server answers the market probe path
+  // with 204, and the Agent executes MarketProbeCommand, including targets
+  // named by host (MarketProbeTarget.host: a third-party CDN access name
+  // probed over HTTPS with the business Host/SNI, ADR 0008 §6.2).
+  // MARKET_PROBE v3 adds origin targets (MarketProbeTarget.scheme): http or
+  // https, any port, an IP or a name, separate Host and SNI, optional custom
+  // CA, for origin failover probing.
+  CAPABILITY_NAME_MARKET_PROBE = 31;
+  // The agent can download, verify and load the signed OWASP CRS engine
+  // extension (libmodsecurity + ModSecurity-nginx) on demand
+  // (api_version 1 = waf_crs_module_v1).
+  CAPABILITY_NAME_WAF_CRS_MODULE = 32;
+  // MULTI_TENANT_RUNTIME v1: the Agent keeps one current/previous release per
+  // configuration scope, composes them into one runtime, rolls back only the
+  // failing scope, and reports scoped_config_identities. Requires
+  // ACTIVE_CONFIG_IDENTITY v1.
+  CAPABILITY_NAME_MULTI_TENANT_RUNTIME = 33;
+  // MARKET_BENCHMARK v1: market-pool edges serve the fixed benchmark object
+  // on /.well-known/cdnca-market-benchmark, and the Agent executes
+  // MarketProbeCommand.benchmark (a timed parallel download) for the node
+  // market's admission grading. Requires MARKET_PROBE v1.
+  CAPABILITY_NAME_MARKET_BENCHMARK = 34;
+  // IP_INTEL v2: the Agent has applied an IP intelligence library (libs/
+  // entitlement/ipintel format v2) as an item of its node artifact set
+  // (ARTIFACT_SET) and keeps the last verified one; site and L4 rules may
+  // reference carrier / IDC / ASN / region tags. Declared only while the
+  // applied set holds a library.
+  CAPABILITY_NAME_IP_INTEL = 35;
+  // L4_TOA v1: TCP streams with toa=true carry the IPv4 client address to
+  // the origin in TCP option 254 (length 8) via the node's eBPF sockops
+  // program and the patched stream proxy (proxy_toa). Declared only after a
+  // successful load, attach and loopback self-test on this node's kernel.
+  CAPABILITY_NAME_L4_TOA = 36;
+  // L4_LIVE_CONNECTIONS v1: the Agent executes L4LiveConnectionsCommand,
+  // listing the TCP sessions its L4 runtime is serving and closing chosen
+  // ones (docs/architecture/l4-v6-fields.md).
+  CAPABILITY_NAME_L4_LIVE_CONNECTIONS = 37;
+  // EDGE_SIGNER_TRUST v1: the Agent applies EdgeSignerTrustBundle (the
+  // offline-root signed node signer trust document, re-signed for this node
+  // by the control plane) over its installed artifact trust, persists it and
+  // answers EdgeSignerTrustReceipt
+  // (docs/architecture/signer-revocation-offline-and-edge.md).
+  CAPABILITY_NAME_EDGE_SIGNER_TRUST = 38;
+  // ARTIFACT_SET v1: the Agent executes node artifact set deployments
+  // (libs/edgeconfig/artifactset, ADR 0007 section 4.3): content-addressed
+  // segment objects into its object store, then the signed complete desired
+  // set (an absent item is uninstalled), switched as a whole with the last
+  // known good kept, answered with DeploymentStatus.artifact_set_receipt.
+  CAPABILITY_NAME_ARTIFACT_SET = 39;
+  // SITE_QUIC v1: the node's OpenResty is built with the HTTP/3 module, so a
+  // site runtime v2 HTTPS listener can also listen on QUIC (listen ... quic;
+  // http3 on). Declared from the runtime binary's build, independent of
+  // HTTP_3, which now means only the standalone HTTP/3 runtime
+  // (cdnca.edge.http3/v1, health-probed with h3probe).
+  CAPABILITY_NAME_SITE_QUIC = 40;
+  // SCHED302 v1: HTTP 302 scheduling. The node renders a
+  // site's schedule302 settings (site runtime v2), applies the scheduling
+  // table pushed as ConnectResponse.sched302_table to
+  // <deployment_root>/schedule302/table.json, redirects by client carrier /
+  // region and serves the signed landing path /_cdnca302/.
+  CAPABILITY_NAME_SCHED302 = 41;
+  // AUTO_DEFENSE v1: intelligent automatic defense (ADR 0010,
+  // module.autodefense). The Agent verifies and applies the signed snapshot
+  // pushed as ConnectResponse.auto_defense_command
+  // (cdnca.autodefense/v1, libs/edgeconfig/autodefense: site modes,
+  // baseline bands, signatures, mitigation table, module auto overlay,
+  // whitelist) and answers with ConnectRequest.auto_defense_receipt. A node
+  // that does not declare it runs no automatic defense.
+  CAPABILITY_NAME_AUTO_DEFENSE = 42;
+  // XDP_FILTER v1 (number pending allocation): the node attached
+  // its XDP filter (native or generic) at start; it executes auto defense L5
+  // as XDP blocks. Declared per boot; a run time fallback to nftables is
+  // reported in NodeTelemetryV1.xdp (the node then executes L5 as L4).
+  CAPABILITY_NAME_XDP_FILTER = 43;
+  // SUBSCRIPTION_LIMITS v1 (ADR 0012 ML-07): the node enforces per
+  // subscription the node share of a market supply's realtime limits
+  // (concurrent connections, new connections per second, QPS, bandwidth)
+  // and the stop state (every request 503, layer 4 closed) carried in site
+  // objects and layer 4 subscription_limits, and reports per subscription
+  // per minute maxima in its site telemetry. A leaf refuses to publish a
+  // subscription site carrying these fields to a node that does not declare
+  // it; there is no downgrade.
+  CAPABILITY_NAME_SUBSCRIPTION_LIMITS = 44;
+  // EDGE_BROTLI v1: the node's OpenResty is built with
+  // ngx_brotli (source chain step 25) and gzip/brotli levels that take
+  // variables (step 26), so a site's compression may list br and set its
+  // own gzip/Brotli level. A leaf refuses to publish such a site to a node
+  // that does not declare it.
+  CAPABILITY_NAME_EDGE_BROTLI = 45;
+  // EDGE_WEBP v1: the node converts a site's JPEG/PNG
+  // responses to WebP for clients that accept image/webp (libgd in a
+  // worker thread pool, original on any failure; site.access.webp). A leaf
+  // refuses to publish a site with WebP on to a node that does not declare it.
+  CAPABILITY_NAME_EDGE_WEBP = 46;
+  // INSTALLATION_BAN_TICKET v1 (ADR 0014 LIC-BAN-05): the Agent applies
+  // InstallationBanCommand (the license service signed BanNotice and
+  // ServiceTicket, forwarded unchanged), stops serving while its control
+  // installation is banned or its ticket has not been renewed within the node
+  // offline tolerance (HTTP/HTTPS 503 maintenance page, layer 4 refused),
+  // resumes the previous configuration when lifted, and answers
+  // InstallationBanReceipt.
+  CAPABILITY_NAME_INSTALLATION_BAN_TICKET = 47;
+  // GATEWAY_ENDPOINT_MIGRATION v1 (ADR 0013 §5.2): the node
+  // accepts GatewayEndpointMigration on the Connect stream. A disabled
+  // Gateway sends it to its connected nodes; the node probes the other
+  // endpoints, moves its next session to the first reachable one and avoids
+  // the disabled Gateway until a published list names it again.
+  CAPABILITY_NAME_GATEWAY_ENDPOINT_MIGRATION = 50;
+  // ORIGIN_FOLLOW_REDIRECT v1: the dynamic routing runtime
+  // follows an origin's 301/302/303/307/308 for a bodyless GET/HEAD request
+  // (site origin.follow_redirect: at most max_hops, same origin unless
+  // cross_origin; max_hops <= 5) and serves the final response. A leaf refuses to publish
+  // a site with it on to a node that does not declare it.
+  CAPABILITY_NAME_ORIGIN_FOLLOW_REDIRECT = 51;
+  // CACHE_RULE_MATCH v1: cache rules may match a path
+  // regular expression (path_regex) and the response Content-Type
+  // (content_types, decided in the header filter). A leaf refuses to
+  // publish a site whose cache policy uses either to a node that does not
+  // declare it.
+  CAPABILITY_NAME_CACHE_RULE_MATCH = 52;
+  // EDGE_RESPONSE_RULES v1: the node evaluates a site's
+  // response rules (site.access.response_rules) in header_filter: conditions
+  // on the response status and headers, actions set/add/delete headers, log,
+  // replace with the site's error page, block with a fixed status; never
+  // the body. A leaf refuses to publish a site with response rules to a node
+  // that does not declare it.
+  CAPABILITY_NAME_EDGE_RESPONSE_RULES = 55;
+  // SITE_DROP v1 (esc-node, 攻击自动升级 D 级): the node applies site drop
+  // lists (SiteDropCommand, libs/edgeconfig/sitedrop): the listed sites'
+  // exclusive ports are dropped (XDP, else nftables), their TLS SNI on
+  // shared ports at XDP, and OpenResty closes their requests (444). The
+  // Gateway sends site drop lists only to an Agent that declares it.
+  CAPABILITY_NAME_SITE_DROP = 57;
+  // SITE_EDGE_OPTIONS v1 (number pending the main
+  // session's allocation): the dynamic routing runtime serves the site edit
+  // options: the default site (unknown Host / no SNI), search engine origin,
+  // ACME HTTP-01 pass-through to the origin and unbuffered proxying.
+  CAPABILITY_NAME_SITE_EDGE_OPTIONS = 58;
+  // L2_ROUTING v1 (A19-b EDGE-L2-EFFECTIVE-01): the dynamic routing runtime
+  // applies an L2 configuration's
+  // cache mode (only a URL a cache rule caches goes through L2, any other
+  // goes straight to the origin) and its L2 conditions (members used only
+  // for matching requests on matching L1 nodes). A site using either is
+  // refused to a node that does not declare it. v2: a
+  // node-list (automatic) publication's L2 is pass-through (the L1 reaches
+  // the L2 on the visitor's protocol and port), a node that is an endpoint
+  // of the site's L2 pool goes straight to the origin, and an L2 hop carries
+  // X-Cdnca-L2-Hop so the L2 never forwards it to another L2.
+  CAPABILITY_NAME_L2_ROUTING = 59;
+  // L4_TRAFFIC_STOP v1: a forward withdrawn because its
+  // package went over its monthly traffic loses its open sessions at once
+  // (the agent closes them as the live connection list does) instead of
+  // draining. Control names those forwards, per node, only to an Agent that
+  // declares it; other forwards withdrawn (disabled by an administrator)
+  // still drain.
+  CAPABILITY_NAME_L4_TRAFFIC_STOP = 61;
+  // ERROR_PAGE_SLOTS v1: the node serves the platform's
+  // error page slots it answers itself (ScopeV2.node_pages categories
+  // blacklist, http_403, traffic_exceeded, package_expired, node_ip_access,
+  // connection_limit, with region / node selectors), answers a site marked
+  // package_expired with that page without reaching the origin, and accepts
+  // error page snapshots that carry slots. A release that needs either
+  // requires it.
+  CAPABILITY_NAME_ERROR_PAGE_SLOTS = 62;
+  // WAF_REPEAT_SITE v1: the node reads a site's grey zone repeat
+  // threshold / window from its waf_adapt entry (repeat_threshold,
+  // repeat_window; absent = edgeconfig DynamicWAFRepeat* constants). The
+  // control plane sends the fields only to an Agent that declares it
+  // (earlier agents refuse unknown snapshot fields).
+  CAPABILITY_NAME_WAF_REPEAT_SITE = 64;
+  // CACHE_WILDCARD_PURGE v1: the agent purges
+  // a "*.<suffix>" target host (exact URL or directory) on both cache task
+  // paths (cachetask index scan, dynamic routing dyncache zone walk), clearing
+  // every host under the suffix the site keys. The control plane sends a
+  // wildcard purge only to nodes declaring it. (59 is L2_ROUTING, s5c.)
+  CAPABILITY_NAME_CACHE_WILDCARD_PURGE = 60;
+  // SITE_TLS_OPTIONS v1 (61/62 are taken on other branches):
+  // the dynamic routing runtime applies per site, on a shared HTTPS port,
+  // HTTP/2 off (native patch 27: ALPN offers only http/1.1 to a connection
+  // ssl_client_hello_by_lua marked) and an explicit
+  // ssl_prefer_server_ciphers. The control plane sends a listener with
+  // either only to nodes declaring it.
+  CAPABILITY_NAME_SITE_TLS_OPTIONS = 63;
+  // SITE_TLS_CUSTOM_CIPHERS v1 (64-66 are reserved on
+  // other branches): the dynamic routing runtime applies a site's custom
+  // cipher preset, an ordered list of whitelisted TLS 1.2 suites
+  // (edgeconfig.TLSCustomCipherSuites), per connection on a shared HTTPS
+  // port (SSL_set_cipher_list in ssl_client_hello_by_lua). The control plane
+  // sends a listener with the custom preset only to nodes declaring it.
+  CAPABILITY_NAME_SITE_TLS_CUSTOM_CIPHERS = 67;
+  // L4_STREAM_SELECTION v1: the node's site object key
+  // document names the scope's L4 forwards it must not serve (none of their
+  // line groups has it), and the Agent leaves them out of its L4 runtime.
+  // Control writes the list only for an Agent that declares it; an older
+  // node serves every forward of the scope as before.
+  CAPABILITY_NAME_L4_STREAM_SELECTION = 65;
+  // L4_PACKAGE_ATTRIBUTION v1: the L4 runtime names each
+  // forward's package subscription (package_subscription_id) and the Agent
+  // stamps it on every L4 session fact (L4SessionEventV1.
+  // package_subscription_id), so a session's bytes stay with the package it
+  // ran under. Control requires it for any release with a packaged forward.
+  CAPABILITY_NAME_L4_PACKAGE_ATTRIBUTION = 66;
+  // CACHE_CONTROL_CANCEL v1 (CACHE-ADD-07): the Agent accepts
+  // CacheControlCancel for a cache task it was delivered, stops the targets
+  // it has not run yet, and answers with CacheControlCancelReceipt. Control
+  // sends a cancel only to a node that declares it; an older node keeps
+  // running a delivered task to the end (cancel only stops scheduling).
+  CAPABILITY_NAME_CACHE_CONTROL_CANCEL = 68;
+  // NODE_TELEMETRY_DETAIL v1: node telemetry carries mounts
+  // (every mount with device, filesystem type, read-only, bind and why the
+  // disk ranking leaves it out) and port_group_overrides (whether each layer 4
+  // port group override of auto defense is in effect on the node). The
+  // console shows "node version not reported" for nodes not declaring it.
+  CAPABILITY_NAME_NODE_TELEMETRY_DETAIL = 69;
+  // NODE_REGION v1: the
+  // node takes its region from the control plane, the region catalog code
+  // in its site object key document (KeyDocument.node_region), and picks
+  // region error pages and region origin routes by it; it has no local
+  // region setting. Control writes the field only for an Agent that
+  // declares it; an older node picks nothing by region.
+  CAPABILITY_NAME_NODE_REGION = 70;
+  // NODE_STORAGE v1:
+  // the node takes its cache directory, cache limit and log directory from
+  // the control plane (KeyDocument.node_storage) and reports what it runs in
+  // NodeTelemetryV1.storage. Cache directory and limit apply on reload, the
+  // log directory on the next Agent start. Control writes the field and
+  // allows editing only for an Agent that declares it.
+  CAPABILITY_NAME_NODE_STORAGE = 71;
+  // WAF_JA4_NEGATION v1 (number assigned by the main
+  // session): bound WAF rules may require the request's JA4 fingerprint to
+  // be none of a set (WAFMatch.not_ja4, rule plan op ja4_not_in); a request
+  // without a fingerprint never matches. Control publishes such a rule only
+  // to nodes that declare it.
+  CAPABILITY_NAME_WAF_JA4_NEGATION = 72;
+  // CC_MATCH_KEYS v1 ("CC v7"): CC rules count by User-Agent, Referer, a named request header,
+  // cookie or query argument, and match on the JA4 fingerprint. Control
+  // publishes such a policy only to nodes that declare it.
+  CAPABILITY_NAME_CC_MATCH_KEYS = 73;
+  // BAN_CIDR v1: the
+  // security ban list (cdnca.security-ban-list/v1) may carry network bans
+  // ("198.51.100.0/24", IPv4 /8../31, IPv6 /32../127) besides single
+  // addresses; the runtime matches them by prefix and the kernel ban path
+  // writes the prefix. Control sends network bans and releases only to nodes
+  // that declare it (an older node refuses the whole list).
+  CAPABILITY_NAME_BAN_CIDR = 74;
+  // AGGREGATED_EDGE_PROBE v1 (number assigned by the main
+  // session): MARKET_PROBE host targets (v2) may carry a request method
+  // (MarketProbeTarget.method: GET or HEAD) and extra request headers
+  // (MarketProbeTarget.headers, at most 8; Host and hop-by-hop headers are
+  // refused). Control sends them only to nodes that declare it; an older
+  // node is asked with GET and no extra header.
+  CAPABILITY_NAME_AGGREGATED_EDGE_PROBE = 75;
+  // GATEWAY_ADDRESS_CHANGE v1 (number to be confirmed by the main
+  // session): the node accepts a signed cdnca.gateway-address-change/v1
+  // document (GatewayAddressChangeCommand), probes the new Gateway address
+  // with mTLS and an authenticated Connect hello, switches only on success
+  // and answers GatewayAddressChangeReceipt (probing / switched / failed).
+  CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE = 76;
+  // ORIGIN_TLS_NO_VERIFY v1 (number assigned by the main
+  // session): an HTTPS origin may carry trust anchor "none" (回源 HTTPS 不校验
+  // 源站证书): the node accepts any origin certificate chain and skips the
+  // host name check for that attempt (native patch 29). The agent declares
+  // it only when the OpenResty binary exports the patch's function; control
+  // refuses to publish a site with it to a node without it.
+  CAPABILITY_NAME_ORIGIN_TLS_NO_VERIFY = 77;
+}
+
+// Capability advertises the highest implementation version for one feature.
+message Capability {
+  CapabilityName name = 1;
+  uint32 api_version = 2;
+}
+
+enum ActiveConfigIdentitySchema {
+  ACTIVE_CONFIG_IDENTITY_SCHEMA_UNSPECIFIED = 0;
+  ACTIVE_CONFIG_IDENTITY_SCHEMA_V1 = 1;
+}
+
+// ActiveConfigIdentity binds one configuration UUID to the digest of the exact
+// signed artifact wire bytes after compression and optional encryption.
+message ActiveConfigIdentity {
+  string config_version_id = 1;
+  bytes artifact_sha256 = 2;
+  ActiveConfigIdentitySchema schema = 3;
+}
+
+// ScopedApplyResult is the most recent terminal outcome of one scope's
+// deployment on a MULTI_TENANT_RUNTIME node. state is HEALTHY, FAILED,
+// REVERTED, ROLLBACK_FAILED or SUPERSEDED. error_code is UNSPECIFIED unless
+// state is FAILED or ROLLBACK_FAILED.
+message ScopedApplyResult {
+  string deployment_id = 1;
+  uint32 attempt = 2;
+  string config_version_id = 3;
+  NodeDeploymentState state = 4;
+  google.protobuf.Timestamp finished_time = 5;
+  common.v1.ErrorCode error_code = 6;
+}
+
+// ScopedConfigIdentity is the Agent's configuration state for one
+// configuration scope on a MULTI_TENANT_RUNTIME node: the running (current)
+// release, its rollback target (previous), and the most recent apply result.
+// Each identity must name the same config version as its companion version ID
+// and both travel together. previous requires current. An entry carries a
+// current release, a last_apply_result, or both (a scope whose first apply
+// failed has only a result). Node-level health stays in the legacy fields.
+message ScopedConfigIdentity {
+  string configuration_scope_id = 1;
+  optional string current_config_version_id = 2;
+  ActiveConfigIdentity current_config_identity = 3;
+  optional string previous_config_version_id = 4;
+  ActiveConfigIdentity previous_config_identity = 5;
+  ScopedApplyResult last_apply_result = 6;
+}
+
+// AgentCapabilities is captured during enrollment and refreshed on Connect.
+message AgentCapabilities {
+  string agent_version = 1;
+  string build_id = 2;
+  string operating_system = 3;
+  string architecture = 4;
+  string openresty_version = 5;
+  repeated Capability features = 6;
+}
+
+// CertificateBundle contains public certificate material only. The private key
+// corresponding to the CSR never leaves the Agent.
+message CertificateBundle {
+  bytes leaf_certificate_pem = 1;
+  repeated bytes issuing_chain_pem = 2;
+  string serial_number = 3;
+  google.protobuf.Timestamp not_before_time = 4;
+  google.protobuf.Timestamp expiration_time = 5;
+  google.protobuf.Timestamp renewal_time = 6;
+}
+
+// EnrollRequest is accepted only on the server-authenticated TLS enrollment
+// endpoint. enrollment_token is one-time, short-lived, and must never be logged.
+message EnrollRequest {
+  common.v1.RequestMetadata request = 1;
+  string enrollment_token = 2;
+  // certificate_signing_request_der is a PKCS#10 DER CSR for an Agent-held key.
+  bytes certificate_signing_request_der = 3;
+  // machine_fingerprint_sha256 is a digest, not raw hardware inventory.
+  bytes machine_fingerprint_sha256 = 4;
+  common.v1.ProtocolVersionRange supported_protocol_versions = 5;
+  AgentCapabilities capabilities = 6;
+  // artifact_encryption_public_key is a 32-byte X25519 public key. Its private
+  // key remains on the Agent and is independent from the mTLS signing key.
+  bytes artifact_encryption_public_key = 7;
+}
+
+// EnrollResponse can be replayed only for the same request ID and request digest.
+message EnrollResponse {
+  string node_id = 1;
+  common.v1.ProtocolVersion selected_protocol_version = 2;
+  CertificateBundle certificate = 3;
+  // artifact_encryption_key_id identifies the public key bound during enrollment.
+  string artifact_encryption_key_id = 4;
+}
+
+// RenewCertificateRequest requires an already authenticated mTLS connection.
+message RenewCertificateRequest {
+  common.v1.RequestMetadata request = 1;
+  string current_serial_number = 2;
+  bytes certificate_signing_request_der = 3;
+}
+
+// RenewCertificateResponse contains a newly issued short-lived certificate.
+message RenewCertificateResponse {
+  CertificateBundle certificate = 1;
+}
+
+// RecoverCertificateRequest re-issues an expired node certificate (ADR 0013
+// section 6.1 b). It is accepted on the server-TLS enrollment listener, so the
+// node proves possession with expired_certificate_der's private key instead of
+// mTLS: signature is the Ed25519 signature over the canonical recovery message
+// (request_id, sent_time, node_id, SHA-256 of the certificate and the CSR,
+// nonce). The CSR must carry the same public key as the expired certificate.
+message RecoverCertificateRequest {
+  common.v1.RequestMetadata request = 1;
+  string node_id = 2;
+  // expired_certificate_der is the node's last current leaf certificate.
+  bytes expired_certificate_der = 3;
+  bytes certificate_signing_request_der = 4;
+  // nonce is 32 random bytes, accepted once per installation.
+  bytes nonce = 5;
+  bytes signature = 6;
+}
+
+// RecoverCertificateResponse contains the re-issued certificate.
+message RecoverCertificateResponse {
+  CertificateBundle certificate = 1;
+}
+
+// NodeNetworkCandidateV1 is an Agent-observed address on its effective default
+// egress interface, not an administrator-supplied address or an echo-service result.
+message NodeNetworkCandidateV1 {
+  string address = 1;
+  string interface_name = 2;
+}
+
+// ReportNodeNetworkInventoryV1Request never carries a claimed node identity or trusted peer.
+// Missing candidates require a stable discovery reason. Only schema_version=1
+// is accepted. This optional RPC does not change enrollment or protocol 1.0.
+message ReportNodeNetworkInventoryV1Request {
+  common.v1.RequestMetadata request = 1;
+  uint32 schema_version = 2;
+  NodeNetworkCandidateV1 ipv4 = 3;
+  NodeNetworkCandidateV1 ipv6 = 4;
+  string ipv4_reason = 5;
+  string ipv6_reason = 6;
+}
+
+// ReportNodeNetworkInventoryV1Response confirms a durable decision, not inbound
+// service reachability. One transport can verify only its own address family.
+message ReportNodeNetworkInventoryV1Response {
+  uint32 schema_version = 1;
+  string node_id = 2;
+  string ipv4_state = 3;
+  string ipv6_state = 4;
+  google.protobuf.Timestamp received_time = 5;
+  bool replayed = 6;
+}
+
+// NodeDeploymentState maps exactly to the documented NodeDeployment states.
+// UNSPECIFIED is a wire sentinel and is never a valid persisted domain state.
+enum NodeDeploymentState {
+  NODE_DEPLOYMENT_STATE_UNSPECIFIED = 0;
+  NODE_DEPLOYMENT_STATE_QUEUED = 1;
+  NODE_DEPLOYMENT_STATE_DELIVERED = 2;
+  NODE_DEPLOYMENT_STATE_STAGED = 3;
+  NODE_DEPLOYMENT_STATE_PRECHECKED = 4;
+  NODE_DEPLOYMENT_STATE_ACTIVATED = 5;
+  NODE_DEPLOYMENT_STATE_HEALTHY = 6;
+  NODE_DEPLOYMENT_STATE_FAILED = 7;
+  NODE_DEPLOYMENT_STATE_REVERTING = 8;
+  NODE_DEPLOYMENT_STATE_REVERTED = 9;
+  NODE_DEPLOYMENT_STATE_ROLLBACK_FAILED = 10;
+  // The following states are reported only on MULTI_TENANT_RUNTIME sessions.
+  // The Agent applies one scope at a time under a node-level lock. After
+  // DELIVERED (sequence 1) it reports AGENT_QUEUED (2) while waiting behind
+  // other scopes and STARTED (3) when it takes the lock; later transitions
+  // continue from 4. The control plane's apply deadline starts at STARTED.
+  NODE_DEPLOYMENT_STATE_AGENT_QUEUED = 11;
+  NODE_DEPLOYMENT_STATE_STARTED = 12;
+  // SUPERSEDED is terminal and follows AGENT_QUEUED: a newer deployment for the
+  // same scope replaced this one before it started; the running configuration
+  // is unchanged. A full local queue (16 entries) is reported as FAILED after
+  // AGENT_QUEUED with a retryable RATE_LIMITED ProtocolError.
+  NODE_DEPLOYMENT_STATE_SUPERSEDED = 13;
+}
+
+// AcmeHTTP01OverlayState is independent from the full configuration deployment
+// state. Overlay activation must not change the Agent's active config version.
+enum AcmeHTTP01OverlayState {
+  ACME_HTTP01_OVERLAY_STATE_UNSPECIFIED = 0;
+  ACME_HTTP01_OVERLAY_STATE_DELIVERED = 1;
+  ACME_HTTP01_OVERLAY_STATE_STAGED = 2;
+  ACME_HTTP01_OVERLAY_STATE_PRECHECKED = 3;
+  ACME_HTTP01_OVERLAY_STATE_ACTIVATED = 4;
+  ACME_HTTP01_OVERLAY_STATE_HEALTHY = 5;
+  ACME_HTTP01_OVERLAY_STATE_FAILED = 6;
+  ACME_HTTP01_OVERLAY_STATE_REVERTING = 7;
+  ACME_HTTP01_OVERLAY_STATE_REVERTED = 8;
+  ACME_HTTP01_OVERLAY_STATE_ROLLBACK_FAILED = 9;
+}
+
+// AcmeHTTP01OverlayResultCode is stable and safe to persist. Detailed failures
+// are carried by ProtocolError without exposing challenge response values.
+enum AcmeHTTP01OverlayResultCode {
+  ACME_HTTP01_OVERLAY_RESULT_CODE_UNSPECIFIED = 0;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_OK = 1;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_INVALID_ARTIFACT = 2;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_EXPIRED = 3;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_CONFLICT = 4;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_STALE_ATTEMPT = 5;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_PRECHECK_FAILED = 6;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_ACTIVATION_FAILED = 7;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_HEALTH_FAILED = 8;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_ROLLED_BACK = 9;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_ROLLBACK_FAILED = 10;
+  ACME_HTTP01_OVERLAY_RESULT_CODE_UNSUPPORTED = 11;
+}
+
+// ActiveDeployment is Agent journal state reported during handshake or heartbeat.
+message ActiveDeployment {
+  string deployment_id = 1;
+  uint32 attempt = 2;
+  string config_version_id = 3;
+  NodeDeploymentState state = 4;
+  ActiveConfigIdentity observed_active_config_identity = 5;
+}
+
+// AgentHello must be the first Agent payload on every Connect stream. node_id is
+// checked against the certificate URI SAN and is never trusted by itself.
+message AgentHello {
+  string node_id = 1;
+  // boot_id changes on process start and is not an authentication credential.
+  string boot_id = 2;
+  common.v1.ProtocolVersionRange supported_protocol_versions = 3;
+  AgentCapabilities capabilities = 4;
+  optional string current_config_version_id = 5;
+  optional string previous_config_version_id = 6;
+  repeated ActiveDeployment active_deployments = 7;
+  string artifact_encryption_key_id = 8;
+  ActiveConfigIdentity current_config_identity = 9;
+  ActiveConfigIdentity previous_config_identity = 10;
+  GatewayPortTransitionProof gateway_port_transition_proof = 11;
+  // scoped_config_identities requires MULTI_TENANT_RUNTIME v1 in capabilities.
+  // With exactly one entry the legacy current/previous fields mirror it; with
+  // more than one entry the legacy current/previous fields are omitted.
+  // Every scope the Agent holds state for has exactly one entry.
+  repeated ScopedConfigIdentity scoped_config_identities = 12;
+}
+
+// GatewayHello is the first successful Gateway payload on a Connect stream.
+message GatewayHello {
+  common.v1.ProtocolVersion selected_protocol_version = 1;
+  string gateway_version = 2;
+  string session_id = 3;
+  uint64 session_epoch = 4;
+  google.protobuf.Timestamp server_time = 5;
+  google.protobuf.Duration heartbeat_interval_duration = 6;
+  google.protobuf.Duration offline_after_duration = 7;
+  uint32 maximum_artifact_chunk_bytes = 8;
+  repeated Capability enabled_capabilities = 9;
+  // message_id_replay_window is the maximum number of recent inbound message
+  // IDs whose sequence and exact payload digest the Gateway retains. A replay
+  // older than this window is rejected by stream sequence fencing.
+  uint32 message_id_replay_window = 10;
+  // known_capabilities lists every capability name this Gateway build
+  // understands (whether or not enabled for this session). An Agent only
+  // advertises a newer optional capability, e.g. MARKET_BENCHMARK, once a
+  // Gateway listed it, so an older Gateway never sees a name it would drop
+  // the session facts for. Absent from older Gateways.
+  repeated CapabilityName known_capabilities = 11;
+  // observed_peer_ip is the node address as this Gateway sees it (TCP peer,
+  // or the trusted CDN forwarded address on a tunnel; ADR 0013 §4.4). A node
+  // behind NAT may use it as its network inventory candidate.
+  string observed_peer_ip = 12;
+  // gateway_endpoints is the control plane's current node endpoint list
+  // (ADR 0013 §4.5/§5.2, GW-07): online Gateways first, then the
+  // administrator's extra entry points. The Agent persists it and fails over
+  // along it. Empty: the Gateway has no list yet; keep the stored one.
+  repeated GatewayEndpointV1 gateway_endpoints = 13;
+  // gateway_endpoints_version changes whenever the list changes.
+  string gateway_endpoints_version = 14;
+  // node_owner_scope_id is the scope that owns this node, from the control
+  // plane's node authorization. The Agent's host firewall (nftables, XDP)
+  // takes tenant-scoped host rules only when the tenant owns the node: a
+  // shared platform node never applies one tenant's host rule to the others
+  // (A08). Required; an Agent that has not learned it treats the node as not
+  // owned by any tenant.
+  string node_owner_scope_id = 15;
+}
+
+// GatewayEndpointV1 is one node entry point (ADR 0013 §4.5). transport is
+// "grpc" (direct, the address is the Gateway agent port) or "ws" (WebSocket
+// tunnel, e.g. a CDN's 443). server_name is the Gateway certificate name of
+// the inner TLS; tunnel_host, when set, is the outer SNI/Host of a ws entry.
+message GatewayEndpointV1 {
+  string address = 1;
+  string server_name = 2;
+  string transport = 3;
+  string tunnel_host = 4;
+  // enrollment_address is the host:port a grpc entry's Gateway enrolls nodes
+  // on (a standalone Gateway's enrollment port, ADR 0013 §4.5); empty for ws
+  // entries (enrollment uses the same address) and extra entry points.
+  string enrollment_address = 5;
+}
+
+// GatewayEndpointMigration asks the node to leave this Gateway (it was
+// disabled on the Gateway management page, ADR 0013 §5.2): endpoints is the
+// current list without it. The node probes the others and reconnects to the
+// first reachable one; the Gateway closes the sessions still left after 30
+// minutes. Sent only when GATEWAY_ENDPOINT_MIGRATION v1 is enabled.
+message GatewayEndpointMigration {
+  repeated GatewayEndpointV1 endpoints = 1;
+  string endpoints_version = 2;
+}
+
+// RuntimeState is the local health of an edge runtime component.
+enum RuntimeState {
+  RUNTIME_STATE_UNSPECIFIED = 0;
+  RUNTIME_STATE_RUNNING = 1;
+  RUNTIME_STATE_DEGRADED = 2;
+  RUNTIME_STATE_STOPPED = 3;
+  RUNTIME_STATE_FAILED = 4;
+}
+
+// EdgeRuntimeStatus reports only operational state, never config or secret data.
+message EdgeRuntimeStatus {
+  RuntimeState openresty_state = 1;
+  RuntimeState firewall_state = 2;
+  optional string loaded_config_version_id = 3;
+  ActiveConfigIdentity loaded_config_identity = 4;
+  // error_log summarizes the node OpenResty error.log on dynamic routing
+  // nodes (site_runtime 9): alert/crit/emerg lines except the known
+  // reuseport reload noise. Absent on other nodes.
+  ErrorLogSummary error_log = 5;
+  // market_probe is the node's market probe role from its local
+  // market_probe settings. Older Agents leave it UNSPECIFIED; the controller
+  // treats that as unknown and never as JOIN_MARKET.
+  MarketProbeRole market_probe = 6;
+  // native_runtime is the outcome of the native node runtime switch the
+  // Agent ran at its last start (/opt/cdnca-node, node-runtime-upgrade).
+  // Absent on nodes that are not native.
+  NativeRuntimeStatus native_runtime = 7;
+}
+
+// NativeRuntimeStatus: whether the native node runs the OpenResty/Lua
+// runtime of its Agent release.
+message NativeRuntimeStatus {
+  NativeRuntimeState state = 1;
+  // release is the manifest sha256 (64 lowercase hex) of the runtime the
+  // switch targeted: the active one after SWITCHED or UNCHANGED.
+  string release = 2;
+  // previous_release is the runtime active before the switch: the one kept
+  // after ROLLED_BACK, the rollback target after SWITCHED. Empty after
+  // UNCHANGED.
+  string previous_release = 3;
+  // error_code (^[A-Z][A-Z0-9_]*$, RUNTIME_*) is set only after ROLLED_BACK.
+  string error_code = 4;
+  // 5 was old_sessions (withdrawn: upgrades cut old sessions, BATCH 77b).
+  reserved 5;
+  reserved "old_sessions";
+}
+
+enum NativeRuntimeState {
+  NATIVE_RUNTIME_STATE_UNSPECIFIED = 0;
+  // SWITCHED: the runtime of this Agent release became active.
+  NATIVE_RUNTIME_STATE_SWITCHED = 1;
+  // UNCHANGED: the active runtime already was this release's.
+  NATIVE_RUNTIME_STATE_UNCHANGED = 2;
+  // ROLLED_BACK: the switch failed; the previous runtime stays active.
+  NATIVE_RUNTIME_STATE_ROLLED_BACK = 3;
+  // 4 was WAITING_OLD_SESSIONS (withdrawn: upgrades cut old sessions).
+  reserved 4;
+  reserved "NATIVE_RUNTIME_STATE_WAITING_OLD_SESSIONS";
+}
+
+// MarketProbeRole is the node's market probe role (market_probe.enabled and
+// market_probe.join_market of the Agent configuration).
+enum MarketProbeRole {
+  MARKET_PROBE_ROLE_UNSPECIFIED = 0;
+  // PROBE_ONLY: probes other nodes and answers the probe path, but takes no
+  // node-market traffic (installer default).
+  MARKET_PROBE_ROLE_PROBE_ONLY = 1;
+  // JOIN_MARKET: also takes part in node-market admission and offers.
+  MARKET_PROBE_ROLE_JOIN_MARKET = 2;
+  // DISABLED: market probing is off on this node.
+  MARKET_PROBE_ROLE_DISABLED = 3;
+}
+
+// ErrorLogSummary is a bounded error.log digest, not a log transport.
+message ErrorLogSummary {
+  // severe_total counts alert/crit/emerg lines since the agent started.
+  uint64 severe_total = 1;
+  // noise_total counts the filtered known reload noise lines.
+  uint64 noise_total = 2;
+  // recent holds the newest severe lines, newest last: at most 16, each at
+  // most 512 bytes.
+  repeated string recent = 3;
+  google.protobuf.Timestamp last_severe_time = 4;
+}
+
+// ResourceUsage is a bounded heartbeat summary, not an access-log transport.
+message ResourceUsage {
+  uint64 filesystem_total_bytes = 1;
+  uint64 filesystem_available_bytes = 2;
+  uint64 cache_used_bytes = 3;
+}
+
+// Heartbeat is safe to redeliver using event.event_id as the deduplication key.
+message Heartbeat {
+  common.v1.EventMetadata event = 1;
+  uint64 session_epoch = 2;
+  uint64 heartbeat_sequence = 3;
+  optional string current_config_version_id = 4;
+  optional string previous_config_version_id = 5;
+  EdgeRuntimeStatus runtime = 6;
+  ResourceUsage resources = 7;
+  repeated ActiveDeployment active_deployments = 8;
+  // agent_version is optional for compatibility with Agents released before
+  // heartbeat version reporting. When present it must match AgentHello.
+  optional string agent_version = 9;
+  Capability active_config_identity_capability = 10;
+  ActiveConfigIdentity current_config_identity = 11;
+  ActiveConfigIdentity previous_config_identity = 12;
+  // scoped_config_identities requires a negotiated MULTI_TENANT_RUNTIME v1
+  // session and follows the same legacy-mirroring rule as AgentHello.
+  repeated ScopedConfigIdentity scoped_config_identities = 13;
+}
+
+// HeartbeatAck confirms Gateway receipt, not PostgreSQL persistence.
+message HeartbeatAck {
+  string heartbeat_event_id = 1;
+  uint64 session_epoch = 2;
+  google.protobuf.Timestamp received_time = 3;
+}
+
+// ArtifactKind controls handling and logging policy on both peers.
+enum ArtifactKind {
+  ARTIFACT_KIND_UNSPECIFIED = 0;
+  ARTIFACT_KIND_CONFIGURATION = 1;
+  // NODE_SECRET_BUNDLE bytes must be a node-scoped encrypted envelope.
+  ARTIFACT_KIND_NODE_SECRET_BUNDLE = 2;
+  // ACME_HTTP01_OVERLAY is a signed immutable complete-set snapshot. It never
+  // replaces or mutates the active full configuration artifact.
+  ARTIFACT_KIND_ACME_HTTP01_OVERLAY = 3;
+}
+
+// ArtifactCompression names the compression applied before hashing and signing.
+enum ArtifactCompression {
+  ARTIFACT_COMPRESSION_UNSPECIFIED = 0;
+  ARTIFACT_COMPRESSION_NONE = 1;
+  ARTIFACT_COMPRESSION_ZSTD = 2;
+}
+
+// ArtifactSignatureAlgorithm identifies the platform signature algorithm.
+enum ArtifactSignatureAlgorithm {
+  ARTIFACT_SIGNATURE_ALGORITHM_UNSPECIFIED = 0;
+  ARTIFACT_SIGNATURE_ALGORITHM_ED25519 = 1;
+  ARTIFACT_SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 = 2;
+}
+
+// ArtifactEncryptionAlgorithm identifies encryption applied after compression.
+enum ArtifactEncryptionAlgorithm {
+  ARTIFACT_ENCRYPTION_ALGORITHM_UNSPECIFIED = 0;
+  ARTIFACT_ENCRYPTION_ALGORITHM_NONE = 1;
+  ARTIFACT_ENCRYPTION_ALGORITHM_HPKE_X25519_HKDF_SHA256_AES_256_GCM = 2;
+}
+
+// ArtifactDescriptor is immutable. sha256 and signature cover the exact wire
+// bytes after compression and optional encryption.
+message ArtifactDescriptor {
+  string artifact_id = 1;
+  ArtifactKind kind = 2;
+  uint64 size_bytes = 3;
+  bytes sha256 = 4;
+  bytes signature = 5;
+  string signing_key_id = 6;
+  ArtifactSignatureAlgorithm signature_algorithm = 7;
+  ArtifactCompression compression = 8;
+  string media_type = 9;
+  ArtifactEncryptionAlgorithm encryption_algorithm = 10;
+  // recipient_key_id is required for an encrypted node secret bundle.
+  optional string recipient_key_id = 11;
+}
+
+// ArtifactChunk carries one contiguous range. The Agent verifies every chunk and
+// the complete descriptor hash/signature before reporting STAGED.
+message ArtifactChunk {
+  string request_id = 1;
+  string artifact_id = 2;
+  uint64 offset = 3;
+  bytes data = 4;
+  bytes chunk_sha256 = 5;
+  uint64 total_size_bytes = 6;
+  bool end_of_artifact = 7;
+}
+
+// FetchArtifactRequest authorizes a resumable range against one deployment.
+// Identical retries reuse all identity fields. A new offset uses a new request_id.
+message FetchArtifactRequest {
+  common.v1.RequestMetadata request = 1;
+  string event_id = 2;
+  string deployment_id = 3;
+  uint32 attempt = 4;
+  string artifact_id = 5;
+  uint64 offset = 6;
+}
+
+// FetchArtifactResponse wraps one streamed artifact chunk.
+message FetchArtifactResponse {
+  ArtifactChunk chunk = 1;
+}
+
+// DeploymentAction is part of the Agent journal deduplication key.
+enum DeploymentAction {
+  DEPLOYMENT_ACTION_UNSPECIFIED = 0;
+  DEPLOYMENT_ACTION_APPLY = 1;
+  DEPLOYMENT_ACTION_ROLLBACK = 2;
+  DEPLOYMENT_ACTION_RECONCILE = 3;
+}
+
+// HealthCheckPolicy is frozen with the rollout command.
+message HealthCheckPolicy {
+  google.protobuf.Duration activation_timeout_duration = 1;
+  google.protobuf.Duration observation_window_duration = 2;
+  uint32 required_consecutive_successes = 3;
+}
+
+// DeploymentCommand is delivered at least once. Redelivery must preserve
+// event.event_id, event.request_id, deployment_id, attempt, and action.
+message DeploymentCommand {
+  common.v1.EventMetadata event = 1;
+  string deployment_id = 2;
+  uint32 attempt = 3;
+  string rollout_id = 4;
+  string config_version_id = 5;
+  optional string previous_config_version_id = 6;
+  DeploymentAction action = 7;
+  repeated ArtifactDescriptor artifacts = 8;
+  repeated Capability required_capabilities = 9;
+  HealthCheckPolicy health_check = 10;
+  google.protobuf.Timestamp deadline_time = 11;
+  // configuration_scope_id binds scoped configuration formats such as the
+  // site-runtime v2 bundle. Legacy v1 commands may omit it.
+  optional string configuration_scope_id = 12;
+}
+
+// CheckResult is a safe health or precheck result; output must be sanitized.
+message CheckResult {
+  string name = 1;
+  bool succeeded = 2;
+  string summary = 3;
+  google.protobuf.Duration latency_duration = 4;
+}
+
+// DeploymentStatus advances the documented state machine. Duplicate and
+// out-of-order events are accepted for audit but cannot regress persisted state.
+message DeploymentStatus {
+  common.v1.EventMetadata event = 1;
+  string deployment_id = 2;
+  uint32 attempt = 3;
+  string config_version_id = 4;
+  NodeDeploymentState state = 5;
+  uint64 transition_sequence = 6;
+  // running_config_unchanged must be true for FAILED after a delivery attempt.
+  bool running_config_unchanged = 7;
+  repeated CheckResult checks = 8;
+  common.v1.ProtocolError error = 9;
+  Capability active_config_identity_capability = 10;
+  ActiveConfigIdentity active_config_identity = 11;
+  // configuration_scope_id echoes the command's scope on every status of a
+  // negotiated MULTI_TENANT_RUNTIME session and is absent otherwise. There,
+  // active_config_identity names that scope's current release, not a
+  // node-wide one.
+  optional string configuration_scope_id = 12;
+  // artifact_set_receipt is the canonical cdnca.edge.artifact-set-receipt/v1
+  // document (per item applied / rejected / pending with a reason code) on the
+  // terminal status of an ARTIFACT_SET set deployment, and absent otherwise.
+  bytes artifact_set_receipt = 13;
+}
+
+// AcmeHTTP01OverlayCommand activates one immutable complete-set snapshot.
+// Redelivery must preserve event_id, deployment_id, attempt, version, revision,
+// previous version/revision, and the artifact descriptor byte-for-byte.
+message AcmeHTTP01OverlayCommand {
+  common.v1.EventMetadata event = 1;
+  string overlay_deployment_id = 2;
+  uint32 attempt = 3;
+  string overlay_version_id = 4;
+  uint64 overlay_revision = 5;
+  optional string previous_overlay_version_id = 6;
+  optional uint64 previous_overlay_revision = 7;
+  ArtifactDescriptor artifact = 8;
+  HealthCheckPolicy health_check = 9;
+  google.protobuf.Timestamp deadline_time = 10;
+  // purpose is bound to the signed snapshot (its "purpose" member): the Agent
+  // rejects a command whose purpose differs from the artifact's. CLEANUP_ONLY
+  // carries an empty snapshot and only removes tokens (ADR-0003).
+  AcmeHTTP01OverlayPurpose purpose = 11;
+}
+
+// AcmeHTTP01OverlayStatus is the durable activation receipt for one command.
+// activation_summary and error.message are sanitized and never contain tokens
+// or exact challenge response values.
+message AcmeHTTP01OverlayStatus {
+  common.v1.EventMetadata event = 1;
+  string overlay_deployment_id = 2;
+  uint32 attempt = 3;
+  string overlay_version_id = 4;
+  uint64 overlay_revision = 5;
+  AcmeHTTP01OverlayState state = 6;
+  uint64 transition_sequence = 7;
+  optional string active_overlay_version_id = 8;
+  uint64 active_overlay_revision = 9;
+  bool active_overlay_unchanged = 10;
+  AcmeHTTP01OverlayResultCode result_code = 11;
+  string activation_summary = 12;
+  repeated CheckResult checks = 13;
+  common.v1.ProtocolError error = 14;
+}
+
+// CacheControlAction and CacheControlScope are a closed pair. The Agent rejects
+// every combination except purge_exact/url, purge_prefix/directory,
+// purge_site/site, and prewarm/url.
+enum CacheControlAction {
+  CACHE_CONTROL_ACTION_UNSPECIFIED = 0;
+  CACHE_CONTROL_ACTION_PURGE_EXACT = 1;
+  CACHE_CONTROL_ACTION_PURGE_PREFIX = 2;
+  CACHE_CONTROL_ACTION_PURGE_SITE = 3;
+  CACHE_CONTROL_ACTION_PREWARM = 4;
+}
+
+enum CacheControlScope {
+  CACHE_CONTROL_SCOPE_UNSPECIFIED = 0;
+  CACHE_CONTROL_SCOPE_URL = 1;
+  CACHE_CONTROL_SCOPE_DIRECTORY = 2;
+  CACHE_CONTROL_SCOPE_SITE = 3;
+}
+
+// NORMAL is intentionally the only accepted v1 priority. Scheduling policy is
+// owned by the control plane and Agent local limits, not by caller input.
+enum CacheControlPriority {
+  CACHE_CONTROL_PRIORITY_UNSPECIFIED = 0;
+  CACHE_CONTROL_PRIORITY_NORMAL = 1;
+}
+
+message CacheControlTarget {
+  uint32 index = 1;
+  uint32 target_ordinal = 2;
+  // canonical_url is empty only for purge_site.
+  string canonical_url = 3;
+  // sha256 binds the exact canonical_url bytes, including the empty value.
+  bytes sha256 = 4;
+}
+
+// CacheControlCommand is delivered at least once. task_id is exactly
+// cc-{control_operation_id}-{node_id}-{attempt}; request_digest binds the
+// control-plane canonical request and every target carries an independent
+// digest for result correlation.
+message CacheControlCommand {
+  common.v1.EventMetadata event = 1;
+  string task_id = 2;
+  string scope_id = 3;
+  string site_id = 4;
+  string node_id = 5;
+  string control_operation_id = 6;
+  string lease_id = 7;
+  uint32 attempt = 8;
+  string config_version_id = 9;
+  uint64 config_revision = 10;
+  CacheControlAction action = 11;
+  CacheControlScope scope = 12;
+  CacheControlPriority priority = 13;
+  bytes request_digest = 14;
+  repeated CacheControlTarget targets = 15;
+  google.protobuf.Timestamp deadline_time = 16;
+  // tenant_id is the resource owner. scope_id remains the independently bound
+  // control-plane target scope and must not be substituted for tenant identity.
+  string tenant_id = 17;
+}
+
+enum CacheControlState {
+  CACHE_CONTROL_STATE_UNSPECIFIED = 0;
+  CACHE_CONTROL_STATE_DELIVERED = 1;
+  CACHE_CONTROL_STATE_RUNNING = 2;
+  CACHE_CONTROL_STATE_SUCCEEDED = 3;
+  CACHE_CONTROL_STATE_PARTIAL_FAILED = 4;
+  CACHE_CONTROL_STATE_FAILED = 5;
+  CACHE_CONTROL_STATE_CANCELLED = 6;
+}
+
+enum CacheControlTargetState {
+  CACHE_CONTROL_TARGET_STATE_UNSPECIFIED = 0;
+  CACHE_CONTROL_TARGET_STATE_SUCCESS = 1;
+  CACHE_CONTROL_TARGET_STATE_SKIPPED = 2;
+  CACHE_CONTROL_TARGET_STATE_FAILED = 3;
+}
+
+message CacheControlTargetResult {
+  uint32 index = 1;
+  uint32 target_ordinal = 2;
+  bytes sha256 = 3;
+  CacheControlTargetState state = 4;
+  // result_code and cause_code are stable lowercase snake_case values.
+  string result_code = 5;
+  string cause_code = 6;
+  uint64 affected_entries = 7;
+  uint64 transferred_bytes = 8;
+  uint32 attempts = 9;
+  google.protobuf.Timestamp completed_time = 10;
+}
+
+// CacheControlStatus is safe to redeliver by event.event_id. A terminal status
+// binds every target by index, target_ordinal, and sha256. Cache commands never
+// mutate the active configuration pointer.
+message CacheControlStatus {
+  common.v1.EventMetadata event = 1;
+  string task_id = 2;
+  string scope_id = 3;
+  string site_id = 4;
+  string node_id = 5;
+  string control_operation_id = 6;
+  string lease_id = 7;
+  uint32 attempt = 8;
+  string config_version_id = 9;
+  uint64 config_revision = 10;
+  CacheControlAction action = 11;
+  CacheControlScope scope = 12;
+  CacheControlState state = 13;
+  uint64 transition_sequence = 14;
+  bytes request_digest = 15;
+  repeated CacheControlTargetResult results = 16;
+  string error_code = 17;
+  string summary = 18;
+  bool active_config_unchanged = 19;
+  string tenant_id = 20;
+}
+
+// CacheControlStatusAck is emitted only after the Gateway durably publishes the
+// exact status event. The Agent uses transition_sequence as its fsynced journal
+// compaction cursor and deletes a terminal record only after this acknowledgement.
+message CacheControlStatusAck {
+  string status_event_id = 1;
+  string task_id = 2;
+  string lease_id = 3;
+  uint32 attempt = 4;
+  uint64 transition_sequence = 5;
+  google.protobuf.Timestamp persisted_time = 6;
+}
+
+// CacheControlCancel asks the node to stop one delivered cache task
+// (CACHE_CONTROL_CANCEL v1). It names the task exactly as the command did
+// (task_id, lease_id, attempt) and is safe to redeliver by cancel_id: the
+// node answers every delivery with the same receipt outcome.
+message CacheControlCancel {
+  common.v1.EventMetadata event = 1;
+  // cancel_id is the control-plane cancel delivery row (one per node attempt).
+  string cancel_id = 2;
+  string task_id = 3;
+  string scope_id = 4;
+  string tenant_id = 5;
+  string site_id = 6;
+  string node_id = 7;
+  string control_operation_id = 8;
+  string lease_id = 9;
+  uint32 attempt = 10;
+  google.protobuf.Timestamp requested_time = 11;
+}
+
+enum CacheControlCancelOutcome {
+  CACHE_CONTROL_CANCEL_OUTCOME_UNSPECIFIED = 0;
+  // The node stopped the task; targets it had not run were not run.
+  CACHE_CONTROL_CANCEL_OUTCOME_CANCELLED = 1;
+  // The task had already finished on the node before the cancel arrived.
+  CACHE_CONTROL_CANCEL_OUTCOME_ALREADY_COMPLETED = 2;
+  // The node never received (or no longer holds) the task's command.
+  CACHE_CONTROL_CANCEL_OUTCOME_NOT_RECEIVED = 3;
+}
+
+// CacheControlCancelReceipt answers one CacheControlCancel after the node
+// settled the task. The counts are the node's own target results (targets
+// that finished before the cancel keep their result).
+message CacheControlCancelReceipt {
+  common.v1.EventMetadata event = 1;
+  string cancel_id = 2;
+  string task_id = 3;
+  string node_id = 4;
+  string lease_id = 5;
+  uint32 attempt = 6;
+  CacheControlCancelOutcome outcome = 7;
+  uint32 succeeded_targets = 8;
+  uint32 failed_targets = 9;
+  uint32 cancelled_targets = 10;
+  google.protobuf.Timestamp settled_time = 11;
+}
+
+// DeploymentStatusAck is emitted only after the Gateway durably publishes the
+// exact terminal status and acknowledges its authoritative command delivery.
+// The Agent uses it as a durable journal compaction cursor.
+message DeploymentStatusAck {
+  string status_event_id = 1;
+  string deployment_id = 2;
+  uint32 attempt = 3;
+  string config_version_id = 4;
+  uint64 transition_sequence = 5;
+  google.protobuf.Timestamp persisted_time = 6;
+  // published_stream and published_sequence carry the exact JetStream PubAck
+  // for the durable terminal status publication.
+  string published_stream = 7;
+  uint64 published_sequence = 8;
+}
+
+// DeploymentStatusAckReceipt proves that the Agent fsynced the exact terminal
+// acknowledgement before it became eligible for local journal compaction.
+message DeploymentStatusAckReceipt {
+  string status_event_id = 1;
+  string deployment_id = 2;
+  uint32 attempt = 3;
+  string config_version_id = 4;
+  uint64 transition_sequence = 5;
+  google.protobuf.Timestamp persisted_time = 6;
+  // The receipt repeats the exact status publication identity before the Agent
+  // compacts its local terminal journal record.
+  string published_stream = 7;
+  uint64 published_sequence = 8;
+}
+
+// UpgradeCommand carries the exact canonical JSON command issued by the
+// control plane. command_sha256 binds the broker bytes without re-encoding.
+message UpgradeCommand {
+  bytes command = 1;
+  bytes command_sha256 = 2;
+}
+
+// UpgradeStatus carries the Agent's fsynced canonical JSON status outbox row.
+message UpgradeStatus {
+  bytes status = 1;
+  bytes status_sha256 = 2;
+}
+
+// UpgradeStatusAck permits Agent outbox compaction only after the Gateway has
+// received an exact JetStream publication acknowledgement.
+message UpgradeStatusAck {
+  string status_event_id = 1;
+  string command_id = 2;
+  uint64 status_revision = 3;
+  bytes status_sha256 = 4;
+  google.protobuf.Timestamp persisted_time = 5;
+  // published_stream and published_sequence carry the exact JetStream PubAck
+  // only when EDGE_UPGRADE_STATUS_PUBACK v1 was negotiated.
+  string published_stream = 6;
+  uint64 published_sequence = 7;
+}
+
+// UpgradeStatusAckReceipt confirms durable retention of one exact
+// UpgradeStatusAck. ack_sha256 covers the deterministic protobuf encoding of
+// that UpgradeStatusAck payload, without a ConnectResponse envelope. Unknown
+// fields in the acknowledged payload must be rejected before hashing.
+message UpgradeStatusAckReceipt {
+  string status_event_id = 1;
+  string command_id = 2;
+  uint64 status_revision = 3;
+  bytes status_sha256 = 4;
+  google.protobuf.Timestamp persisted_time = 5;
+  string published_stream = 6;
+  uint64 published_sequence = 7;
+  bytes ack_sha256 = 8;
+}
+
+enum FirewallSchema {
+  FIREWALL_SCHEMA_UNSPECIFIED = 0;
+  FIREWALL_SCHEMA_V1 = 1;
+}
+
+enum FirewallOperation {
+  FIREWALL_OPERATION_UNSPECIFIED = 0;
+  FIREWALL_OPERATION_APPLY = 1;
+  FIREWALL_OPERATION_RECOVER = 2;
+}
+
+enum FirewallCIDRAction {
+  FIREWALL_CIDR_ACTION_UNSPECIFIED = 0;
+  FIREWALL_CIDR_ACTION_ALLOW = 1;
+  FIREWALL_CIDR_ACTION_DENY = 2;
+}
+
+enum FirewallProtocol {
+  FIREWALL_PROTOCOL_UNSPECIFIED = 0;
+  FIREWALL_PROTOCOL_ANY = 1;
+  FIREWALL_PROTOCOL_TCP = 2;
+  FIREWALL_PROTOCOL_UDP = 3;
+  FIREWALL_PROTOCOL_ICMP = 4;
+}
+
+enum FirewallRecoveryReason {
+  FIREWALL_RECOVERY_REASON_UNSPECIFIED = 0;
+  FIREWALL_RECOVERY_REASON_NOT_APPLICABLE = 1;
+  FIREWALL_RECOVERY_REASON_FALSE_POSITIVE = 2;
+  FIREWALL_RECOVERY_REASON_POLICY_REGRESSION = 3;
+  FIREWALL_RECOVERY_REASON_HEALTH_FAILURE = 4;
+  FIREWALL_RECOVERY_REASON_OPERATOR_REQUEST = 5;
+}
+
+enum FirewallStatusState {
+  FIREWALL_STATUS_STATE_UNSPECIFIED = 0;
+  FIREWALL_STATUS_STATE_APPLIED = 1;
+  FIREWALL_STATUS_STATE_FAILED = 2;
+  FIREWALL_STATUS_STATE_ROLLED_BACK = 3;
+}
+
+// FirewallCIDRTarget repeats its owning tenant/site scope so the command digest
+// cannot authorize a CIDR copied from another owner.
+message FirewallCIDRTarget {
+  uint32 ordinal = 1;
+  string tenant_id = 2;
+  string site_id = 3;
+  FirewallCIDRAction action = 4;
+  string cidr = 5;
+  string source = 6;
+  string reason_code = 7;
+  optional google.protobuf.Timestamp expiration_time = 8;
+  FirewallProtocol protocol = 9;
+  uint32 port_start = 10;
+  uint32 port_end = 11;
+}
+
+// FirewallCommand is a complete immutable scoped snapshot. command_sha256 is
+// SHA-256 over its deterministic protobuf encoding with command_sha256 cleared;
+// this lets an upstream signed envelope bind task, scope, ownership, ordering,
+// recovery intent, and every target without giving the Agent a free-form subject.
+message FirewallCommand {
+  common.v1.EventMetadata event = 1;
+  FirewallSchema schema = 2;
+  string task_id = 3;
+  uint64 task_revision = 4;
+  string idempotency_key = 5;
+  string tenant_id = 6;
+  string site_id = 7;
+  string node_id = 8;
+  uint64 policy_version = 9;
+  uint64 expected_active_policy_version = 10;
+  FirewallOperation operation = 11;
+  FirewallRecoveryReason recovery_reason = 12;
+  repeated FirewallCIDRTarget targets = 13;
+  bytes command_sha256 = 14;
+  google.protobuf.Timestamp deadline_time = 15;
+  ArtifactSignatureAlgorithm signature_algorithm = 16;
+  string signing_key_id = 17;
+  bytes signature = 18;
+  string policy_kind = 19;
+  string policy_id = 20;
+}
+
+// FirewallStatus echoes only the command identity and a stable terminal result.
+// It never carries CIDRs, rule content, credentials, or runtime command output.
+message FirewallStatus {
+  common.v1.EventMetadata event = 1;
+  FirewallSchema schema = 2;
+  string task_id = 3;
+  uint64 task_revision = 4;
+  string idempotency_key = 5;
+  string tenant_id = 6;
+  string site_id = 7;
+  string node_id = 8;
+  uint64 policy_version = 9;
+  uint64 expected_active_policy_version = 10;
+  FirewallOperation operation = 11;
+  FirewallRecoveryReason recovery_reason = 12;
+  bytes command_sha256 = 13;
+  FirewallStatusState state = 14;
+  uint64 status_revision = 15;
+  uint64 active_policy_version = 16;
+  bool active_policy_unchanged = 17;
+  string error_code = 18;
+}
+
+enum DrainSchema {
+  DRAIN_SCHEMA_UNSPECIFIED = 0;
+  DRAIN_SCHEMA_V1 = 1;
+}
+
+enum DrainPhase {
+  DRAIN_PHASE_UNSPECIFIED = 0;
+  DRAIN_PHASE_PRECHECK = 1;
+  DRAIN_PHASE_ACTIVATE_NEW = 2;
+  DRAIN_PHASE_HEALTH_GATE = 3;
+  DRAIN_PHASE_DRAINING_OLD = 4;
+  DRAIN_PHASE_COMPLETED = 5;
+  DRAIN_PHASE_ROLLED_BACK = 6;
+  DRAIN_PHASE_FAILED = 7;
+}
+
+// DrainCommand carries the exact canonical drain plan produced for one
+// immutable L4 transition. The Agent verifies both identity and digest before
+// allowing the plan to reach its local OpenResty runtime.
+message DrainCommand {
+  common.v1.EventMetadata event = 1;
+  DrainSchema schema = 2;
+  string command_id = 3;
+  string node_id = 4;
+  string plan_id = 5;
+  uint64 revision = 6;
+  bytes canonical_plan_json = 7;
+  bytes plan_sha256 = 8;
+  google.protobuf.Timestamp deadline_time = 9;
+}
+
+// DrainStatus is durable progress evidence for a DrainCommand. Nonterminal
+// phases remain pending and are redelivered; completed and rolled-back phases
+// terminate command delivery.
+message DrainStatus {
+  common.v1.EventMetadata event = 1;
+  DrainSchema schema = 2;
+  string command_id = 3;
+  string node_id = 4;
+  string plan_id = 5;
+  uint64 revision = 6;
+  bytes plan_sha256 = 7;
+  DrainPhase phase = 8;
+  uint64 status_revision = 9;
+  bool pending = 10;
+  bool degraded = 11;
+  uint32 remaining_old_workers = 12;
+  bool forced_termination = 13;
+  string error_code = 14;
+}
+
+// NodeMonitoringSchema versions the complete node monitoring artifact and
+// every metric/recovery publication carried over the authenticated stream.
+enum NodeMonitoringSchema {
+  NODE_MONITORING_SCHEMA_UNSPECIFIED = 0;
+  NODE_MONITORING_SCHEMA_V1 = 1;
+}
+
+enum NodeMonitoringRecordKind {
+  NODE_MONITORING_RECORD_KIND_UNSPECIFIED = 0;
+  NODE_MONITORING_RECORD_KIND_METRIC = 1;
+  NODE_MONITORING_RECORD_KIND_RECOVERY_NOTIFICATION = 2;
+  // Basic host counters do not require an activated service-probe policy.
+  // config_revision must be zero, load_metrics_v1 must be present, and payload
+  // JSON contains only schema_version=1, node_id, and observed_at.
+  NODE_MONITORING_RECORD_KIND_HOST_METRIC = 3;
+  // FX65: a site's CC auto switch engaged on this node (cc auto_switch_status).
+  // config_revision must be zero and load_metrics_v1 absent; payload JSON is
+  // the strict schema-v1 CC auto switch event (node, scope, site, policy,
+  // engaged_at, trigger rates and thresholds).
+  NODE_MONITORING_RECORD_KIND_CC_AUTO_SWITCH = 4;
+}
+
+// NodeMonitoringArtifact is a complete immutable system-configuration
+// snapshot. node_id is checked against the mTLS identity before delivery.
+message NodeMonitoringArtifact {
+  common.v1.EventMetadata event = 1;
+  NodeMonitoringSchema schema = 2;
+  string node_id = 3;
+  uint64 config_revision = 4;
+  uint64 publication_sequence = 5;
+  bytes canonical_config_json = 6;
+  bytes config_sha256 = 7;
+}
+
+// NodeMonitoringReport is durable and stable across retransmission. The
+// payload is strict schema-v1 JSON emitted by the node-monitoring runtime.
+message NodeNetworkInterfaceMetricsV1 {
+  string name = 1;
+  uint64 rx_bytes = 2;
+  uint64 tx_bytes = 3;
+  uint64 rx_bandwidth_bps = 4;
+  uint64 tx_bandwidth_bps = 5;
+}
+
+message NodeSystemLoadV1 {
+  double one_minute = 1;
+  double five_minutes = 2;
+  double fifteen_minutes = 3;
+  uint32 running_processes = 4;
+  uint32 total_processes = 5;
+}
+
+message NodeDiskUsageV1 {
+  string path = 1;
+  uint64 total_bytes = 2;
+  uint64 used_bytes = 3;
+  uint64 total_inodes = 4;
+  uint64 used_inodes = 5;
+  double space_percent = 6;
+  double inode_percent = 7;
+}
+
+// An optional, per-sample monitoring recommendation, not a listener binding.
+// Missing on old Agents. source is default_route or unavailable; interfaces are
+// sorted, unique and must refer to network_interfaces in the same sample.
+message NodeNetworkSelectionV1 {
+  string source = 1;
+  repeated string interfaces = 2;
+}
+
+// One packet filter of the node DDoS table (inet cdnca_ddos): packets and
+// bytes it dropped since the filter was turned on (cumulative, a node
+// counter). kind is tcp_null, tcp_xmas, tcp_syn_fin, tcp_syn_rst, tcp_fin,
+// tcp_all or ct_invalid.
+message NodeDDoSDropV1 {
+  string kind = 1;
+  uint64 packets = 2;
+  uint64 bytes = 3;
+}
+
+// NodeXDPStatusV1 is the node XDP filter (agents/edge-agent/internal/xdp):
+// mode native / generic (attached) or nftables / disabled (not attached;
+// reason says why: disabled, unsupported_os, kernel_too_old,
+// bpf_unavailable, load_failed, self_test_failed, no_interface,
+// attach_failed, verify_failed, update_failed). interfaces are
+// "<name>=<native|generic>", sorted; drops the filter's cumulative drops
+// (kind sorted, unique: tcp_* classes, xdp_ban, xdp_block, xdp_port_ban,
+// xdp_rate), only while attached.
+message NodeXDPStatusV1 {
+  string mode = 1;
+  string reason = 2;
+  string detail = 3;
+  repeated string interfaces = 4;
+  repeated NodeDDoSDropV1 drops = 5;
+}
+
+message NodeTelemetryV1 {
+  uint32 schema_version = 1;
+  repeated NodeNetworkInterfaceMetricsV1 network_interfaces = 2;
+  NodeSystemLoadV1 system_load = 3;
+  repeated NodeDiskUsageV1 disks = 4;
+  uint64 total_rx_bytes = 5;
+  uint64 total_tx_bytes = 6;
+  NodeNetworkSelectionV1 network_selection = 7;
+  // Sorted by kind, unique; only the filters that are on. Missing on nodes
+  // without a DDoS table and on old Agents.
+  repeated NodeDDoSDropV1 ddos_drops = 8;
+  // The node XDP filter's mode now (number pending allocation).
+  // Missing on old Agents.
+  NodeXDPStatusV1 xdp = 9;
+  // Level D site drops (攻击自动升级, XDP site counters + nftables
+  // site_drop) since the previous sample, with the sites the node dropped for
+  // then. Missing when the node drops for no site and on old Agents.
+  NodeSiteDropV1 site_drop = 10;
+  // The node DDoS protection (inet cdnca_ddos) state now (E1). Missing
+  // on old Agents.
+  NodeDDoSProtectionV1 ddos_protection = 11;
+  // Every mount of the node (NODE_TELEMETRY_DETAIL v1), sorted by path,
+  // unique, at most 256. Missing on old Agents.
+  repeated NodeMountV1 mounts = 12;
+  // The layer 4 auto defense port group overrides (NODE_TELEMETRY_DETAIL v1),
+  // sorted by port_group_id, unique, at most 256. Missing on old Agents and on
+  // nodes without the layer 4 engine.
+  repeated NodePortGroupOverrideV1 port_group_overrides = 13;
+  // The node storage settings in effect (NODE_STORAGE v1). Missing on old
+  // Agents.
+  NodeStorageV1 storage = 14;
+}
+
+// NodeStorageV1 is what the node runs: the cache directory and limit of the
+// running OpenResty and the log directory of this Agent process. state is
+// applied (the control plane's settings are in effect), default (the control
+// plane sets none, the node's defaults run), failed (the last control plane
+// settings were refused; reason says why, the previous ones keep running) or
+// restart_pending (the control plane's log directory takes effect on the
+// next Agent start). requested_log_directory is the control plane's log
+// directory when it differs from the running one.
+message NodeStorageV1 {
+  string cache_directory = 1;
+  uint64 cache_max_bytes = 2;
+  string log_directory = 3;
+  string state = 4;
+  string reason = 5;
+  string requested_log_directory = 6;
+}
+
+// NodeMountV1 is one mount of /proc/self/mountinfo: device is major:minor,
+// bind is a bind mount of a subtree or another mount of a device that already
+// has a ranked one. filter_reason says why the disk ranking (disks) leaves it
+// out: system_path (/proc, /sys, /dev, /run), squashfs, read_only or
+// bind_duplicate; empty means the mount is in disks.
+message NodeMountV1 {
+  string path = 1;
+  string device = 2;
+  string fstype = 3;
+  bool read_only = 4;
+  bool bind = 5;
+  string filter_reason = 6;
+}
+
+// NodePortGroupOverrideV1 is one layer 4 port group override on the node:
+// state applied (automatic values are in the node DDoS table), standby (in
+// effect, nothing tightened now), inactive (not in effect; reason manual,
+// suggest, auto_mitigation_off or shared_ports) or failed (the node DDoS
+// table write failed; retried next window).
+message NodePortGroupOverrideV1 {
+  string port_group_id = 1;
+  string state = 2;
+  string reason = 3;
+}
+
+// NodeDDoSProtectionV1 is the node DDoS protection table's state: state
+// applied (the running configuration's table is in place), off (the running
+// configuration has none), pending (no configuration applied yet), failed
+// (the last application failed; the previous table stays, retried with the
+// next apply) or unavailable (the node cannot run it: reason nft_missing,
+// nft_unusable, init_failed or unsupported_os). reason is empty unless state
+// is unavailable; detail (sanitized, at most 256 bytes) says why for failed
+// and unavailable.
+message NodeDDoSProtectionV1 {
+  string state = 1;
+  string reason = 2;
+  string detail = 3;
+}
+
+// NodeSiteDropV1: the node's counters are not per site; packets and bytes are
+// the whole node's site drops in the interval, shared by site_ids (sorted
+// canonical UUIDs, unique, at most 256).
+message NodeSiteDropV1 {
+  repeated string site_ids = 1;
+  uint64 packets = 2;
+  uint64 bytes = 3;
+}
+
+message NodeLoadMetricsV1 {
+  google.protobuf.Timestamp observed_time = 1;
+  double cpu_percent = 2;
+  uint64 memory_used_bytes = 3;
+  uint64 memory_total_bytes = 4;
+  uint64 active_connections = 5;
+  uint64 rx_bandwidth_bps = 6;
+  uint64 tx_bandwidth_bps = 7;
+  // Absent means that the Agent could not collect the optional node telemetry.
+  NodeTelemetryV1 telemetry = 8;
+}
+
+message NodeMonitoringReport {
+  common.v1.EventMetadata event = 1;
+  NodeMonitoringSchema schema = 2;
+  string node_id = 3;
+  uint64 config_revision = 4;
+  uint64 publication_sequence = 5;
+  NodeMonitoringRecordKind kind = 6;
+  bytes payload_json = 7;
+  // Absent means unknown and preserves compatibility with older Agents.
+  NodeLoadMetricsV1 load_metrics_v1 = 8;
+}
+
+// NodeMonitoringAck permits Agent outbox compaction only after the Gateway
+// received the exact JetStream PubAck for this publication.
+message NodeMonitoringAck {
+  string event_id = 1;
+  string node_id = 2;
+  uint64 config_revision = 3;
+  uint64 publication_sequence = 4;
+  string published_stream = 5;
+  uint64 published_sequence = 6;
+  bool replayed = 7;
+  google.protobuf.Timestamp accepted_time = 8;
+}
+
+enum NodeMonitoringApplyState {
+  NODE_MONITORING_APPLY_STATE_UNSPECIFIED = 0;
+  NODE_MONITORING_APPLY_STATE_APPLIED = 1;
+  NODE_MONITORING_APPLY_STATE_REJECTED = 2;
+}
+
+// NodeMonitoringApplyStatus is the Agent's durable activation evidence. The
+// Gateway ACKs the artifact delivery only for APPLIED with matching active
+// revision; REJECTED is NAKed and remains eligible for redelivery.
+message NodeMonitoringApplyStatus {
+  common.v1.EventMetadata event = 1;
+  NodeMonitoringSchema schema = 2;
+  string node_id = 3;
+  uint64 config_revision = 4;
+  string artifact_event_id = 5;
+  NodeMonitoringApplyState state = 6;
+  uint64 active_config_revision = 7;
+  string error_code = 8;
+}
+
+// GatewayPortTransitionSchema versions communication endpoint migrations.
+// A port migration never changes the node certificate or private key.
+enum GatewayPortTransitionSchema {
+  GATEWAY_PORT_TRANSITION_SCHEMA_UNSPECIFIED = 0;
+  GATEWAY_PORT_TRANSITION_SCHEMA_V1 = 1;
+}
+
+enum GatewayPortTransitionAction {
+  GATEWAY_PORT_TRANSITION_ACTION_UNSPECIFIED = 0;
+  GATEWAY_PORT_TRANSITION_ACTION_SWITCH = 1;
+  GATEWAY_PORT_TRANSITION_ACTION_FINALIZE = 2;
+  GATEWAY_PORT_TRANSITION_ACTION_ROLLBACK = 3;
+}
+
+enum GatewayPortTransitionState {
+  GATEWAY_PORT_TRANSITION_STATE_UNSPECIFIED = 0;
+  GATEWAY_PORT_TRANSITION_STATE_PREPARED = 1;
+  GATEWAY_PORT_TRANSITION_STATE_SWITCHED = 2;
+  GATEWAY_PORT_TRANSITION_STATE_FAILED = 3;
+  GATEWAY_PORT_TRANSITION_STATE_ROLLED_BACK = 4;
+  GATEWAY_PORT_TRANSITION_STATE_FINALIZED = 5;
+}
+
+message GatewayEndpoint {
+  string address = 1;
+  string server_name = 2;
+  // listen_address is consumed only by the Gateway and is ignored by Agents.
+  string listen_address = 3;
+}
+
+// GatewayPortTransitionCommand is immutable for one transition revision. The
+// Gateway binds the new listener before delivering SWITCH to an Agent.
+message GatewayPortTransitionCommand {
+  common.v1.EventMetadata event = 1;
+  GatewayPortTransitionSchema schema = 2;
+  string transition_id = 3;
+  string node_id = 4;
+  uint64 revision = 5;
+  uint64 expected_node_revision = 6;
+  GatewayEndpoint old_endpoint = 7;
+  GatewayEndpoint new_endpoint = 8;
+  google.protobuf.Timestamp compatibility_deadline = 9;
+  google.protobuf.Timestamp rollback_deadline = 10;
+  string certificate_sha256 = 11;
+  GatewayPortTransitionAction action = 12;
+}
+
+// GatewayPortTransitionProof is sent on the newly authenticated connection so
+// the Gateway can bind the transition to the same certificate-backed node.
+message GatewayPortTransitionProof {
+  string transition_id = 1;
+  uint64 revision = 2;
+  GatewayEndpoint active_endpoint = 3;
+}
+
+message GatewayPortTransitionStatus {
+  common.v1.EventMetadata event = 1;
+  GatewayPortTransitionSchema schema = 2;
+  string transition_id = 3;
+  string node_id = 4;
+  uint64 revision = 5;
+  uint64 status_revision = 6;
+  GatewayPortTransitionState state = 7;
+  GatewayEndpoint active_endpoint = 8;
+  string certificate_sha256 = 9;
+  string error_code = 10;
+}
+
+// MarketProbeCommand asks the Agent to probe other sellers' edge nodes for the
+// node market. Targets are literal IP addresses; the Agent sends one HTTP GET
+// to the fixed market probe path and refuses non-public addresses, ports other
+// than 80/443, redirects and anything past expire_time.
+message MarketProbeCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  repeated MarketProbeTarget targets = 3;
+  uint32 timeout_millis = 4;
+  google.protobuf.Timestamp expire_time = 5;
+  // benchmark, when set, turns every target into a benchmark download of the
+  // fixed benchmark object instead of a probe (MARKET_BENCHMARK v1 only).
+  // timeout_millis bounds the whole download of one target.
+  MarketBenchmarkSpec benchmark = 6;
+}
+
+// MarketBenchmarkSpec: download the benchmark object over `connections`
+// parallel HTTP GETs (1–8). The Agent measures time to first byte and the
+// aggregate throughput, and stops at timeout_millis.
+message MarketBenchmarkSpec {
+  uint32 connections = 1;
+}
+
+// A target is either a literal ip (market probe path, ports 80/443) or, with
+// MARKET_PROBE v2, a host: the Agent resolves it itself, dials only a public
+// unicast address, and sends one HTTPS GET of path to port 443 with
+// server_name as SNI and Host, verifying the certificate for server_name.
+// OK means the answer status equals expect_status (redirects are not
+// followed). ip and host are mutually exclusive; benchmark never applies.
+//
+// MARKET_PROBE v3 adds origin targets, marked by a non-empty scheme ("http"
+// or "https"): host is a DNS name or a public IP literal, port any of
+// 1–65535, host_header the Host sent, server_name the SNI and the name the
+// certificate is verified for (https only), ca_pem optional PEM roots that
+// replace the system roots for this probe only (https only). The Agent dials
+// only public unicast addresses (a non-public literal or answer is SKIPPED
+// rejected_address) and reports the answer's status_code.
+message MarketProbeTarget {
+  string task_id = 1;
+  string ip = 2;
+  uint32 port = 3;
+  string host = 4;
+  string server_name = 5;
+  string path = 6;
+  uint32 expect_status = 7;
+  string scheme = 8;
+  string host_header = 9;
+  string ca_pem = 10;
+  // method (AGGREGATED_EDGE_PROBE v1): "" or GET, or HEAD; host targets only.
+  string method = 11;
+  // headers (AGGREGATED_EDGE_PROBE v1): extra request headers of a host target.
+  repeated MarketProbeHeader headers = 12;
+}
+
+message MarketProbeHeader {
+  string name = 1;
+  string value = 2;
+}
+
+enum MarketProbeOutcome {
+  MARKET_PROBE_OUTCOME_UNSPECIFIED = 0;
+  // OK: a 2xx answer arrived before the timeout.
+  MARKET_PROBE_OUTCOME_OK = 1;
+  // FAILED: the target was probed and did not answer 2xx in time.
+  MARKET_PROBE_OUTCOME_FAILED = 2;
+  // SKIPPED: the Agent refused or could not schedule the probe. It says
+  // nothing about the target and must not be counted as a vote.
+  MARKET_PROBE_OUTCOME_SKIPPED = 3;
+}
+
+message MarketProbeResult {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  repeated MarketProbeTargetResult results = 4;
+}
+
+message MarketProbeTargetResult {
+  string task_id = 1;
+  MarketProbeOutcome outcome = 2;
+  uint32 latency_millis = 3;
+  // error_code is a short reason for FAILED or SKIPPED, e.g. "timeout",
+  // "status", "rejected_address", "rate_limited", "expired".
+  string error_code = 4;
+  // Benchmark results (MarketProbeCommand.benchmark set): aggregate
+  // throughput in kbit/s over all connections, median time to first byte
+  // in milliseconds, and the bytes received.
+  uint64 throughput_kbps = 5;
+  uint32 ttfb_millis = 6;
+  uint64 bytes_received = 7;
+  // status_code is the HTTP status a host or origin target answered with
+  // (0: no answer), so the controller can apply its own status rule.
+  uint32 status_code = 8;
+}
+
+// L4LiveConnectionsCommand asks the Agent for the TCP sessions its L4
+// runtime serves for one stream (CAPABILITY_NAME_L4_LIVE_CONNECTIONS v1), or,
+// when close_session_keys is set, to close those sessions instead. UDP
+// sessions are not listed: v2 UDP forwards end each session with its reply.
+// The exchange is an ephemeral request/reply relayed by the Gateway; nothing
+// is retried after expire_time.
+message L4LiveConnectionsCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string stream_id = 3;
+  // client_ip, when set, keeps only sessions whose client (the PROXY
+  // protocol address when the peer is a trusted proxy) is in this address or
+  // CIDR.
+  string client_ip = 4;
+  // limit bounds the sessions returned (1-1000).
+  uint32 limit = 5;
+  google.protobuf.Timestamp expire_time = 6;
+  // close_session_keys are L4LiveConnection.session_key values of the stream
+  // to close (at most 1000). The result then reports each in closed.
+  repeated string close_session_keys = 7;
+}
+
+message L4LiveConnection {
+  // session_key identifies the session on this node until it ends.
+  string session_key = 1;
+  string listener_id = 2;
+  uint32 listen_port = 3;
+  string client_ip = 4;
+  uint32 client_port = 5;
+  // peer_ip is the socket peer when it differs from the client (a trusted
+  // PROXY protocol sender); empty otherwise.
+  string peer_ip = 6;
+  // upstream is the stream's configured origin (address or host and port).
+  string upstream = 7;
+  google.protobuf.Timestamp started_at = 8;
+  // Bytes the client sent and the bytes the node sent it that the client
+  // acknowledged, from the kernel's TCP_INFO; absent when unknown.
+  optional uint64 bytes_received = 9;
+  optional uint64 bytes_sent = 10;
+}
+
+message L4LiveConnectionClose {
+  string session_key = 1;
+  // error_code is empty when the session was closed, otherwise "not_found"
+  // (already ended or not this stream's), "unsupported" or "failed".
+  string error_code = 2;
+}
+
+message L4LiveConnectionsResult {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  // error_code is empty on success, otherwise "unavailable" (the L4 runtime
+  // is not running or does not answer), "expired" or "busy".
+  string error_code = 4;
+  repeated L4LiveConnection connections = 5;
+  // matched counts the sessions that passed the filter, beyond limit too.
+  uint32 matched = 6;
+  // untracked counts sessions the runtime could not record (registry full).
+  uint32 untracked = 7;
+  repeated L4LiveConnectionClose closed = 8;
+}
+
+// StreamError reports a durable stream protocol error before the Gateway closes
+// or continues the connection according to error.retryable.
+message StreamError {
+  common.v1.ProtocolError error = 1;
+  optional string related_message_id = 2;
+}
+
+// ConnectRequest is one Agent-to-Gateway stream envelope.
+message ConnectRequest {
+  // 15 was node_plugin_receipt (node plugins, removed by ADR 0007); never reuse.
+  reserved 15;
+  reserved "node_plugin_receipt";
+  common.v1.StreamMetadata stream = 1;
+  oneof payload {
+    AgentHello hello = 2;
+    Heartbeat heartbeat = 3;
+    DeploymentStatus deployment_status = 4;
+    AcmeHTTP01OverlayStatus acme_http01_overlay_status = 5;
+    CacheControlStatus cache_control_status = 6;
+    DeploymentStatusAckReceipt deployment_status_ack_receipt = 7;
+    UpgradeStatus upgrade_status = 8;
+    UpgradeStatusAckReceipt upgrade_status_ack_receipt = 9;
+    FirewallStatus firewall_status = 10;
+    DrainStatus drain_status = 11;
+    NodeMonitoringReport node_monitoring_report = 12;
+    NodeMonitoringApplyStatus node_monitoring_apply_status = 13;
+    GatewayPortTransitionStatus gateway_port_transition_status = 14;
+    MarketProbeResult market_probe_result = 16;
+    L4LiveConnectionsResult l4_live_connections_result = 17;
+    EdgeSignerTrustReceipt edge_signer_trust_receipt = 18;
+    AutoDefenseReceipt auto_defense_receipt = 23;
+    SecurityBanStatus security_ban_status = 22;
+    AutoDefenseReport auto_defense_report = 24;
+    InstallationBanReceipt installation_ban_receipt = 25;
+    SiteDropReceipt site_drop_receipt = 26;
+    CacheControlCancelReceipt cache_control_cancel_receipt = 27;
+    GatewayAddressChangeReceipt gateway_address_change_receipt = 28;
+  }
+}
+
+// ConnectResponse is one Gateway-to-Agent stream envelope.
+message ConnectResponse {
+  // 18 was node_plugin_bundle (node plugins, removed by ADR 0007); never reuse.
+  reserved 18;
+  reserved "node_plugin_bundle";
+  common.v1.StreamMetadata stream = 1;
+  oneof payload {
+    GatewayHello hello = 2;
+    DeploymentCommand deployment_command = 3;
+    HeartbeatAck heartbeat_ack = 4;
+    StreamError error = 5;
+    AcmeHTTP01OverlayCommand acme_http01_overlay_command = 6;
+    CacheControlCommand cache_control_command = 7;
+    CacheControlStatusAck cache_control_status_ack = 8;
+    DeploymentStatusAck deployment_status_ack = 9;
+    UpgradeCommand upgrade_command = 10;
+    UpgradeStatusAck upgrade_status_ack = 11;
+    UpgradeStatusAckReceipt upgrade_status_ack_receipt = 12;
+    FirewallCommand firewall_command = 13;
+    DrainCommand drain_command = 14;
+    NodeMonitoringArtifact node_monitoring_artifact = 15;
+    NodeMonitoringAck node_monitoring_ack = 16;
+    GatewayPortTransitionCommand gateway_port_transition_command = 17;
+    MarketProbeCommand market_probe_command = 19;
+    L4LiveConnectionsCommand l4_live_connections_command = 20;
+    EdgeSignerTrustBundle edge_signer_trust_bundle = 21;
+    SecurityBanCommand security_ban_command = 25;
+    Sched302Table sched302_table = 22;
+    AutoDefenseCommand auto_defense_command = 26;
+    InstallationBanCommand installation_ban_command = 27;
+    GatewayEndpointMigration gateway_endpoint_migration = 28;
+    SiteDropCommand site_drop_command = 29;
+    CacheControlCancel cache_control_cancel = 30;
+    GatewayAddressChangeCommand gateway_address_change_command = 31;
+  }
+}
+
+// TelemetryKind is the closed set of versioned analytics envelope types
+// accepted by the Gateway. UNSPECIFIED and unknown values fail closed.
+enum TelemetryKind {
+  TELEMETRY_KIND_UNSPECIFIED = 0;
+  TELEMETRY_KIND_ACCESS_V1 = 1;
+  TELEMETRY_KIND_SECURITY_V1 = 2;
+  TELEMETRY_KIND_CONNECTIONS_V1 = 3;
+  TELEMETRY_KIND_ACCESS_V2 = 4;
+  TELEMETRY_KIND_SECURITY_V2 = 5;
+  TELEMETRY_KIND_L4_SESSION_V1 = 6;
+  TELEMETRY_KIND_ACCESS_WINDOW_V1 = 7;
+  // ADR 0012 ML-07: per subscription minute statistics of cdnca_limits
+  // (JSON subscription_minute.v1).
+  TELEMETRY_KIND_SUBSCRIPTION_MINUTE_V1 = 8;
+}
+
+// TelemetryClientHello must be the first Agent payload on every telemetry RPC.
+// last_durable_acknowledged_sequence is the Agent's fsynced spool cursor and is
+// used only to establish the next expected batch boundary, never as identity.
+message TelemetryClientHello {
+  common.v1.ProtocolVersionRange supported_protocol_versions = 1;
+  uint64 last_durable_acknowledged_sequence = 2;
+  // boot_id is a canonical UUID for process correlation, not authentication.
+  string boot_id = 3;
+  // Presence opts into separate access and connections queue sequences. The
+  // value is the fsynced connections queue ACK, never its source watermark.
+  optional uint64 last_durable_connections_acknowledged_sequence = 4;
+  // scoped_records opts into per-scope attribution: every record then carries
+  // configuration_scope_id. Only MULTI_TENANT_RUNTIME Agents set it.
+  bool scoped_records = 5;
+}
+
+// TelemetryGatewayHello selects the protocol and freezes transport limits for
+// this RPC. v1 requires maximum_inflight_batches to equal 1 so an ACK always
+// identifies an unambiguous ordered batch.
+message TelemetryGatewayHello {
+  common.v1.ProtocolVersion selected_protocol_version = 1;
+  string gateway_version = 2;
+  google.protobuf.Timestamp server_time = 3;
+  uint32 maximum_records_per_batch = 4;
+  uint32 maximum_record_bytes = 5;
+  uint32 maximum_batch_bytes = 6;
+  uint32 maximum_inflight_batches = 7;
+  // Echoed only when the Agent requested independent queue cursors. An Agent
+  // requiring this mode must not publish to a Gateway that omits this flag.
+  bool independent_queue_cursors = 8;
+  // Echoed only when the Agent requested scoped records and the Gateway
+  // validates them. Without it the Agent must not mix scopes on this RPC.
+  bool scoped_records = 9;
+}
+
+// TelemetryRecord is one already-sanitized versioned analytics publication. The Agent
+// never supplies a NATS subject or installation identity. payload is the exact
+// strict access/security JSON envelope or deterministic L4SessionEnvelopeV1;
+// the Gateway verifies kind,
+// message/event IDs, tenant/site/node bindings, counts, and byte limits before
+// computing the fixed subject and publishing the original bytes.
+message TelemetryRecord {
+  TelemetryKind kind = 1;
+  string message_id = 2;
+  uint64 first_sequence = 3;
+  uint64 last_sequence = 4;
+  string last_event_id = 5;
+  uint32 event_count = 6;
+  bytes payload = 7;
+  // Optional attribution hint. The Gateway verifies it against the immutable
+  // configuration authorization and writes the authoritative value to payload.
+  string package_subscription_id = 8;
+  // configuration_scope_id is required when scoped_records was negotiated and
+  // absent otherwise. One record belongs to exactly one scope; it must equal
+  // the payload tenant and an authorized scope for this node and site.
+  optional string configuration_scope_id = 9;
+}
+
+// TelemetryBatch is stable across retransmission. Record sequence ranges must
+// be non-empty and contiguous; the outer boundary must equal the first and last
+// record boundaries. Reusing batch_id with different content is a conflict.
+message TelemetryBatch {
+  string batch_id = 1;
+  uint64 first_sequence = 2;
+  uint64 last_sequence = 3;
+  repeated TelemetryRecord records = 4;
+}
+
+// ConnectionsTelemetryRecordV1 carries one durable connections publication.
+// receipt_id is the exact event-spool publication identity and must be
+// preserved across retries; envelope is the authority-backed metric carrier.
+message ConnectionsTelemetryRecordV1 {
+  string receipt_id = 1;
+  ConnectionsMetricEnvelopeV1 envelope = 2;
+  // Same rule as TelemetryRecord.configuration_scope_id.
+  optional string configuration_scope_id = 3;
+}
+
+// ConnectionsTelemetryBatchV1 carries a contiguous prefix of durable
+// connections publications. The batch identity is stable across retransmit;
+// each record keeps its exact receipt identity for PubAck and deduplication.
+message ConnectionsTelemetryBatchV1 {
+  string batch_id = 1;
+  uint64 first_sequence = 2;
+  uint64 last_sequence = 3;
+  repeated ConnectionsTelemetryRecordV1 records = 4;
+}
+
+// TelemetryAck confirms only the contiguous record prefix for which the
+// Gateway received JetStream PubAck. The Agent may durably advance exactly to
+// accepted_through_sequence/last_event_id, including duplicate PubAcks, before
+// retrying any unaccepted suffix. retry_after_duration is a lower bound used
+// for explicit backpressure and does not weaken that durable boundary.
+message TelemetryAck {
+  string batch_id = 1;
+  uint32 accepted_record_count = 2;
+  uint64 accepted_through_sequence = 3;
+  string accepted_through_message_id = 4;
+  string accepted_through_event_id = 5;
+  uint32 duplicate_record_count = 6;
+  google.protobuf.Timestamp accepted_time = 7;
+  google.protobuf.Duration retry_after_duration = 8;
+}
+
+// TelemetryError is safe protocol metadata. It never contains telemetry
+// payload bytes, headers, credentials, tenant/site identifiers, or subjects.
+// When a partial durable prefix exists, its TelemetryAck is sent first.
+message TelemetryError {
+  common.v1.ProtocolError error = 1;
+  optional string related_batch_id = 2;
+}
+
+// StreamTelemetryRequest is the Agent-to-Gateway envelope. StreamMetadata.sequence
+// starts at 1 for each RPC and is independent from the durable spool sequence.
+message StreamTelemetryRequest {
+  common.v1.StreamMetadata stream = 1;
+  oneof payload {
+    TelemetryClientHello hello = 2;
+    TelemetryBatch batch = 3;
+    ConnectionsTelemetryBatchV1 connections_batch = 4;
+  }
+}
+
+// StreamTelemetryResponse is the Gateway-to-Agent envelope. The first successful
+// response is TelemetryGatewayHello; later responses are ACKs or safe errors.
+message StreamTelemetryResponse {
+  common.v1.StreamMetadata stream = 1;
+  oneof payload {
+    TelemetryGatewayHello hello = 2;
+    TelemetryAck ack = 3;
+    TelemetryError error = 4;
+  }
+}
+
+// EdgeSignerTrustSchema versions the node signer trust carrier. The bundle and
+// receipt bodies are versioned independently by libs/entitlement/edgesignertrust.
+enum EdgeSignerTrustSchema {
+  EDGE_SIGNER_TRUST_SCHEMA_UNSPECIFIED = 0;
+  EDGE_SIGNER_TRUST_SCHEMA_V1 = 1;
+}
+
+enum Sched302Schema {
+  SCHED302_SCHEMA_UNSPECIFIED = 0;
+  SCHED302_SCHEMA_V1 = 1;
+}
+
+// Sched302Table is one node's HTTP 302 scheduling table
+// (cdnca.edge.sched302-table/v1, libs/edgeconfig/sched302): for every
+// schedule302 site the node serves, its signing key and the candidate nodes
+// of its line group with their availability and load. Each table carries the
+// whole state, so only the newest matters; node_id and revision repeat the
+// body and table_sha256 is the digest of table_json. signature is the
+// control plane's Ed25519 signature over table_json (the configuration
+// artifact signing key, verified with the Agent's artifact trust). The Agent
+// writes it to the node's runtime (no reload) and sends no receipt.
+message Sched302Table {
+  common.v1.EventMetadata event = 1;
+  Sched302Schema schema = 2;
+  string node_id = 3;
+  uint64 revision = 4;
+  bytes table_json = 5;
+  bytes table_sha256 = 6;
+  ArtifactSignatureAlgorithm signature_algorithm = 7;
+  string signing_key_id = 8;
+  bytes signature = 9;
+}
+
+// EdgeSignerTrustBundle carries one node signer trust bundle
+// (cdnca.edge-signer-trust-bundle/v1) to one node. node_id and revision
+// repeat the signed body for routing and are checked against it;
+// bundle_sha256 is the digest of the exact bundle_json bytes. The Agent
+// verifies the control plane signature with its effective artifact trust.
+message EdgeSignerTrustBundle {
+  common.v1.EventMetadata event = 1;
+  EdgeSignerTrustSchema schema = 2;
+  string node_id = 3;
+  uint64 revision = 4;
+  bytes bundle_json = 5;
+  bytes bundle_sha256 = 6;
+}
+
+// EdgeSignerTrustReceipt answers one EdgeSignerTrustBundle. receipt_json is
+// the strict receipt body (cdnca.edge-signer-trust-receipt/v1) bound to
+// bundle_sha256; revision repeats the bundle's. The Gateway acknowledges the
+// bundle delivery only after the receipt is durably published.
+message EdgeSignerTrustReceipt {
+  common.v1.EventMetadata event = 1;
+  EdgeSignerTrustSchema schema = 2;
+  string node_id = 3;
+  string bundle_event_id = 4;
+  uint64 revision = 5;
+  bytes bundle_sha256 = 6;
+  bytes receipt_json = 7;
+}
+
+// InstallationBanCommand carries the license service signed installation
+// state documents for one node (ADR 0014 §5.3): notice_json is the BanNotice
+// (cdnca.installation-ban/v1) and ticket_json the ServiceTicket
+// (cdnca.installation-service-ticket/v1), each the exact signed bytes or
+// empty when absent. control-api only forwards them; the node verifies them
+// with its signer trust entries of usage installation-ban. revision is the
+// highest document revision (routing and redelivery); the sha256 fields bind
+// the exact bytes.
+message InstallationBanCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  uint64 revision = 3;
+  bytes notice_json = 4;
+  bytes notice_sha256 = 5;
+  bytes ticket_json = 6;
+  bytes ticket_sha256 = 7;
+}
+
+// SiteDropCommand carries one node's site drop list (cdnca.site-drop/v1,
+// libs/edgeconfig/sitedrop, 攻击自动升级 D 级): every site the node must stop
+// serving, each until its own deadline (at most 7 days; the node lifts it by
+// itself then). A list replaces the previous one; revision only grows per
+// node; an empty site list lifts every drop. list_json is the signed body
+// (Ed25519 over "cdnca.site-drop/v1\n" and the body without its signature,
+// the edge publish signer); list_sha256 is the digest of the exact bytes.
+// node_id and revision repeat the body for routing and are checked against
+// it.
+// GatewayAddressChangeCommand carries one signed
+// cdnca.gateway-address-change/v1 document (libs/edgeconfig/gatewayaddr).
+// The Gateway binds the carrier (node, revision, digest) and relays it; it
+// never verifies the signature. The command stream keeps each node's newest
+// document and every session starts from it, so after a switch the node is
+// handed the same document again on the new address and answers SWITCHED
+// there (the control plane marks it switched from that receipt).
+message GatewayAddressChangeCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  uint64 revision = 3;
+  bytes document_json = 4;
+  bytes document_sha256 = 5;
+}
+
+message GatewayAddressChangeReceipt {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  uint64 revision = 4;
+  bytes document_sha256 = 5;
+  // state: probing | switched | failed (gatewayaddr.State*).
+  string state = 6;
+  // error_code: gatewayaddr.Error*; empty unless failed.
+  string error_code = 7;
+  // active_address / active_server_name: the endpoint the node uses now.
+  string active_address = 8;
+  string active_server_name = 9;
+}
+
+message SiteDropCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  uint64 revision = 3;
+  bytes list_json = 4;
+  bytes list_sha256 = 5;
+}
+
+// SiteDropRejection is one listed site (or one of its ports) the node does
+// not drop as asked: reason sni_unavailable (a shared TLS port on a node
+// without XDP: OpenResty still closes the site's handshakes and requests) or
+// not_served (the node does not run the site). port is 0 for the whole site.
+message SiteDropRejection {
+  string site_id = 1;
+  uint32 port = 2;
+  string reason = 3;
+}
+
+// SiteDropReceipt answers one SiteDropCommand: applied true (the node
+// enforces the list: sites counts the listed sites still running, ports the
+// dropped exclusive ports, server_names the SNI names dropped at XDP; mode
+// is xdp or nftables) or applied false (error_code says why; the node keeps
+// its previous list).
+message SiteDropReceipt {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  uint64 revision = 4;
+  bytes list_sha256 = 5;
+  bool applied = 6;
+  string mode = 7;
+  uint32 sites = 8;
+  uint32 ports = 9;
+  uint32 server_names = 10;
+  repeated SiteDropRejection rejected = 11;
+  string error_code = 12;
+}
+
+// InstallationBanReceipt answers one InstallationBanCommand. applied is false
+// when a document was refused (reason); status is what the node enforces now:
+// serving, banned, service_ticket_expired or no_ticket. The Gateway
+// acknowledges the command only after the receipt is durably published.
+message InstallationBanReceipt {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  uint64 revision = 4;
+  bool applied = 5;
+  string status = 6;
+  string reason = 7;
+  // The ServiceTicket the node holds after the command (PF09: the console
+  // shows each node's last ticket and the days left); both unset before the
+  // node's first ticket.
+  google.protobuf.Timestamp ticket_issued_time = 8;
+  google.protobuf.Timestamp ticket_not_after_time = 9;
+}
+
+// AutoDefenseCommand carries one node's automatic defense snapshot
+// (cdnca.autodefense/v1, ADR 0010 section 8.2, libs/edgeconfig/autodefense):
+// the full runtime state of every enabled site the node serves. A snapshot
+// replaces the previous one; revision only grows per node; an empty site
+// list stops automatic defense on the node. snapshot_json is the signed body
+// (Ed25519 over "cdnca.autodefense/v1\n" and the body without its
+// signature, the edge publish signer); snapshot_sha256 is the digest of the
+// exact snapshot_json bytes. node_id and revision repeat the body for
+// routing and are checked against it.
+message AutoDefenseCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  uint64 revision = 3;
+  bytes snapshot_json = 4;
+  bytes snapshot_sha256 = 5;
+}
+
+// AutoDefenseReceipt answers one AutoDefenseCommand: applied true (the node
+// runtime holds the snapshot; sites, signatures and mitigations count what
+// it applied) or applied false (error_code says why; the node keeps its
+// previous snapshot).
+message AutoDefenseReceipt {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  uint64 revision = 4;
+  bytes snapshot_sha256 = 5;
+  bool applied = 6;
+  uint32 sites = 7;
+  uint32 signatures = 8;
+  uint32 mitigations = 9;
+  string error_code = 10;
+}
+
+// SecurityBanCommand carries one node's security ban list snapshot
+// (cdnca.security-ban-list/v1): every active WAF / CC /
+// manual ban and every release of the last 7 days of the sites the node
+// serves. A snapshot replaces the previous one; revision only grows per
+// node. list_json is the signed body (Ed25519 over the domain
+// "cdnca.security-ban-list/v1\n" and the body without its signature, the
+// edge publish signer); list_sha256 is the digest of the exact list_json
+// bytes. node_id and revision repeat the body for routing.
+message SecurityBanCommand {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  uint64 revision = 3;
+  bytes list_json = 4;
+  bytes list_sha256 = 5;
+}
+
+// SecurityBanStatus answers one SecurityBanCommand: the snapshot was applied
+// (applied true, the bans and releases the node runtime and kernel firewall
+// hold) or refused (applied false, error_code says why; the node keeps its
+// previous list).
+message SecurityBanStatus {
+  common.v1.EventMetadata event = 1;
+  string node_id = 2;
+  string command_event_id = 3;
+  uint64 revision = 4;
+  bytes list_sha256 = 5;
+  bool applied = 6;
+  uint32 bans = 7;
+  uint32 releases = 8;
+  string error_code = 9;
+}
+
+// AutoDefenseReport is one optional upstream automatic defense summary
+// (cdnca.autodefense.report/v1 JSON, ADR 0010 section 8.1): minute summary,
+// state change, mined signature candidate, verdicts or overlay adjustment.
+// Display only: the node defends on its own and never waits for it. The
+// Gateway rate limits per session, drops what exceeds the budget without an
+// answer and publishes the rest on cdnca.security.autodefense.v1.<node>
+// (JetStream, deduplicated by node, scope and seq). Sent only after the
+// Gateway enabled CAPABILITY_NAME_AUTO_DEFENSE.
+message AutoDefenseReport {
+  bytes report_json = 1;
+}
+
+// AcmeHTTP01OverlayPurpose (ADR-0003). APPLY requires deployments allowed;
+// CLEANUP_ONLY is the empty node-global snapshot a draining, non-serving node
+// receives to clear the tokens it still owes a cleanup for. The Gateway
+// relays CLEANUP_ONLY even when deployments are not allowed and never derives
+// the purpose itself.
+enum AcmeHTTP01OverlayPurpose {
+  ACME_HTTP01_OVERLAY_PURPOSE_UNSPECIFIED = 0;
+  ACME_HTTP01_OVERLAY_PURPOSE_APPLY = 1;
+  ACME_HTTP01_OVERLAY_PURPOSE_CLEANUP_ONLY = 2;
+}
+
+// FetchSiteObjectsRequest asks for site objects (ADR 0009 section 8.3) of the
+// site_runtime 8 release one deployment delivers, by plaintext SHA-256 (lower
+// case hex). root_sha256 is the digest of that deployment's signed root
+// artifact plaintext; the Gateway serves only objects of the publication the
+// root names, in the deployment's configuration scope. At most 256 distinct
+// digests per request. Identical retries reuse all identity fields; a new
+// request uses a new request_id.
+message FetchSiteObjectsRequest {
+  common.v1.RequestMetadata request = 1;
+  string event_id = 2;
+  string deployment_id = 3;
+  uint32 attempt = 4;
+  string root_sha256 = 5;
+  repeated string sha256 = 6;
+}
+
+// SiteObjectChunk is one contiguous range of one object's wire bytes (the
+// AES-256-GCM ciphertext under the publication's content key). Objects are
+// streamed whole, one after another, in request order, each from offset 0;
+// end_of_object marks an object's last chunk.
+message SiteObjectChunk {
+  string request_id = 1;
+  string sha256 = 2;
+  uint64 offset = 3;
+  bytes data = 4;
+  uint64 total_size_bytes = 5;
+  bool end_of_object = 6;
+}
+
+// FetchSiteObjectsResponse wraps one streamed site object chunk.
+message FetchSiteObjectsResponse {
+  SiteObjectChunk chunk = 1;
+}

@@ -1,0 +1,9 @@
+{
+  "domain": "cdnca.webhook.signature/v1",
+  "timestamp": "1704067200",
+  "delivery_id": "018cc251-f400-7def-8000-000000000001",
+  "body_utf8": "{\"type\":\"example\",\"token\":\"do-not-log\"}",
+  "content_sha256": "3a99123acb55cd2f63b9413a1d5f1bc8834c445a2bde7d1a458b8ffbd30dbe91",
+  "secret_utf8": "0123456789abcdef0123456789abcdef",
+  "signature": "v1=y4w2sGp3ebYtrKIK8-rl5t9k2TlyDog4b71ObJWgvw4"
+}

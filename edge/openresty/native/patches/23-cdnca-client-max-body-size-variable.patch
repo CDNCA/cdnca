@@ -1,0 +1,406 @@
+CDNCA client_max_body_size with variables.  Original CDNCA change, not
+upstream.  With one shared server{} per port (docs/adr/0009, 1.0.36) the
+upload limit must follow the site chosen at request time, and a Lua
+Content-Length check cannot see chunked HTTP/1.1, HTTP/2 or HTTP/3 bodies.
+A value with variables is evaluated once per request body; empty,
+malformed, zero or overflowing values reject the request with 500 instead
+of lifting the limit.  A value without variables keeps the stock semantics.
+
+--- a/src/http/ngx_http.h
++++ b/src/http/ngx_http.h
+@@ -152,6 +152,7 @@ ngx_int_t ngx_http_read_unbuffered_request_body(ngx_ht
+ ngx_int_t ngx_http_read_client_request_body(ngx_http_request_t *r,
+     ngx_http_client_body_handler_pt post_handler);
+ ngx_int_t ngx_http_read_unbuffered_request_body(ngx_http_request_t *r);
++ngx_int_t ngx_http_request_body_max_size(ngx_http_request_t *r, off_t *max);
+ 
+ ngx_int_t ngx_http_send_header(ngx_http_request_t *r);
+ ngx_int_t ngx_http_send_early_hints(ngx_http_request_t *r);
+--- a/src/http/ngx_http_core_module.c
++++ b/src/http/ngx_http_core_module.c
+@@ -58,6 +58,8 @@ static char *ngx_http_core_limit_except(ngx_conf_t *cf
+ static char *ngx_http_core_root(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+ static char *ngx_http_core_limit_except(ngx_conf_t *cf, ngx_command_t *cmd,
+     void *conf);
++static char *ngx_http_core_client_max_body_size_slot(ngx_conf_t *cf,
++    ngx_command_t *cmd, void *conf);
+ static char *ngx_http_core_set_aio(ngx_conf_t *cf, ngx_command_t *cmd,
+     void *conf);
+ static char *ngx_http_core_directio(ngx_conf_t *cf, ngx_command_t *cmd,
+@@ -356,7 +358,7 @@ static ngx_command_t  ngx_http_core_commands[] = {
+ 
+     { ngx_string("client_max_body_size"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_off_slot,
++      ngx_http_core_client_max_body_size_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+       offsetof(ngx_http_core_loc_conf_t, client_max_body_size),
+       NULL },
+@@ -981,6 +983,7 @@ ngx_http_core_find_config_phase(ngx_http_request_t *r,
+     ngx_http_phase_handler_t *ph)
+ {
+     u_char                    *p;
++    off_t                      max;
+     size_t                     len;
+     ngx_int_t                  rc;
+     ngx_http_core_loc_conf_t  *clcf;
+@@ -1008,15 +1011,27 @@ ngx_http_core_find_config_phase(ngx_http_request_t *r,
+                    &clcf->name);
+ 
+     ngx_http_update_location_config(r);
++
++    max = clcf->client_max_body_size;
++
++    if (r->headers_in.content_length_n > 0
++        && !r->discard_body
++        && ngx_http_core_client_max_body_size(r, &max) != NGX_OK)
++    {
++        r->expect_tested = 1;
++        (void) ngx_http_discard_request_body(r);
++        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
++        return NGX_OK;
++    }
+ 
+     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                    "http cl:%O max:%O",
+-                   r->headers_in.content_length_n, clcf->client_max_body_size);
++                   r->headers_in.content_length_n, max);
+ 
+     if (r->headers_in.content_length_n != -1
+         && !r->discard_body
+-        && clcf->client_max_body_size
+-        && clcf->client_max_body_size < r->headers_in.content_length_n)
++        && max
++        && max < r->headers_in.content_length_n)
+     {
+         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                       "client intended to send too large body: %O bytes",
+@@ -2905,6 +2920,48 @@ ngx_http_get_forwarded_addr_internal(ngx_http_request_
+         xfflen = p - 1 - xff;
+ 
+     } while (recursive && p > xff);
++
++    return NGX_OK;
++}
++
++
++/*
++ * CDNCA: the effective client_max_body_size of the request's location.
++ * A static value (0 = unlimited) is returned as configured.  A value with
++ * variables must evaluate to a positive size; empty, malformed, overflowing
++ * or zero values are errors (the caller rejects the request with 500), so a
++ * routing failure can never turn into an unlimited upload.
++ */
++
++ngx_int_t
++ngx_http_core_client_max_body_size(ngx_http_request_t *r, off_t *max)
++{
++    off_t                      size;
++    ngx_str_t                  value;
++    ngx_http_core_loc_conf_t  *clcf;
++
++    clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
++
++    if (clcf->client_max_body_size_value == NULL) {
++        *max = clcf->client_max_body_size;
++        return NGX_OK;
++    }
++
++    if (ngx_http_complex_value(r, clcf->client_max_body_size_value, &value)
++        != NGX_OK)
++    {
++        return NGX_ERROR;
++    }
++
++    size = ngx_parse_offset(&value);
++
++    if (size == NGX_ERROR || size == 0) {
++        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
++                      "invalid client_max_body_size value \"%V\"", &value);
++        return NGX_ERROR;
++    }
++
++    *max = size;
+ 
+     return NGX_OK;
+ }
+@@ -3879,6 +3936,10 @@ ngx_http_core_merge_loc_conf(ngx_conf_t *cf, void *par
+     ngx_conf_merge_str_value(conf->default_type,
+                               prev->default_type, "text/plain");
+ 
++    if (conf->client_max_body_size == NGX_CONF_UNSET) {
++        conf->client_max_body_size_value = prev->client_max_body_size_value;
++    }
++
+     ngx_conf_merge_off_value(conf->client_max_body_size,
+                               prev->client_max_body_size, 1 * 1024 * 1024);
+     ngx_conf_merge_size_value(conf->client_body_buffer_size,
+@@ -4819,6 +4880,51 @@ ngx_http_core_limit_except(ngx_conf_t *cf, ngx_command
+     *cf = save;
+ 
+     return rv;
++}
++
++
++static char *
++ngx_http_core_client_max_body_size_slot(ngx_conf_t *cf, ngx_command_t *cmd,
++    void *conf)
++{
++    ngx_http_core_loc_conf_t *clcf = conf;
++
++    ngx_str_t                         *value;
++    ngx_http_compile_complex_value_t   ccv;
++
++    value = cf->args->elts;
++
++    if (clcf->client_max_body_size != NGX_CONF_UNSET
++        || ngx_http_script_variables_count(&value[1]) == 0)
++    {
++        return ngx_conf_set_off_slot(cf, cmd, conf);
++    }
++
++    clcf->client_max_body_size_value = ngx_palloc(cf->pool,
++                                             sizeof(ngx_http_complex_value_t));
++    if (clcf->client_max_body_size_value == NULL) {
++        return NGX_CONF_ERROR;
++    }
++
++    ngx_memzero(&ccv, sizeof(ngx_http_compile_complex_value_t));
++
++    ccv.cf = cf;
++    ccv.value = &value[1];
++    ccv.complex_value = clcf->client_max_body_size_value;
++
++    if (ngx_http_compile_complex_value(&ccv) != NGX_OK) {
++        return NGX_CONF_ERROR;
++    }
++
++    /*
++     * the static field only marks the directive as set; readers of
++     * the field that bypass ngx_http_core_client_max_body_size() see
++     * the largest limit rather than "unlimited" (0)
++     */
++
++    clcf->client_max_body_size = NGX_MAX_OFF_T_VALUE;
++
++    return NGX_CONF_OK;
+ }
+ 
+ 
+--- a/src/http/ngx_http_core_module.h
++++ b/src/http/ngx_http_core_module.h
+@@ -452,6 +452,9 @@ struct ngx_http_core_loc_conf_s {
+     ngx_uint_t    types_hash_bucket_size;
+ 
+     ngx_queue_t  *locations;
++
++    /* CDNCA: client_max_body_size with variables (patch 23) */
++    ngx_http_complex_value_t  *client_max_body_size_value;
+ 
+ #if 0
+     ngx_http_core_loc_conf_t  *prev_location;
+@@ -549,7 +552,10 @@ ngx_int_t ngx_http_link_multi_headers(ngx_http_request
+ 
+ ngx_int_t ngx_http_link_multi_headers(ngx_http_request_t *r);
+ 
++ngx_int_t ngx_http_core_client_max_body_size(ngx_http_request_t *r,
++    off_t *max);
+ 
++
+ extern ngx_module_t  ngx_http_core_module;
+ 
+ extern ngx_uint_t ngx_http_max_module;
+--- a/src/http/ngx_http_request.h
++++ b/src/http/ngx_http_request.h
+@@ -313,6 +313,8 @@ typedef struct {
+     unsigned                          filter_need_buffering:1;
+     unsigned                          last_sent:1;
+     unsigned                          last_saved:1;
++    unsigned                          max_size_set:1;   /* CDNCA patch 23 */
++    off_t                             max_size;         /* CDNCA patch 23 */
+ } ngx_http_request_body_t;
+ 
+ 
+--- a/src/http/ngx_http_request_body.c
++++ b/src/http/ngx_http_request_body.c
+@@ -32,6 +32,7 @@ ngx_http_read_client_request_body(ngx_http_request_t *
+ ngx_http_read_client_request_body(ngx_http_request_t *r,
+     ngx_http_client_body_handler_pt post_handler)
+ {
++    off_t                      max;
+     size_t                     preread;
+     ssize_t                    size;
+     ngx_int_t                  rc;
+@@ -48,6 +49,32 @@ ngx_http_read_client_request_body(ngx_http_request_t *
+         return NGX_OK;
+     }
+ 
++    /*
++     * CDNCA: fix the request's body size limit once, before 100-continue
++     * and before any byte is read; every protocol's body filter uses it
++     */
++
++    max = 0;
++
++    if (r->headers_in.content_length_n > 0 || r->headers_in.chunked) {
++
++        if (ngx_http_core_client_max_body_size(r, &max) != NGX_OK) {
++            r->expect_tested = 1;
++            rc = NGX_HTTP_INTERNAL_SERVER_ERROR;
++            goto done;
++        }
++
++        if (max && max < r->headers_in.content_length_n) {
++            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
++                          "client intended to send too large body: %O bytes",
++                          r->headers_in.content_length_n);
++
++            r->expect_tested = 1;
++            rc = NGX_HTTP_REQUEST_ENTITY_TOO_LARGE;
++            goto done;
++        }
++    }
++
+     if (ngx_http_test_expect(r) != NGX_OK) {
+         rc = NGX_HTTP_INTERNAL_SERVER_ERROR;
+         goto done;
+@@ -77,6 +104,11 @@ ngx_http_read_client_request_body(ngx_http_request_t *
+     rb->rest = -1;
+     rb->post_handler = post_handler;
+ 
++    if (r->headers_in.content_length_n > 0 || r->headers_in.chunked) {
++        rb->max_size = max;
++        rb->max_size_set = 1;
++    }
++
+     r->request_body = rb;
+ 
+     if (r->headers_in.content_length_n < 0 && !r->headers_in.chunked) {
+@@ -225,6 +257,32 @@ done:
+     }
+ 
+     return rc;
++}
++
++
++/*
++ * CDNCA: the body size limit fixed for this request body (0 = unlimited).
++ * Evaluated once, so a variable limit cannot change while the body is read.
++ */
++
++ngx_int_t
++ngx_http_request_body_max_size(ngx_http_request_t *r, off_t *max)
++{
++    ngx_http_request_body_t  *rb;
++
++    rb = r->request_body;
++
++    if (!rb->max_size_set) {
++        if (ngx_http_core_client_max_body_size(r, &rb->max_size) != NGX_OK) {
++            return NGX_ERROR;
++        }
++
++        rb->max_size_set = 1;
++    }
++
++    *max = rb->max_size;
++
++    return NGX_OK;
+ }
+ 
+ 
+@@ -1089,12 +1147,12 @@ ngx_http_request_body_chunked_filter(ngx_http_request_
+ static ngx_int_t
+ ngx_http_request_body_chunked_filter(ngx_http_request_t *r, ngx_chain_t *in)
+ {
++    off_t                      max;
+     size_t                     size;
+     ngx_int_t                  rc;
+     ngx_buf_t                 *b;
+     ngx_chain_t               *cl, *out, *tl, **ll;
+     ngx_http_request_body_t   *rb;
+-    ngx_http_core_loc_conf_t  *clcf;
+     ngx_http_core_srv_conf_t  *cscf;
+ 
+     rb = r->request_body;
+@@ -1139,11 +1197,13 @@ ngx_http_request_body_chunked_filter(ngx_http_request_
+ 
+                 /* a chunk has been parsed successfully */
+ 
+-                clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
++                if (ngx_http_request_body_max_size(r, &max) != NGX_OK) {
++                    return NGX_HTTP_INTERNAL_SERVER_ERROR;
++                }
+ 
+-                if (clcf->client_max_body_size
+-                    && clcf->client_max_body_size
+-                       - r->headers_in.content_length_n < rb->chunked->size)
++                if (max
++                    && max - r->headers_in.content_length_n
++                       < rb->chunked->size)
+                 {
+                     ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                                   "client intended to send too large chunked "
+--- a/src/http/v2/ngx_http_v2.c
++++ b/src/http/v2/ngx_http_v2.c
+@@ -4224,11 +4224,11 @@ ngx_http_v2_filter_request_body(ngx_http_request_t *r)
+ static ngx_int_t
+ ngx_http_v2_filter_request_body(ngx_http_request_t *r)
+ {
++    off_t                      max;
+     ngx_buf_t                 *b, *buf;
+     ngx_int_t                  rc;
+     ngx_chain_t               *cl;
+     ngx_http_request_body_t   *rb;
+-    ngx_http_core_loc_conf_t  *clcf;
+ 
+     rb = r->request_body;
+     buf = rb->buf;
+@@ -4261,11 +4261,11 @@ ngx_http_v2_filter_request_body(ngx_http_request_t *r)
+             }
+ 
+         } else {
+-            clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
++            if (ngx_http_request_body_max_size(r, &max) != NGX_OK) {
++                return NGX_HTTP_INTERNAL_SERVER_ERROR;
++            }
+ 
+-            if (clcf->client_max_body_size
+-                && rb->received > clcf->client_max_body_size)
+-            {
++            if (max && rb->received > max) {
+                 ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                               "client intended to send too large chunked body: "
+                               "%O bytes", rb->received);
+--- a/src/http/v3/ngx_http_v3_request.c
++++ b/src/http/v3/ngx_http_v3_request.c
+@@ -1552,7 +1552,6 @@ ngx_http_v3_request_body_filter(ngx_http_request_t *r,
+     ngx_chain_t               *cl, *out, *tl, **ll;
+     ngx_http_v3_session_t     *h3c;
+     ngx_http_request_body_t   *rb;
+-    ngx_http_core_loc_conf_t  *clcf;
+     ngx_http_core_srv_conf_t  *cscf;
+     ngx_http_v3_parse_data_t  *st;
+ 
+@@ -1570,13 +1569,17 @@ ngx_http_v3_request_body_filter(ngx_http_request_t *r,
+ 
+         rb->rest = cscf->large_client_header_buffers.size;
+     }
+-
+-    clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
+ 
+     max = r->headers_in.content_length_n;
+ 
+-    if (max == -1 && clcf->client_max_body_size) {
+-        max = clcf->client_max_body_size;
++    if (max == -1) {
++        if (ngx_http_request_body_max_size(r, &max) != NGX_OK) {
++            return NGX_HTTP_INTERNAL_SERVER_ERROR;
++        }
++
++        if (max == 0) {
++            max = -1;
++        }
+     }
+ 
+     out = NULL;

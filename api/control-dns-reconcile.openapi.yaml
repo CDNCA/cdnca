@@ -1,0 +1,709 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild DNS Reconciliation API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Package-level DNS-03/04 reconciliation contract. Tenant scope is derived
+    only from one authenticated Bearer session. Apply creates a durable
+    dns_reconcile job, performs only create/update operations, and waits for
+    consecutive propagation health before it becomes ready. Commit is the
+    explicit CAS-protected step that deletes superseded records. Provider
+    reports are accepted only on the separate workload-authenticated internal
+    surface. Tenant routes are mounted by the shared control-api server.
+servers:
+  - url: /
+tags:
+  - name: DNS reconciliation
+    description: Tenant-scoped dry-run, durable task, commit, and cancellation operations.
+  - name: DNS reconciliation workload
+    description: Workload-authenticated provider report ingestion isolated from tenant sessions.
+paths:
+  /v1/sites/{site_id}/dns-reconcile/dry-run:
+    post:
+      tags: [DNS reconciliation]
+      operationId: dryRunDNSReconciliation
+      summary: Build a deterministic repair plan without provider side effects
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequiredRequestID'
+        - $ref: '#/components/parameters/RequiredTraceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/DryRunOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/sites/{site_id}/dns-reconcile/apply:
+    post:
+      tags: [DNS reconciliation]
+      operationId: applyDNSReconciliation
+      summary: Persist and enqueue a DNS reconciliation task
+      description: >-
+        Requires dns.manage and a live DNS reconciliation entitlement. The
+        authenticated tenant, site path, idempotency key, canonical payload
+        digest, and provider revision form the durable command identity. A
+        same-key retry with a different payload returns 409.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequiredRequestID'
+        - $ref: '#/components/parameters/RequiredTraceparent'
+        - $ref: '#/components/parameters/MutationIdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CheckRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/TaskAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '408': {$ref: '#/components/responses/ResultUnknown'}
+        '503': {$ref: '#/components/responses/ResultUnknown'}
+        '504': {$ref: '#/components/responses/ResultUnknown'}
+  /v1/sites/{site_id}/dns-reconcile/tasks/{task_id}:
+    get:
+      tags: [DNS reconciliation]
+      operationId: getDNSReconciliationTask
+      summary: Read one durable DNS reconciliation task
+      description: >-
+        Requires dns.read. Unknown, cross-tenant, and task/site mismatches all
+        return the same 404 response. Tenant scope is never accepted from a
+        path, query parameter, or request body.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/OptionalTraceparent'
+      responses:
+        '200': {$ref: '#/components/responses/TaskOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/sites/{site_id}/dns-reconcile/tasks/{task_id}/commit:
+    post:
+      tags: [DNS reconciliation]
+      operationId: commitDNSReconciliationTask
+      summary: Delete superseded records after propagation is healthy
+      description: >-
+        Requires dns.manage and a live DNS reconciliation entitlement. Commit
+        rechecks convergence and provider revision before processing deferred
+        deletes. Crash/retry reuses the same command identity and durable task.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/RequiredRequestID'
+        - $ref: '#/components/parameters/RequiredTraceparent'
+        - $ref: '#/components/parameters/MutationIdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        $ref: '#/components/requestBodies/EmptyCommand'
+      responses:
+        '200': {$ref: '#/components/responses/TaskOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '408': {$ref: '#/components/responses/ResultUnknown'}
+        '503': {$ref: '#/components/responses/ResultUnknown'}
+        '504': {$ref: '#/components/responses/ResultUnknown'}
+  /v1/sites/{site_id}/dns-reconcile/tasks/{task_id}/cancel:
+    post:
+      tags: [DNS reconciliation]
+      operationId: cancelDNSReconciliationTask
+      summary: Persist a cancellation request for a DNS reconciliation task
+      security: [{bearerAuth: []}]
+      x-required-permissions: [dns.manage]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/RequiredRequestID'
+        - $ref: '#/components/parameters/RequiredTraceparent'
+        - $ref: '#/components/parameters/MutationIdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        $ref: '#/components/requestBodies/EmptyCommand'
+      responses:
+        '200': {$ref: '#/components/responses/TaskOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/CancelConflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '408': {$ref: '#/components/responses/ResultUnknown'}
+        '503': {$ref: '#/components/responses/ResultUnknown'}
+        '504': {$ref: '#/components/responses/ResultUnknown'}
+  /internal/v1/dns/reconcile/tasks/{task_id}/provider-reports:
+    post:
+      tags: [DNS reconciliation workload]
+      operationId: recordDNSProviderReport
+      summary: Append a sequenced provider operation report
+      description: >-
+        Internal workload surface. Tenant sessions and tenant API keys are not
+        valid credentials. Tenant and site are derived from the authenticated
+        workload binding and every report is fenced by the current job attempt
+        and lease. Stale and duplicate sequence values are acknowledged with
+        X-Report-Accepted false without regressing persisted state.
+      security: [{workloadAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/TaskID'
+        - $ref: '#/components/parameters/RequiredRequestID'
+        - $ref: '#/components/parameters/RequiredTraceparent'
+        - $ref: '#/components/parameters/MutationIdempotencyKey'
+        - $ref: '#/components/parameters/IfMatchRevision'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProviderReport'}
+      responses:
+        '200': {$ref: '#/components/responses/ProviderReportOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/WorkloadUnauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '408': {$ref: '#/components/responses/ResultUnknown'}
+        '503': {$ref: '#/components/responses/ResultUnknown'}
+        '504': {$ref: '#/components/responses/ResultUnknown'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api session
+      description: Exactly one Authorization header containing one Bearer session.
+    workloadAuth:
+      type: mutualTLS
+      description: >-
+        Dedicated internal workload identity bound to exactly one tenant and
+        site. A tenant Bearer session never satisfies this scheme.
+  parameters:
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      description: Canonical lower-case UUID of a site in the authenticated tenant.
+      schema: {$ref: '#/components/schemas/UUID'}
+    TaskID:
+      name: task_id
+      in: path
+      required: true
+      description: Canonical lower-case UUID of a dns_reconcile job.
+      schema: {$ref: '#/components/schemas/UUID'}
+    RequiredRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/Metadata'}
+    OptionalRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/Metadata'}
+    RequiredTraceparent:
+      name: traceparent
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/Traceparent'}
+    OptionalTraceparent:
+      name: traceparent
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/Traceparent'}
+    MutationIdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Stable command key; retry only with the same route and payload.
+      schema: {$ref: '#/components/schemas/IdempotencyKey'}
+    IfMatchRevision:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong quoted decimal provider/task revision, for example `"7"`.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+        maxLength: 21
+  headers:
+    RequestID:
+      description: Stable request correlation identifier.
+      schema: {$ref: '#/components/schemas/Metadata'}
+    ETag:
+      description: Strong quoted durable task revision.
+      schema:
+        type: string
+        pattern: '^"[1-9][0-9]*"$'
+    IdempotentReplay:
+      description: Present and true when a frozen command result was replayed.
+      schema: {type: string, const: 'true'}
+    ReportAccepted:
+      description: Whether this report advanced the durable sequenced fact.
+      schema: {type: string, enum: ['true', 'false']}
+  requestBodies:
+    EmptyCommand:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+  responses:
+    DryRunOK:
+      description: Deterministic side-effect-free reconciliation plan.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ReconcileResult'}
+    TaskAccepted:
+      description: Durable job created or replayed and available for workers.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Task'}
+    TaskOK:
+      description: Current durable task facts.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Task'}
+    ProviderReportOK:
+      description: Provider report acknowledged without state regression.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Report-Accepted: {$ref: '#/components/headers/ReportAccepted'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Task'}
+    BadRequest:
+      description: Non-canonical path/header, unsupported media type, oversized body, unknown field, or invalid JSON.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Unauthorized:
+      description: Exactly one valid Bearer session is required.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    WorkloadUnauthorized:
+      description: A valid dedicated workload identity and tenant/site binding are required.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Forbidden:
+      description: Live IAM permission or DNS reconciliation entitlement denied.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    NotFound:
+      description: Task is absent or outside the authenticated tenant/site scope.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    MethodNotAllowed:
+      description: Method is not supported by this route.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    Conflict:
+      description: Idempotency payload conflict or task state does not permit the command.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    CancelConflict:
+      description: Idempotency payload conflict or a provider operation is still in flight.
+      x-error-codes: [idempotency_conflict, dns_reconcile_operation_in_flight]
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    PreconditionFailed:
+      description: If-Match or provider revision is stale.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    RequestCancelled:
+      description: Read-only request was cancelled.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    GatewayTimeout:
+      description: Read-only request timed out.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    ServiceUnavailable:
+      description: Required runtime dependency is unavailable.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+    ResultUnknown:
+      description: Mutation result is unknown; retry only with the same key and payload.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ErrorEnvelope'}}}
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    Metadata:
+      type: string
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    IdempotencyKey:
+      type: string
+      pattern: '^[A-Za-z0-9._-]{1,128}$'
+    Traceparent:
+      type: string
+      pattern: '^00-(?!00000000000000000000000000000000)[0-9a-f]{32}-(?!0000000000000000)[0-9a-f]{16}-(00|01)$'
+    RecordType:
+      type: string
+      enum: [A, AAAA, CNAME]
+    CheckRequest:
+      type: object
+      additionalProperties: false
+      required: [name, expected, authoritative_ns, ttl, propagation_window_seconds, provider]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 255}
+        expected:
+          type: array
+          minItems: 1
+          maxItems: 3
+          items: {$ref: '#/components/schemas/ExpectedRecord'}
+        authoritative_ns:
+          type: array
+          maxItems: 32
+          items: {type: string, minLength: 1, maxLength: 255}
+        ttl: {type: integer, minimum: 1, maximum: 604800}
+        line:
+          type: string
+          maxLength: 64
+          description: Provider routing line. Empty/default values preserve the provider default line.
+        weight:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Provider record weight; zero is the provider default.
+        propagation_started_at: {type: string, format: date-time}
+        propagation_window_seconds: {type: integer, minimum: 1, maximum: 604800}
+        provider: {$ref: '#/components/schemas/ProviderSnapshot'}
+    ExpectedRecord:
+      type: object
+      additionalProperties: false
+      required: [type, values]
+      properties:
+        type: {$ref: '#/components/schemas/RecordType'}
+        values:
+          type: array
+          minItems: 1
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 255}
+    ProviderSnapshot:
+      type: object
+      additionalProperties: false
+      required: [zone_id, revision, records]
+      properties:
+        zone_id: {$ref: '#/components/schemas/UUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        records:
+          type: array
+          maxItems: 128
+          items: {$ref: '#/components/schemas/ProviderRecord'}
+    ProviderRecord:
+      type: object
+      additionalProperties: false
+      required: [record_id, name, type, value, ttl]
+      properties:
+        record_id: {type: string, minLength: 1, maxLength: 256, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'}
+        name: {type: string, minLength: 1, maxLength: 255}
+        type: {$ref: '#/components/schemas/RecordType'}
+        value: {type: string, minLength: 1, maxLength: 255}
+        ttl: {type: integer, minimum: 1, maximum: 604800}
+        line: {type: string, maxLength: 64}
+        weight: {type: integer, minimum: 0, maximum: 100}
+    ProviderReport:
+      type: object
+      additionalProperties: false
+      required: [client_request_id, job_attempt, lease_id, status, error_class, error_code, sequence]
+      properties:
+        client_request_id: {$ref: '#/components/schemas/Metadata'}
+        job_attempt: {type: integer, format: int64, minimum: 1, maximum: 4294967295}
+        lease_id: {type: string, format: uuid}
+        provider_request_id: {type: string, minLength: 1, maxLength: 256, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'}
+        provider_record_id: {type: string, minLength: 1, maxLength: 256, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'}
+        provider_revision: {type: integer, format: int64, minimum: 1}
+        status: {$ref: '#/components/schemas/ReportedOperationStatus'}
+        error_class: {type: string, enum: ['', transient, permanent, revision_conflict, cancelled, timeout]}
+        error_code: {type: string, maxLength: 128}
+        retry_after_seconds: {type: integer, format: int64, minimum: 0, maximum: 3600}
+        sequence: {type: integer, format: int64, minimum: 1}
+      allOf:
+        - if:
+            properties:
+              status: {const: running}
+            required: [status]
+          then:
+            properties:
+              error_class: {const: ''}
+              error_code: {const: ''}
+              retry_after_seconds: {maximum: 0}
+            not:
+              anyOf:
+                - required: [provider_request_id]
+                - required: [provider_record_id]
+                - required: [provider_revision]
+        - if:
+            properties:
+              status: {const: succeeded}
+            required: [status]
+          then:
+            required: [provider_request_id, provider_record_id, provider_revision]
+            properties:
+              provider_revision: {type: integer, format: int64, minimum: 1}
+              error_class: {const: ''}
+              error_code: {const: ''}
+              retry_after_seconds: {maximum: 0}
+        - if:
+            properties:
+              status: {type: string, enum: [transient_failed, permanent_failed, revision_conflict, cancelled]}
+            required: [status]
+          then:
+            not:
+              anyOf:
+                - required: [provider_record_id]
+                - required: [provider_revision]
+        - if:
+            properties:
+              status: {const: transient_failed}
+            required: [status]
+          then:
+            properties:
+              error_class: {type: string, enum: [transient, timeout]}
+              error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+          else:
+            properties:
+              retry_after_seconds: {maximum: 0}
+        - if:
+            properties:
+              status: {const: permanent_failed}
+            required: [status]
+          then:
+            properties:
+              error_class: {const: permanent}
+              error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+        - if:
+            properties:
+              status: {const: revision_conflict}
+            required: [status]
+          then:
+            properties:
+              error_class: {const: revision_conflict}
+              error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+        - if:
+            properties:
+              status: {const: cancelled}
+            required: [status]
+          then:
+            properties:
+              error_class: {const: cancelled}
+              error_code: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-z][a-z0-9._-]{0,127}$'}
+    Task:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_id, site_id, revision, required_consecutive, job, request, result, created_at, updated_at, replayed]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        tenant_id: {$ref: '#/components/schemas/UUID'}
+        site_id: {$ref: '#/components/schemas/UUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        required_consecutive: {type: integer, minimum: 1, maximum: 5}
+        job: {$ref: '#/components/schemas/Job'}
+        request: {$ref: '#/components/schemas/CheckRequest'}
+        result: {$ref: '#/components/schemas/ReconcileResult'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    Job:
+      type: object
+      additionalProperties: false
+      required: [id, kind, subject, state, attempt, max_attempts, progress, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        kind: {type: string, const: dns_reconcile}
+        subject: {type: string, minLength: 1}
+        state: {type: string, enum: [queued, running, succeeded, partial_failed, failed, cancelled]}
+        attempt: {type: integer, minimum: 0}
+        max_attempts: {type: integer, minimum: 1}
+        cancel_requested_at: {type: string, format: date-time}
+        progress: {$ref: '#/components/schemas/Progress'}
+        last_error_code: {type: string, maxLength: 64}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    Progress:
+      type: object
+      additionalProperties: false
+      required: [total, completed, succeeded, failed, cancelled, pending]
+      properties:
+        total: {type: integer, minimum: 0}
+        completed: {type: integer, minimum: 0}
+        succeeded: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        cancelled: {type: integer, minimum: 0}
+        pending: {type: integer, minimum: 0}
+    ReconcileResult:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, site_id, zone_id, payload_digest, plan, status, replayed, started_at, updated_at, initial_revision, provider_revision, operations, deferred_deletes, compensation_plan, propagation, error_class, error_code]
+      properties:
+        tenant_id: {$ref: '#/components/schemas/UUID'}
+        site_id: {$ref: '#/components/schemas/UUID'}
+        zone_id: {$ref: '#/components/schemas/UUID'}
+        payload_digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        plan: {$ref: '#/components/schemas/RepairPlan'}
+        status: {type: string, enum: [dry_run, applying, propagating, ready_to_commit, committed, failed, cancelled, timed_out, commit_failed]}
+        replayed: {type: boolean}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        ready_at: {type: string, format: date-time}
+        initial_revision: {type: integer, format: int64, minimum: 1}
+        provider_revision: {type: integer, format: int64, minimum: 1}
+        operations: {type: array, items: {$ref: '#/components/schemas/OperationResult'}}
+        deferred_deletes: {type: array, items: {$ref: '#/components/schemas/OperationResult'}}
+        compensation_plan: {type: array, items: {$ref: '#/components/schemas/ProviderOperation'}}
+        propagation: {type: array, items: {$ref: '#/components/schemas/PropagationAttempt'}}
+        last_check: {$ref: '#/components/schemas/CheckResult'}
+        error_class: {type: string, enum: ['', transient, permanent, revision_conflict, cancelled, timeout]}
+        error_code: {type: string, maxLength: 64}
+    RepairPlan:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, site_id, zone_id, precondition_revision, digest, operations]
+      properties:
+        tenant_id: {$ref: '#/components/schemas/UUID'}
+        site_id: {$ref: '#/components/schemas/UUID'}
+        zone_id: {$ref: '#/components/schemas/UUID'}
+        precondition_revision: {type: integer, format: int64, minimum: 1}
+        digest: {type: string, pattern: '^[0-9a-f]{64}$'}
+        operations: {type: array, items: {$ref: '#/components/schemas/ProviderOperation'}}
+    ProviderOperation:
+      type: object
+      additionalProperties: false
+      required: [sequence, action, name, type, value, ttl, reason]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        action: {type: string, enum: [create, update, delete]}
+        record_id: {type: string, minLength: 1, maxLength: 256, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'}
+        name: {type: string}
+        type: {$ref: '#/components/schemas/RecordType'}
+        value: {type: string}
+        ttl: {type: integer, minimum: 1, maximum: 604800}
+        line: {type: string, maxLength: 64}
+        weight: {type: integer, minimum: 0, maximum: 100}
+        previous_value: {type: string}
+        previous_ttl: {type: integer, minimum: 1, maximum: 604800}
+        previous_line: {type: string, maxLength: 64}
+        previous_weight: {type: integer, minimum: 0, maximum: 100}
+        reason: {type: string}
+    OperationStatus:
+      type: string
+      enum: [planned, deferred_until_commit, running, succeeded, transient_failed, permanent_failed, revision_conflict, cancelled, skipped]
+    ReportedOperationStatus:
+      type: string
+      enum: [running, succeeded, transient_failed, permanent_failed, revision_conflict, cancelled]
+    OperationResult:
+      type: object
+      additionalProperties: false
+      required: [source_sequence, operation, client_request_id, provider_revision, status, attempts, error_class, error_code, report_sequence]
+      properties:
+        source_sequence: {type: integer, minimum: 1}
+        operation: {$ref: '#/components/schemas/ProviderOperation'}
+        client_request_id: {type: string}
+        provider_request_id: {type: string, minLength: 1, maxLength: 256, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'}
+        provider_record_id: {type: string, minLength: 1, maxLength: 256, pattern: '^[A-Za-z0-9][A-Za-z0-9._:/-]*$'}
+        provider_revision: {type: integer, format: int64, minimum: 0}
+        status: {$ref: '#/components/schemas/OperationStatus'}
+        attempts: {type: integer, minimum: 0}
+        retry_after_seconds: {type: integer, format: int64, minimum: 1, maximum: 3600}
+        error_class: {type: string, enum: ['', transient, permanent, revision_conflict, cancelled, timeout]}
+        error_code: {type: string}
+        report_sequence: {type: integer, format: int64, minimum: 0}
+    PropagationAttempt:
+      type: object
+      additionalProperties: false
+      required: [number, checked_at, status, consecutive_healthy, dependency_unavailable]
+      properties:
+        number: {type: integer, minimum: 1}
+        checked_at: {type: string, format: date-time}
+        status: {type: string}
+        consecutive_healthy: {type: integer, minimum: 0}
+        dependency_unavailable: {type: boolean}
+    CheckResult:
+      type: object
+      additionalProperties: false
+      required: [name, status, compliant, checked_at, observations, repair_plan]
+      properties:
+        name: {type: string}
+        status: {type: string}
+        compliant: {type: boolean}
+        checked_at: {type: string, format: date-time}
+        observations: {type: array, items: {$ref: '#/components/schemas/Observation'}}
+        repair_plan: {$ref: '#/components/schemas/RepairPlan'}
+    Observation:
+      type: object
+      additionalProperties: false
+      required: [role, resolver, record_type, status, values, cname_chain, attempts, minimum_ttl, error_code]
+      properties:
+        role: {type: string, enum: [authoritative, public_recursive]}
+        resolver: {type: string}
+        record_type: {$ref: '#/components/schemas/RecordType'}
+        status: {type: string}
+        values: {type: array, items: {type: string}}
+        cname_chain: {type: array, items: {type: string}}
+        attempts: {type: integer, minimum: 0}
+        minimum_ttl: {type: integer, minimum: 0}
+        error_code: {type: string}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+            message: {type: string}
+            request_id: {$ref: '#/components/schemas/Metadata'}

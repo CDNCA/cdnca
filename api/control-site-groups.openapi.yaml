@@ -1,0 +1,233 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Site Group API
+  version: 1.1.0
+  description: Tenant-scoped site group management with permission checks, idempotent writes, and revision preconditions.
+servers: [{url: /}]
+security:
+  - bearerAuth: []
+  - cdncaKey: []
+paths:
+  /v1/admin/site-groups:
+    get:
+      operationId: listAdminSiteGroups
+      summary: List all tenant site groups for a platform administrator
+      description: >-
+        Requires a live platform identity and both permissions under shared IAM rules.
+        Tenant credentials are rejected even when they contain similarly named permissions.
+        No scope override is accepted. Count and page come from one database snapshot.
+        Groups are ordered by created_at, id, scope_id ascending. A user is returned only
+        when the scope has exactly one non-deleted system tenant_owner with an active membership.
+        Missing or multiple owners are explicit; the actor or first member is never substituted.
+      x-required-permissions: [sites.read, identity.users.manage]
+      x-required-scope-kind: platform
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+      responses:
+        '200':
+          description: Complete scoped-resource rows and a real global total.
+          content: {application/json: {schema: {$ref: '#/components/schemas/AdminSiteGroupList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/site-groups:
+    get:
+      operationId: listSiteGroups
+      summary: List site groups
+      x-required-permissions: [sites.read]
+      parameters:
+        - {$ref: '#/components/parameters/ScopeID'}
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, default: 1}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+      responses:
+        '200':
+          description: Active groups ordered by creation time and ID.
+          content: {application/json: {schema: {$ref: '#/components/schemas/SiteGroupList'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      operationId: createSiteGroup
+      summary: Create a site group
+      x-required-permissions: [sites.manage]
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/CreateSiteGroupRequest'}}}
+      responses:
+        '201':
+          description: Created group or an exact completed request replay.
+          headers: {ETag: {$ref: '#/components/headers/ETag'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/SiteGroup'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/site-groups/{id}:
+    parameters:
+      - {$ref: '#/components/parameters/SiteGroupID'}
+      - {$ref: '#/components/parameters/ScopeID'}
+    get:
+      operationId: getSiteGroup
+      summary: Read one exact active site group in an authorized tenant scope
+      x-required-permissions: [sites.read]
+      responses:
+        '200':
+          description: Current group including its real display ID and remark. A newer revision must not be mistaken for exact write readback.
+          headers: {ETag: {$ref: '#/components/headers/ETag'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/CurrentSiteGroup'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      operationId: renameSiteGroup
+      summary: Rename a site group
+      x-required-permissions: [sites.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RenameSiteGroupRequest'}}}
+      responses:
+        '200':
+          description: Renamed group or an exact completed request replay.
+          headers: {ETag: {$ref: '#/components/headers/ETag'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/SiteGroup'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      operationId: deleteSiteGroup
+      summary: Delete an unused site group
+      x-required-permissions: [sites.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      responses:
+        '204': {description: Group deleted or an exact completed request replay.}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+    cdncaKey: {type: apiKey, in: header, name: Authorization, description: 'Use the CdncaKey authorization scheme.'}
+  parameters:
+    ScopeID:
+      name: scope_id
+      in: query
+      required: true
+      schema: {type: string, format: uuid}
+    SiteGroupID:
+      name: id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+  headers:
+    ETag:
+      description: Strong revision ETag.
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$'}
+  schemas:
+    SiteGroup:
+      type: object
+      required: [id, scope_id, name, revision, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        scope_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 1024, pattern: '^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]*$', description: 'Versioned plain text; tab and line breaks are allowed. Omitted only in pre-extension immutable write receipts.'}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$', description: 'Database-assigned immutable global display number. New write receipts include the persisted number; immutable historical receipts may omit it and are replayed unchanged.'}
+        revision: {type: integer, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        deleted_at: {type: [string, 'null'], format: date-time}
+    CurrentSiteGroup:
+      allOf:
+        - {$ref: '#/components/schemas/SiteGroup'}
+        - type: object
+          required: [display_id, remark]
+    SiteGroupList:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SiteGroup'}}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    SiteGroupUser:
+      type: object
+      required: [id, display_id, username]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        username: {type: string, minLength: 1}
+    AdminSiteGroup:
+      allOf:
+        - {$ref: '#/components/schemas/SiteGroup'}
+        - type: object
+          required: [display_id, remark, user, user_state]
+          properties:
+            user:
+              oneOf: [{$ref: '#/components/schemas/SiteGroupUser'}, {type: 'null'}]
+            user_state: {type: string, enum: [resolved, missing, ambiguous]}
+          if: {properties: {user_state: {const: resolved}}}
+          then: {properties: {user: {$ref: '#/components/schemas/SiteGroupUser'}}}
+          else: {properties: {user: {type: 'null'}}}
+    AdminSiteGroupList:
+      type: object
+      required: [items, total, page, limit]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/AdminSiteGroup'}}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1, maximum: 1000000}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    CreateSiteGroupRequest:
+      type: object
+      required: [target_scope_id, name]
+      additionalProperties: false
+      properties:
+        target_scope_id: {type: string, format: uuid}
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 1024, pattern: '^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]*$', description: 'Optional; omission creates an empty remark and preserves the legacy request digest. Null is invalid.'}
+    RenameSiteGroupRequest:
+      type: object
+      required: [expected_revision, name]
+      additionalProperties: false
+      properties:
+        expected_revision: {type: integer, minimum: 1}
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 1024, pattern: '^[^\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]*$', description: 'Omission preserves the current remark and legacy digest. An explicit empty string clears it. Null is invalid.'}
+  responses:
+    BadRequest: {description: 'Invalid request or precondition. A refused name or remark is validation_error with error.details {field: name|remark, reason}.'}
+    Unauthorized: {description: Authentication required.}
+    Forbidden: {description: Permission denied.}
+    NotFound: {description: Site group not found.}
+    Conflict: {description: 'Revision, idempotency, name, or in-use conflict.'}
+    Unavailable: {description: Site group service unavailable.}

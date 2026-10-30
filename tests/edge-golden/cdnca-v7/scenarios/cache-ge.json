@@ -1,0 +1,327 @@
+{
+  "name": "cache-ge",
+  "description": "缓存（ge-cache）：命中缓存规则的请求带 Cookie 仍缓存、未命中规则带 Cookie 绕过并给出 X-CDN-Cache-Reason；不缓存规则的原因；Range 从完整缓存对象切出（源站不收到 Range）；单对象大小上限。",
+  "covers": [
+    "缓存",
+    "Cookie",
+    "Range",
+    "绕过原因",
+    "对象大小"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b2010-0000-4000-8000-000000000001",
+      "source_revision": 7,
+      "config_version_id": "0a1b2010-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "ipv6",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 6
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b2010-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "cookie.ge.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18120",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18120,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o1",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19401,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": true,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          },
+          "cache": {
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000001",
+            "domain": "cookie.ge.example.test",
+            "policy": {
+              "schema_version": 2,
+              "revision": 5,
+              "mode": "override",
+              "rules": [
+                {
+                  "order": 1,
+                  "extensions": [
+                    ".css",
+                    ".mp4"
+                  ],
+                  "action": "cache",
+                  "ttl_seconds": 60
+                },
+                {
+                  "order": 2,
+                  "path_prefix": "/api/",
+                  "action": "no_cache",
+                  "ttl_seconds": 0
+                }
+              ],
+              "query_mode": "preserve",
+              "query_names": [],
+              "vary_headers": [],
+              "disk_quota_bytes": 67108864
+            }
+          }
+        },
+        {
+          "id": "0a1b2010-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "size.ge.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18120",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18120,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o2",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19402,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          },
+          "cache": {
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000001",
+            "domain": "size.ge.example.test",
+            "policy": {
+              "schema_version": 2,
+              "revision": 6,
+              "mode": "override",
+              "rules": [
+                {
+                  "order": 1,
+                  "extensions": [
+                    ".css",
+                    ".mp4"
+                  ],
+                  "action": "cache",
+                  "ttl_seconds": 60
+                },
+                {
+                  "order": 2,
+                  "path_prefix": "/api/",
+                  "action": "no_cache",
+                  "ttl_seconds": 0
+                }
+              ],
+              "query_mode": "preserve",
+              "query_names": [],
+              "vary_headers": [],
+              "disk_quota_bytes": 67108864,
+              "max_object_bytes": 1024
+            }
+          }
+        }
+      ]
+    },
+    "node": {
+      "health_port": 18904
+    }
+  },
+  "origins": [
+    {
+      "name": "cookie",
+      "address": "127.0.0.1:19401",
+      "routes": [
+        {
+          "path": "/v.mp4",
+          "body": "0123456789abcdefghij",
+          "ranges": true
+        }
+      ]
+    },
+    {
+      "name": "size",
+      "address": "127.0.0.1:19402",
+      "routes": [
+        {
+          "path": "/big.css",
+          "body": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "cookie-rule-1",
+      "port": 18120,
+      "host": "cookie.ge.example.test",
+      "path": "/s.css",
+      "headers": {
+        "Cookie": "_ga=GA1.2.3"
+      }
+    },
+    {
+      "id": "cookie-rule-2",
+      "port": 18120,
+      "host": "cookie.ge.example.test",
+      "path": "/s.css",
+      "headers": {
+        "Cookie": "_ga=GA1.2.3"
+      }
+    },
+    {
+      "id": "cookie-unmatched",
+      "port": 18120,
+      "host": "cookie.ge.example.test",
+      "path": "/page.html",
+      "headers": {
+        "Cookie": "_ga=GA1.2.3"
+      }
+    },
+    {
+      "id": "no-cache-rule",
+      "port": 18120,
+      "host": "cookie.ge.example.test",
+      "path": "/api/x"
+    },
+    {
+      "id": "range-1",
+      "port": 18120,
+      "host": "cookie.ge.example.test",
+      "path": "/v.mp4",
+      "headers": {
+        "Range": "bytes=2-5"
+      }
+    },
+    {
+      "id": "range-2",
+      "port": 18120,
+      "host": "cookie.ge.example.test",
+      "path": "/v.mp4",
+      "headers": {
+        "Range": "bytes=10-12"
+      }
+    },
+    {
+      "id": "big-1",
+      "port": 18120,
+      "host": "size.ge.example.test",
+      "path": "/big.css"
+    },
+    {
+      "id": "big-2",
+      "port": 18120,
+      "host": "size.ge.example.test",
+      "path": "/big.css"
+    }
+  ]
+}

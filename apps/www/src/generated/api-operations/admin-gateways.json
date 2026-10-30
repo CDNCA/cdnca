@@ -1,0 +1,310 @@
+{
+ "id": "admin-gateways",
+ "prefix": "/v1/admin/gateways",
+ "operations": [
+  {
+   "operation_id": "listAgentGateways",
+   "method": "GET",
+   "path": "/v1/admin/gateways",
+   "summary": "List standalone Agent Gateways (platform session, system.gateway.manage)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The co-located Gateway of an all-mode installation is not listed. standalone_access_open is false until the control plane opens ControlInternal/Redis/NATS to Gateways; binding is refused until then.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Gateways that are not deleted.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AgentGateway>",
+       "required": true
+      },
+      {
+       "name": "installation_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "standalone_access_open",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    }
+   ]
+  },
+  {
+   "operation_id": "createAgentGateway",
+   "method": "POST",
+   "path": "/v1/admin/gateways",
+   "summary": "Add a Gateway and issue its one-time binding token (1 hour, single use, only the SHA-256 is stored)",
+   "auth": [
+    "bearer"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "host",
+      "type": "string",
+      "required": true,
+      "description": "Public Gateway name (domain or IP)"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created; binding_token is shown once.",
+     "fields": [
+      {
+       "name": "gateway",
+       "type": "AgentGateway",
+       "required": true
+      },
+      {
+       "name": "binding_token",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "token_expires_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "gateway_name_taken"
+    },
+    {
+     "status": "422",
+     "description": "invalid_input"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteAgentGateway",
+   "method": "DELETE",
+   "path": "/v1/admin/gateways/{id}",
+   "summary": "Delete a Gateway; every certificate it was issued is revoked",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted."
+    },
+    {
+     "status": "404",
+     "description": "gateway_not_found"
+    }
+   ]
+  },
+  {
+   "operation_id": "setAgentGatewayAllowedIPs",
+   "method": "PUT",
+   "path": "/v1/admin/gateways/{id}/allowed-ips",
+   "summary": "Replace the addresses a bound Gateway may connect from (IPv4/IPv6, 1–16, audited)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "allowed_ips",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved (normalized).",
+     "fields": [
+      {
+       "name": "allowed_ips",
+       "type": "array<string>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "gateway_not_found"
+    },
+    {
+     "status": "409",
+     "description": "gateway_state_conflict (not bound yet)"
+    },
+    {
+     "status": "422",
+     "description": "invalid_input"
+    }
+   ]
+  },
+  {
+   "operation_id": "reissueAgentGatewayBindingToken",
+   "method": "POST",
+   "path": "/v1/admin/gateways/{id}/binding-token",
+   "summary": "Replace the binding token of a pending Gateway (the previous token stops working)",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "New token.",
+     "fields": [
+      {
+       "name": "gateway",
+       "type": "AgentGateway",
+       "required": true
+      },
+      {
+       "name": "binding_token",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "token_expires_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "404",
+     "description": "gateway_not_found"
+    },
+    {
+     "status": "409",
+     "description": "gateway_state_conflict (already bound)"
+    }
+   ]
+  },
+  {
+   "operation_id": "disableAgentGateway",
+   "method": "POST",
+   "path": "/v1/admin/gateways/{id}/disable",
+   "summary": "Disable a bound Gateway; its ControlInternal calls are refused",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Disabled."
+    },
+    {
+     "status": "404",
+     "description": "gateway_not_found"
+    },
+    {
+     "status": "409",
+     "description": "gateway_state_conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "enableAgentGateway",
+   "method": "POST",
+   "path": "/v1/admin/gateways/{id}/enable",
+   "summary": "Re-enable a disabled Gateway",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Enabled."
+    },
+    {
+     "status": "404",
+     "description": "gateway_not_found"
+    },
+    {
+     "status": "409",
+     "description": "gateway_state_conflict"
+    }
+   ]
+  }
+ ]
+}

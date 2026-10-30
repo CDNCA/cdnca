@@ -1,0 +1,233 @@
+import i18n from './index'
+
+const zhCN = {
+  action: '重新生成 CNAME',
+  confirm: '确认重新生成',
+  singleTitle: '重新生成 {{domain}} 的 CNAME',
+  singleSummary: '将为 {{domain}} 重新生成 CNAME，生成期间状态显示为「生成中」。',
+  singleResultTitle: '{{domain}} 的 CNAME 重新生成结果',
+  singleUnknown: '{{domain}} 的 CNAME 重新生成结果待确认',
+  queued: '已排队',
+  regenerateQueued: '已开始重新生成 {{domain}} 的 CNAME',
+  taskID: '任务 ID：{{id}}',
+  errors: {
+    cname_not_configured: '站点尚未配置 CNAME。',
+    cname_not_failed: '仅 CNAME 生成失败的站点可重新生成。',
+    cname_not_regenerable: '当前 CNAME 状态不允许重新生成。',
+    permission_denied: '无权重新生成 CNAME。',
+    site_not_found: '站点不存在或已删除。',
+    site_locked: '站点已锁定，无法重新生成 CNAME。',
+    version_conflict: '站点版本已变化，请刷新后重试。',
+    request_failed: 'CNAME 重新生成失败，请重试。',
+  },
+  cell: {
+    pending: '生成中',
+    failed: '生成失败：{{reason}}',
+    regenerate: '重新生成',
+    goDnsConfig: '去 DNS 配置',
+    details: '详情',
+    failedMark: '生成失败',
+    failedMarkLabel: '生成失败：{{reason}}，点击查看原因',
+    failedTitle: 'CNAME 生成失败',
+    code: '原因码：{{label}}',
+    goLineGroups: '去线路组',
+    contactAdmin: '联系管理员（提交工单）',
+  },
+  codes: {
+    dns_provider_not_configured: '未配置DNS服务商',
+    cname_zone_not_configured: 'CNAME域名未配置',
+    cname_zone_not_configured_default: '未配置默认CNAME域名',
+    cname_zone_provider_mismatch: 'DNS服务商已停用',
+    platform_dns_sync_failed: '平台DNS未同步',
+    package_subscription_inactive: '套餐已失效',
+    node_group_unavailable: '线路组不可用',
+    node_targets_unavailable: '线路组无可用节点',
+    cname_no_default_line_group: '未设平台默认线路组',
+    cname_no_default_zone: '无可用CNAME域名',
+    site_authority_unavailable: '操作人无权限',
+    domain_blocked: '域名在黑名单',
+    intent_superseded: '已被新任务取代',
+    dns_reconcile_unavailable: 'DNS服务商调用失败',
+    dns_reconcile_failed: '解析写入失败',
+    dns_permission_denied: '无DNS权限',
+    dns_reconcile_entitlement_denied: '授权不允许写解析',
+    dns_reconcile_not_found: '网站不存在',
+    dns_reconcile_invalid_request: '解析请求无效',
+    dns_reconcile_idempotency_conflict: '请求重复冲突',
+    dns_reconcile_revision_conflict: 'DNS区域已变化',
+    dns_propagation_unconfirmed: '解析未确认生效',
+    cname_allocation_exhausted: '重试次数用尽',
+    cname_allocation_cancelled: '任务已取消',
+    dns_zone_not_hosted: '域名不在该DNS账号',
+    allocation_rejected: '分配被拒绝',
+    cname_label_exhausted: 'CNAME名称重复',
+    unknown: '原因未知',
+  },
+  failures: {
+    dns_provider_not_configured: '尚未配置 DNS 服务商（节点管理 → DNS配置）',
+    cname_zone_not_configured: '套餐 CNAME 域名 {{domain}} 未在 DNS 配置的 CNAME 域名里',
+    cname_zone_not_configured_default: '未配置默认 CNAME 域名（节点管理 → DNS配置 → CNAME域名）',
+    cname_zone_provider_mismatch: 'CNAME 域名 {{domain}} 所在的 DNS 服务商已停用（节点管理 → DNS配置）',
+    platform_dns_sync_failed: '平台 DNS 配置未能同步到本账号，请联系平台管理员',
+    package_subscription_inactive: '网站绑定的套餐已失效或未开通',
+    node_group_unavailable: '套餐的线路组不可用或尚未发布',
+    node_targets_unavailable: '线路组没有可解析的节点 IP',
+    cname_no_default_line_group: '网站未绑定套餐且没有平台默认线路组，请在节点管理 → 线路组设一个平台默认线路组',
+    cname_no_default_zone: '网站未绑定套餐，且没有参与随机分配的 CNAME 域名，也没有默认 CNAME 域名（节点管理 → DNS配置 → CNAME域名）',
+    site_authority_unavailable: '操作人已无该网站或 DNS 的管理权限',
+    domain_blocked: 'CNAME 域名在平台黑名单中',
+    intent_superseded: '已有更新的 CNAME 任务',
+    dns_reconcile_unavailable: 'DNS 服务商调用失败',
+    dns_reconcile_failed: 'DNS 服务商写入解析记录失败',
+    dns_permission_denied: '操作人没有该租户的 DNS 权限',
+    dns_reconcile_entitlement_denied: '当前授权不允许写入 DNS 解析',
+    dns_reconcile_not_found: '网站已删除或不属于该租户',
+    dns_reconcile_invalid_request: 'DNS 解析写入请求无效',
+    dns_reconcile_idempotency_conflict: 'DNS 解析写入请求重复且内容不同，请重新生成',
+    dns_reconcile_revision_conflict: 'DNS 区域已变化，请重新生成',
+    dns_propagation_unconfirmed: '解析记录已写入，但未能确认已生效，请重新生成',
+    cname_allocation_exhausted: 'CNAME 生成任务多次重试仍未完成，已停止，请重新生成',
+    cname_allocation_cancelled: 'CNAME 生成任务已被取消，请重新生成',
+    dns_zone_not_hosted: '该域名不在所选 DNS 账号下',
+    allocation_rejected: 'CNAME 分配被拒绝',
+    cname_label_exhausted: '自动生成的 CNAME 名称连续重名，请重新生成',
+    unknown: '原因未知',
+  },
+  // FLOW001：普通用户没有“节点管理”菜单；平台侧配置缺失时只告诉他配置已保存、需联系管理员。
+  tenantFailures: {
+    platform: '平台尚未配置可用的 DNS 或 CNAME 域名，请联系管理员处理。网站配置已保存，处理后可重新生成。',
+    line: '平台尚未配置可用线路，请联系管理员。网站配置已保存，管理员配置后可重新生成。',
+  },
+}
+
+const enUS: typeof zhCN = {
+  action: 'Regenerate CNAME',
+  confirm: 'Confirm regeneration',
+  singleTitle: 'Regenerate the CNAME of {{domain}}',
+  singleSummary: 'The CNAME of {{domain}} will be regenerated; it shows "Generating" meanwhile.',
+  singleResultTitle: 'CNAME regeneration of {{domain}}',
+  singleUnknown: 'The CNAME regeneration of {{domain}} has an unknown outcome',
+  queued: 'Queued',
+  regenerateQueued: 'Regenerating the CNAME of {{domain}}',
+  taskID: 'Task ID: {{id}}',
+  errors: {
+    cname_not_configured: 'The site does not have a CNAME configuration.',
+    cname_not_failed: 'Only a failed CNAME can be regenerated.',
+    cname_not_regenerable: 'The current CNAME state cannot be regenerated.',
+    permission_denied: 'You do not have permission to regenerate the CNAME.',
+    site_not_found: 'The site no longer exists.',
+    site_locked: 'The site is locked and its CNAME cannot be regenerated.',
+    version_conflict: 'The site version changed. Refresh and try again.',
+    request_failed: 'CNAME regeneration failed. Try again.',
+  },
+  cell: {
+    pending: 'Generating',
+    failed: 'Generation failed: {{reason}}',
+    regenerate: 'Regenerate',
+    goDnsConfig: 'Go to DNS configuration',
+    details: 'Details',
+    failedMark: 'Failed',
+    failedMarkLabel: 'Generation failed: {{reason}}. Open for the reason',
+    failedTitle: 'CNAME generation failed',
+    code: 'Reason code: {{label}}',
+    goLineGroups: 'Go to line groups',
+    contactAdmin: 'Contact the administrator (open a ticket)',
+  },
+  codes: {
+    dns_provider_not_configured: 'No DNS provider',
+    cname_zone_not_configured: 'CNAME domain not configured',
+    cname_zone_not_configured_default: 'No default CNAME domain',
+    cname_zone_provider_mismatch: 'DNS provider disabled',
+    platform_dns_sync_failed: 'Platform DNS not synced',
+    package_subscription_inactive: 'Package inactive',
+    node_group_unavailable: 'Line group unavailable',
+    node_targets_unavailable: 'No usable nodes',
+    cname_no_default_line_group: 'No default line group',
+    cname_no_default_zone: 'No usable CNAME domain',
+    site_authority_unavailable: 'No permission',
+    domain_blocked: 'Domain blocked',
+    intent_superseded: 'Superseded',
+    dns_reconcile_unavailable: 'DNS provider call failed',
+    dns_reconcile_failed: 'Record write failed',
+    dns_permission_denied: 'No DNS permission',
+    dns_reconcile_entitlement_denied: 'Not licensed to write DNS',
+    dns_reconcile_not_found: 'Site not found',
+    dns_reconcile_invalid_request: 'Invalid DNS request',
+    dns_reconcile_idempotency_conflict: 'Duplicate request conflict',
+    dns_reconcile_revision_conflict: 'DNS zone changed',
+    dns_propagation_unconfirmed: 'Propagation unconfirmed',
+    cname_allocation_exhausted: 'Retries exhausted',
+    cname_allocation_cancelled: 'Task cancelled',
+    dns_zone_not_hosted: 'Domain not in DNS account',
+    allocation_rejected: 'Allocation rejected',
+    cname_label_exhausted: 'CNAME name clash',
+    unknown: 'Unknown reason',
+  },
+  failures: {
+    dns_provider_not_configured: 'No DNS provider is configured (Nodes → DNS configuration)',
+    cname_zone_not_configured: 'The package CNAME domain {{domain}} is not one of the CNAME domains in the DNS configuration',
+    cname_zone_not_configured_default: 'No default CNAME domain is configured (Nodes → DNS configuration → CNAME domains)',
+    cname_zone_provider_mismatch: 'The DNS provider of the CNAME domain {{domain}} is disabled (Nodes → DNS configuration)',
+    platform_dns_sync_failed: 'The platform DNS configuration could not be copied to this account; contact the platform administrator',
+    package_subscription_inactive: 'The package bound to the site is inactive',
+    node_group_unavailable: 'The package line group is unavailable or not published',
+    node_targets_unavailable: 'The line group has no node IP to resolve to',
+    cname_no_default_line_group: 'The site has no package and there is no platform default line group; set one under Nodes → Line groups',
+    cname_no_default_zone: 'The site has no package, and no CNAME domain is marked for random allocation or set as default (Nodes → DNS configuration → CNAME domains)',
+    site_authority_unavailable: 'The operator no longer manages this site or its DNS',
+    domain_blocked: 'The CNAME domain is blocklisted by the platform',
+    intent_superseded: 'A newer CNAME task replaced this one',
+    dns_reconcile_unavailable: 'The DNS provider call failed',
+    dns_reconcile_failed: 'The DNS provider failed to write the record',
+    dns_permission_denied: 'The operator has no DNS permission for this tenant',
+    dns_reconcile_entitlement_denied: 'The current license does not allow writing DNS records',
+    dns_reconcile_not_found: 'The site was deleted or does not belong to this tenant',
+    dns_reconcile_invalid_request: 'The DNS write request is invalid',
+    dns_reconcile_idempotency_conflict: 'A DNS write request with the same key but different content exists; regenerate the CNAME',
+    dns_reconcile_revision_conflict: 'The DNS zone changed; regenerate the CNAME',
+    dns_propagation_unconfirmed: 'The record was written but could not be confirmed live; regenerate the CNAME',
+    cname_allocation_exhausted: 'The CNAME generation task gave up after repeated retries; regenerate the CNAME',
+    cname_allocation_cancelled: 'The CNAME generation task was cancelled; regenerate the CNAME',
+    dns_zone_not_hosted: 'The domain is not hosted by the selected DNS account',
+    allocation_rejected: 'CNAME allocation was rejected',
+    cname_label_exhausted: 'Every generated CNAME name was already taken. Regenerate to try again',
+    unknown: 'Unknown reason',
+  },
+  tenantFailures: {
+    platform: 'The platform has no usable DNS or CNAME domain yet; contact the administrator. Your site settings are saved, and you can regenerate once it is fixed.',
+    line: 'The platform has no usable line yet; contact the administrator. Your site settings are saved, and you can regenerate once a line is configured.',
+  },
+}
+
+type Messages = typeof zhCN
+
+function pseudo(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const tokens: string[] = []
+    const protectedValue = value.replace(/\{\{[^{}]+\}\}/g, (token) => {
+      tokens.push(token)
+      return `__TOKEN_${tokens.length - 1}__`
+    })
+    return `［¡¡ ${protectedValue.replace(/[A-Za-z\u4e00-\u9fff]/g, '$&$&')} !!］`
+      .replace(/__TOKEN_(\d+)__/g, (_match, index: string) => tokens[Number(index)] ?? '')
+  }
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => [key, pseudo(child)]),
+  )
+}
+
+const pseudoCN = pseudo(zhCN) as Messages
+
+export const siteCnameRegenerationMessages: Record<
+  'zh-CN' | 'en-US' | 'qps-ploc' | 'qps-Ploc',
+  Messages
+> = {
+  'zh-CN': zhCN,
+  'en-US': enUS,
+  'qps-ploc': pseudoCN,
+  'qps-Ploc': pseudoCN,
+}
+
+for (const [locale, messages] of Object.entries(siteCnameRegenerationMessages)) {
+  i18n.addResourceBundle(locale, 'siteCnameRegeneration', messages, true, true)
+}

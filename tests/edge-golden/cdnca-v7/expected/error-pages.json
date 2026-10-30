@@ -1,0 +1,368 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "error-pages",
+  "scenario_sha256": "9087e91b7af3aaef0a1cc8c14806b98a5f074810f4b1e6caee414011b708f86a",
+  "steps": [
+    {
+      "id": "ok",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "26",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 26,
+            "sha256": "4a05869c2df76b2b5a4014af98e2fd7780e02d7e1af41442ee80eff1a8b3d016",
+            "text": "pages pages.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "pages",
+              "method": "GET",
+              "uri": "/",
+              "host": "pages.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "origin-404",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, max-age=0",
+            "content-length": "24",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff"
+          },
+          "body": {
+            "length": 24,
+            "sha256": "e40261dc604009ac6f34d06da60cea38b01758864bec12a1f99c2ddaaa9f4836",
+            "text": "site origin_response 404"
+          },
+          "origin": [
+            {
+              "origin": "pages",
+              "method": "GET",
+              "uri": "/missing",
+              "host": "pages.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "origin-503",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 503,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, max-age=0",
+            "content-length": "24",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff"
+          },
+          "body": {
+            "length": 24,
+            "sha256": "46a31320f60b259ac757dc897df7fef069a280a5784f3ae447e9580c443112db",
+            "text": "site origin_response 503"
+          },
+          "origin": [
+            {
+              "origin": "pages",
+              "method": "GET",
+              "uri": "/busy",
+              "host": "pages.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "origin-418",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 418,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "15",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 15,
+            "sha256": "1f7b7c6e173dc3be6059246925841228e118d3cbe79ff694174968fe64f680d3",
+            "text": "origin 418 body"
+          },
+          "origin": [
+            {
+              "origin": "pages",
+              "method": "GET",
+              "uri": "/teapot",
+              "host": "pages.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge-504",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 504,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, max-age=0",
+            "content-length": "23",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff"
+          },
+          "body": {
+            "length": 23,
+            "sha256": "783f79a09abafcd327e6ce9fb696f2e368e20383ac565fb243521427a1f3f2a1",
+            "text": "global edge_connect 504"
+          },
+          "origin": [
+            {
+              "origin": "pages",
+              "method": "GET",
+              "uri": "/slow",
+              "host": "pages.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge-403",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, max-age=0",
+            "content-length": "19",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff"
+          },
+          "body": {
+            "length": 19,
+            "sha256": "495c2d9978ee21ef7f6f880cea189340ba8f2fd5e9f814a7d2c5319371013054",
+            "text": "site edge_route 403"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "edge-502",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 502,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, max-age=0",
+            "content-length": "21",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff"
+          },
+          "body": {
+            "length": 21,
+            "sha256": "07c58d203ca86886a9b2ec79048f23878925c178035812350f42d23ca5b4af5e",
+            "text": "down edge_connect 502"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "plain-404",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "15",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 15,
+            "sha256": "a4b5642db159156de06c8b91f89c6be648d8817ab7384abbd3d62a5bb0908235",
+            "text": "origin 404 body"
+          },
+          "origin": [
+            {
+              "origin": "nopages",
+              "method": "GET",
+              "uri": "/missing",
+              "host": "nopages.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plain-400",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 400,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "15",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 15,
+            "sha256": "584eedda5ec8138410cd5c36d8ece717850730b8edc29605e8ed213e107cd417",
+            "text": "origin 400 body"
+          },
+          "origin": [
+            {
+              "origin": "nopages",
+              "method": "GET",
+              "uri": "/bad",
+              "host": "nopages.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "unknown-host",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "cache-control": "no-store, max-age=0",
+            "content-length": "21",
+            "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "0",
+            "pragma": "no-cache",
+            "referrer-policy": "no-referrer",
+            "server": "openresty",
+            "x-content-type-options": "nosniff"
+          },
+          "body": {
+            "length": 21,
+            "sha256": "2fbcee9bdcb3d9755bcb503f5a551afe5ee606da4bf03956401571d9e40412c1",
+            "text": "node unknown site 404"
+          },
+          "origin": []
+        }
+      ]
+    }
+  ]
+}

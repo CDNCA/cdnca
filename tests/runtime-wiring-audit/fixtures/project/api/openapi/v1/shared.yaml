@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info: { title: Fragment reachability fixture, version: 1.0.0 }
+paths:
+  /v1/fragment-visible:
+    get:
+      operationId: getFragmentVisible
+      responses:
+        '200': { description: ok }
+        '400':
+          description: invalid
+          content:
+            application/json:
+              schema: { type: object }
+  /v1/fragment-hidden:
+    get:
+      operationId: getFragmentHidden
+      responses:
+        '200': { description: ok }
+        '400':
+          description: invalid
+          content:
+            application/json:
+              schema: { type: object }

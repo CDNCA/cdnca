@@ -1,0 +1,9 @@
+/* 用户编辑「刷新预热额度」页签（fix-cachequota），沿用代理商页签的排版。 */
+.account-quota-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 18px;
+}

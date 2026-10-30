@@ -1,0 +1,8 @@
+openapi: 3.1.0
+paths:
+  /v1/widgets:
+    get:
+      x-required-permissions: [widgets.read]
+  /v1/ghost:
+    get:
+      summary: documented but not served

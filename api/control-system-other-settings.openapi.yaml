@@ -1,0 +1,110 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Platform System Other Settings API
+  version: 0.1.0
+  description: Platform administrator operational settings for source IP handling, DNS protection, synchronization, resource rankings, HTTP proxy and traffic coefficient.
+  license: {name: Proprietary, identifier: LicenseRef-Proprietary}
+servers:
+  - {url: /}
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/system-other-settings:
+    get:
+      summary: Read platform other settings
+      operationId: getPlatformSystemOtherSettings
+      x-required-permissions: [system_configuration.read]
+      responses:
+        '200': {description: Current operational settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+    put:
+      summary: Update platform other settings
+      operationId: updatePlatformSystemOtherSettings
+      x-required-permissions: [system_configuration.manage]
+      parameters:
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/WriteRequest'}}}
+      responses:
+        '200': {description: Saved operational settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
+        '400': {description: Validation error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+        '401': {description: Unauthenticated}
+        '403': {description: Permission denied}
+        '409': {description: Revision or idempotency conflict}
+        '500': {description: Unexpected internal failure}
+        '503': {description: Settings storage or policy is unavailable}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+    RequestID: {name: X-Request-ID, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: On a 400 system_other_settings_validation_error that names the refused field of the save body (value.<field>) and a machine reason.
+              x-description-zh: 能定位字段的 400 system_other_settings_validation_error 附带 field（保存请求体路径 value.<字段>）与 reason 机器码。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field: {type: string}
+                reason: {type: string}
+              example: {field: value.sync_batch, reason: out_of_range}
+    Document:
+      type: object
+      additionalProperties: false
+      required: [schema, revision, value]
+      properties:
+        schema: {const: cdnca.platform-system-other-settings/v1}
+        revision: {type: integer, minimum: 0, maximum: 9223372036854775806}
+        updated_at: {type: string, format: date-time}
+        value: {$ref: '#/components/schemas/Settings'}
+    WriteRequest:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties: {value: {$ref: '#/components/schemas/Settings'}}
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [source_ip_header, api_key_enabled, dns_protection, record_repair_mode, sync_batch, sync_scope, disable_failed_sync_nodes, resource_rank, http_proxy, tcp_factor]
+      properties:
+        source_ip_header: {type: string, maxLength: 256}
+        api_key_enabled: {type: boolean, description: Globally enables tenant API key authentication and issuance}
+        dns_protection: {type: string, maxLength: 2048, description: Comma-separated hostname prefixes protected during DNS reconciliation}
+        record_repair_mode: {type: string, enum: [off, repair, repair_delete_extra]}
+        sync_batch: {type: integer, minimum: 1, maximum: 10000}
+        sync_scope: {type: string, enum: [region, line_group]}
+        disable_failed_sync_nodes: {type: boolean}
+        resource_rank: {type: integer, minimum: 1, maximum: 1000}
+        http_proxy: {type: string, maxLength: 2048}
+        tcp_factor: {type: number, minimum: 0.01, maximum: 100}
+        l4_drain_max_seconds:
+          type: integer
+          minimum: 0
+          maximum: 604800
+          default: 86400
+          description: >-
+            How long existing L4 connections keep running on the worker generation a configuration change retires
+            (e.g. after adding a port); 0 is unlimited. Responses always carry it; a request that omits it keeps the
+            stored value. A value other than 86400 is published as drain_max_ms and requires node agents with tcp/udp v5.

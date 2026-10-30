@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "status": "active",
+  "openapi": {
+    "version": "info.version+path-/vN",
+    "deprecation": "deprecated+x-deprecated-since+x-sunset-after+x-replacement-operation-id"
+  },
+  "protobuf": {
+    "version": "package-.vN",
+    "deprecation": "deprecated=true+comment-since+replacement"
+  },
+  "plugin": {
+    "version": "api_version/event-vN",
+    "deprecation": "status=deprecated+deprecated_since+replacement"
+  }
+}

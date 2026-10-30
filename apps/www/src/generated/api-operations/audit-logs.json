@@ -1,0 +1,216 @@
+{
+ "id": "audit-logs",
+ "prefix": "/v1/audit-logs",
+ "operations": [
+  {
+   "operation_id": "listAuditLogs",
+   "method": "GET",
+   "path": "/v1/audit-logs",
+   "summary": "List rendered operation log rows, newest first",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "identity.self.read"
+   ],
+   "params": [
+    {
+     "name": "category",
+     "in": "query",
+     "type": "string | const all"
+    },
+    {
+     "name": "exclude_category",
+     "in": "query",
+     "type": "string",
+     "description": "Drop one category (the admin log center's operation tab excludes auth)"
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform administrators only; tenants may only pass their own scope"
+    },
+    {
+     "name": "since",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "until",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "actor",
+     "in": "query",
+     "type": "string",
+     "description": "Username (exact"
+    },
+    {
+     "name": "actor_user_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "source_ip",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "resource_type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "resource_id",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "result",
+     "in": "query",
+     "type": "string: success / denied / failure"
+    },
+    {
+     "name": "action",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "tz",
+     "in": "query",
+     "type": "string",
+     "description": "IANA time zone for the rendered time (default Asia/Shanghai)"
+    },
+    {
+     "name": "lang",
+     "in": "query",
+     "type": "string",
+     "description": "Overrides Accept-Language"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of rows",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Row>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid filter (audit_log_invalid_request)"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "503",
+     "description": "Log storage unavailable (audit_log_unavailable)"
+    }
+   ]
+  },
+  {
+   "operation_id": "listAuditLogCategories",
+   "method": "GET",
+   "path": "/v1/audit-logs/categories",
+   "summary": "Event categories with labels and default retention days",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "identity.self.read"
+   ],
+   "params": [
+    {
+     "name": "lang",
+     "in": "query",
+     "type": "string",
+     "description": "Overrides Accept-Language"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Categories in display order",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<CategoryInfo>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "exportAuditLogs",
+   "method": "GET",
+   "path": "/v1/audit-logs/export",
+   "summary": "Export the filtered rows as UTF-8 CSV (at most 10000 rows; the export itself is audited as system.audit_log.export)",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin",
+    "identity.self.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "CSV file"
+    },
+    {
+     "status": "400",
+     "description": "Invalid filter (audit_log_invalid_request)"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "503",
+     "description": "Log storage or audit unavailable (audit_log_unavailable)"
+    }
+   ]
+  }
+ ]
+}

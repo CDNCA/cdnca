@@ -1,0 +1,24 @@
+{
+  "schema_version": "cdnca.edge.l4/v2",
+  "version_id": "l4-geo-cross-scope",
+  "revision": 8,
+  "listeners": [
+    {
+      "id": "stream-public",
+      "tenant_id": "018f1000-0000-7000-8000-000000000001",
+      "site_id": "018f1000-0000-7000-8000-000000000002",
+      "stream_id": "stream-public",
+      "geo": {
+        "enabled": true,
+        "tenant_id": "018f1000-0000-7000-8000-000000000001",
+        "site_id": "018f1000-0000-7000-8000-000000000099",
+        "stream_id": "stream-public",
+        "revision": 8,
+        "unknown_region_action": "allow",
+        "blocked_regions": [],
+        "trusted_proxy_cidrs": [],
+        "region_cidrs": []
+      }
+    }
+  ]
+}

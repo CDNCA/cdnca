@@ -1,0 +1,112 @@
+{
+  "schema": "cdnca.waf-gate-verdict/v1",
+  "passed": true,
+  "reasons": [],
+  "base_report_sha256": "b7c7d170b3509167caee2d29e984ef2b69dd3b5143163c7eeaecaff64b7551a3",
+  "candidate_report_sha256": "26cf64c3b8336c0304da198af96651c7132a0110f63b36317af0c4d892ed16fd",
+  "standard_pack_id": "system/crs-pl1",
+  "corpus_sha256": "adc530e4a786310e9c23a18b2a4822970a99b9f8df007923b2ca9924635e0189",
+  "std": {
+    "mode": "fast",
+    "files": [
+      {
+        "name": "wafcomp-mal",
+        "sha256": "deb7f58a37db53fcefb6437170a959142d0b79c641b8923d7438430fc5cabf37",
+        "requests": 11087
+      },
+      {
+        "name": "wafcomp-legit",
+        "sha256": "7f1840434e43ede433266f30d0b045f90261cb74590d98327c5333c3ce806f07",
+        "requests": 155078
+      }
+    ]
+  },
+  "samples": 169939,
+  "tiers": [
+    {
+      "pack_id": "system/crs-pl1-log",
+      "name": "仅记录",
+      "base": {
+        "attacks": 14609,
+        "blocked": 0,
+        "benign": 155327,
+        "false_positives": 1,
+        "errors": 0,
+        "excluded": 3
+      },
+      "candidate": {
+        "attacks": 14609,
+        "blocked": 0,
+        "benign": 155327,
+        "false_positives": 1,
+        "errors": 0,
+        "excluded": 3
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl1",
+      "name": "标准防护",
+      "base": {
+        "attacks": 14609,
+        "blocked": 11302,
+        "benign": 155327,
+        "false_positives": 21320,
+        "errors": 0,
+        "excluded": 3
+      },
+      "candidate": {
+        "attacks": 14609,
+        "blocked": 11302,
+        "benign": 155327,
+        "false_positives": 21320,
+        "errors": 0,
+        "excluded": 3
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl2",
+      "name": "严格防护",
+      "base": {
+        "attacks": 14609,
+        "blocked": 12573,
+        "benign": 155323,
+        "false_positives": 59932,
+        "errors": 0,
+        "excluded": 7
+      },
+      "candidate": {
+        "attacks": 14609,
+        "blocked": 12573,
+        "benign": 155323,
+        "false_positives": 59932,
+        "errors": 0,
+        "excluded": 7
+      },
+      "changed": 0
+    },
+    {
+      "pack_id": "system/crs-pl3",
+      "name": "极严格防护",
+      "base": {
+        "attacks": 14609,
+        "blocked": 12665,
+        "benign": 155321,
+        "false_positives": 65476,
+        "errors": 0,
+        "excluded": 9
+      },
+      "candidate": {
+        "attacks": 14609,
+        "blocked": 12665,
+        "benign": 155321,
+        "false_positives": 65476,
+        "errors": 0,
+        "excluded": 9
+      },
+      "changed": 0
+    }
+  ],
+  "changes": []
+}

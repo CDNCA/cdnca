@@ -1,0 +1,407 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Site Monitoring API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Finalized site monitoring aggregates for tenant and platform sessions.
+    Every response is bound to one immutable snapshot and reports the source
+    watermark and finalized boundary. Unavailable sections are explicit and
+    are never represented as fabricated zero values.
+servers:
+  - url: /
+tags:
+  - name: SiteMonitoring
+paths:
+  /v1/analytics/site-monitoring:
+    get:
+      tags: [SiteMonitoring]
+      operationId: getTenantSiteMonitoring
+      summary: Read site monitoring for the authenticated tenant
+      description: >-
+        Requires a tenant session with sites.read. The tenant is derived only
+        from the authenticated principal; tenant_id and self-asserted identity
+        headers are rejected. Query parameters are single-valued and strict.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/Range'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/Domain'
+        - $ref: '#/components/parameters/ListenPort'
+        - $ref: '#/components/parameters/RankBy'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/MonitoringOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/admin/analytics/site-monitoring:
+    get:
+      tags: [SiteMonitoring]
+      operationId: getPlatformSiteMonitoring
+      summary: Read one tenant's site monitoring as a platform administrator
+      description: >-
+        Requires a platform session with platform.admin and exactly one
+        canonical tenant_id. Omitting, duplicating, or changing tenant scope
+        through identity headers is rejected before any source is queried.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/Range'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+        - $ref: '#/components/parameters/Timezone'
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/NodeID'
+        - $ref: '#/components/parameters/Domain'
+        - $ref: '#/components/parameters/ListenPort'
+        - $ref: '#/components/parameters/RankBy'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/MonitoringOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantID:
+      name: tenant_id
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Range:
+      name: range
+      in: query
+      required: true
+      description: >-
+        Fixed presets use no from/to values. custom requires both from and to
+        and is limited to 31 days; longer ranges are rejected.
+      schema: {type: string, enum: [1h, 6h, 12h, custom]}
+    From:
+      name: from
+      in: query
+      required: false
+      description: Inclusive UTC boundary, required only for range=custom.
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      required: false
+      description: Exclusive UTC boundary, required only for range=custom.
+      schema: {type: string, format: date-time}
+    Timezone:
+      name: timezone
+      in: query
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    SiteID:
+      name: site_id
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    NodeID:
+      name: node_id
+      in: query
+      required: false
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Domain:
+      name: domain
+      in: query
+      required: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 253
+        pattern: '^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$'
+    ListenPort:
+      name: listen_port
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 65535}
+    RankBy:
+      name: rank_by
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [host, site, node, status_code]
+        default: host
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque snapshot- and filter-bound cursor.
+      schema: {type: string, minLength: 1, maxLength: 4096, pattern: '^[A-Za-z0-9_-]+$'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 128, pattern: '^[A-Za-z0-9._-]+$'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      not: {const: 00000000-0000-0000-0000-000000000000}
+    UnsignedInteger:
+      type: integer
+      format: uint64
+      minimum: 0
+    SiteMonitoringResponse:
+      type: object
+      additionalProperties: false
+      required: [version, meta, basic, quality, origin, rank]
+      properties:
+        version: {type: string, const: site-monitoring/v2}
+        meta: {$ref: '#/components/schemas/SiteMonitoringMeta'}
+        basic: {$ref: '#/components/schemas/BasicSection'}
+        quality: {$ref: '#/components/schemas/QualitySection'}
+        origin: {$ref: '#/components/schemas/OriginSection'}
+        rank: {$ref: '#/components/schemas/RankSection'}
+    SiteMonitoringMeta:
+      type: object
+      additionalProperties: false
+      required: [range, from, to, timezone, bucket, downsample, snapshot_at, source_watermark, finalized_through, snapshot_expires_at]
+      properties:
+        range: {type: string, enum: [1h, 6h, 12h, custom]}
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        timezone: {type: string, minLength: 1, maxLength: 128}
+        bucket: {type: string, minLength: 2, maxLength: 32}
+        downsample: {type: boolean}
+        snapshot_at: {type: string, format: date-time}
+        source_watermark: {$ref: '#/components/schemas/UnsignedInteger'}
+        finalized_through: {type: string, format: date-time}
+        snapshot_expires_at: {type: string, format: date-time}
+    AvailableBasic:
+      type: object
+      additionalProperties: false
+      required: [available, value]
+      properties:
+        available: {type: boolean, const: true}
+        value: {$ref: '#/components/schemas/BasicFacts'}
+    AvailableQuality:
+      type: object
+      additionalProperties: false
+      required: [available, value]
+      properties:
+        available: {type: boolean, const: true}
+        value: {$ref: '#/components/schemas/QualityFacts'}
+    AvailableOrigin:
+      type: object
+      additionalProperties: false
+      required: [available, value]
+      properties:
+        available: {type: boolean, const: true}
+        value: {$ref: '#/components/schemas/OriginFacts'}
+    AvailableRank:
+      type: object
+      additionalProperties: false
+      required: [available, value]
+      properties:
+        available: {type: boolean, const: true}
+        value: {$ref: '#/components/schemas/RankFacts'}
+    DegradedSection:
+      type: object
+      additionalProperties: false
+      required: [available, reason]
+      properties:
+        available: {type: boolean, const: false}
+        reason:
+          type: string
+          enum: [dependency_unavailable, authoritative_fact_missing]
+    BasicSection:
+      oneOf:
+        - $ref: '#/components/schemas/AvailableBasic'
+        - $ref: '#/components/schemas/DegradedSection'
+    QualitySection:
+      oneOf:
+        - $ref: '#/components/schemas/AvailableQuality'
+        - $ref: '#/components/schemas/DegradedSection'
+    OriginSection:
+      oneOf:
+        - $ref: '#/components/schemas/AvailableOrigin'
+        - $ref: '#/components/schemas/DegradedSection'
+    RankSection:
+      oneOf:
+        - $ref: '#/components/schemas/AvailableRank'
+        - $ref: '#/components/schemas/DegradedSection'
+    BasicFacts:
+      type: object
+      additionalProperties: false
+      required: [fact_count, requests, bandwidth_bps, traffic_bytes, connections, series]
+      properties:
+        fact_count: {$ref: '#/components/schemas/UnsignedInteger'}
+        requests: {$ref: '#/components/schemas/UnsignedInteger'}
+        bandwidth_bps: {type: number, minimum: 0}
+        traffic_bytes: {$ref: '#/components/schemas/UnsignedInteger'}
+        connections: {$ref: '#/components/schemas/UnsignedInteger'}
+        series:
+          type: array
+          maxItems: 240
+          items: {$ref: '#/components/schemas/BasicPoint'}
+    BasicPoint:
+      type: object
+      additionalProperties: false
+      required: [bucket, requests, traffic_bytes, bandwidth_bps, connections]
+      properties:
+        bucket: {type: string, format: date-time}
+        requests: {$ref: '#/components/schemas/UnsignedInteger'}
+        traffic_bytes: {$ref: '#/components/schemas/UnsignedInteger'}
+        bandwidth_bps: {type: number, minimum: 0}
+        connections: {$ref: '#/components/schemas/UnsignedInteger'}
+    QualityFacts:
+      type: object
+      additionalProperties: false
+      required: [fact_count, cache_hits, cache_misses, status_2xx, status_3xx, status_4xx, status_5xx, errors, average_duration_us, series]
+      properties:
+        fact_count: {$ref: '#/components/schemas/UnsignedInteger'}
+        cache_hits: {$ref: '#/components/schemas/UnsignedInteger'}
+        cache_misses: {$ref: '#/components/schemas/UnsignedInteger'}
+        status_2xx: {$ref: '#/components/schemas/UnsignedInteger'}
+        status_3xx: {$ref: '#/components/schemas/UnsignedInteger'}
+        status_4xx: {$ref: '#/components/schemas/UnsignedInteger'}
+        status_5xx: {$ref: '#/components/schemas/UnsignedInteger'}
+        errors: {$ref: '#/components/schemas/UnsignedInteger'}
+        average_duration_us: {type: number, minimum: 0}
+        series:
+          type: array
+          maxItems: 240
+          items: {$ref: '#/components/schemas/QualityPoint'}
+    QualityPoint:
+      type: object
+      additionalProperties: false
+      required: [bucket, status_2xx, status_3xx, status_4xx, status_5xx]
+      properties:
+        bucket: {type: string, format: date-time}
+        status_2xx: {$ref: '#/components/schemas/UnsignedInteger'}
+        status_3xx: {$ref: '#/components/schemas/UnsignedInteger'}
+        status_4xx: {$ref: '#/components/schemas/UnsignedInteger'}
+        status_5xx: {$ref: '#/components/schemas/UnsignedInteger'}
+    OriginFacts:
+      type: object
+      additionalProperties: false
+      required: [fact_count, connect_us, first_byte_us, total_us, series]
+      properties:
+        fact_count: {$ref: '#/components/schemas/UnsignedInteger'}
+        connect_us: {type: number, minimum: 0}
+        first_byte_us: {type: number, minimum: 0}
+        total_us: {type: number, minimum: 0}
+        series:
+          type: array
+          maxItems: 240
+          items: {$ref: '#/components/schemas/OriginPoint'}
+    OriginPoint:
+      type: object
+      additionalProperties: false
+      required: [bucket, connect_us, first_byte_us, total_us]
+      properties:
+        bucket: {type: string, format: date-time}
+        connect_us: {type: number, minimum: 0}
+        first_byte_us: {type: number, minimum: 0}
+        total_us: {type: number, minimum: 0}
+    RankFacts:
+      type: object
+      additionalProperties: false
+      required: [fact_count, dimension, items]
+      properties:
+        fact_count: {$ref: '#/components/schemas/UnsignedInteger'}
+        dimension: {type: string, enum: [host, site, node, status_code]}
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/RankItem'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    RankItem:
+      type: object
+      additionalProperties: false
+      required: [key, label, requests, traffic_bytes]
+      properties:
+        key: {type: string, minLength: 1, maxLength: 253}
+        label: {type: string, minLength: 1, maxLength: 253}
+        requests: {$ref: '#/components/schemas/UnsignedInteger'}
+        traffic_bytes: {$ref: '#/components/schemas/UnsignedInteger'}
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - analytics_monitoring_invalid_request
+                - analytics_monitoring_unauthenticated
+                - analytics_monitoring_scope_forbidden
+                - analytics_monitoring_permission_denied
+                - analytics_monitoring_method_not_allowed
+                - analytics_monitoring_request_cancelled
+                - analytics_monitoring_invalid_response
+                - analytics_monitoring_response_too_large
+                - analytics_monitoring_unavailable
+                - analytics_monitoring_timeout
+            message: {type: string}
+            request_id: {type: string}
+  responses:
+    MonitoringOK:
+      description: Finalized monitoring aggregate.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Request-ID: {schema: {type: string}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SiteMonitoringResponse'}
+    BadRequest: {$ref: '#/components/responses/Error'}
+    Unauthorized: {$ref: '#/components/responses/Error'}
+    Forbidden: {$ref: '#/components/responses/Error'}
+    MethodNotAllowed: {$ref: '#/components/responses/Error'}
+    RequestCancelled: {$ref: '#/components/responses/Error'}
+    BadGateway: {$ref: '#/components/responses/Error'}
+    ServiceUnavailable: {$ref: '#/components/responses/Error'}
+    GatewayTimeout: {$ref: '#/components/responses/Error'}
+    Error:
+      description: Stable non-leaking error envelope.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Request-ID: {schema: {type: string}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}

@@ -1,0 +1,193 @@
+{
+ "id": "admin-plugin-providers",
+ "prefix": "/v1/admin/plugin-providers",
+ "operations": [
+  {
+   "operation_id": "listPluginProviders",
+   "method": "GET",
+   "path": "/v1/admin/plugin-providers",
+   "summary": "List third-party DNS / SMS / ICP provider plugins with their installation contract results",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform administrators with plugin_installations.read (or platform.admin). A provider plugin appears once its installation is enabled here and the license service serves its declaration (plugin_provider/<plugin id>). usable is true only while it is active, its contract passed for the current version and it is enabled.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Provider plugins.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PluginProvider>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "actOnPluginProvider",
+   "method": "POST",
+   "path": "/v1/admin/plugin-providers/{plugin_id}/{action}",
+   "summary": "Run the installation contract, enable or disable a provider plugin",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform administrators with plugin_installations.manage (or platform.admin). contract runs the cdnca.provider/v1 contract cases against the plugin sandbox and records the report; enable requires a passed contract for the current version (409 plugin_provider_contract_not_passed otherwise, also refused by the database). A payment plugin (high_risk) is a high-risk permission: enable needs risk_acknowledged (422 plugin_provider_risk_not_acknowledged) and an MFA step-up proof issued for the installation tenant with audience/action plugin.provider.enable_payment (403 plugin_provider_step_up_required); the proof is bound to the plugin declaration when consumed. Audited as plugin.provider.contract / enable / disable (refusals included).",
+   "params": [
+    {
+     "name": "plugin_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "action",
+     "in": "path",
+     "type": "any",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "fields": [
+     {
+      "name": "risk_acknowledged",
+      "type": "boolean"
+     },
+     {
+      "name": "step_up_token",
+      "type": "string"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The provider plugin after the action.",
+     "fields": [
+      {
+       "name": "plugin_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "base_url",
+       "type": "string(uri)",
+       "required": true
+      },
+      {
+       "name": "kinds",
+       "type": "array<any>",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "any",
+       "required": true
+      },
+      {
+       "name": "contract_status",
+       "type": "any",
+       "required": true
+      },
+      {
+       "name": "contract_version",
+       "type": "string"
+      },
+      {
+       "name": "contract_checked_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "contract_report",
+       "type": "object"
+      },
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "usable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "high_risk",
+       "type": "boolean",
+       "description": "The plugin provides payment; enabling it needs risk_acknowledged and an MFA step-up."
+      },
+      {
+       "name": "risk_notice",
+       "type": "string"
+      },
+      {
+       "name": "tenant_id",
+       "type": "string(uuid)",
+       "description": "Tenant of the plugin installation; the step-up proof is issued for it."
+      },
+      {
+       "name": "payment_confirmed_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "422",
+     "description": "plugin_provider_risk_not_acknowledged (payment plugin enable without the acknowledged risk notice)."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,979 @@
+{
+ "id": "custom-rbac",
+ "prefix": "/v1/custom-rbac",
+ "operations": [
+  {
+   "operation_id": "listTenantCustomRoleGrants",
+   "method": "GET",
+   "path": "/v1/custom-rbac/grants",
+   "summary": "Page through active or revoked custom-role grants",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The signed cursor freezes grant creation and revocation state at the durable commit-ordered database watermark captured by the first page.",
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "role_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "subject_user_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string: active / revoked / all"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page of custom-role grants.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<Grant>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "Page",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "assignTenantCustomRole",
+   "method": "POST",
+   "path": "/v1/custom-rbac/grants",
+   "summary": "Assign the current role revision to another active tenant member",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current role revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Proof",
+     "in": "header",
+     "type": "string",
+     "description": "Opaque 32-byte base64url MFA proof. Required when the affected permission set contains a catalog entry with step_up_required=true. The server consumes it in the RBAC transaction and binds the use to the operation, authenticated tenant actor and session, target role, subject or grant, expected revision, normalized business payload, and idempotency key. Reusing the proof for a different logical mutation is rejected even when request IDs match."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "role_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "subject_user_id",
+      "type": "string(uuid)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Grant created, or the original response replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Grant",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the authenticated tenant"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, revision, name, lifecycle, or immutability conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeded the configured limit"
+    },
+    {
+     "status": "428",
+     "description": "A valid bound and unconsumed step-up proof is required"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "revokeTenantCustomRoleGrant",
+   "method": "POST",
+   "path": "/v1/custom-rbac/grants/{grant_id}/revoke",
+   "summary": "Append a custom-role grant revocation fact",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "grant_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Proof",
+     "in": "header",
+     "type": "string",
+     "description": "Opaque 32-byte base64url MFA proof. Required when the affected permission set contains a catalog entry with step_up_required=true. The server consumes it in the RBAC transaction and binds the use to the operation, authenticated tenant actor and session, target role, subject or grant, expected revision, normalized business payload, and idempotency key. Reusing the proof for a different logical mutation is rejected even when request IDs match."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Revocation appended, or the original response replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Revocation",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the authenticated tenant"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, revision, name, lifecycle, or immutability conflict"
+    },
+    {
+     "status": "428",
+     "description": "A valid bound and unconsumed step-up proof is required"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantDelegablePermissions",
+   "method": "GET",
+   "path": "/v1/custom-rbac/permissions",
+   "summary": "List the tenant-delegable permission catalog",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Delegable permission catalog.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<Permission>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "listTenantCustomRoles",
+   "method": "GET",
+   "path": "/v1/custom-rbac/roles",
+   "summary": "Page through custom roles in the authenticated tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The signed cursor is bound to the authenticated scope and include_deactivated filter, and freezes role creation, revision, and deactivation state at a durable commit-ordered database watermark from the first page.",
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "include_deactivated",
+     "in": "query",
+     "type": "boolean"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page of custom roles.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<Role>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "Page",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "createTenantCustomRole",
+   "method": "POST",
+   "path": "/v1/custom-rbac/roles",
+   "summary": "Create a custom role and its first immutable revision",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Proof",
+     "in": "header",
+     "type": "string",
+     "description": "Opaque 32-byte base64url MFA proof. Required when the affected permission set contains a catalog entry with step_up_required=true. The server consumes it in the RBAC transaction and binds the use to the operation, authenticated tenant actor and session, target role, subject or grant, expected revision, normalized business payload, and idempotency key. Reusing the proof for a different logical mutation is rejected even when request IDs match."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "permissions",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Custom role created, or the original response replayed.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Role",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, revision, name, lifecycle, or immutability conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeded the configured limit"
+    },
+    {
+     "status": "422",
+     "description": "A requested permission is not tenant delegable"
+    },
+    {
+     "status": "428",
+     "description": "A valid bound and unconsumed step-up proof is required"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantCustomRole",
+   "method": "GET",
+   "path": "/v1/custom-rbac/roles/{role_id}",
+   "summary": "Get a custom role in the authenticated tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Unknown and cross-tenant role IDs return the same 404 response.",
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "role_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Custom role detail.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Role",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the authenticated tenant"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "deactivateTenantCustomRole",
+   "method": "POST",
+   "path": "/v1/custom-rbac/roles/{role_id}/deactivate",
+   "summary": "Deactivate a custom role with compare-and-swap",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "role_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current role revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Proof",
+     "in": "header",
+     "type": "string",
+     "description": "Opaque 32-byte base64url MFA proof. Required when the affected permission set contains a catalog entry with step_up_required=true. The server consumes it in the RBAC transaction and binds the use to the operation, authenticated tenant actor and session, target role, subject or grant, expected revision, normalized business payload, and idempotency key. Reusing the proof for a different logical mutation is rejected even when request IDs match."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Custom role detail.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Role",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the authenticated tenant"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, revision, name, lifecycle, or immutability conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeded the configured limit"
+    },
+    {
+     "status": "422",
+     "description": "A requested permission is not tenant delegable"
+    },
+    {
+     "status": "428",
+     "description": "A valid bound and unconsumed step-up proof is required"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "publishTenantCustomRoleRevision",
+   "method": "POST",
+   "path": "/v1/custom-rbac/roles/{role_id}/publish",
+   "summary": "Publish a new permission revision with compare-and-swap",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "role_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current role revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Proof",
+     "in": "header",
+     "type": "string",
+     "description": "Opaque 32-byte base64url MFA proof. Required when the affected permission set contains a catalog entry with step_up_required=true. The server consumes it in the RBAC transaction and binds the use to the operation, authenticated tenant actor and session, target role, subject or grant, expected revision, normalized business payload, and idempotency key. Reusing the proof for a different logical mutation is rejected even when request IDs match."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "permissions",
+      "type": "array<string>",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Custom role detail.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Role",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the authenticated tenant"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, revision, name, lifecycle, or immutability conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeded the configured limit"
+    },
+    {
+     "status": "422",
+     "description": "A requested permission is not tenant delegable"
+    },
+    {
+     "status": "428",
+     "description": "A valid bound and unconsumed step-up proof is required"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  },
+  {
+   "operation_id": "renameTenantCustomRole",
+   "method": "POST",
+   "path": "/v1/custom-rbac/roles/{role_id}/rename",
+   "summary": "Rename a custom role with revision compare-and-swap",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "identity.roles.manage"
+   ],
+   "params": [
+    {
+     "name": "role_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Quoted positive decimal current role revision, for example \"3\"."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Step-Up-Proof",
+     "in": "header",
+     "type": "string",
+     "description": "Opaque 32-byte base64url MFA proof. Required when the affected permission set contains a catalog entry with step_up_required=true. The server consumes it in the RBAC transaction and binds the use to the operation, authenticated tenant actor and session, target role, subject or grant, expected revision, normalized business payload, and idempotency key. Reusing the proof for a different logical mutation is rejected even when request IDs match."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Custom role detail.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Role",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Strict header, query, path, or JSON validation failed"
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required"
+    },
+    {
+     "status": "403",
+     "description": "Tenant session or delegation permission was denied"
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the authenticated tenant"
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, revision, name, lifecycle, or immutability conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeded the configured limit"
+    },
+    {
+     "status": "422",
+     "description": "A requested permission is not tenant delegable"
+    },
+    {
+     "status": "428",
+     "description": "A valid bound and unconsumed step-up proof is required"
+    },
+    {
+     "status": "408",
+     "description": "Caller cancelled the request"
+    },
+    {
+     "status": "502",
+     "description": "Storage returned invalid facts or the response exceeded its bound"
+    },
+    {
+     "status": "503",
+     "description": "Storage or a required dependency is unavailable"
+    },
+    {
+     "status": "504",
+     "description": "Server-side operation deadline elapsed"
+    }
+   ]
+  }
+ ]
+}

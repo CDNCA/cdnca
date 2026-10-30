@@ -1,0 +1,1603 @@
+{
+ "id": "certificate-assets",
+ "prefix": "/v1/certificate-assets",
+ "operations": [
+  {
+   "operation_id": "listCertificateAssets",
+   "method": "GET",
+   "path": "/v1/certificate-assets",
+   "summary": "List active certificate assets",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant sessions target their own scope. Platform sessions retain their platform actor scope. Only this collection GET may omit target_scope_id to list assets across active tenants, with live certificates.read authorization. An explicit target limits the collection to that tenant. Detail and write operations still require an explicit platform target.",
+   "permissions": [
+    "certificates.read"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "status",
+     "in": "query",
+     "type": "string: normal / expiring / expired / auto_renew / manual_renew",
+     "description": "normal/expiring/expired by the latest version (expiring: active or default and expiring within 30 days; expired: not_after passed); auto_renew/manual_renew by whether an auto-renewing order issued the asset."
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string",
+     "description": "Advanced search (CERT-05); every advanced filter narrows items, total and counts alike. A SAN of any version contains it, case-insensitive."
+    },
+    {
+     "name": "domains",
+     "in": "query",
+     "type": "string",
+     "description": "Comma-separated domains; the latest version's SANs contain every one exactly (case-insensitive). At most 100."
+    },
+    {
+     "name": "user",
+     "in": "query",
+     "type": "string",
+     "description": "The recorded owner's display ID, username, email or phone contains it."
+    },
+    {
+     "name": "certificate_id",
+     "in": "query",
+     "type": "string",
+     "description": "The asset display ID contains it."
+    },
+    {
+     "name": "name",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "remark",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "source",
+     "in": "query",
+     "type": "string: uploaded / acme"
+    },
+    {
+     "name": "dns_provider_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "The DNS provider of the order that issued the asset."
+    },
+    {
+     "name": "expiry",
+     "in": "query",
+     "type": "string: within30 / within90 / expired",
+     "description": "within30/within90 are latest versions in force (active or default, not expired) expiring within 30/90 days; expired is a passed not_after. Expired assets are never within30/within90."
+    },
+    {
+     "name": "auto_renew",
+     "in": "query",
+     "type": "string: true / false",
+     "description": "Whether an auto-renewing order issued the asset."
+    },
+    {
+     "name": "issue",
+     "in": "query",
+     "type": "string: issued / failed",
+     "description": "issued is an asset issued by an order; failed is an asset whose issuing order or one of its renewal orders failed."
+    },
+    {
+     "name": "sync",
+     "in": "query",
+     "type": "string: complete / pending / failed",
+     "description": "Publication of the asset's current site bindings; failed when one permanently failed, complete when every one succeeded and its apply rollout has every node deployment healthy, pending otherwise. An unbound asset matches none."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate assets",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<CertificateAsset>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true,
+       "description": "Assets under search and status."
+      },
+      {
+       "name": "counts",
+       "type": "object",
+       "required": true,
+       "description": "Assets per status under search (not status), over every page."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "uploadCertificateAsset",
+   "method": "POST",
+   "path": "/v1/certificate-assets",
+   "summary": "Upload a certificate and private key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires certificates.manage. The private key crosses this request boundary once, is encrypted by the certificate store, and is never returned in a response. Exact replay uses the same request body, X-Request-ID and Idempotency-Key without adding facts. owner_user_id records an active member of the target tenant and is immutable. Tenant uploads default to the actor and cannot assign another user. For compatibility, platform clients may omit owner_user_id; these assets remain legacy_unknown. The admin UI requires explicit ownership. Omitted-owner legacy requests retain their original idempotency digest and receipt ownership.",
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Retry an unknown result only with this exact key and unchanged request."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "owner_user_id",
+      "type": "string(uuid)",
+      "description": "Active target-tenant member. Immutable after creation. Tenant actors may only select themselves; omitted platform ownership stays unknown for legacy clients."
+     },
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "remark",
+      "type": "string",
+      "description": "Optional; trimmed, no control characters. Part of the idempotency digest."
+     },
+     {
+      "name": "certificate_pem",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "private_key_pem",
+      "type": "string",
+      "required": true,
+      "description": "Never returned by this API."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Certificate asset created or exactly replayed",
+     "fields": [
+      {
+       "name": "asset",
+       "type": "CertificateAsset",
+       "required": true
+      },
+      {
+       "name": "versions",
+       "type": "array<CertificateAssetVersion>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds 384 KiB"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type is not application/json with optional UTF-8 charset"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    },
+    {
+     "status": "503",
+     "description": "Certificate private-key envelope service unavailable"
+    }
+   ]
+  },
+  {
+   "operation_id": "getCertificateAsset",
+   "method": "GET",
+   "path": "/v1/certificate-assets/{asset_id}",
+   "summary": "Get a certificate asset and its public versions",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Private-key plaintext, ciphertext and envelope metadata are never returned.",
+   "permissions": [
+    "certificates.read"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate asset detail",
+     "fields": [
+      {
+       "name": "asset",
+       "type": "CertificateAsset",
+       "required": true
+      },
+      {
+       "name": "versions",
+       "type": "array<CertificateAssetVersion>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteCertificateAsset",
+   "method": "DELETE",
+   "path": "/v1/certificate-assets/{asset_id}",
+   "summary": "Soft-delete an unreferenced certificate asset",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Retry an unknown result only with this exact key and unchanged request."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate asset",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Unique only within tenant_scope_id; use the UUID id for row identity and operations."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant",
+       "type": "CertificateAssetTenant",
+       "required": true,
+       "description": "Actual tenant joined through tenant_scope_id. Older idempotency receipts receive this additive projection from the current tenant fact without changing their recorded ownership."
+      },
+      {
+       "name": "owner",
+       "type": "CertificateAssetOwner | null",
+       "required": true,
+       "description": "Recorded user identity, not created_by or inferred current tenant membership. Null for legacy assets, including empty or multi-member tenants."
+      },
+      {
+       "name": "owner_status",
+       "type": "string: recorded / legacy_unknown",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "Set at upload or from the issuing order; empty when none."
+      },
+      {
+       "name": "source",
+       "type": "string: uploaded / acme",
+       "required": true
+      },
+      {
+       "name": "auto_renew",
+       "type": "boolean",
+       "required": true,
+       "description": "Whether this certificate renews automatically; always false for uploaded certificates."
+      },
+      {
+       "name": "disabled",
+       "type": "boolean",
+       "required": true,
+       "description": "Disabled certificates cannot be bound and are not auto-renewed."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "created_by_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "updated_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "updated_by_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds 384 KiB"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type is not application/json with optional UTF-8 charset"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "setCertificateAssetAutoRenew",
+   "method": "PATCH",
+   "path": "/v1/certificate-assets/{asset_id}/auto-renew",
+   "summary": "Turn automatic renewal of an ACME certificate on or off",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Renewal intent lives on the certificate asset; the issuing order's auto_renew stays an immutable snapshot. Uploaded certificates return 409 certificate_asset_auto_renew_unsupported. Audited as certificate.auto_renew.update.",
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Retry an unknown result only with this exact key and unchanged request."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate asset",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Unique only within tenant_scope_id; use the UUID id for row identity and operations."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant",
+       "type": "CertificateAssetTenant",
+       "required": true,
+       "description": "Actual tenant joined through tenant_scope_id. Older idempotency receipts receive this additive projection from the current tenant fact without changing their recorded ownership."
+      },
+      {
+       "name": "owner",
+       "type": "CertificateAssetOwner | null",
+       "required": true,
+       "description": "Recorded user identity, not created_by or inferred current tenant membership. Null for legacy assets, including empty or multi-member tenants."
+      },
+      {
+       "name": "owner_status",
+       "type": "string: recorded / legacy_unknown",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "Set at upload or from the issuing order; empty when none."
+      },
+      {
+       "name": "source",
+       "type": "string: uploaded / acme",
+       "required": true
+      },
+      {
+       "name": "auto_renew",
+       "type": "boolean",
+       "required": true,
+       "description": "Whether this certificate renews automatically; always false for uploaded certificates."
+      },
+      {
+       "name": "disabled",
+       "type": "boolean",
+       "required": true,
+       "description": "Disabled certificates cannot be bound and are not auto-renewed."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "created_by_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "updated_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "updated_by_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds 384 KiB"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type is not application/json with optional UTF-8 charset"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "listCertificateAssetBindings",
+   "method": "GET",
+   "path": "/v1/certificate-assets/{asset_id}/bindings",
+   "summary": "List current site bindings for one certificate asset",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.read"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current certificate asset bindings",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<CertificateAssetBinding>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "bindCertificateAsset",
+   "method": "POST",
+   "path": "/v1/certificate-assets/{asset_id}/bindings",
+   "summary": "Bind an active version to a tenant site",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Retry an unknown result only with this exact key and unchanged request."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "version_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "default",
+      "type": "boolean",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current binding fact",
+     "fields": [
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "asset_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "default",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bound",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "changed_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "changed_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds 384 KiB"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type is not application/json with optional UTF-8 charset"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "unbindCertificateAsset",
+   "method": "DELETE",
+   "path": "/v1/certificate-assets/{asset_id}/bindings/{site_id}",
+   "summary": "Append an immutable site unbind fact",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Retry an unknown result only with this exact key and unchanged request."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current binding fact",
+     "fields": [
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "asset_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "default",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "bound",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "changed_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "changed_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds 384 KiB"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type is not application/json with optional UTF-8 charset"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "setCertificateAssetDisabled",
+   "method": "PATCH",
+   "path": "/v1/certificate-assets/{asset_id}/disabled",
+   "summary": "Disable or re-enable a certificate",
+   "auth": [
+    "bearer"
+   ],
+   "description": "A disabled certificate cannot be bound to a site and is not auto-renewed. A certificate still bound to a site returns 409 certificate_asset_referenced; binding a disabled one returns 409 certificate_asset_disabled. Audited as certificate.asset.disable / certificate.asset.enable.",
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Retry an unknown result only with this exact key and unchanged request."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "disabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate asset",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true,
+       "description": "Unique only within tenant_scope_id; use the UUID id for row identity and operations."
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant",
+       "type": "CertificateAssetTenant",
+       "required": true,
+       "description": "Actual tenant joined through tenant_scope_id. Older idempotency receipts receive this additive projection from the current tenant fact without changing their recorded ownership."
+      },
+      {
+       "name": "owner",
+       "type": "CertificateAssetOwner | null",
+       "required": true,
+       "description": "Recorded user identity, not created_by or inferred current tenant membership. Null for legacy assets, including empty or multi-member tenants."
+      },
+      {
+       "name": "owner_status",
+       "type": "string: recorded / legacy_unknown",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "remark",
+       "type": "string",
+       "description": "Set at upload or from the issuing order; empty when none."
+      },
+      {
+       "name": "source",
+       "type": "string: uploaded / acme",
+       "required": true
+      },
+      {
+       "name": "auto_renew",
+       "type": "boolean",
+       "required": true,
+       "description": "Whether this certificate renews automatically; always false for uploaded certificates."
+      },
+      {
+       "name": "disabled",
+       "type": "boolean",
+       "required": true,
+       "description": "Disabled certificates cannot be bound and are not auto-renewed."
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "created_by_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "updated_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "updated_by_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "deleted_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds 384 KiB"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type is not application/json with optional UTF-8 charset"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  },
+  {
+   "operation_id": "downloadCertificateAsset",
+   "method": "GET",
+   "path": "/v1/certificate-assets/{asset_id}/download",
+   "summary": "Download the current certificate version with its private key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the latest activated version. Requires certificates.manage; a tenant downloads only its own certificates. Audited as certificate.asset.download in the same transaction before the key is returned. A revoked current version returns 409 certificate_asset_download_unavailable.",
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate zip (Content-Disposition attachment, named after the primary domain)."
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    },
+    {
+     "status": "503",
+     "description": "Private key envelope unavailable (certificate_asset_envelope_unavailable)"
+    }
+   ]
+  },
+  {
+   "operation_id": "activateCertificateAssetVersion",
+   "method": "POST",
+   "path": "/v1/certificate-assets/{asset_id}/versions/{version_id}/activate",
+   "summary": "Atomically activate one immutable certificate version",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "certificates.manage"
+   ],
+   "params": [
+    {
+     "name": "asset_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "version_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Required for platform detail and write operations; optional for the collection GET to list active tenants. Forbidden when it differs from a tenant actor scope."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Retry an unknown result only with this exact key and unchanged request."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Certificate asset version",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "asset_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "version",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: default / pending_activation / active / superseded / revoked / expired",
+       "required": true
+      },
+      {
+       "name": "fingerprint_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "certificate_pem",
+       "type": "string(byte)",
+       "required": true,
+       "description": "Public certificate chain only; no private-key material."
+      },
+      {
+       "name": "sans",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "subject",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "serial_number",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "public_key_algorithm",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "public_key_bits",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "signature_algorithm",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "not_before",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "not_after",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "acme_order_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "renewal_due_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "renewal_due",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "imported_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "imported_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request, metadata or certificate material"
+    },
+    {
+     "status": "401",
+     "description": "Bearer session missing or invalid"
+    },
+    {
+     "status": "403",
+     "description": "Tenant scope or live permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Certificate asset or version not found"
+    },
+    {
+     "status": "405",
+     "description": "Method not allowed"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, reference or lifecycle conflict"
+    },
+    {
+     "status": "413",
+     "description": "Request body exceeds 384 KiB"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type is not application/json with optional UTF-8 charset"
+    },
+    {
+     "status": "500",
+     "description": "Sanitized internal failure"
+    }
+   ]
+  }
+ ]
+}

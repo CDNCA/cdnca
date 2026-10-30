@@ -1,0 +1,586 @@
+{
+ "id": "admin-billing-bridge",
+ "prefix": "/v1/admin/billing-bridge",
+ "operations": [
+  {
+   "operation_id": "listPlatformBillingBridgeKeys",
+   "method": "GET",
+   "path": "/v1/admin/billing-bridge/keys",
+   "summary": "List the platform billing bridge keys",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Bearer session of the platform owner (platform session, billing_bridge.manage). Lease feature module.billing.bridge (403 entitlement_feature_denied when the plugin is not enabled). Keys are paged by (created_at DESC, id DESC); the secret is never returned here.",
+   "permissions": [
+    "billing_bridge.manage"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of keys.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingBridgeKey>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "has_more",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "createPlatformBillingBridgeKey",
+   "method": "POST",
+   "path": "/v1/admin/billing-bridge/keys",
+   "summary": "Create a platform billing bridge key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Bearer session of the platform owner (platform session, billing_bridge.manage), MFA step-up proof (audience billing-bridge, action billing_bridge.key.create) in step_up_token; 403 mfa_step_up_required without it. ip_allowlist is required (1–32 addresses or CIDR networks, no /0). The secret is returned once in this response and only its pepper-derived seed is stored. Audit billing_bridge.key.created.",
+   "permissions": [
+    "billing_bridge.manage"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "name",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "ip_allowlist",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "expires_at",
+      "type": "string(date-time)"
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "The key and its one-time secret.",
+     "fields": [
+      {
+       "name": "key",
+       "type": "BillingBridgeKey",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string",
+       "required": true,
+       "description": "Shown once; sign requests with it (cbs_ + 43 base64url characters)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "415",
+     "description": "Content-Type must be exactly application/json without parameters."
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "revokePlatformBillingBridgeKey",
+   "method": "POST",
+   "path": "/v1/admin/billing-bridge/keys/{id}/revoke",
+   "summary": "Revoke a platform billing bridge key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Step-up action billing_bridge.key.revoke bound to the key id. Revocation is final. Audit billing_bridge.key.revoked.",
+   "permissions": [
+    "billing_bridge.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The revoked key.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "key_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "owner_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner_kind",
+       "type": "string: platform / reseller",
+       "required": true
+      },
+      {
+       "name": "name",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "ip_allowlist",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: active / revoked",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "last_used_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "created_by",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "revoked_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "rotatePlatformBillingBridgeKey",
+   "method": "POST",
+   "path": "/v1/admin/billing-bridge/keys/{id}/rotate",
+   "summary": "Rotate the secret of a platform billing bridge key",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Step-up action billing_bridge.key.rotate bound to the key id. The old secret stops working at once; the new one is returned once. 409 revision_conflict on a stale expected_revision, 409 key_revoked for a revoked key. Audit billing_bridge.key.rotated.",
+   "permissions": [
+    "billing_bridge.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "The key and its new one-time secret.",
+     "fields": [
+      {
+       "name": "key",
+       "type": "BillingBridgeKey",
+       "required": true
+      },
+      {
+       "name": "secret",
+       "type": "string",
+       "required": true,
+       "description": "Shown once; sign requests with it (cbs_ + 43 base64url characters)."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "404",
+     "description": "The requested resource was not found.",
+     "description_zh": "请求的资源不存在。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformBillingBridgeLogs",
+   "method": "GET",
+   "path": "/v1/admin/billing-bridge/logs",
+   "summary": "List the platform billing bridge call log",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Calls made with the caller's own keys only (owner scope), newest first, cursor paged. Denied calls carry the internal reason_code the caller of the bridge never sees. Rows are kept 90 days.",
+   "permissions": [
+    "billing_bridge.manage"
+   ],
+   "params": [
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One page of log rows.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<BillingBridgeLogEntry>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "has_more",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformBillingBridgeSettings",
+   "method": "GET",
+   "path": "/v1/admin/billing-bridge/settings",
+   "summary": "Read the platform billing bridge plugin settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Platform plugin settings. sso_require_mfa defaults to false (bridge SSO skips the second factor); revision 0 means never saved. Lease feature module.billing.bridge (403 entitlement_feature_denied).",
+   "permissions": [
+    "billing_bridge.manage"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current settings.",
+     "fields": [
+      {
+       "name": "sso_require_mfa",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "putPlatformBillingBridgeSettings",
+   "method": "PUT",
+   "path": "/v1/admin/billing-bridge/settings",
+   "summary": "Change the platform billing bridge plugin settings",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a step-up proof (audience billing-bridge, action billing_bridge.settings.update, bound to the owner scope): turning MFA off weakens every bridge SSO sign-in. expected_revision is the revision read (0 for the first save); a stale revision is 409. Audited as billing_bridge.settings.updated.",
+   "permissions": [
+    "billing_bridge.manage"
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "sso_require_mfa",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     },
+     {
+      "name": "step_up_token",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Saved settings.",
+     "fields": [
+      {
+       "name": "sso_require_mfa",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal is not allowed to perform the action.",
+     "description_zh": "当前身份没有执行该操作的权限。"
+    },
+    {
+     "status": "409",
+     "description": "The requested state conflicts with an existing resource or idempotency fact.",
+     "description_zh": "请求的状态与已有资源或幂等记录冲突。"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,547 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "tls-sni-host",
+  "scenario_sha256": "a6b13b927ba978ed722adf9a4a5241bf3bf575e000cdac9277d39b1e769f1e79",
+  "steps": [
+    {
+      "id": "hs-shop",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "h2",
+        "subject": "shop.example.test",
+        "names": [
+          "shop.example.test",
+          "*.shop.example.test"
+        ],
+        "serial": 101,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "hs-wildcard",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "h2",
+        "subject": "shop.example.test",
+        "names": [
+          "shop.example.test",
+          "*.shop.example.test"
+        ],
+        "serial": 101,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "hs-blog",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "h2",
+        "subject": "blog.example.test",
+        "names": [
+          "blog.example.test"
+        ],
+        "serial": 102,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "hs-unknown",
+      "kind": "tls",
+      "tls": {
+        "error": "tls_alert_unrecognized_name"
+      }
+    },
+    {
+      "id": "hs-no-sni",
+      "kind": "tls",
+      "tls": {
+        "error": "tls_alert_unrecognized_name"
+      }
+    },
+    {
+      "id": "hs-tls12",
+      "kind": "tls",
+      "tls": {
+        "version": "1.2",
+        "alpn": "h2",
+        "subject": "shop.example.test",
+        "names": [
+          "shop.example.test",
+          "*.shop.example.test"
+        ],
+        "serial": 101,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "hs-http1-only-alpn",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "http/1.1",
+        "subject": "shop.example.test",
+        "names": [
+          "shop.example.test",
+          "*.shop.example.test"
+        ],
+        "serial": 101,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "hs-legacy-h2-offered",
+      "kind": "tls",
+      "tls": {
+        "version": "1.3",
+        "alpn": "http/1.1",
+        "subject": "legacy.example.test",
+        "names": [
+          "legacy.example.test"
+        ],
+        "serial": 103,
+        "issuer": "cdnca edge golden site CA",
+        "verified": true
+      }
+    },
+    {
+      "id": "h2-shop",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/2.0",
+          "headers": {
+            "content-length": "25",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 25,
+            "sha256": "503a553ab0f003c6948ad885c72a6d0b07911617bafdd4457ad2cdd559509b87",
+            "text": "shop shop.example.test /x"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "h2",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/x",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "h1-shop",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "25",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 25,
+            "sha256": "503a553ab0f003c6948ad885c72a6d0b07911617bafdd4457ad2cdd559509b87",
+            "text": "shop shop.example.test /x"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/x",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "h1-wildcard",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "27",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 27,
+            "sha256": "6aa3aff7494af5a1e13bf6dffff1c8bdc3418f963f47c4eb28dc4f48a7f28dc3",
+            "text": "shop a.shop.example.test /w"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/w",
+              "host": "a.shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sni-shop-host-blog-h1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 32,
+            "sha256": "344542183731e9da1fcd569cf736ae38ba9060ec149330a5edfae7b6d6e50f50",
+            "text": "blog blog.example.test /mismatch"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "blog",
+              "method": "GET",
+              "uri": "/mismatch",
+              "host": "blog.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sni-shop-host-blog-h2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/2.0",
+          "headers": {
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 32,
+            "sha256": "344542183731e9da1fcd569cf736ae38ba9060ec149330a5edfae7b6d6e50f50",
+            "text": "blog blog.example.test /mismatch"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "h2",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "blog",
+              "method": "GET",
+              "uri": "/mismatch",
+              "host": "blog.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sni-shop-host-unknown",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 421,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "170",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 170,
+            "sha256": "2994add6b59762ad47fa60e1ea26ba3daa14a454cbafa7ad7147b3318774e083",
+            "text": "<html>\r\n<head><title>421 Misdirected Request</title></head>\r\n<body>\r\n<center><h1>421 Misdirected Request</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "sni-shop-host-legacy",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 421,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "170",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 170,
+            "sha256": "2994add6b59762ad47fa60e1ea26ba3daa14a454cbafa7ad7147b3318774e083",
+            "text": "<html>\r\n<head><title>421 Misdirected Request</title></head>\r\n<body>\r\n<center><h1>421 Misdirected Request</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "plain-http-to-tls-port",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 400,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "252",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 252,
+            "sha256": "a3bec831b7186bbb0dc427b3d9ff396fc17f245d125d48745cf688d198e2dfd1",
+            "text": "<html>\r\n<head><title>400 The plain HTTP request was sent to HTTPS port</title></head>\r\n<body>\r\n<center><h1>400 Bad Request</h1></center>\r\n<center>The plain HTTP request was sent to HTTPS port</center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "legacy-h1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "29",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 29,
+            "sha256": "975ba9f8f99c8831e9a167c52c8fb84695b3e9ff31b0d913d80bd7624fd36218",
+            "text": "legacy legacy.example.test /l"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "legacy.example.test",
+            "names": [
+              "legacy.example.test"
+            ],
+            "serial": 103,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "legacy",
+              "method": "GET",
+              "uri": "/l",
+              "host": "legacy.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "forged-client-verify",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "30",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 30,
+            "sha256": "41e378e412020c2527591e5133f849fc5c92b3c5c6b6479af61a31599e8f0dce",
+            "text": "shop shop.example.test /forged"
+          },
+          "tls": {
+            "version": "1.3",
+            "alpn": "http/1.1",
+            "subject": "shop.example.test",
+            "names": [
+              "shop.example.test",
+              "*.shop.example.test"
+            ],
+            "serial": 101,
+            "issuer": "cdnca edge golden site CA",
+            "verified": true
+          },
+          "origin": [
+            {
+              "origin": "shop",
+              "method": "GET",
+              "uri": "/forged",
+              "host": "shop.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "https",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

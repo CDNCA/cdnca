@@ -1,0 +1,551 @@
+{
+ "id": "firewall-actions",
+ "prefix": "/v1/firewall-actions",
+ "operations": [
+  {
+   "operation_id": "getFirewallActionPolicy",
+   "method": "GET",
+   "path": "/v1/firewall-actions/policy",
+   "summary": "Read the desired, active, and last-known-good firewall action policy",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "firewall.read"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Desired, active, and LKG state",
+     "fields": [
+      {
+       "name": "normal_action",
+       "type": "string: disconnect / return_page",
+       "required": true
+      },
+      {
+       "name": "escalated_action",
+       "type": "string: nftables",
+       "required": true
+      },
+      {
+       "name": "engage_threshold",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recover_threshold",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recovery_windows",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "block_networks",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "trusted_proxies",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "trusted_crawlers",
+       "type": "array<TrustedCrawler>",
+       "required": true
+      },
+      {
+       "name": "return_page",
+       "type": "ReturnPage",
+       "required": true
+      },
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "active_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "lkg_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "deployment_state",
+       "type": "string: pending / active / failed",
+       "required": true
+      },
+      {
+       "name": "host_escalation",
+       "type": "string: owned / shared_unsupported",
+       "required": true,
+       "description": "Where the nftables escalation runs. owned - the scope owns an active node, the escalation applies there; shared_unsupported - the scope has only shared platform nodes, which never take tenant host rules, so only the OpenResty normal action applies (use site access control)."
+      },
+      {
+       "name": "document_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Policy absent or outside actor scope"
+    }
+   ]
+  },
+  {
+   "operation_id": "putFirewallActionPolicy",
+   "method": "PUT",
+   "path": "/v1/firewall-actions/policy",
+   "summary": "Create the next immutable firewall action policy candidate",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "firewall.manage"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "normal_action",
+      "type": "string: disconnect / return_page",
+      "required": true
+     },
+     {
+      "name": "escalated_action",
+      "type": "string: nftables",
+      "required": true
+     },
+     {
+      "name": "engage_threshold",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "recover_threshold",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "recovery_windows",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "block_networks",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "trusted_proxies",
+      "type": "array<string>",
+      "required": true
+     },
+     {
+      "name": "trusted_crawlers",
+      "type": "array<TrustedCrawler>",
+      "required": true
+     },
+     {
+      "name": "return_page",
+      "type": "ReturnPage",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Immutable candidate accepted for publication",
+     "fields": [
+      {
+       "name": "normal_action",
+       "type": "string: disconnect / return_page",
+       "required": true
+      },
+      {
+       "name": "escalated_action",
+       "type": "string: nftables",
+       "required": true
+      },
+      {
+       "name": "engage_threshold",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recover_threshold",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recovery_windows",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "block_networks",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "trusted_proxies",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "trusted_crawlers",
+       "type": "array<TrustedCrawler>",
+       "required": true
+      },
+      {
+       "name": "return_page",
+       "type": "ReturnPage",
+       "required": true
+      },
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "active_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "lkg_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "deployment_state",
+       "type": "string: pending / active / failed",
+       "required": true
+      },
+      {
+       "name": "host_escalation",
+       "type": "string: owned / shared_unsupported",
+       "required": true,
+       "description": "Where the nftables escalation runs. owned - the scope owns an active node, the escalation applies there; shared_unsupported - the scope has only shared platform nodes, which never take tenant host rules, so only the OpenResty normal action applies (use site access control)."
+      },
+      {
+       "name": "document_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid policy or request metadata"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, or LKG conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "recoverFirewallActionLKG",
+   "method": "POST",
+   "path": "/v1/firewall-actions/policy/recover",
+   "summary": "Create a monotonic recovery candidate from the last-known-good policy",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Creates a new monotonic candidate from the durable last-known-good document; it never rewinds revisions.",
+   "permissions": [
+    "firewall.manage"
+   ],
+   "params": [
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "LKG recovery candidate accepted",
+     "fields": [
+      {
+       "name": "normal_action",
+       "type": "string: disconnect / return_page",
+       "required": true
+      },
+      {
+       "name": "escalated_action",
+       "type": "string: nftables",
+       "required": true
+      },
+      {
+       "name": "engage_threshold",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recover_threshold",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "recovery_windows",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "block_networks",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "trusted_proxies",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "trusted_crawlers",
+       "type": "array<TrustedCrawler>",
+       "required": true
+      },
+      {
+       "name": "return_page",
+       "type": "ReturnPage",
+       "required": true
+      },
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "tenant_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "active_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "lkg_revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "deployment_state",
+       "type": "string: pending / active / failed",
+       "required": true
+      },
+      {
+       "name": "host_escalation",
+       "type": "string: owned / shared_unsupported",
+       "required": true,
+       "description": "Where the nftables escalation runs. owned - the scope owns an active node, the escalation applies there; shared_unsupported - the scope has only shared platform nodes, which never take tenant host rules, so only the OpenResty normal action applies (use site access control)."
+      },
+      {
+       "name": "document_sha256",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid policy or request metadata"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, or LKG conflict"
+    }
+   ]
+  }
+ ]
+}

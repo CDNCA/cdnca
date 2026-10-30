@@ -1,0 +1,24 @@
+.plugin-market-page { min-width: 0; }
+.plugin-market-page h1 { margin: 0; font-size: 22px; line-height: 1.35; }
+.plugin-market-subtitle { margin: 4px 0 16px; color: var(--cdnca-color-text-hint, #667085); }
+.plugin-market-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.plugin-market-toolbar .ant-input { width: min(280px, 100%); }
+.plugin-market-loading { display: grid; min-height: 240px; place-items: center; }
+.plugin-market-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; }
+.plugin-market-scope-list { margin: 0; padding-left: 20px; }
+.plugin-market-scope-list code { overflow-wrap: anywhere; }
+.plugin-market-digest { word-break: break-all; }
+.plugin-market-actions { margin-top: 16px; }
+.plugin-market-state { margin-bottom: 16px; }
+.plugin-market-state-reason { margin: 8px 0 0; color: var(--cdnca-color-text-subtle, #596273); line-height: 1.5; }
+.plugin-market-state .plugin-market-actions { margin-top: 12px; }
+.plugin-market-danger { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--cdnca-color-border-divider, #f0f1f2); }
+.plugin-market-consent-note { margin-bottom: 12px; }
+.plugin-market-groups { margin-bottom: 12px; }
+@media (max-width: 640px) {
+  .plugin-market-page h1 { font-size: 18px; }
+  .plugin-market-toolbar, .plugin-market-toolbar .ant-space-compact, .plugin-market-toolbar .ant-input { width: 100%; }
+  .plugin-market-toolbar .ant-select { min-width: 0 !important; flex: 1; }
+  .plugin-market-pagination { justify-content: space-between; }
+  .plugin-market-drawer .ant-drawer-body { padding: 12px; }
+}

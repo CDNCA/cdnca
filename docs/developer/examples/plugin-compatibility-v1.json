@@ -1,0 +1,62 @@
+{
+  "schema": "cdnca.plugin-compatibility-matrix/v1",
+  "rows": [
+    {
+      "surface": "manifest",
+      "contract": "marketplace.cdnca.io/v1",
+      "compatibility_source": "plugin.json#/api_version",
+      "failure_mode": "reject_manifest"
+    },
+    {
+      "surface": "manifest_signature",
+      "contract": "cdnca-plugin-manifest/v1",
+      "compatibility_source": "plugin.json#/integrity",
+      "failure_mode": "reject_manifest"
+    },
+    {
+      "surface": "control_api",
+      "contract": "canonical-semver-conjunction/v1",
+      "compatibility_source": "plugin.json#/spec/compatibility/control_api",
+      "failure_mode": "deny_install_or_upgrade_preserve_lkg"
+    },
+    {
+      "surface": "license_operator_api",
+      "contract": "/operator/v1",
+      "compatibility_source": "license OpenAPI operation path",
+      "failure_mode": "reject_unknown_major"
+    },
+    {
+      "surface": "plugin_workload_identity",
+      "contract": "cdnca.plugin-workload-identity/v1",
+      "compatibility_source": "signed workload credential schema",
+      "failure_mode": "deny_runtime_request"
+    },
+    {
+      "surface": "agent",
+      "contract": "no_direct_plugin_execution/v1",
+      "compatibility_source": "out-of-process integration boundary",
+      "failure_mode": "do_not_activate_plugin_code"
+    },
+    {
+      "surface": "control_plugin_installation_api",
+      "contract": "cdnca.control.plugin-installation/v1",
+      "compatibility_source": "PluginInstallation.schema and Control OpenAPI operation path",
+      "failure_mode": "reject_unknown_major"
+    },
+    {
+      "surface": "webhook_signature",
+      "contract": "cdnca.webhook.signature/v2",
+      "compatibility_source": "X-CDNCA-Webhook-Signature-Version and signed request bytes",
+      "failure_mode": "reject_webhook_without_side_effect"
+    }
+  ],
+  "deprecations": [
+    {
+      "contract": "marketplace.cdnca.io/v1",
+      "status": "active",
+      "deprecated_since": null,
+      "sunset_after": null,
+      "replacement": null
+    }
+  ]
+}

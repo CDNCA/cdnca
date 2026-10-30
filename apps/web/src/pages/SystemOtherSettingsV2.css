@@ -1,0 +1,225 @@
+/* fix-sysother: 系统配置「其它配置」页签分组卡网格（artifacts/fix-sysother/DESIGN.md）.
+   Every rule sits under the outer root .sys-setting-v2 (same as SystemGlobalSettingsV2.css),
+   so base declarations stay untouched (DefaultLookLock). Colors use --cdnca-* variables only.
+   The base page pins card margin/padding and title margin with !important, hence the
+   !important on those three overrides. */
+
+.sys-setting-v2 .sys-other .sys-other-summary .sys-setting-v2-summary > ul {
+  grid-template-columns: repeat(6, minmax(140px, 1fr));
+}
+
+.sys-setting-v2 .sys-other-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (min-width: 1680px) {
+  .sys-setting-v2 .sys-other-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1199px) {
+  .sys-setting-v2 .sys-other-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sys-setting-v2 .sys-other .sys-other-summary .sys-setting-v2-summary > ul {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .sys-other-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  margin: 0 !important;
+  padding: 18px 20px 6px !important;
+}
+
+.sys-setting-v2 .sys-other-card-head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .sys-other-card-head > .system-settings-config-card-title {
+  margin: 0 !important;
+}
+
+.sys-setting-v2 .sys-other-card-sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Vertical labels; the control takes the card width. */
+.sys-setting-v2 .sys-other-form .ant-form-item {
+  margin-bottom: 14px;
+}
+
+.sys-setting-v2 .sys-other-form .ant-form-item-label {
+  padding-bottom: 6px;
+}
+
+.sys-setting-v2 .sys-other-form .ant-form-item-label > label {
+  height: auto;
+  color: var(--cdnca-color-text);
+  font-weight: 500;
+}
+
+.sys-setting-v2 .sys-other-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0 16px;
+}
+
+.sys-setting-v2 .sys-other-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sys-setting-v2 .sys-other-help {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--cdnca-color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: help;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.sys-setting-v2 .sys-other-help:hover {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-bg-hover);
+}
+
+.sys-setting-v2 .sys-other-help:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.sys-setting-v2 .sys-other-form .ant-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.sys-setting-v2 .sys-other-toggles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+/* Toggle cards stretch to the grid cell here instead of the fixed 220px used on the 系统配置 tab. */
+.sys-setting-v2 .sys-other .sys-setting-v2-toggle {
+  width: auto;
+}
+
+.sys-setting-v2 .sys-other-expert {
+  margin-top: 16px;
+}
+
+.sys-setting-v2 .sys-other-expert .ant-collapse {
+  background: var(--cdnca-color-bg-container);
+  border-color: var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.sys-setting-v2 .sys-other-expert .ant-collapse-content-box {
+  padding-top: 12px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .sys-approval-card {
+  margin: 16px 0 0 !important;
+}
+
+.sys-setting-v2 .sys-approval-card .ant-typography {
+  margin-bottom: 8px;
+}
+
+.sys-setting-v2 .sys-other .sys-approval-toggle {
+  width: 260px;
+  max-width: 100%;
+  margin: 4px 0 16px;
+}
+
+.sys-setting-v2 .system-settings-baseline-page.sys-setting.sys-setting-reference-page .sys-approval-card > .ant-btn {
+  align-self: flex-start;
+  margin-bottom: 14px;
+}
+
+.sys-setting-v2 .sys-approval-rules-label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+/* 默认保底链最后一级（fix-fallbackchain2）：二选一 + 无限防线路组下拉 */
+.sys-setting-v2 .sys-fallback-chain-last-resort {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sys-setting-v2 .sys-fallback-chain-last-resort .ant-radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.sys-setting-v2 .sys-fallback-chain-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.sys-setting-v2 .sys-approval-rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px 16px;
+  margin-bottom: 16px;
+}
+
+.sys-setting-v2 .sys-approval-rules .ant-checkbox-wrapper {
+  min-height: 32px;
+  align-items: center;
+  margin-inline-start: 0;
+  white-space: nowrap;
+}
+
+.sys-setting-v2 .sys-other-savebar {
+  margin-top: 16px;
+  border-bottom: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.sys-setting-v2 .sys-other-savebar > .sys-other-savebar-actions {
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sys-setting-v2 .sys-other-help {
+    transition: none;
+  }
+}

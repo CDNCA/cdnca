@@ -1,0 +1,3 @@
+# Preserve signed/downloaded byte identity and unified-diff context prefixes.
+*.patch -whitespace
+*.asc -whitespace

@@ -1,0 +1,264 @@
+# Production-shape example only. Replace every example host, CIDR, Secret name,
+# repository, and digest with approved environment-specific references.
+production:
+  enabled: true
+  metricsServerAvailable: true
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+
+networkPolicy:
+  gatewaySourceCIDRs: [203.0.113.0/24]
+  controlExternalEgress:
+    cidrs: [10.20.0.0/24]
+    ports: [443]
+  gatewayExternalEgress:
+    cidrs: []
+  dataStores:
+    postgresql: {cidrs: [10.20.0.10/32], port: 5432}
+    redis: {cidrs: [10.20.0.20/32], port: 6379}
+    nats: {cidrs: [10.20.0.30/32], port: 4222}
+    clickhouse: {cidrs: [10.20.0.40/32], port: 8123}
+
+customerIngress:
+  enabled: true
+  host: customer.example.invalid
+  tls:
+    enabled: true
+    existingSecret: cdnca-customer-ingress-tls
+
+controlBackupTool:
+  image:
+    repository: registry.example.invalid/cdnca/control-backup
+    digest: "" # Supply the exact published backup-tool image digest in the deployment overlay.
+  storage:
+    existingClaim: cdnca-control-recovery-replicated
+  recovery:
+    coreManifestSHA256: "0000000000000000000000000000000000000000000000000000000000000000"
+    envelopeKey:
+      provider: kms
+      name: control-backup/customer-control-production
+      version: unconfigured-1
+    jetStream:
+      url: tls://nats.cdnca.svc.cluster.local:4222
+      nodeId: 11111111-1111-4111-8111-111111111111
+      nodeIdUnderscore: "11111111_1111_4111_8111_111111111111"
+      secret:
+        existingSecret: cdnca-control-recovery-nats
+    dnsProbe:
+      hostname: control.example.invalid
+      expectedAddresses: [198.51.100.30]
+    agentProbe:
+      url: https://control-api.cdnca.svc.cluster.local/v1/internal/recovery/agent-reconnect
+      expectedNodes: 3
+      secret:
+        existingSecret: cdnca-control-recovery-agent-probe
+
+controlBackup:
+  # Enable only after the installation identity, release bindings, and runtime dependencies are verified.
+  enabled: false
+  secret:
+    existingSecret: cdnca-control-backup-source
+
+# Manual break-glass only: set enabled=true together with an approved exact ID,
+# manifest digest, empty targets, and measured PostgreSQL free bytes.
+controlRestore:
+  enabled: false
+  backupId: ""
+  manifestSHA256: ""
+  operationId: ""
+  targetId: ""
+
+controlBackupNetworkPolicy:
+  enabled: true
+  nats:
+    cidrs: [10.40.0.20/32]
+  kubernetesAPI:
+    cidrs: [10.96.0.1/32]
+  agentProbe:
+    cidrs: [10.40.0.30/32]
+    port: 443
+
+controlApi:
+  replicaCount: 3
+  cacheControl:
+    streamReplicas: 3
+  nodeScheduling:
+    enabled: false
+  systemConfiguration:
+    enabled: true
+  securityActivation:
+    signer:
+      provider: remote
+      publicKeySecret:
+        existingSecret: cdnca-control-api-edge-publication-signer
+        key: public-key.pem
+      remote:
+        endpoint: https://edge-signer.example.invalid/v1/sign
+        caSecret:
+          existingSecret: cdnca-control-api-edge-publication-signer
+          key: ca.pem
+        bearerTokenSecret:
+          existingSecret: cdnca-control-api-edge-publication-signer
+          key: bearer-token
+        timeout: 3s
+  image:
+    repository: registry.example.invalid/cdnca/control-api
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  licenseServiceURL: https://license.example.invalid
+  trafficPackage:
+    enabled: true
+    cursorKeySecret:
+      existingSecret: cdnca-control-api-traffic-package
+    workload:
+      enabled: false
+  packageCommerce:
+    enabled: true
+    providerCallbacks:
+      enabled: false
+      keyringSecret:
+        existingSecret: cdnca-package-commerce-provider-callbacks
+        key: keyring.json
+    worker:
+      enabled: true
+      nats:
+        url: tls://nats.package-commerce.svc.cluster.local:4222
+        credentialsSecret:
+          existingSecret: cdnca-package-commerce-nats-credentials
+        caSecret:
+          existingSecret: cdnca-package-commerce-nats-ca
+  packageMonitor:
+    enabled: true
+    cursorKeySecret:
+      existingSecret: cdnca-control-api-package-monitor
+      key: cursor-hmac-key-base64
+  identityVerification:
+    enabled: true
+    resolverName: trusted-kyc
+    reviewTTL: 72h
+    retentionPeriod: 52560h
+    cursorKeySecret:
+      existingSecret: cdnca-control-api-identity-verification
+      key: cursor-hmac-key-base64
+    settlement:
+      workerEnabled: true
+      leaseDuration: 1m
+      retryDelay: 1m
+      maxAttempts: 8
+      idlePoll: 250ms
+      errorBackoff: 1s
+    provider:
+      enabled: true
+      name: trusted-kyc
+      endpoint: https://kyc-provider.example.invalid
+      apiKeySecret:
+        existingSecret: cdnca-control-api-identity-verification-provider
+        key: api-key
+      callbackKeyId: callback-hmac-2026-01
+      callbackHMACSecret:
+        existingSecret: cdnca-control-api-identity-verification-provider
+        key: callback-hmac-base64
+      objectStore:
+        endpoint: https://identity-evidence.example.invalid
+        region: cn-control-1
+        bucket: cdnca-identity-evidence
+        prefix: identity-verification
+        kmsKeyId: arn:aws:kms:cn-control-1:000000000000:key/replace-before-deploy
+        credentialsSecret:
+          existingSecret: cdnca-control-api-identity-verification-object-store
+          keys:
+            accessKeyId: access-key-id
+            secretAccessKey: secret-access-key
+            sessionToken: session-token
+    issuer:
+      enabled: true
+      listenAddress: 0.0.0.0:9444
+      servicePort: 9444
+      workloadIdentities: spiffe://control.cdnca.local/workload/identity-verification/issuer|trusted-kyc-issuer
+      kmsEndpoint: ""
+      mtlsSecret:
+        existingSecret: cdnca-control-api-identity-verification-issuer-mtls
+        keys:
+          serverCertificate: server.crt
+          serverPrivateKey: server.key
+          clientCA: client-ca.crt
+  pdb: {enabled: true, minAvailable: 2}
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 65
+    targetMemoryUtilizationPercentage: 75
+
+controlUpgradeRunner:
+  enabled: true
+  protocolVersion: "2"
+  pollInterval: 5s
+  stepTimeout: 3m
+  healthTimeout: 10m
+  expectedReplicas: 3
+  quorum: 2
+  stateKey: control-state.json
+  internalTokenKey: internal-token
+  installationSecret:
+    existingSecret: cdnca-control-api-runtime
+    key: installation-id
+  trustSecret:
+    existingSecret: cdnca-control-api-runtime
+    key: entitlement-trusted-keys.json
+  planSecret:
+    existingSecret: cdnca-control-upgrade-plan
+    key: bundle.json
+  planSource:
+    url: https://control.internal.example.invalid/v1/internal/control-upgrade/plan
+    timeout: 10s
+    maxBytes: 262144
+    existingSecret: replace-with-control-upgrade-plan-source
+    keys:
+      ca: ca.crt
+      clientCertificate: tls.crt
+      clientPrivateKey: tls.key
+      internalToken: internal-token
+  state:
+    existingClaim: ""
+    storageClass: fast-retained
+    size: 1Gi
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits: {cpu: "1", memory: 512Mi}
+
+agentGateway:
+  replicaCount: 3
+  image:
+    repository: registry.example.invalid/cdnca/agent-gateway
+    digest: sha256:2222222222222222222222222222222222222222222222222222222222222222
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+    loadBalancerSourceRanges: [203.0.113.0/24]
+  pdb: {enabled: true, minAvailable: 2}
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 65
+    targetMemoryUtilizationPercentage: 75
+  terminationGracePeriodSeconds: 120
+
+web:
+  replicaCount: 2
+  image:
+    repository: registry.example.invalid/cdnca/web
+    digest: sha256:4444444444444444444444444444444444444444444444444444444444444444
+  pdb: {enabled: true, minAvailable: 1}
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 65
+    targetMemoryUtilizationPercentage: 75

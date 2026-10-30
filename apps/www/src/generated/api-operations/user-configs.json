@@ -1,0 +1,384 @@
+{
+ "id": "user-configs",
+ "prefix": "/v1/user-configs",
+ "operations": [
+  {
+   "operation_id": "listUserConfigs",
+   "method": "GET",
+   "path": "/v1/user-configs",
+   "summary": "List per-user stream defaults",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "type must be stream. Tenant principals see only their own rows; platform principals see all rows in the selected scope.",
+   "permissions": [
+    "streams.read"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page ordered oldest first; display_id is the row ordinal.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<StreamUserConfig>",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  },
+  {
+   "operation_id": "createUserConfig",
+   "method": "POST",
+   "path": "/v1/user-configs",
+   "summary": "Create a per-user stream default",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "The scope is global, or a forwarding group that must exist in the same scope. New forwards resolve these defaults when the field is omitted.",
+   "permissions": [
+    "streams.manage"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Reuse is accepted only for the exact same actor, operation, and normalized input."
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "target_scope_id",
+      "type": "string(uuid)",
+      "description": "Required for platform principals; tenant principals may omit it or use their current scope."
+     },
+     {
+      "name": "owner_id",
+      "type": "string(uuid)",
+      "description": "Required for platform principals; tenant principals may omit it or use their current user."
+     },
+     {
+      "name": "setting_name",
+      "type": "string: proxy_protocol / listen_protocol / balance_way",
+      "required": true
+     },
+     {
+      "name": "setting_value",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "scope_name",
+      "type": "string: global / group",
+      "required": true
+     },
+     {
+      "name": "group_id",
+      "type": "string(uuid)",
+      "description": "Required exactly when scope_name is group, and must exist in the same scope."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Default committed, or an exact idempotent replay returned.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "owner",
+       "type": "StreamOwner | null",
+       "required": true
+      },
+      {
+       "name": "setting_name",
+       "type": "string: proxy_protocol / listen_protocol / balance_way",
+       "required": true
+      },
+      {
+       "name": "setting_value",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_name",
+       "type": "string: global / group",
+       "required": true
+      },
+      {
+       "name": "group",
+       "type": "StreamGroupReference | null",
+       "required": true
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or listener-port conflict."
+    },
+    {
+     "status": "415",
+     "description": "Exactly one Content-Type field parsing as application/json is required."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  },
+  {
+   "operation_id": "getEffectiveUserConfigs",
+   "method": "GET",
+   "path": "/v1/user-configs/effective",
+   "summary": "Resolve the stream defaults a new forward draft is prefilled with",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "type must be stream. The same resolution as creating a forward: the owner's global defaults, overridden by those of the given groups. Tenant principals resolve their own; platform principals must give target_scope_id and owner_id of a tenant member.",
+   "permissions": [
+    "streams.read"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "type",
+     "in": "query",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "owner_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "group_id",
+     "in": "query",
+     "type": "array<string(uuid)>"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Effective defaults.",
+     "fields": [
+      {
+       "name": "protocol",
+       "type": "string: tcp / udp / null | null: tcp / udp / null",
+       "required": true
+      },
+      {
+       "name": "proxy_protocol_inbound",
+       "type": "boolean | null",
+       "required": true
+      },
+      {
+       "name": "balance_way",
+       "type": "string: rr / ip_hash / null | null: rr / ip_hash / null",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteUserConfig",
+   "method": "DELETE",
+   "path": "/v1/user-configs/{id}",
+   "summary": "Delete a per-user stream default",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "permissions": [
+    "streams.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact per-user stream default identity."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "description": "Caller-stable request identity; invalid or absent values are replaced by middleware."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Reuse is accepted only for the exact same actor, operation, and normalized input."
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Default deleted."
+    },
+    {
+     "status": "400",
+     "description": "Stable invalid request or validation error."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal lacks the required permission or owner scope."
+    },
+    {
+     "status": "404",
+     "description": "No visible stream matches the exact immutable stream identity."
+    },
+    {
+     "status": "409",
+     "description": "Revision, idempotency, name, or listener-port conflict."
+    },
+    {
+     "status": "500",
+     "description": "Internal operation failure without publication or activation claims."
+    }
+   ]
+  }
+ ]
+}

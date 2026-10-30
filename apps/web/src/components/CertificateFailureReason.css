@@ -1,0 +1,36 @@
+.certificate-failure {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.certificate-failure .certificate-failure-cell,
+.certificate-failure .certificate-failure-reason {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.certificate-failure .certificate-failure-reason {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.certificate-failure .certificate-failure-reason.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.certificate-failure .certificate-failure-toggle.ant-btn {
+  height: auto;
+  padding: 0;
+  font-size: 12px;
+  line-height: 18px;
+}

@@ -1,0 +1,637 @@
+/* redesign-a: 工单聊天气泡详情 + 列表（artifacts/redesign-a/DESIGN-tickets.md）。
+   Every rule sits under a root class new in this task (.ticket-chat,
+   .ticket-list-*), so no base declaration changes (DefaultLookLock).
+   Colors come from the shared --cdnca-* variables only. */
+
+/* ---- detail shell ---- */
+.ticket-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ticket-chat .ticket-chat-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.ticket-chat .ticket-chat-head-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.ticket-chat .ticket-chat-head h4.ant-typography {
+  margin: 0 0 6px;
+  font-size: 18px;
+  line-height: 26px;
+  overflow-wrap: anywhere;
+}
+
+.ticket-chat .ticket-chat-head-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 0;
+}
+
+.ticket-chat .ticket-chat-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: 16px;
+}
+
+/* ---- conversation panel: stream scrolls, composer stays at the bottom ---- */
+.ticket-chat .ticket-chat-panel {
+  position: relative;
+  display: flex;
+  height: calc(100vh - 260px);
+  min-height: 480px;
+  flex-direction: column;
+  background: var(--cdnca-color-bg-soft);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.ticket-chat .ticket-chat-stream {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ticket-chat .ticket-chat-system {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.ticket-chat .ticket-chat-system::before,
+.ticket-chat .ticket-chat-system::after {
+  height: 1px;
+  flex: 1;
+  background: var(--cdnca-color-border-secondary);
+  content: "";
+}
+
+/* ---- message groups: customer left, staff right ---- */
+.ticket-chat .ticket-chat-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 78%;
+}
+
+.ticket-chat .ticket-chat-group--staff {
+  flex-direction: row-reverse;
+  align-self: flex-end;
+}
+
+.ticket-chat .ticket-chat-avatar {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--cdnca-color-bg-muted);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 50%;
+}
+
+.ticket-chat .ticket-chat-group--staff .ticket-chat-avatar {
+  color: var(--cdnca-color-text-inverse);
+  background: var(--cdnca-color-primary);
+  border-color: var(--cdnca-color-primary);
+}
+
+.ticket-chat .ticket-chat-group--internal .ticket-chat-avatar {
+  color: var(--cdnca-color-title);
+  background: var(--cdnca-color-warning-bg);
+  border-color: var(--cdnca-color-warning);
+}
+
+.ticket-chat .ticket-chat-group-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.ticket-chat .ticket-chat-group--staff .ticket-chat-group-main {
+  align-items: flex-end;
+}
+
+.ticket-chat .ticket-chat-who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.ticket-chat .ticket-chat-group--staff .ticket-chat-who {
+  flex-direction: row-reverse;
+}
+
+.ticket-chat .ticket-chat-who strong {
+  color: var(--cdnca-color-title);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ticket-chat .ticket-chat-bubble {
+  max-width: 100%;
+  padding: 10px 14px;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 4px 12px 12px 12px;
+}
+
+.ticket-chat .ticket-chat-group--staff .ticket-chat-bubble {
+  background: var(--cdnca-color-primary-bg);
+  border-color: var(--cdnca-color-primary-bg);
+  border-radius: 12px 4px 12px 12px;
+}
+
+.ticket-chat .ticket-chat-group--internal .ticket-chat-bubble {
+  background: var(--cdnca-color-warning-bg);
+  border: 1px dashed var(--cdnca-color-warning);
+}
+
+.ticket-chat .ticket-chat-internal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  color: var(--cdnca-color-title);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.ticket-chat .ticket-chat-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- attachments ---- */
+.ticket-chat .ticket-chat-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ticket-chat .ticket-chat-file {
+  display: inline-flex;
+  max-width: 280px;
+  align-items: center;
+  gap: 4px;
+  padding-right: 4px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+
+.ticket-chat .ticket-chat-file-main {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 44px;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  color: var(--cdnca-color-primary);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.ticket-chat .ticket-chat-file-main:hover .ticket-chat-file-name {
+  text-decoration: underline;
+}
+
+.ticket-chat .ticket-chat-file-main:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.ticket-chat .ticket-chat-file-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.ticket-chat .ticket-chat-file-name {
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-chat .ticket-chat-file-size {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* ---- composer ---- */
+.ticket-chat .ticket-chat-notice {
+  margin: 0 24px 12px;
+}
+
+.ticket-chat .ticket-chat-composer {
+  position: relative;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--cdnca-color-bg-container);
+  border-top: 1px solid var(--cdnca-color-border-card);
+  transition: background-color 150ms ease;
+}
+
+.ticket-chat .ticket-chat-composer.is-internal {
+  background: var(--cdnca-color-warning-bg);
+}
+
+.ticket-chat .ticket-chat-drop {
+  position: absolute;
+  inset: 6px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+  background: var(--cdnca-color-primary-bg);
+  border: 2px dashed var(--cdnca-color-primary);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.ticket-chat .ticket-chat-pending {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.ticket-chat .ticket-chat-pending li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ticket-chat .ticket-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.ticket-chat .ticket-chat-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ticket-chat .ticket-chat-hint {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.ticket-chat .ticket-chat-actions-end {
+  display: inline-flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---- side panel ---- */
+.ticket-chat .ticket-chat-side {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ticket-chat .ticket-chat-card {
+  padding: 16px 20px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.ticket-chat .ticket-chat-card h3 {
+  margin: 0 0 12px;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.ticket-chat .ticket-chat-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ticket-chat .ticket-chat-user .ticket-chat-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 16px;
+}
+
+.ticket-chat .ticket-chat-user > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.ticket-chat .ticket-chat-user strong {
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-chat .ticket-chat-label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+}
+
+.ticket-chat .ticket-chat-fields {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0;
+}
+
+.ticket-chat .ticket-chat-fields dt {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.ticket-chat .ticket-chat-fields dd {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ticket-chat .ticket-chat-fields .ant-select {
+  width: 100%;
+}
+
+.ticket-chat .ticket-chat-mono {
+  font-size: 12px;
+}
+
+.ticket-chat .ticket-chat-card > .ant-alert {
+  margin-top: 12px;
+}
+
+@media (max-width: 1199px) {
+  .ticket-chat .ticket-chat-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ticket-chat .ticket-chat-side {
+    order: -1;
+  }
+
+  .ticket-chat .ticket-chat-group {
+    max-width: 92%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket-chat .ticket-chat-composer {
+    transition: none;
+  }
+}
+
+/* ---- list ---- */
+.ticket-list-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.ticket-list-summary {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.ticket-list-summary li {
+  display: flex;
+  min-width: 112px;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 18px;
+  border-left: 1px solid var(--cdnca-color-border-secondary);
+}
+
+.ticket-list-summary li:first-child {
+  border-left: 0;
+}
+
+.ticket-list-summary span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.ticket-list-summary strong {
+  color: var(--cdnca-color-title);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+}
+
+.ticket-list-summary li.is-primary strong {
+  color: var(--cdnca-color-primary);
+}
+
+.ticket-list-summary li.is-error strong {
+  color: var(--cdnca-color-error);
+}
+
+.ticket-list-advfilters {
+  margin-bottom: 12px;
+}
+
+.ticket-list-subject {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.ticket-list-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  margin-top: 8px;
+  border-radius: 50%;
+}
+
+.ticket-list-dot.is-unread {
+  background: var(--cdnca-color-primary);
+}
+
+.ticket-list-subject .ant-btn-link {
+  height: auto;
+  padding: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.ticket-list-sub {
+  overflow-wrap: anywhere;
+}
+
+.ticket-list-subject .ant-btn-link.is-unread {
+  font-weight: 600;
+}
+
+.ticket-list-subject .ant-tag {
+  margin-left: 6px;
+}
+
+.ticket-list-sub {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+/* fix-ticketops：管理员操作 */
+.ticket-chat .ticket-chat-head-ops {
+  flex: none;
+}
+
+.ticket-list-batch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 12px;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.ticket-ops-impact {
+  display: block;
+  max-width: 320px;
+}
+
+/* fix-ticket2：列表右上的“工单通知 / 新建工单”，窄屏时换到摘要下方并占满一行。 */
+.ticket-list-actions {
+  flex: none;
+}
+
+.ticket-drawer-alert {
+  margin-bottom: 12px;
+}
+
+/* 工单通知：事件 × 渠道的勾选表，行头是事件名，列头是渠道。 */
+.ticket-notify-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--cdnca-color-bg-container);
+  border: 1px solid var(--cdnca-color-border-card);
+  border-radius: 6px;
+}
+
+.ticket-notify-table th,
+.ticket-notify-table td {
+  padding: 12px;
+  border-top: 1px solid var(--cdnca-color-border-secondary);
+  text-align: center;
+}
+
+.ticket-notify-table thead th {
+  border-top: 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--cdnca-color-bg-soft);
+}
+
+.ticket-notify-table th[scope="row"],
+.ticket-notify-table thead th:first-child {
+  color: var(--cdnca-color-title);
+  font-weight: 500;
+  text-align: left;
+}
+
+.ticket-notify-table thead th:first-child {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.ticket-notify-channel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 767px) {
+  .ticket-list-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* fix-advfilter3: 4 × 112px overflowed the 390 viewport; split the width evenly instead. */
+  .ticket-list-summary li {
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 8px 10px;
+  }
+
+  .ticket-notify-table th,
+  .ticket-notify-table td {
+    padding: 10px 6px;
+  }
+}

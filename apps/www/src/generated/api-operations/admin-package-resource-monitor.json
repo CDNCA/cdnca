@@ -1,0 +1,161 @@
+{
+ "id": "admin-package-resource-monitor",
+ "prefix": "/v1/admin/package-resource-monitor",
+ "operations": [
+  {
+   "operation_id": "listAdminPackageResources",
+   "method": "GET",
+   "path": "/v1/admin/package-resource-monitor",
+   "summary": "查询所有当前有效用户套餐的带宽与连接数资源状态",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "query_version",
+     "in": "query",
+     "type": "integer: 1 / 2",
+     "description": "默认版本 1 仅返回旧字段；版本 2 返回稳定 subscription_display_id 并支持数字套餐 ID 筛选。"
+    },
+    {
+     "name": "subscription_display_ids",
+     "in": "query",
+     "type": "string",
+     "description": "仅版本 2；逗号分隔的持久化用户套餐数字编号，不得重复，最多 100 个，单个不超过 9223372036854775807。不能与 subscription_ids 同时使用。"
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer: 10 / 30 / 100 / 300"
+    },
+    {
+     "name": "order_by",
+     "in": "query",
+     "type": "string: bandwidth / connections"
+    },
+    {
+     "name": "user_id",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "subscription_ids",
+     "in": "query",
+     "type": "string",
+     "description": "逗号分隔、不得重复的套餐 UUID，最多 100 个"
+    },
+    {
+     "name": "node_ids",
+     "in": "query",
+     "type": "string",
+     "description": "逗号分隔、不得重复的节点显示 ID，最多 100 个"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "套餐不可变快照、用户显示 ID 与权威监控观测组成的分页结果",
+     "fields": [
+      {
+       "name": "count",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "items",
+       "type": "array<PackageResourceMonitorItem>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "408",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "502",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误信封"
+    }
+   ]
+  },
+  {
+   "operation_id": "listAdminPackageResourceNodes",
+   "method": "GET",
+   "path": "/v1/admin/package-resource-monitor/nodes",
+   "summary": "查询一个当前有效用户套餐的节点资源状态",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "subscription_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "ClickHouse 当前节点维度遥测；缺少任一指标时明确返回 unknown",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<PackageResourceMonitorNode>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "401",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "403",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "404",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "408",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "502",
+     "description": "稳定错误信封"
+    },
+    {
+     "status": "503",
+     "description": "稳定错误信封"
+    }
+   ]
+  }
+ ]
+}

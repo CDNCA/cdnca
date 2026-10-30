@@ -1,0 +1,50 @@
+{
+ "id": "modules",
+ "prefix": "/v1/modules",
+ "operations": [
+  {
+   "operation_id": "listGrantedModules",
+   "method": "GET",
+   "path": "/v1/modules",
+   "summary": "List the module, pack and theme feature codes the local entitlement lease grants",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Any authenticated session. Modules is empty unless the verified local lease is valid (grace included is not valid), matching the API entry gate (entitlement_feature_denied) and the publication gate. Front-end menu items with requiredModule are shown only when the code is listed.",
+   "responses": [
+    {
+     "status": "200",
+     "description": "Granted module codes.",
+     "fields": [
+      {
+       "name": "status",
+       "type": "string",
+       "required": true,
+       "description": "Local lease state (valid, grace, expired, revoked, invalid, uninstalled)."
+      },
+      {
+       "name": "lease_serial",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "modules",
+       "type": "array<string>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "500",
+     "description": "The request could not be completed because of an internal failure.",
+     "description_zh": "服务内部故障，请求未完成。"
+    }
+   ]
+  }
+ ]
+}

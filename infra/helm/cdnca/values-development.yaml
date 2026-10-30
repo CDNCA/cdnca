@@ -1,0 +1,36 @@
+# Local integration overlay. External data services and Secrets are still required.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+
+networkPolicy:
+  gatewaySourceCIDRs: []
+  controlExternalEgress:
+    cidrs: []
+  gatewayExternalEgress:
+    cidrs: []
+
+customerIngress:
+  enabled: false
+
+controlApi:
+  replicaCount: 1
+  nodeScheduling:
+    enabled: false
+  pdb: {enabled: false}
+  autoscaling: {enabled: false}
+
+agentGateway:
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    externalTrafficPolicy: Cluster
+    loadBalancerSourceRanges: []
+  pdb: {enabled: false}
+  autoscaling: {enabled: false}
+
+web:
+  replicaCount: 1
+  pdb: {enabled: false}
+  autoscaling: {enabled: false}

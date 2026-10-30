@@ -1,0 +1,2968 @@
+{
+ "id": "admin-analytics",
+ "prefix": "/v1/admin/analytics",
+ "operations": [
+  {
+   "operation_id": "getPlatformAnalyticsBlockedIPCount",
+   "method": "GET",
+   "path": "/v1/admin/analytics/blocked-ip-count",
+   "summary": "Count distinct client IPs blocked by the global firewall or CC auto-bans",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity with sites.read or platform.admin. Counts distinct client_ip values from global_firewall block events and CC temporary_ban events in the left-closed, right-open window and is bounded by one ingestion snapshot. It is not the current ACL cardinality.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "RFC3339 instant. After UTC normalization it must be exactly hour aligned and earlier than to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant. After UTC normalization it must be exactly hour aligned. The window may not exceed 31 days."
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only. Omit for all tenants."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Distinct client IPs blocked by global firewall events or auto-banned by CC rules in the normalized UTC window.",
+     "fields": [
+      {
+       "name": "blocked_ip_count",
+       "type": "integer(uint64)",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "QueryMetadata",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "analytics_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "analytics_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "analytics_permission_denied or analytics_scope_forbidden"
+    },
+    {
+     "status": "408",
+     "description": "analytics_request_cancelled"
+    },
+    {
+     "status": "502",
+     "description": "analytics_storage_rejected, analytics_storage_invalid_response, or analytics_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "analytics_storage_unavailable or analytics_realtime_evidence_unavailable; no zero-value data is substituted. site-realtime with query_version=3 returns partial coverage instead of analytics_realtime_evidence_unavailable for unsettled hours; dependency failures remain 503."
+    },
+    {
+     "status": "504",
+     "description": "analytics_query_timeout"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAnalyticsBlockedIPTrend",
+   "method": "GET",
+   "path": "/v1/admin/analytics/blocked-ip-trend",
+   "summary": "Read the hourly distinct client IPs blocked by the global firewall",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity with sites.read or platform.admin. Each returned UTC bucket contains the distinct client_ip count from global_firewall block events, bounded by one ingestion snapshot.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "RFC3339 instant. After UTC normalization it must be exactly hour aligned and earlier than to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant. After UTC normalization it must be exactly hour aligned. The window may not exceed 31 days."
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only. Omit for all tenants."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Hourly distinct client IPs blocked by global firewall events.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<BlockedIPTrendPoint>",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "QueryMetadata",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "analytics_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "analytics_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "analytics_permission_denied or analytics_scope_forbidden"
+    },
+    {
+     "status": "408",
+     "description": "analytics_request_cancelled"
+    },
+    {
+     "status": "502",
+     "description": "analytics_storage_rejected, analytics_storage_invalid_response, or analytics_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "analytics_storage_unavailable or analytics_realtime_evidence_unavailable; no zero-value data is substituted. site-realtime with query_version=3 returns partial coverage instead of analytics_realtime_evidence_unavailable for unsettled hours; dependency failures remain 503."
+    },
+    {
+     "status": "504",
+     "description": "analytics_query_timeout"
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformAnalyticsConnectionsDeadLetters",
+   "method": "GET",
+   "path": "/v1/admin/analytics/connections/dead-letters",
+   "summary": "List durable analytics connections dead-letter receipts",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a revocable platform Bearer session with sites.read and platform.admin. An optional tenant_id narrows the digest-only durable receipt projection to one tenant. Raw payloads are never returned.",
+   "permissions": [
+    "sites.read",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Optional platform scope narrowing to one canonical tenant UUID."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "after_sequence",
+     "in": "query",
+     "type": "integer(uint64)",
+     "description": "Exclusive decimal JetStream dead-letter stream sequence cursor."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Digest-only durable DLQ receipts ordered by dead-letter stream sequence.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ConnectionsDeadLetterItem>",
+       "required": true
+      },
+      {
+       "name": "next_after_sequence",
+       "type": "integer(uint64)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "connections_dead_letter_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "connections_dead_letter_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "connections_dead_letter_permission_denied"
+    },
+    {
+     "status": "404",
+     "description": "connections_dead_letter_not_found"
+    },
+    {
+     "status": "408",
+     "description": "connections_dead_letter_request_timeout"
+    },
+    {
+     "status": "502",
+     "description": "connections_dead_letter_invalid_response or connections_dead_letter_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "connections_dead_letter_unavailable; no zero-value receipt is substituted."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAnalyticsConnectionsDeadLetter",
+   "method": "GET",
+   "path": "/v1/admin/analytics/connections/dead-letters/{dead_letter_id}",
+   "summary": "Read one durable analytics connections dead-letter receipt",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a revocable platform Bearer session with sites.read and platform.admin. The response is a digest-only durable receipt and never includes raw payload or secret fields.",
+   "permissions": [
+    "sites.read",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "dead_letter_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "One digest-only durable DLQ receipt.",
+     "fields": [
+      {
+       "name": "item",
+       "type": "ConnectionsDeadLetterItem",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "connections_dead_letter_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "connections_dead_letter_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "connections_dead_letter_permission_denied"
+    },
+    {
+     "status": "404",
+     "description": "connections_dead_letter_not_found"
+    },
+    {
+     "status": "408",
+     "description": "connections_dead_letter_request_timeout"
+    },
+    {
+     "status": "502",
+     "description": "connections_dead_letter_invalid_response or connections_dead_letter_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "connections_dead_letter_unavailable; no zero-value receipt is substituted."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAnalyticsConnectionsRetention",
+   "method": "GET",
+   "path": "/v1/admin/analytics/connections/retention",
+   "summary": "Read finalized connections retention facts for a tenant subscription",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a revocable platform Bearer session with sites.read and platform.admin. Tenant and subscription scope are mandatory and every returned fact is finalized, evidence-bound, and ordered by UTC period.",
+   "permissions": [
+    "sites.read",
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Exact tenant scope for the platform retention route."
+    },
+    {
+     "name": "subscription_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Package subscription authority captured at event time."
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Inclusive canonical UTC RFC3339 instant."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive canonical UTC RFC3339 instant; the window may not exceed 31 days."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Finalized connections facts in ascending period order.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<ConnectionsRetentionItem>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "retention_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "retention_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "retention_permission_denied"
+    },
+    {
+     "status": "408",
+     "description": "retention_request_timeout"
+    },
+    {
+     "status": "502",
+     "description": "retention_invalid_response or retention_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "retention_unavailable; no zero-value fact is substituted."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAnalyticsHourlyTrend",
+   "method": "GET",
+   "path": "/v1/admin/analytics/hourly-trend",
+   "summary": "Read a platform or explicitly selected tenant hourly trend",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity with sites.read or platform.admin. Buckets are UTC hours and only buckets containing events are returned.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "RFC3339 instant. After UTC normalization it must be hour aligned and earlier than to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant. It must be hour aligned after UTC normalization; the window is at most 31 days."
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only. Omit for all tenants; tenant routes reject this parameter."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "UTC hourly metrics ordered by hour ascending; hours with no events are omitted.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<AnalyticsTrendPoint>",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "AnalyticsQueryMetadata",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "analytics_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "analytics_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "analytics_permission_denied or analytics_scope_forbidden"
+    },
+    {
+     "status": "408",
+     "description": "analytics_request_cancelled"
+    },
+    {
+     "status": "500",
+     "description": "analytics_internal_error"
+    },
+    {
+     "status": "502",
+     "description": "analytics_storage_rejected, analytics_storage_invalid_response, or analytics_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "analytics_storage_unavailable; no zero-value data is substituted."
+    },
+    {
+     "status": "504",
+     "description": "analytics_query_timeout"
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminL4Realtime",
+   "method": "GET",
+   "path": "/v1/admin/analytics/l4-realtime",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "可选租户范围；省略时平台管理员查询全部租户"
+    },
+    {
+     "name": "range",
+     "in": "query",
+     "type": "string: 1h / 6h / 12h / 24h / custom",
+     "required": true
+    },
+    {
+     "name": "timezone",
+     "in": "query",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)"
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "stream_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "protocol",
+     "in": "query",
+     "type": "string: tcp / udp"
+    },
+    {
+     "name": "listen_port",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "L4 session aggregates",
+     "fields": [
+      {
+       "name": "version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "totals",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "rows",
+       "type": "array<object>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Request validation failed; clients map the stable code through locale resources."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required or the session is invalid."
+    },
+    {
+     "status": "403",
+     "description": "The authenticated principal cannot access this scope or operation."
+    },
+    {
+     "status": "500",
+     "description": "The response could not be encoded safely."
+    },
+    {
+     "status": "503",
+     "description": "The analytics dependency is unavailable; retry with the same query."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformAccessLogs",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/access",
+   "summary": "List access logs for one explicitly selected tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity. tenant_id is mandatory; this API never performs an all-tenant log query. URI output contains only an origin-form path and omits query and fragment content.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only; omit for all tenants or provide one tenant UUID to narrow the read."
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Inclusive RFC3339 instant with at most millisecond precision. It is normalized to UTC and must be earlier than to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant with at most millisecond precision. The window may not exceed 31 days."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "host",
+     "in": "query",
+     "type": "string",
+     "description": "Access logs and block events: one host or up to 64 distinct space-separated hosts."
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "client_ip",
+     "in": "query",
+     "type": "string(ip)",
+     "description": "Exact IPv4 or IPv6 address without a zone identifier."
+    },
+    {
+     "name": "uri_path",
+     "in": "query",
+     "type": "string",
+     "description": "Exact origin-form path after query and fragment removal."
+    },
+    {
+     "name": "uri_path_match",
+     "in": "query",
+     "type": "string: exact / prefix",
+     "description": "How uri_path matches; prefix uses a startsWith match on the origin-form path. Requires uri_path."
+    },
+    {
+     "name": "status_code",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "method",
+     "in": "query",
+     "type": "string",
+     "description": "Exact HTTP method; access-log routes only."
+    },
+    {
+     "name": "protocol",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored protocol; access-log routes only."
+    },
+    {
+     "name": "cache_status",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored cache status; access-log routes only."
+    },
+    {
+     "name": "upstream_result",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "content_type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "user_agent",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "request_bytes_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "request_bytes_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "response_bytes_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "response_bytes_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "country_code",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored country or region code."
+    },
+    {
+     "name": "carrier",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored carrier value."
+    },
+    {
+     "name": "ja4",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored JA4 fingerprint. Rows without a source JA4 do not match."
+    },
+    {
+     "name": "origin_connect_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_connect_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_first_byte_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_first_byte_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_total_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_total_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description": "Page size. When more rows exist at the fixed snapshot, the response includes an opaque next_cursor."
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque keyset cursor returned by the preceding page. It is bound to the tenant, route kind, complete filter, descending direction, snapshot, and last (occurred_at,event_id) key. Malformed, overlong, or mismatched cursors are rejected and never re-scoped."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Snapshot-bounded access-log page.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<AccessLog>",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "QueryMetadata",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "404",
+     "description": "Analytics log route was not found."
+    },
+    {
+     "status": "422",
+     "description": "Returns analytics_logs_capability_unsupported for malformed cursor shapes rejected before storage or physically observable equal-version replacement ambiguity."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformAccessLogExports",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/access/exports",
+   "summary": "List durable access-log exports owned by the calling account for the target tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Without query filters, lists up to 50 exports owned by the calling account (user + access scope), regardless of the login session that created them. With from/to (and the same filters as the access-log list, without limit/cursor), returns at most one export: the latest generation for that account and normalized query scope, so the log view can recover it after re-login.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route only; all-tenant log queries are forbidden."
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Export scope lookup; when present, to is required and the filters follow the access-log list."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Export scope lookup; exclusive end of the window."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "host",
+     "in": "query",
+     "type": "string",
+     "description": "Access logs and block events: one host or up to 64 distinct space-separated hosts."
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "client_ip",
+     "in": "query",
+     "type": "string(ip)",
+     "description": "Exact IPv4 or IPv6 address without a zone identifier."
+    },
+    {
+     "name": "uri_path",
+     "in": "query",
+     "type": "string",
+     "description": "Exact origin-form path after query and fragment removal."
+    },
+    {
+     "name": "uri_path_match",
+     "in": "query",
+     "type": "string: exact / prefix",
+     "description": "How uri_path matches; prefix uses a startsWith match on the origin-form path. Requires uri_path."
+    },
+    {
+     "name": "status_code",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "method",
+     "in": "query",
+     "type": "string",
+     "description": "Exact HTTP method; access-log routes only."
+    },
+    {
+     "name": "protocol",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored protocol; access-log routes only."
+    },
+    {
+     "name": "cache_status",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored cache status; access-log routes only."
+    },
+    {
+     "name": "upstream_result",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "content_type",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "user_agent",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "request_bytes_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "request_bytes_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "response_bytes_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "response_bytes_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "country_code",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored country or region code."
+    },
+    {
+     "name": "carrier",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored carrier value."
+    },
+    {
+     "name": "ja4",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored JA4 fingerprint. Rows without a source JA4 do not match."
+    },
+    {
+     "name": "origin_connect_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_connect_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_first_byte_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_first_byte_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_total_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_total_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "At most 50 exports for the exact actor, session, scope and tenant.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<AccessExport>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "createPlatformAccessLogExport",
+   "method": "POST",
+   "path": "/v1/admin/analytics/logs/access/exports",
+   "summary": "Create a snapshot-bound access-log export for one target tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Idempotent per account (user + access scope) and normalized query scope, independent of the login session. The same Idempotency-Key replays its export (409 if the key was used for another scope). For the same scope, a pending, running or unexpired completed export is reused (Idempotency-Replayed: true); a failed export with attempts left is retried in place under the same export id; otherwise a new generation is created.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route only; all-tenant log queries are forbidden."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "filter",
+      "type": "AccessExportFilter",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Durable export request accepted; an identical idempotency replay returns the same job.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / running / completed / failed",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "row_count",
+       "type": "integer | null",
+       "required": true
+      },
+      {
+       "name": "byte_count",
+       "type": "integer | null",
+       "required": true
+      },
+      {
+       "name": "sha256",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "downloadable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "filter",
+       "type": "AccessExportFilter | null",
+       "required": true,
+       "description": "申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency key is already bound to another normalized export request."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAccessLogExport",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/access/exports/{export_id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route only; all-tenant log queries are forbidden."
+    },
+    {
+     "name": "export_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Session-bound durable export status.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "status",
+       "type": "string: pending / running / completed / failed",
+       "required": true
+      },
+      {
+       "name": "reason",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "row_count",
+       "type": "integer | null",
+       "required": true
+      },
+      {
+       "name": "byte_count",
+       "type": "integer | null",
+       "required": true
+      },
+      {
+       "name": "sha256",
+       "type": "string"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "downloadable",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "filter",
+       "type": "AccessExportFilter | null",
+       "required": true,
+       "description": "申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "404",
+     "description": "Analytics log route was not found."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "downloadPlatformAccessLogExport",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/access/exports/{export_id}/download",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route only; all-tenant log queries are forbidden."
+    },
+    {
+     "name": "export_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Analytics-Download-Token",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Short-lived one-time token. The server stores only its SHA-256 digest."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "RFC4180 UTF-8 CSV consumed atomically by the one-time grant."
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "410",
+     "description": "Grant is malformed, expired, consumed, or belongs to another session or scope."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "grantPlatformAccessLogExportDownload",
+   "method": "POST",
+   "path": "/v1/admin/analytics/logs/access/exports/{export_id}/download-grants",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns a short-lived one-time token bound to the current platform session, target tenant and export. Any session of the owning account may request a grant; a token from another session is rejected. Only its SHA-256 digest is stored.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route only; all-tenant log queries are forbidden."
+    },
+    {
+     "name": "export_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "201",
+     "description": "One-time grant. Only the SHA-256 token digest is persisted.",
+     "fields": [
+      {
+       "name": "export_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "token",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "expires_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "404",
+     "description": "Analytics log route was not found."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformBlockEvents",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/block-events",
+   "summary": "List security block events for one explicitly selected tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity and an explicit tenant_id. Returns the current security-event projection with the same snapshot-bounded opaque cursor contract as access logs. This is raw event retrieval, not an immutable block-state transition history.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only; omit for all tenants or provide one tenant UUID to narrow the read."
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Inclusive RFC3339 instant with at most millisecond precision. It is normalized to UTC and must be earlier than to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant with at most millisecond precision. The window may not exceed 31 days."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "client_ip",
+     "in": "query",
+     "type": "string(ip)",
+     "description": "Exact IPv4 or IPv6 address without a zone identifier."
+    },
+    {
+     "name": "uri_path",
+     "in": "query",
+     "type": "string",
+     "description": "Exact origin-form path after query and fragment removal."
+    },
+    {
+     "name": "uri_path_match",
+     "in": "query",
+     "type": "string: exact / prefix",
+     "description": "How uri_path matches; prefix uses a startsWith match on the origin-form path. Requires uri_path."
+    },
+    {
+     "name": "status_code",
+     "in": "query",
+     "type": "const 0 | integer",
+     "description": "Exact stored status; 0 means no HTTP status was recorded."
+    },
+    {
+     "name": "action",
+     "in": "query",
+     "type": "string: block / challenge / log / temporary_ban",
+     "description": "Block events only: narrow to block, challenge, log (observed) or temporary_ban (auto block); default all four, the hits the WAF overview counts. A CC challenge page / 429 is one event per site, client IP, rule, action and minute with its request count."
+    },
+    {
+     "name": "event_type",
+     "in": "query",
+     "type": "string",
+     "description": "Block events only: narrow to one event type (waf, cc, acl, ...)."
+    },
+    {
+     "name": "host",
+     "in": "query",
+     "type": "string",
+     "description": "Access logs and block events: one host or up to 64 distinct space-separated hosts."
+    },
+    {
+     "name": "country_code",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored country or region code."
+    },
+    {
+     "name": "carrier",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored carrier value."
+    },
+    {
+     "name": "ja4",
+     "in": "query",
+     "type": "string",
+     "description": "Exact stored JA4 fingerprint. Rows without a source JA4 do not match."
+    },
+    {
+     "name": "origin_connect_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_connect_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_first_byte_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_first_byte_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_total_us_min",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "origin_total_us_max",
+     "in": "query",
+     "type": "integer(uint64)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description": "Page size. When more rows exist at the fixed snapshot, the response includes an opaque next_cursor."
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque keyset cursor returned by the preceding page. It is bound to the tenant, route kind, complete filter, descending direction, snapshot, and last (occurred_at,event_id) key. Malformed, overlong, or mismatched cursors are rejected and never re-scoped."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Snapshot-bounded security block-event page.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<BlockEvent>",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "QueryMetadata",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "404",
+     "description": "Analytics log route was not found."
+    },
+    {
+     "status": "422",
+     "description": "Returns analytics_logs_capability_unsupported for malformed cursor shapes rejected before storage or physically observable equal-version replacement ambiguity."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformCurrentBlocks",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/blocks/current",
+   "summary": "List current ACL blocks across the customer control plane",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns only CIDRs present in the active site ACL policy. A newer unpublished policy revision or open activation makes the item non-unlockable. tenant_id optionally narrows the platform-wide read; every row carries its tenant_id so write actions stay explicitly scoped.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only; omit for all tenants or provide one tenant UUID to narrow the read."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description": "Maximum current or historical block facts returned."
+    },
+    {
+     "name": "offset",
+     "in": "query",
+     "type": "integer",
+     "description": "Number of matching current or historical block facts to skip."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current active ACL block facts.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<CurrentBlock>",
+       "required": true
+      },
+      {
+       "name": "total_count",
+       "type": "integer(uint64)",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "404",
+     "description": "Analytics log route was not found."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "countPlatformCurrentBlocksBySite",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/blocks/current-count",
+   "summary": "Count current ACL blocks by site across the customer control plane",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only; omit for all tenants or provide one tenant UUID to narrow the read."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current active ACL block totals grouped by site.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<SiteBlacklistCount>",
+       "required": true
+      },
+      {
+       "name": "total_count",
+       "type": "integer(uint64)",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "unlockPlatformCurrentBlock",
+   "method": "POST",
+   "path": "/v1/admin/analytics/logs/blocks/current/{block_id}/unlock",
+   "summary": "Unlock one current ACL block for an explicitly selected tenant",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Removes exactly one CIDR from a new ACL policy revision, then starts a version-fenced edge activation. A stale active revision, open activation, missing target CIDR, or missing target-node snapshot fails closed with 409. Reusing the same key and body returns the same durable result; a conflicting body is rejected.",
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "block_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Stable identity derived from site, active ACL policy and canonical CIDR."
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route only; all-tenant log queries are forbidden."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "reason_code",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "The successor policy and activation were durably accepted.",
+     "fields": [
+      {
+       "name": "block_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "candidate_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "string: claimed / canary / expanding / healthy / failed / cancelled / expired / promoted",
+       "required": true
+      },
+      {
+       "name": "reason_code",
+       "type": "string: recovery_claimed / recovery_replayed",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "404",
+     "description": "The scoped active block no longer exists."
+    },
+    {
+     "status": "409",
+     "description": "Returns analytics_block_unlock_conflict when the policy, active edge revision, open activation or target-node snapshot changed."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformBlockHistory",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/blocks/history",
+   "summary": "List audited unlock history across the customer control plane",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns append-only cidr_unlock activation audit facts and their latest durable edge rollout progress. tenant_id optionally narrows the platform-wide read.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only; omit for all tenants or provide one tenant UUID to narrow the read."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description": "Maximum current or historical block facts returned."
+    },
+    {
+     "name": "offset",
+     "in": "query",
+     "type": "integer",
+     "description": "Number of matching current or historical block facts to skip."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Append-only CIDR unlock history with durable edge progress.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<BlockHistory>",
+       "required": true
+      },
+      {
+       "name": "total_count",
+       "type": "integer(uint64)",
+       "required": true
+      },
+      {
+       "name": "snapshot_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "404",
+     "description": "Analytics log route was not found."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "listPlatformCCCoordinationStates",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/cc-coordination",
+   "summary": "List cross-node CC coordination states of every tenant, optionally narrowed to one tenant or site",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only; omit for all tenants or provide one tenant UUID to narrow the read."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer",
+     "description": "Maximum current or historical block facts returned."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Durable tenant/site-scoped cross-node CC state.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<CCCoordinationState>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "releasePlatformCCCoordinationState",
+   "method": "POST",
+   "path": "/v1/admin/analytics/logs/cc-coordination/{state_id}/release",
+   "summary": "Release one exact cross-node CC state after a false-positive decision",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "security_policies.manage"
+   ],
+   "params": [
+    {
+     "name": "state_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route only; all-tenant log queries are forbidden."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "reason_code",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "expected_generation",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "The exact generation was accepted for audited release.",
+     "fields": [
+      {
+       "name": "state",
+       "type": "CCCoordinationState",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid GET body, time range, filter, limit, cursor, or required platform tenant scope. GET bodies are never read."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is required."
+    },
+    {
+     "status": "403",
+     "description": "Permission or identity scope is forbidden."
+    },
+    {
+     "status": "409",
+     "description": "Returns analytics_block_unlock_conflict when the policy, active edge revision, open activation or target-node snapshot changed."
+    },
+    {
+     "status": "503",
+     "description": "Storage transport, rejection, invalid response, or response limit failure."
+    },
+    {
+     "status": "504",
+     "description": "Query deadline or caller cancellation was observed."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAnalyticsGeoEvidence",
+   "method": "GET",
+   "path": "/v1/admin/analytics/logs/{kind}/geo-evidence/{event_id}",
+   "summary": "Reconcile one tenant log fact against a verified GeoIP catalog",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "kind",
+     "in": "path",
+     "type": "string: access / block",
+     "required": true
+    },
+    {
+     "name": "event_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "client_ip",
+     "in": "query",
+     "type": "string(ip)",
+     "required": true
+    },
+    {
+     "name": "database_version",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Verified bounded geo evidence.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "Evidence",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid request."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope."
+    },
+    {
+     "status": "408",
+     "description": "Stable error envelope."
+    },
+    {
+     "status": "409",
+     "description": "Stable error envelope."
+    },
+    {
+     "status": "502",
+     "description": "Stable error envelope."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope."
+    },
+    {
+     "status": "504",
+     "description": "Stable error envelope."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAdminMarketSecurityLogs",
+   "method": "GET",
+   "path": "/v1/admin/analytics/market-security",
+   "summary": "List relayed market supply attack log lines of any tenant",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "RFC 3339; at most 31 days before to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "client_ip",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "host",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "meta.next_cursor of the previous page."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Newest first.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<Log>",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Error."
+    },
+    {
+     "status": "401",
+     "description": "Error."
+    },
+    {
+     "status": "403",
+     "description": "Error."
+    },
+    {
+     "status": "405",
+     "description": "Error."
+    },
+    {
+     "status": "503",
+     "description": "Error."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformSiteMonitoring",
+   "method": "GET",
+   "path": "/v1/admin/analytics/site-monitoring",
+   "summary": "Read one tenant's site monitoring as a platform administrator",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform session with platform.admin and exactly one canonical tenant_id. Omitting, duplicating, or changing tenant scope through identity headers is rejected before any source is queried.",
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "range",
+     "in": "query",
+     "type": "string: 1h / 6h / 12h / custom",
+     "required": true,
+     "description": "Fixed presets use no from/to values. custom requires both from and to and is limited to 31 days; longer ranges are rejected."
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Inclusive UTC boundary, required only for range=custom."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "description": "Exclusive UTC boundary, required only for range=custom."
+    },
+    {
+     "name": "timezone",
+     "in": "query",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "domain",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "listen_port",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "rank_by",
+     "in": "query",
+     "type": "string: host / site / node / status_code"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque snapshot- and filter-bound cursor."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Finalized monitoring aggregate.",
+     "fields": [
+      {
+       "name": "version",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "SiteMonitoringMeta",
+       "required": true
+      },
+      {
+       "name": "basic",
+       "type": "AvailableBasic | DegradedSection",
+       "required": true
+      },
+      {
+       "name": "quality",
+       "type": "AvailableQuality | DegradedSection",
+       "required": true
+      },
+      {
+       "name": "origin",
+       "type": "AvailableOrigin | DegradedSection",
+       "required": true
+      },
+      {
+       "name": "rank",
+       "type": "AvailableRank | DegradedSection",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable non-leaking error envelope."
+    },
+    {
+     "status": "401",
+     "description": "Stable non-leaking error envelope."
+    },
+    {
+     "status": "403",
+     "description": "Stable non-leaking error envelope."
+    },
+    {
+     "status": "405",
+     "description": "Stable non-leaking error envelope."
+    },
+    {
+     "status": "408",
+     "description": "Stable non-leaking error envelope."
+    },
+    {
+     "status": "502",
+     "description": "Stable non-leaking error envelope."
+    },
+    {
+     "status": "503",
+     "description": "Stable non-leaking error envelope."
+    },
+    {
+     "status": "504",
+     "description": "Stable non-leaking error envelope."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformQualityDiagnostics",
+   "method": "GET",
+   "path": "/v1/admin/analytics/site-quality-diagnostics",
+   "summary": "Read one tenant's quality diagnostics from the platform scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "platform.admin"
+   ],
+   "params": [
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Inclusive UTC millisecond boundary."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive UTC millisecond boundary, at most 31 days after from."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "category",
+     "in": "query",
+     "type": "string: upstream_5xx / edge_530 / no_host / config_mismatch"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Finalized, latest-state diagnostics at one exact snapshot.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<QualityDiagnostic>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string | null",
+       "required": true
+      },
+      {
+       "name": "snapshot",
+       "type": "FinalizedSnapshot",
+       "required": true
+      },
+      {
+       "name": "effective_tenant_id",
+       "type": "string(uuid)",
+       "description": "Present only for the platform route."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "401",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "403",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "405",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "408",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "409",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "502",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "503",
+     "description": "Stable error response with no raw dependency text."
+    },
+    {
+     "status": "504",
+     "description": "Stable error response with no raw dependency text."
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformSiteRealtime",
+   "method": "GET",
+   "path": "/v1/admin/analytics/site-realtime",
+   "summary": "Read platform-wide or one tenant's finalized site realtime facts",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform identity with sites.read or platform.admin. Omitting tenant_id queries all tenants; providing it narrows the query to one tenant. With query_version=2 the exact minute-aligned [from,to) interval is projected without rounding. Without query_version, legacy hour alignment and the original response keys are preserved. Its enclosing complete UTC hours must first have independent PostgreSQL source coverage; their expected counts are reconciled with a single ClickHouse access scan shared by all exact-range projections.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Inclusive RFC3339 instant, exactly minute aligned after UTC normalization with query_version=2, otherwise hour aligned; never silently rounded."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant, exactly minute aligned after UTC normalization with query_version=2, otherwise hour aligned; later than from and no more than 31 days apart."
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only. Omit for all tenants or provide one exact tenant scope."
+    },
+    {
+     "name": "query_version",
+     "in": "query",
+     "type": "integer: 2 / 3 / 4",
+     "description": "Explicit opt-in to minute queries and extended series/evidence. 3 adds coverage fields and returns settled hours when other enclosing hours are not finalized yet (coverage_complete=false, missing_windows lists the excluded hour starts) instead of 503. 4 is the realtime monitor: it reads every fact ingested so far, the unsettled current hour included, with no settlement reconciliation (coverage_complete=true, expected_events=0, finalized_through and source_watermark at the Unix epoch); it is a display read and never feeds billing. Omit for the legacy hour-aligned response; other values, empty or repeated values are rejected."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "host",
+     "in": "query",
+     "type": "string",
+     "description": "One or more canonical lowercase hosts without trailing dots, separated by single spaces."
+    },
+    {
+     "name": "listen_port",
+     "in": "query",
+     "type": "integer",
+     "description": "Exact production listen port. Omit to include legacy port-zero facts."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Finalized atomic site realtime facts and source reconciliation evidence."
+    },
+    {
+     "status": "400",
+     "description": "analytics_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "analytics_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "analytics_permission_denied or analytics_scope_forbidden"
+    },
+    {
+     "status": "408",
+     "description": "analytics_request_cancelled"
+    },
+    {
+     "status": "502",
+     "description": "analytics_storage_rejected, analytics_storage_invalid_response, or analytics_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "analytics_storage_unavailable or analytics_realtime_evidence_unavailable; no zero-value data is substituted. site-realtime with query_version=3 returns partial coverage instead of analytics_realtime_evidence_unavailable for unsettled hours; dependency failures remain 503."
+    },
+    {
+     "status": "504",
+     "description": "analytics_query_timeout"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAnalyticsSummary",
+   "method": "GET",
+   "path": "/v1/admin/analytics/summary",
+   "summary": "Read a platform or explicitly selected tenant analytics summary",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity with sites.read or platform.admin. Omitting tenant_id queries all tenants; providing tenant_id narrows the query to that tenant. The time window is left-closed and right-open.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "RFC3339 instant. After UTC normalization it must be hour aligned and earlier than to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant. It must be hour aligned after UTC normalization; the window is at most 31 days."
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only. Omit for all tenants; tenant routes reject this parameter."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Aggregated metrics for the normalized UTC window.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "AnalyticsSummaryMetrics",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "AnalyticsQueryMetadata",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "analytics_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "analytics_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "analytics_permission_denied or analytics_scope_forbidden"
+    },
+    {
+     "status": "408",
+     "description": "analytics_request_cancelled"
+    },
+    {
+     "status": "500",
+     "description": "analytics_internal_error"
+    },
+    {
+     "status": "502",
+     "description": "analytics_storage_rejected, analytics_storage_invalid_response, or analytics_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "analytics_storage_unavailable; no zero-value data is substituted."
+    },
+    {
+     "status": "504",
+     "description": "analytics_query_timeout"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformAnalyticsTop",
+   "method": "GET",
+   "path": "/v1/admin/analytics/top/{dimension}",
+   "summary": "Page through a platform or explicitly selected tenant ranking",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform-scoped identity with sites.read or platform.admin. The cursor is bound to scope, filters, dimension, and one ingestion snapshot. The ja4 dimension is reserved but unsupported in v1.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "dimension",
+     "in": "path",
+     "type": "string: url / ip / domain / region / carrier / ja4 / referer / province / browser / os",
+     "required": true,
+     "description": "region is the ISO country code, province the GB/T 2260 province code (both from the control plane's IP library at ingest), browser and os the node's User-Agent families. Empty values are returned as __unknown__. ip, domain, region, carrier, province, browser and os rank from the hourly history facts; url, ja4 and referer from the access log (see page.source and page.retained_from)."
+    },
+    {
+     "name": "from",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "RFC3339 instant. After UTC normalization it must be hour aligned and earlier than to."
+    },
+    {
+     "name": "to",
+     "in": "query",
+     "type": "string(date-time)",
+     "required": true,
+     "description": "Exclusive RFC3339 instant. It must be hour aligned after UTC normalization; the window is at most 31 days."
+    },
+    {
+     "name": "tenant_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Platform route only. Omit for all tenants; tenant routes reject this parameter."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)"
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Opaque cursor bound to the authenticated scope, filters, dimension, and snapshot."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Deterministically ordered ranking page from one ingestion snapshot.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "array<AnalyticsRankItem>",
+       "required": true
+      },
+      {
+       "name": "dimension",
+       "type": "string: url / ip / domain / region / carrier / ja4 / referer / province / browser / os",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "AnalyticsRankPage",
+       "required": true
+      },
+      {
+       "name": "meta",
+       "type": "AnalyticsQueryMetadata",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "analytics_invalid_request"
+    },
+    {
+     "status": "401",
+     "description": "analytics_authentication_required"
+    },
+    {
+     "status": "403",
+     "description": "analytics_permission_denied or analytics_scope_forbidden"
+    },
+    {
+     "status": "408",
+     "description": "analytics_request_cancelled"
+    },
+    {
+     "status": "422",
+     "description": "analytics_dimension_unsupported"
+    },
+    {
+     "status": "500",
+     "description": "analytics_internal_error"
+    },
+    {
+     "status": "502",
+     "description": "analytics_storage_rejected, analytics_storage_invalid_response, or analytics_response_too_large"
+    },
+    {
+     "status": "503",
+     "description": "analytics_storage_unavailable; no zero-value data is substituted."
+    },
+    {
+     "status": "504",
+     "description": "analytics_query_timeout"
+    }
+   ]
+  }
+ ]
+}

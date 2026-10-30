@@ -1,0 +1,8 @@
+openapi: 3.1.0
+info: {title: b, version: '1'}
+paths:
+  /v1/y:
+    get:
+      operationId: y
+      security: [{nope: []}]
+      responses: {'200': {description: ok}}

@@ -1,0 +1,143 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Firewall Action Policy API
+  version: 1.0.0
+  description: Site-scoped immutable firewall actions with durable candidate, active, and last-known-good revisions.
+servers: [{url: /}]
+security: [{bearerAuth: []}]
+paths:
+  /v1/firewall-actions/policy:
+    get:
+      operationId: getFirewallActionPolicy
+      summary: Read the desired, active, and last-known-good firewall action policy
+      x-required-permissions: [firewall.read]
+      parameters: [{$ref: '#/components/parameters/TargetScopeID'}, {$ref: '#/components/parameters/SiteID'}]
+      responses:
+        '200':
+          description: Desired, active, and LKG state
+          headers: {ETag: {$ref: '#/components/headers/ETag'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Policy'}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      operationId: putFirewallActionPolicy
+      summary: Create the next immutable firewall action policy candidate
+      x-required-permissions: [firewall.manage]
+      parameters:
+        - {$ref: '#/components/parameters/TargetScopeID'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/PolicyInput'}}}
+      responses:
+        '200':
+          description: Immutable candidate accepted for publication
+          headers: {ETag: {$ref: '#/components/headers/ETag'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Policy'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/firewall-actions/policy/recover:
+    post:
+      operationId: recoverFirewallActionLKG
+      summary: Create a monotonic recovery candidate from the last-known-good policy
+      description: Creates a new monotonic candidate from the durable last-known-good document; it never rewinds revisions.
+      x-required-permissions: [firewall.manage]
+      parameters:
+        - {$ref: '#/components/parameters/TargetScopeID'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/IfMatch'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/RequestID'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {type: object, additionalProperties: false}}}
+      responses:
+        '200':
+          description: LKG recovery candidate accepted
+          headers: {ETag: {$ref: '#/components/headers/ETag'}}
+          content: {application/json: {schema: {$ref: '#/components/schemas/Policy'}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    TargetScopeID: {name: target_scope_id, in: query, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    SiteID: {name: site_id, in: query, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+    IfMatch: {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
+    IdempotencyKey: {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}}
+    RequestID: {name: X-Request-ID, in: header, required: true, schema: {$ref: '#/components/schemas/UUID'}}
+  headers:
+    ETag: {description: Quoted desired revision, schema: {type: string, pattern: '^"[1-9][0-9]*"$'}}
+  responses:
+    BadRequest: {description: Invalid policy or request metadata, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unauthorized: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: Permission denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: Policy absent or outside actor scope, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: 'Revision, idempotency, or LKG conflict', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+  schemas:
+    UUID: {type: string, format: uuid}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties: {code: {type: string}}
+    ReturnPage:
+      type: object
+      additionalProperties: false
+      required: [status, content_type, body]
+      properties:
+        status: {type: integer, minimum: 400, maximum: 599}
+        content_type: {type: string, enum: ['text/html; charset=utf-8', 'text/plain; charset=utf-8']}
+        body: {type: string, minLength: 1, maxLength: 16384}
+    TrustedCrawler:
+      type: object
+      additionalProperties: false
+      required: [name, networks, user_agent_prefixes]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 64}
+        networks: {type: array, minItems: 1, maxItems: 256, uniqueItems: true, items: {type: string}}
+        user_agent_prefixes: {type: array, minItems: 1, maxItems: 32, uniqueItems: true, items: {type: string, maxLength: 128}}
+    PolicyInput:
+      type: object
+      additionalProperties: false
+      required: [normal_action, escalated_action, engage_threshold, recover_threshold, recovery_windows, block_networks, trusted_proxies, trusted_crawlers, return_page]
+      properties:
+        normal_action: {type: string, enum: [disconnect, return_page]}
+        escalated_action: {type: string, enum: [nftables]}
+        engage_threshold: {type: integer, minimum: 1}
+        recover_threshold: {type: integer, minimum: 0}
+        recovery_windows: {type: integer, minimum: 1, maximum: 60}
+        block_networks: {type: array, minItems: 1, maxItems: 4092, uniqueItems: true, items: {type: string}}
+        trusted_proxies: {type: array, maxItems: 256, uniqueItems: true, items: {type: string}}
+        trusted_crawlers: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/TrustedCrawler'}}
+        return_page: {$ref: '#/components/schemas/ReturnPage'}
+    Policy:
+      allOf:
+        - {$ref: '#/components/schemas/PolicyInput'}
+        - type: object
+          additionalProperties: false
+          required: [id, tenant_scope_id, site_id, revision, active_revision, lkg_revision, deployment_state, host_escalation, document_sha256, created_at, updated_at]
+          properties:
+            id: {$ref: '#/components/schemas/UUID'}
+            tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+            site_id: {$ref: '#/components/schemas/UUID'}
+            revision: {type: integer, minimum: 1}
+            active_revision: {type: integer, minimum: 0}
+            lkg_revision: {type: integer, minimum: 0}
+            deployment_state: {type: string, enum: [pending, active, failed]}
+            host_escalation:
+              type: string
+              enum: [owned, shared_unsupported]
+              description: Where the nftables escalation runs. owned - the scope owns an active node, the escalation applies there; shared_unsupported - the scope has only shared platform nodes, which never take tenant host rules, so only the OpenResty normal action applies (use site access control).
+            document_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}

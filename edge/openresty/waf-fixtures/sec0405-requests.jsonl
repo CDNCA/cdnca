@@ -1,0 +1,14 @@
+{"case_id":"ordered_allow_continue","host":"waf.example.test","port":18081,"method":"GET","path":"/ordered","source_addr":"127.0.0.1"}
+{"case_id":"allow_stop","host":"waf.example.test","port":18081,"method":"GET","path":"/allow-stop","source_addr":"127.0.0.1"}
+{"case_id":"expired_allow_active_block","host":"waf.example.test","port":18081,"method":"GET","path":"/expired","source_addr":"127.0.0.1"}
+{"case_id":"cidr_v4_zero","host":"waf.example.test","port":18081,"method":"GET","path":"/cidr-v4-zero","source_addr":"127.0.0.1"}
+{"case_id":"cidr_v4_31","host":"waf.example.test","port":18081,"method":"GET","path":"/cidr-v4-31","source_addr":"127.0.0.1"}
+{"case_id":"cidr_v4_32","host":"waf.example.test","port":18081,"method":"GET","path":"/cidr-v4-32","source_addr":"127.0.0.1"}
+{"case_id":"cidr_v6_zero","host":"waf.example.test","port":18081,"method":"GET","path":"/cidr-v6-zero","source_addr":"::1"}
+{"case_id":"cidr_v6_127","host":"waf.example.test","port":18081,"method":"GET","path":"/cidr-v6-127","source_addr":"::1"}
+{"case_id":"cidr_v6_128","host":"waf.example.test","port":18081,"method":"GET","path":"/cidr-v6-128","source_addr":"::1"}
+{"case_id":"mapped_request_does_not_match_v4","host":"waf.example.test","port":18085,"method":"GET","path":"/mapped-request","source_addr":"::ffff:127.0.0.1"}
+{"case_id":"block_continue_then_log_stop","host":"waf.example.test","port":18081,"method":"GET","path":"/block-chain","source_addr":"127.0.0.1"}
+{"case_id":"header_query","host":"waf.example.test","port":18081,"method":"GET","path":"/fields","query":{"token":["ok"]},"header":{"X-Mode":["strict"]},"source_addr":"127.0.0.1"}
+{"case_id":"log_only","host":"waf.example.test","port":18081,"method":"GET","path":"/log-only","source_addr":"127.0.0.1"}
+{"case_id":"no_match","host":"waf.example.test","port":18081,"method":"GET","path":"/no-match","source_addr":"127.0.0.1"}

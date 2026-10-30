@@ -1,0 +1,133 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Site Traffic Limit API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    A website's own daily, monthly and total traffic caps (independent of its
+    package) and the notice page nodes serve with status 509 while a cap is
+    reached. Usage is measured by the control plane from the 400-day metering
+    facts; a write advances the site version (ETag / If-Match).
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Site traffic limit
+paths:
+  /v1/sites/{site_id}/traffic-limit:
+    parameters:
+      - name: site_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      operationId: getSiteTrafficLimit
+      tags: [Site traffic limit]
+      summary: Read a website's traffic caps and their enforcement (sites.read)
+      responses:
+        '200':
+          description: The caps; ETag is the site version.
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteTrafficLimitState'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+    put:
+      operationId: putSiteTrafficLimit
+      tags: [Site traffic limit]
+      summary: Replace a website's traffic caps (sites.manage)
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: {type: string, pattern: '^[A-Za-z0-9._-]{1,128}$'}
+        - name: If-Match
+          in: header
+          required: true
+          description: The quoted site version.
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SiteTrafficLimitSetting'}
+      responses:
+        '200':
+          description: The stored caps; the site's next release enforces them.
+          headers:
+            ETag: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteTrafficLimitState'}
+        '400': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    Error:
+      description: >-
+        validation_error, site_not_found, site_locked, version_conflict or
+        idempotency_conflict.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: {type: string}
+                  message: {type: string}
+                  request_id: {type: string}
+  schemas:
+    SiteTrafficLimitSetting:
+      type: object
+      additionalProperties: false
+      required: [enabled, daily_bytes, monthly_bytes, total_bytes, time_zone, notice_html]
+      properties:
+        enabled:
+          type: boolean
+          description: An enabled limit needs at least one cap.
+        daily_bytes: {type: [integer, 'null'], minimum: 1, maximum: 1152921504606846976}
+        monthly_bytes: {type: [integer, 'null'], minimum: 1, maximum: 1152921504606846976}
+        total_bytes:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 1152921504606846976
+          description: Counted from total_since (set when the total cap is set or changed).
+        time_zone:
+          type: string
+          maxLength: 64
+          description: IANA zone the daily and monthly periods start in ("" means Asia/Shanghai).
+        notice_html:
+          type: string
+          maxLength: 65536
+          description: Page served with status 509 while exceeded ("" the default page).
+    SiteTrafficLimitState:
+      type: object
+      required: [site_id, version, setting, total_since, exceeded_period, exceeded_at, evaluated_at, updated_at]
+      properties:
+        site_id: {type: string, format: uuid}
+        version: {type: integer, minimum: 1}
+        setting: {$ref: '#/components/schemas/SiteTrafficLimitSetting'}
+        total_since: {type: [string, 'null'], format: date-time}
+        exceeded_period:
+          type: string
+          enum: ['', daily, monthly, total]
+          description: The reached cap; nodes serve the notice page while set.
+        exceeded_at: {type: [string, 'null'], format: date-time}
+        evaluated_at: {type: [string, 'null'], format: date-time}
+        updated_at: {type: [string, 'null'], format: date-time}

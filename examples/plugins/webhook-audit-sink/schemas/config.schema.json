@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://webhook-audit-sink.example.invalid/schemas/config.schema.json",
+  "title": "Webhook 审计接收器配置",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {}
+}

@@ -1,0 +1,546 @@
+{{- define "cdnca.pluginWebhook.cidrDescriptor" -}}
+{{- $cidr := . -}}
+{{- $cidrParts := splitList "/" $cidr -}}
+{{- if ne (len $cidrParts) 2 -}}
+  {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+{{- end -}}
+{{- $address := index $cidrParts 0 -}}
+{{- $prefixText := index $cidrParts 1 -}}
+{{- if not (contains ":" $address) -}}
+  {{- if not (regexMatch "^(0|[1-9][0-9]{0,2})([.](0|[1-9][0-9]{0,2})){3}$" $address) -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- if not (regexMatch "^(0|[1-9]|[12][0-9]|3[0-2])$" $prefixText) -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- $ip := 0 -}}
+  {{- range $octet := splitList "." $address -}}
+    {{- $value := atoi $octet -}}
+    {{- if gt $value 255 -}}
+      {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+    {{- end -}}
+    {{- $ip = add (mul $ip 256) $value -}}
+  {{- end -}}
+  {{- $prefix := atoi $prefixText -}}
+  {{- $blockSize := 1 -}}
+  {{- range until (int (sub 32 $prefix)) -}}
+    {{- $blockSize = mul $blockSize 2 -}}
+  {{- end -}}
+  {{- if ne (mod $ip $blockSize) 0 -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- printf "4|%d|%d" $ip (sub (add $ip $blockSize) 1) -}}
+{{- else -}}
+  {{- if not (regexMatch "^(0|[1-9][0-9]?|1[01][0-9]|12[0-8])$" $prefixText) -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- $addressParts := splitList "::" $address -}}
+  {{- if gt (len $addressParts) 2 -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- $left := list -}}
+  {{- $right := list -}}
+  {{- if ne (index $addressParts 0) "" -}}
+    {{- $left = splitList ":" (index $addressParts 0) -}}
+  {{- end -}}
+  {{- if and (eq (len $addressParts) 2) (ne (index $addressParts 1) "") -}}
+    {{- $right = splitList ":" (index $addressParts 1) -}}
+  {{- end -}}
+  {{- $explicitCount := add (len $left) (len $right) -}}
+  {{- $zeroCount := 0 -}}
+  {{- if eq (len $addressParts) 2 -}}
+    {{- if ge $explicitCount 8 -}}
+      {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+    {{- end -}}
+    {{- $zeroCount = sub 8 $explicitCount -}}
+  {{- else if ne $explicitCount 8 -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- $segments := list -}}
+  {{- range $token := $left -}}
+    {{- if not (regexMatch "^[0-9a-f]{1,4}$" $token) -}}
+      {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+    {{- end -}}
+    {{- $segments = append $segments (int (printf "0x%s" $token)) -}}
+  {{- end -}}
+  {{- range until (int $zeroCount) -}}
+    {{- $segments = append $segments 0 -}}
+  {{- end -}}
+  {{- range $token := $right -}}
+    {{- if not (regexMatch "^[0-9a-f]{1,4}$" $token) -}}
+      {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+    {{- end -}}
+    {{- $segments = append $segments (int (printf "0x%s" $token)) -}}
+  {{- end -}}
+  {{- if ne (len $segments) 8 -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- $prefix := atoi $prefixText -}}
+  {{- range $index, $segment := $segments -}}
+    {{- $segmentStart := mul $index 16 -}}
+    {{- $segmentEnd := add $segmentStart 16 -}}
+    {{- if le $prefix $segmentStart -}}
+      {{- if ne (int $segment) 0 -}}
+        {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+      {{- end -}}
+    {{- else if lt $prefix $segmentEnd -}}
+      {{- $hostBlock := 1 -}}
+      {{- range until (int (sub $segmentEnd $prefix)) -}}
+        {{- $hostBlock = mul $hostBlock 2 -}}
+      {{- end -}}
+      {{- if ne (mod (int $segment) $hostBlock) 0 -}}
+        {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- $bestZeroStart := -1 -}}
+  {{- $bestZeroLength := 0 -}}
+  {{- $zeroStart := 0 -}}
+  {{- $zeroLength := 0 -}}
+  {{- range $index, $segment := $segments -}}
+    {{- if eq (int $segment) 0 -}}
+      {{- if eq $zeroLength 0 -}}
+        {{- $zeroStart = $index -}}
+      {{- end -}}
+      {{- $zeroLength = add $zeroLength 1 -}}
+      {{- if gt $zeroLength $bestZeroLength -}}
+        {{- $bestZeroStart = $zeroStart -}}
+        {{- $bestZeroLength = $zeroLength -}}
+      {{- end -}}
+    {{- else -}}
+      {{- $zeroLength = 0 -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if lt $bestZeroLength 2 -}}
+    {{- $bestZeroStart = -1 -}}
+    {{- $bestZeroLength = 0 -}}
+  {{- end -}}
+  {{- $canonicalAddress := "" -}}
+  {{- range $index, $segment := $segments -}}
+    {{- if eq $index $bestZeroStart -}}
+      {{- if eq $index 0 -}}
+        {{- $canonicalAddress = "::" -}}
+      {{- else -}}
+        {{- $canonicalAddress = printf "%s::" $canonicalAddress -}}
+      {{- end -}}
+    {{- else if or (lt $index $bestZeroStart) (ge $index (add $bestZeroStart $bestZeroLength)) -}}
+      {{- $separator := ":" -}}
+      {{- if or (eq $canonicalAddress "") (hasSuffix ":" $canonicalAddress) -}}
+        {{- $separator = "" -}}
+      {{- end -}}
+      {{- $canonicalAddress = printf "%s%s%x" $canonicalAddress $separator (int $segment) -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if ne $address $canonicalAddress -}}
+    {{- fail (printf "invalid or non-canonical CIDR %q" $cidr) -}}
+  {{- end -}}
+  {{- printf "6|%d" $prefix -}}
+  {{- range $segment := $segments -}}
+    {{- printf "|%d" $segment -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "cdnca.pluginWebhook.cidrsOverlap" -}}
+{{- $left := splitList "|" .left -}}
+{{- $right := splitList "|" .right -}}
+{{- if ne (index $left 0) (index $right 0) -}}
+false
+{{- else if eq (index $left 0) "4" -}}
+  {{- if and (le (int64 (index $left 1)) (int64 (index $right 2))) (le (int64 (index $right 1)) (int64 (index $left 2))) -}}true{{- else -}}false{{- end -}}
+{{- else -}}
+  {{- $sharedBits := min (int (index $left 1)) (int (index $right 1)) -}}
+  {{- $fullSegments := div $sharedBits 16 -}}
+  {{- $remainingBits := mod $sharedBits 16 -}}
+  {{- $matches := true -}}
+  {{- range $index := until (int $fullSegments) -}}
+    {{- if ne (int (index $left (add $index 2))) (int (index $right (add $index 2))) -}}
+      {{- $matches = false -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if and $matches (gt $remainingBits 0) -}}
+    {{- $divisor := 1 -}}
+    {{- range until (int (sub 16 $remainingBits)) -}}
+      {{- $divisor = mul $divisor 2 -}}
+    {{- end -}}
+    {{- if ne (div (int (index $left (add $fullSegments 2))) $divisor) (div (int (index $right (add $fullSegments 2))) $divisor) -}}
+      {{- $matches = false -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if $matches -}}true{{- else -}}false{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "cdnca.pluginWebhook.durationMillis" -}}
+{{- $value := . -}}
+{{- $pattern := "^(([1-9][0-9]{0,4}|[12][0-9]{5}|300000)ms|([1-9][0-9]?|[12][0-9]{2}|300)s|[1-5]m)$" -}}
+{{- if not (regexMatch $pattern $value) -}}
+  {{- fail "pluginWebhook NATS reconnect durations must be positive Go durations no greater than 5m" -}}
+{{- end -}}
+{{- if hasSuffix "ms" $value -}}
+  {{- atoi (trimSuffix "ms" $value) -}}
+{{- else if hasSuffix "s" $value -}}
+  {{- mul (atoi (trimSuffix "s" $value)) 1000 -}}
+{{- else -}}
+  {{- mul (atoi (trimSuffix "m" $value)) 60000 -}}
+{{- end -}}
+{{- end -}}
+
+{{- $components := list
+  (dict "name" "controlApi" "values" .Values.controlApi)
+  (dict "name" "agentGateway" "values" .Values.agentGateway)
+  (dict "name" "web" "values" .Values.web)
+-}}
+{{- if .Values.production.enabled }}
+  {{- if not .Values.production.metricsServerAvailable }}
+    {{- fail "production autoscaling requires the metrics.k8s.io API from Metrics Server" }}
+  {{- end }}
+  {{- if not .Values.networkPolicy.enabled }}
+    {{- fail "production workloads require NetworkPolicy" }}
+  {{- end }}
+  {{- $requiredTopologyKeys := dict "topology.kubernetes.io/zone" false "kubernetes.io/hostname" false }}
+  {{- range $constraint := .Values.topologySpreadConstraints }}
+    {{- if hasKey $requiredTopologyKeys $constraint.topologyKey }}
+      {{- if get $requiredTopologyKeys $constraint.topologyKey }}
+        {{- fail (printf "production topologySpreadConstraints must define %s exactly once" $constraint.topologyKey) }}
+      {{- end }}
+      {{- if or (ne (int $constraint.maxSkew) 1) (ne $constraint.whenUnsatisfiable "DoNotSchedule") }}
+        {{- fail (printf "production topology %s requires maxSkew=1 and whenUnsatisfiable=DoNotSchedule" $constraint.topologyKey) }}
+      {{- end }}
+      {{- $_ := set $requiredTopologyKeys $constraint.topologyKey true }}
+    {{- end }}
+  {{- end }}
+  {{- range $topologyKey, $present := $requiredTopologyKeys }}
+    {{- if not $present }}
+      {{- fail (printf "production topologySpreadConstraints requires %s" $topologyKey) }}
+    {{- end }}
+  {{- end }}
+  {{- range $component := $components }}
+    {{- if not $component.values.enabled }}
+      {{- fail (printf "production requires %s" $component.name) }}
+    {{- end }}
+    {{- if not (regexMatch "^sha256:[0-9a-f]{64}$" $component.values.image.digest) }}
+      {{- fail (printf "production requires an immutable digest for %s.image" $component.name) }}
+    {{- end }}
+    {{- if not $component.values.autoscaling.enabled }}
+      {{- fail (printf "production requires autoscaling for %s" $component.name) }}
+    {{- end }}
+    {{- if lt (int $component.values.autoscaling.minReplicas) 2 }}
+      {{- fail (printf "production requires at least two replicas for %s" $component.name) }}
+    {{- end }}
+    {{- if not $component.values.pdb.enabled }}
+      {{- fail (printf "production requires a PodDisruptionBudget for %s" $component.name) }}
+    {{- end }}
+    {{- if ge (int $component.values.pdb.minAvailable) (int $component.values.autoscaling.minReplicas) }}
+      {{- fail (printf "production %s PDB must leave one voluntary disruption available at the HPA floor" $component.name) }}
+    {{- end }}
+  {{- end }}
+  {{- if not .Values.controlApi.migrations.enabled }}
+    {{- fail "production requires fail-closed control migrations" }}
+  {{- end }}
+  {{- $stores := dict "postgresql" (dict "values" .Values.networkPolicy.dataStores.postgresql "port" 5432) "redis" (dict "values" .Values.networkPolicy.dataStores.redis "port" 6379) "nats" (dict "values" .Values.networkPolicy.dataStores.nats "port" 4222) "clickhouse" (dict "values" .Values.networkPolicy.dataStores.clickhouse "port" 8123) -}}
+  {{- range $name, $store := $stores }}
+    {{- if not $store.values.cidrs }}
+      {{- fail (printf "production requires explicit %s NetworkPolicy CIDRs" $name) }}
+    {{- end }}
+    {{- if ne (int $store.values.port) (int $store.port) }}
+      {{- fail (printf "production %s NetworkPolicy port must be %d" $name (int $store.port)) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- range $component := $components }}
+  {{- if eq (lower $component.values.image.tag) "latest" }}
+    {{- fail (printf "%s.image.tag must not be latest" $component.name) }}
+  {{- end }}
+  {{- if and $component.values.autoscaling.enabled (gt (int $component.values.autoscaling.minReplicas) (int $component.values.autoscaling.maxReplicas)) }}
+    {{- fail (printf "%s.autoscaling.minReplicas must not exceed maxReplicas" $component.name) }}
+  {{- end }}
+  {{- $minimumReplicas := int $component.values.replicaCount }}
+  {{- if $component.values.autoscaling.enabled }}
+    {{- $minimumReplicas = int $component.values.autoscaling.minReplicas }}
+  {{- end }}
+  {{- if and $component.values.pdb.enabled (gt (int $component.values.pdb.minAvailable) $minimumReplicas) }}
+    {{- fail (printf "%s.pdb.minAvailable must not exceed the minimum replica count" $component.name) }}
+  {{- end }}
+{{- end }}
+{{- $allCIDRs := concat .Values.networkPolicy.gatewaySourceCIDRs .Values.networkPolicy.controlExternalEgress.cidrs .Values.networkPolicy.gatewayExternalEgress.cidrs .Values.networkPolicy.dataStores.postgresql.cidrs .Values.networkPolicy.dataStores.redis.cidrs .Values.networkPolicy.dataStores.nats.cidrs .Values.networkPolicy.dataStores.clickhouse.cidrs .Values.pluginWebhook.nats.egressCIDRs -}}
+{{- range $cidr := $allCIDRs }}
+  {{- if or (eq $cidr "0.0.0.0/0") (eq $cidr "::/0") }}
+    {{- fail "networkPolicy CIDRs must not allow the entire IPv4 or IPv6 Internet" }}
+  {{- end }}
+{{- end }}
+{{- if and (eq .Values.agentGateway.service.type "LoadBalancer") (not .Values.agentGateway.service.loadBalancerSourceRanges) }}
+  {{- fail "agentGateway LoadBalancer requires explicit loadBalancerSourceRanges" }}
+{{- end }}
+{{- if and .Values.customerIngress.enabled (not (and .Values.web.enabled .Values.controlApi.enabled)) }}
+  {{- fail "customerIngress requires web and controlApi" }}
+{{- end }}
+{{- if and .Values.agentGateway.enabled (not .Values.controlApi.enabled) }}
+  {{- fail "agentGateway requires controlApi" }}
+{{- end }}
+{{- if and .Values.controlApi.securityActivation.enabled (eq .Values.controlApi.securityActivation.signer.provider "remote") }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- $secretKey := "^[A-Za-z0-9._-]+$" }}
+  {{- $signer := .Values.controlApi.securityActivation.signer }}
+  {{- if not (regexMatch "^https://[^/?#@[:space:]]+/[^?#[:space:]]*$" $signer.remote.endpoint) }}
+    {{- fail "controlApi.securityActivation.signer.remote.endpoint must be one HTTPS URL without credentials, query, or fragment" }}
+  {{- end }}
+  {{- range $label, $reference := dict "publicKeySecret" $signer.publicKeySecret "caSecret" $signer.remote.caSecret "bearerTokenSecret" $signer.remote.bearerTokenSecret }}
+    {{- if or (gt (len $reference.existingSecret) 253) (not (regexMatch $dns1123Subdomain $reference.existingSecret)) }}
+      {{- fail (printf "controlApi.securityActivation.signer.%s.existingSecret must be a Kubernetes DNS-1123 subdomain" $label) }}
+    {{- end }}
+    {{- if or (gt (len $reference.key) 253) (not (regexMatch $secretKey $reference.key)) }}
+      {{- fail (printf "controlApi.securityActivation.signer.%s.key must be a valid Secret data key" $label) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if or .Values.controlApi.trafficPackage.enabled .Values.controlApi.trafficPackage.workload.enabled }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- $secretKey := "^[A-Za-z0-9._-]+$" }}
+  {{- if not .Values.controlApi.enabled }}
+    {{- fail "controlApi.trafficPackage requires controlApi" }}
+  {{- end }}
+  {{- if or (gt (len .Values.controlApi.trafficPackage.cursorKeySecret.existingSecret) 253) (not (regexMatch $dns1123Subdomain .Values.controlApi.trafficPackage.cursorKeySecret.existingSecret)) }}
+    {{- fail "controlApi.trafficPackage.cursorKeySecret.existingSecret must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- if or (gt (len .Values.controlApi.trafficPackage.cursorKeySecret.key) 253) (not (regexMatch $secretKey .Values.controlApi.trafficPackage.cursorKeySecret.key)) }}
+    {{- fail "controlApi.trafficPackage.cursorKeySecret.key must be a valid Secret data key" }}
+  {{- end }}
+{{- end }}
+{{- if .Values.controlApi.trafficPackage.workload.enabled }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- $secretKey := "^[A-Za-z0-9._-]+$" }}
+  {{- $workload := .Values.controlApi.trafficPackage.workload }}
+  {{- if or (eq (int $workload.port) (int .Values.controlApi.service.httpPort)) (eq (int $workload.port) (int .Values.controlApi.service.internalGRPCPort)) (and .Values.controlApi.dnsReconcile.enabled (eq (int $workload.port) (int .Values.controlApi.dnsReconcile.workloadPort))) }}
+    {{- fail "controlApi.trafficPackage.workload.port must not collide with another controlApi listener" }}
+  {{- end }}
+  {{- if or (gt (len $workload.mtlsSecret.existingSecret) 253) (not (regexMatch $dns1123Subdomain $workload.mtlsSecret.existingSecret)) }}
+    {{- fail "controlApi.trafficPackage.workload.mtlsSecret.existingSecret must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- range $name, $key := $workload.mtlsSecret.keys }}
+    {{- if or (gt (len $key) 253) (not (regexMatch $secretKey $key)) }}
+      {{- fail (printf "controlApi.trafficPackage.workload.mtlsSecret.keys.%s must be a valid Secret data key" $name) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.controlApi.acme.enabled }}
+  {{- if not .Values.controlApi.enabled }}
+    {{- fail "controlApi.acme requires controlApi" }}
+  {{- end }}
+  {{- if not (regexMatch "^https://[^/?#@[:space:]]+(?:/[^?#[:space:]]*)?$" .Values.controlApi.acme.directoryURL) }}
+    {{- fail "controlApi.acme.directoryURL must be one HTTPS URL without query or fragment" }}
+  {{- end }}
+  {{- if or (lt (len .Values.controlApi.acme.contacts) 1) (gt (len .Values.controlApi.acme.contacts) 10) }}
+    {{- fail "controlApi.acme.contacts must contain between one and ten mailto contacts" }}
+  {{- end }}
+  {{- if and .Values.networkPolicy.enabled (or (not .Values.networkPolicy.controlExternalEgress.cidrs) (not (has 443 .Values.networkPolicy.controlExternalEgress.ports))) }}
+    {{- fail "controlApi.acme requires explicit controlExternalEgress CIDRs and port 443" }}
+  {{- end }}
+{{- end }}
+{{- if .Values.controlApi.packageMonitor.enabled }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- $secretKey := "^[A-Za-z0-9._-]+$" }}
+  {{- $cursorKeySecret := .Values.controlApi.packageMonitor.cursorKeySecret }}
+  {{- if not .Values.controlApi.enabled }}
+    {{- fail "controlApi.packageMonitor requires controlApi" }}
+  {{- end }}
+  {{- if or (gt (len $cursorKeySecret.existingSecret) 253) (not (regexMatch $dns1123Subdomain $cursorKeySecret.existingSecret)) }}
+    {{- fail "controlApi.packageMonitor.cursorKeySecret.existingSecret must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- if or (gt (len $cursorKeySecret.key) 253) (not (regexMatch $secretKey $cursorKeySecret.key)) }}
+    {{- fail "controlApi.packageMonitor.cursorKeySecret.key must be a valid Secret data key" }}
+  {{- end }}
+{{- end }}
+{{- if .Values.controlApi.identityVerification.enabled }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- $secretKey := "^[A-Za-z0-9._-]+$" }}
+  {{- $runtime := .Values.controlApi.identityVerification }}
+  {{- if not .Values.controlApi.enabled }}
+    {{- fail "controlApi.identityVerification requires controlApi" }}
+  {{- end }}
+  {{- if not $runtime.settlement.workerEnabled }}
+    {{- fail "controlApi.identityVerification.settlement.workerEnabled must be true when enabled" }}
+  {{- end }}
+  {{- if not (regexMatch "^[a-z][a-z0-9._-]{0,63}$" $runtime.resolverName) }}
+    {{- fail "controlApi.identityVerification.resolverName must be configured" }}
+  {{- end }}
+  {{- if or (gt (len $runtime.cursorKeySecret.existingSecret) 253) (not (regexMatch $dns1123Subdomain $runtime.cursorKeySecret.existingSecret)) }}
+    {{- fail "controlApi.identityVerification.cursorKeySecret.existingSecret must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- if or (gt (len $runtime.cursorKeySecret.key) 253) (not (regexMatch $secretKey $runtime.cursorKeySecret.key)) }}
+    {{- fail "controlApi.identityVerification.cursorKeySecret.key must be a valid Secret data key" }}
+  {{- end }}
+  {{- if $runtime.provider.enabled }}
+    {{- if not $runtime.issuer.enabled }}
+      {{- fail "controlApi.identityVerification.provider requires issuer" }}
+    {{- end }}
+    {{- if not (regexMatch "^[a-z][a-z0-9._-]{0,63}$" $runtime.provider.name) }}
+      {{- fail "controlApi.identityVerification.provider.name is invalid" }}
+    {{- end }}
+    {{- range $endpoint := list $runtime.provider.endpoint $runtime.provider.objectStore.endpoint }}
+      {{- if not (regexMatch "^https://[^/?#]+$" $endpoint) }}
+        {{- fail "controlApi.identityVerification provider endpoints must use HTTPS without path, query, or fragment" }}
+      {{- end }}
+    {{- end }}
+    {{- if or (eq $runtime.provider.objectStore.region "") (eq $runtime.provider.objectStore.bucket "") (eq $runtime.provider.objectStore.kmsKeyId "") }}
+      {{- fail "controlApi.identityVerification.provider.objectStore region, bucket, and kmsKeyId are required" }}
+    {{- end }}
+    {{- range $secret := list $runtime.provider.apiKeySecret $runtime.provider.callbackHMACSecret $runtime.provider.objectStore.credentialsSecret }}
+      {{- if or (gt (len $secret.existingSecret) 253) (not (regexMatch $dns1123Subdomain $secret.existingSecret)) }}
+        {{- fail "controlApi.identityVerification provider Secret names must be Kubernetes DNS-1123 subdomains" }}
+      {{- end }}
+    {{- end }}
+    {{- range $key := list $runtime.provider.apiKeySecret.key $runtime.provider.callbackHMACSecret.key $runtime.provider.objectStore.credentialsSecret.keys.accessKeyId $runtime.provider.objectStore.credentialsSecret.keys.secretAccessKey $runtime.provider.objectStore.credentialsSecret.keys.sessionToken }}
+      {{- if or (gt (len $key) 253) (not (regexMatch $secretKey $key)) }}
+        {{- fail "controlApi.identityVerification provider Secret data keys are invalid" }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+  {{- if $runtime.issuer.enabled }}
+    {{- if not $runtime.provider.enabled }}
+      {{- fail "controlApi.identityVerification.issuer requires provider" }}
+    {{- end }}
+    {{- if ne $runtime.issuer.listenAddress (printf "0.0.0.0:%d" (int $runtime.issuer.servicePort)) }}
+      {{- fail "controlApi.identityVerification.issuer.listenAddress must match 0.0.0.0:servicePort" }}
+    {{- end }}
+    {{- if not (regexMatch "^spiffe://[^|,[:space:]]+\\|[A-Za-z0-9][A-Za-z0-9._:-]{0,127}(,spiffe://[^|,[:space:]]+\\|[A-Za-z0-9][A-Za-z0-9._:-]{0,127})*$" $runtime.issuer.workloadIdentities) }}
+      {{- fail "controlApi.identityVerification.issuer.workloadIdentities is invalid" }}
+    {{- end }}
+    {{- if and (ne $runtime.issuer.kmsEndpoint "") (not (regexMatch "^https://[^/?#]+$" $runtime.issuer.kmsEndpoint)) }}
+      {{- fail "controlApi.identityVerification.issuer.kmsEndpoint must use HTTPS without path, query, or fragment" }}
+    {{- end }}
+    {{- if or (gt (len $runtime.issuer.mtlsSecret.existingSecret) 253) (not (regexMatch $dns1123Subdomain $runtime.issuer.mtlsSecret.existingSecret)) }}
+      {{- fail "controlApi.identityVerification.issuer.mtlsSecret.existingSecret must be a Kubernetes DNS-1123 subdomain" }}
+    {{- end }}
+    {{- range $key := list $runtime.issuer.mtlsSecret.keys.serverCertificate $runtime.issuer.mtlsSecret.keys.serverPrivateKey $runtime.issuer.mtlsSecret.keys.clientCA }}
+      {{- if or (gt (len $key) 253) (not (regexMatch $secretKey $key)) }}
+        {{- fail "controlApi.identityVerification issuer mTLS Secret data keys are invalid" }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if or .Values.controlApi.packageCommerce.enabled .Values.controlApi.packageCommerce.worker.enabled }}
+  {{- if not .Values.controlApi.enabled }}
+    {{- fail "controlApi.packageCommerce requires controlApi" }}
+  {{- end }}
+{{- end }}
+{{- if and .Values.controlApi.packageCommerce.enabled (not .Values.controlApi.packageCommerce.worker.enabled) }}
+  {{- fail "controlApi.packageCommerce HTTP requires its durable worker" }}
+{{- end }}
+{{- if .Values.controlApi.packageCommerce.providerCallbacks.enabled }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- $secretKey := "^[A-Za-z0-9._-]+$" }}
+  {{- $keyringSecret := .Values.controlApi.packageCommerce.providerCallbacks.keyringSecret }}
+  {{- if not .Values.controlApi.packageCommerce.enabled }}
+    {{- fail "controlApi.packageCommerce.providerCallbacks requires package commerce HTTP" }}
+  {{- end }}
+  {{- if or (gt (len $keyringSecret.existingSecret) 253) (not (regexMatch $dns1123Subdomain $keyringSecret.existingSecret)) }}
+    {{- fail "controlApi.packageCommerce.providerCallbacks.keyringSecret.existingSecret must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- if or (gt (len $keyringSecret.key) 253) (not (regexMatch $secretKey $keyringSecret.key)) }}
+    {{- fail "controlApi.packageCommerce.providerCallbacks.keyringSecret.key must be a valid Secret data key" }}
+  {{- end }}
+{{- end }}
+{{- if .Values.controlApi.packageCommerce.worker.enabled }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- $secretKey := "^[A-Za-z0-9._-]+$" }}
+  {{- $worker := .Values.controlApi.packageCommerce.worker }}
+  {{- if or (gt (len $worker.nats.url) 264) (not (regexMatch "^tls://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\\.[a-z]([a-z0-9-]{0,61}[a-z0-9])?:4222$" $worker.nats.url)) }}
+    {{- fail "controlApi.packageCommerce.worker.nats.url must be one canonical tls:// DNS URL on port 4222" }}
+  {{- end }}
+  {{- if not (regexMatch "^[A-Z0-9][A-Z0-9_-]{0,127}$" $worker.nats.stream) }}
+    {{- fail "controlApi.packageCommerce.worker.nats.stream must be a canonical JetStream name" }}
+  {{- end }}
+  {{- range $label, $reference := dict "credentialsSecret" $worker.nats.credentialsSecret "caSecret" $worker.nats.caSecret }}
+    {{- if or (gt (len $reference.existingSecret) 253) (not (regexMatch $dns1123Subdomain $reference.existingSecret)) }}
+      {{- fail (printf "controlApi.packageCommerce.worker.nats.%s.existingSecret must be a Kubernetes DNS-1123 subdomain" $label) }}
+    {{- end }}
+    {{- if or (gt (len $reference.key) 253) (not (regexMatch $secretKey $reference.key)) }}
+      {{- fail (printf "controlApi.packageCommerce.worker.nats.%s.key must be a valid Secret data key" $label) }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.pluginWebhook.enabled }}
+  {{- $dns1123Subdomain := "^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$" }}
+  {{- if not .Values.controlApi.enabled }}
+    {{- fail "pluginWebhook requires controlApi" }}
+  {{- end }}
+  {{- if not .Values.networkPolicy.enabled }}
+    {{- fail "pluginWebhook requires networkPolicy" }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.wrappingKey.id) 128) (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$" .Values.pluginWebhook.wrappingKey.id)) }}
+    {{- fail "pluginWebhook.wrappingKey.id must be a valid key identifier" }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.wrappingKey.secret.name) 253) (not (regexMatch $dns1123Subdomain .Values.pluginWebhook.wrappingKey.secret.name)) }}
+    {{- fail "pluginWebhook.wrappingKey.secret.name must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.wrappingKey.secret.key) 253) (not (regexMatch "^[A-Za-z0-9._-]+$" .Values.pluginWebhook.wrappingKey.secret.key)) }}
+    {{- fail "pluginWebhook.wrappingKey.secret.key must be a valid Secret data key" }}
+  {{- end }}
+  {{- $attestation := .Values.pluginWebhook.attestationKey }}
+  {{- if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" $attestation.id) }}
+    {{- fail "pluginWebhook.attestationKey.id is required: name the Ed25519 publication attestation key (docs/runbooks/plugin-webhook-key.md)" }}
+  {{- end }}
+  {{- if or (gt (len $attestation.secret.name) 253) (not (regexMatch $dns1123Subdomain $attestation.secret.name)) }}
+    {{- fail "pluginWebhook.attestationKey.secret.name is required: create a Secret holding the Ed25519 PKCS#8 PEM key (docs/runbooks/plugin-webhook-key.md)" }}
+  {{- end }}
+  {{- if or $attestation.next.id $attestation.next.secret.name }}
+    {{- if or (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" $attestation.next.id)) (eq $attestation.next.id $attestation.id) }}
+      {{- fail "pluginWebhook.attestationKey.next.id must be a valid key identifier different from attestationKey.id" }}
+    {{- end }}
+    {{- if or (gt (len $attestation.next.secret.name) 253) (not (regexMatch $dns1123Subdomain $attestation.next.secret.name)) }}
+      {{- fail "pluginWebhook.attestationKey.next.secret.name must name the Secret holding the staged key" }}
+    {{- end }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.nats.url) 264) (not (regexMatch "^tls://[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\\.[a-z]([a-z0-9-]{0,61}[a-z0-9])?:4222$" .Values.pluginWebhook.nats.url)) }}
+    {{- fail "pluginWebhook.nats.url must be one canonical tls:// DNS URL on port 4222" }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.nats.credentialsSecret.name) 253) (not (regexMatch $dns1123Subdomain .Values.pluginWebhook.nats.credentialsSecret.name)) }}
+    {{- fail "pluginWebhook.nats.credentialsSecret.name must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.nats.credentialsSecret.key) 253) (not (regexMatch "^[A-Za-z0-9._-]+$" .Values.pluginWebhook.nats.credentialsSecret.key)) }}
+    {{- fail "pluginWebhook.nats.credentialsSecret.key must be a valid Secret data key" }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.nats.caSecret.name) 253) (not (regexMatch $dns1123Subdomain .Values.pluginWebhook.nats.caSecret.name)) }}
+    {{- fail "pluginWebhook.nats.caSecret.name must be a Kubernetes DNS-1123 subdomain" }}
+  {{- end }}
+  {{- if or (gt (len .Values.pluginWebhook.nats.caSecret.key) 253) (not (regexMatch "^[A-Za-z0-9._-]+$" .Values.pluginWebhook.nats.caSecret.key)) }}
+    {{- fail "pluginWebhook.nats.caSecret.key must be a valid Secret data key" }}
+  {{- end }}
+  {{- if ne (int .Values.pluginWebhook.nats.jetStreamReplicas) 3 }}
+    {{- fail "pluginWebhook.nats.jetStreamReplicas must equal 3" }}
+  {{- end }}
+  {{- if not .Values.pluginWebhook.nats.egressCIDRs }}
+    {{- fail "pluginWebhook.nats.egressCIDRs must contain at least one dedicated CIDR" }}
+  {{- end }}
+  {{- $reconnectMinMillis := int64 (include "cdnca.pluginWebhook.durationMillis" .Values.pluginWebhook.nats.reconnect.min) }}
+  {{- $reconnectMaxMillis := int64 (include "cdnca.pluginWebhook.durationMillis" .Values.pluginWebhook.nats.reconnect.max) }}
+  {{- if gt $reconnectMinMillis $reconnectMaxMillis }}
+    {{- fail "pluginWebhook.nats.reconnect.min must not exceed max" }}
+  {{- end }}
+  {{- $sharedCIDRs := .Values.networkPolicy.controlExternalEgress.cidrs }}
+  {{- $pluginCIDRs := dict }}
+  {{- range $index, $cidr := .Values.pluginWebhook.nats.egressCIDRs }}
+    {{- $descriptor := include "cdnca.pluginWebhook.cidrDescriptor" $cidr }}
+    {{- range $_, $existing := $pluginCIDRs }}
+      {{- if eq (include "cdnca.pluginWebhook.cidrsOverlap" (dict "left" $descriptor "right" $existing)) "true" }}
+        {{- fail "pluginWebhook.nats.egressCIDRs must not contain duplicate or overlapping CIDRs" }}
+      {{- end }}
+    {{- end }}
+    {{- $_ := set $pluginCIDRs (printf "%d" $index) $descriptor }}
+  {{- end }}
+  {{- range $_, $pluginDescriptor := $pluginCIDRs }}
+    {{- range $sharedCIDR := $sharedCIDRs }}
+      {{- $sharedDescriptor := include "cdnca.pluginWebhook.cidrDescriptor" $sharedCIDR }}
+      {{- if eq (include "cdnca.pluginWebhook.cidrsOverlap" (dict "left" $pluginDescriptor "right" $sharedDescriptor)) "true" }}
+        {{- fail "pluginWebhook.nats.egressCIDRs must not overlap networkPolicy.controlExternalEgress.cidrs" }}
+      {{- end }}
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if eq (int .Values.controlApi.service.httpPort) (int .Values.controlApi.service.internalGRPCPort) }}
+  {{- fail "controlApi HTTP and internal gRPC ports must differ" }}
+{{- end }}
+{{- if eq (int .Values.agentGateway.service.enrollmentPort) (int .Values.agentGateway.service.agentPort) }}
+  {{- fail "agentGateway enrollment and Agent ports must differ" }}
+{{- end }}

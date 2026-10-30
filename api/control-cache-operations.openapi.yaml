@@ -1,0 +1,1499 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Cache Control API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable HTTP contract for immutable cache-policy revisions
+    and durable purge/prewarm operations. A queued operation is persisted only;
+    it is not evidence of Agent Gateway or Edge delivery. JSON property names and query keys are
+    case-sensitive; duplicate, encoded-alias, malformed, or present-but-empty
+    query parameters are rejected.
+servers:
+  - url: /
+paths:
+  /v1/cache-policies/{site_id}:
+    get:
+      operationId: getTenantCurrentCachePolicy
+      summary: Get the current cache policy for a tenant site
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: publishTenantCachePolicy
+      summary: Publish an immutable cache-policy revision with CAS
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/PublishPolicy'}
+      responses:
+        '201': {$ref: '#/components/responses/PolicyCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-policies/{site_id}/revisions:
+    get:
+      operationId: listTenantCachePolicyRevisions
+      summary: List immutable policy history in the tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-policies/{site_id}/revisions/{revision}:
+    get:
+      operationId: getTenantCachePolicyRevision
+      summary: Get one immutable policy revision in the tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations:
+    get:
+      operationId: listTenantCacheOperations
+      summary: List cache operations in a stable tenant snapshot
+      description: >-
+        The cursor freezes the set of operations whose committed creation audit
+        position is at or below the first page watermark. Mutable state,
+        progress, and update/completion timestamps remain live on later pages.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/SiteFilter'
+        - $ref: '#/components/parameters/SiteDisplayFilter'
+        - $ref: '#/components/parameters/SearchFilter'
+        - $ref: '#/components/parameters/ActionFilter'
+        - $ref: '#/components/parameters/TargetTypeFilter'
+        - $ref: '#/components/parameters/StateFilter'
+      responses:
+        '200': {$ref: '#/components/responses/OperationPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: createTenantCacheOperation
+      summary: Persist a purge or prewarm operation
+      description: >-
+        Returns 202 after the operation and node/target projections are
+        committed. queued never means that a node command was dispatched.
+        Unknown results must be retried with the same Idempotency-Key and body.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/CreateOperation'}
+      responses:
+        '202': {$ref: '#/components/responses/OperationAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations/daily-usage:
+    get:
+      operationId: getTenantCacheDailyUsage
+      summary: Today's cache operation quotas of the caller's account (UTC+8 day; system follow-ups not counted)
+      description: >-
+        Quotas count per account (tenant scope): the owner and its members share
+        them across all its sites. A platform administrator's submissions on the
+        tenant's behalf are neither counted nor refused (still audited as the
+        administrator).
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: The same limits and counts a create is checked against.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheDailyUsage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations/target-sites:
+    post:
+      operationId: resolveTenantCacheTargetSites
+      summary: Group target URLs by the caller's sites serving their hosts (writes nothing)
+      description: >-
+        Hosts match a site's primary domain, aliases and "*." names (an exact
+        name first, else the narrowest wildcard). A "*." purge target goes to
+        every site it stays within. The create dialog submits one operation per
+        group and lists the unmatched URLs before sending anything.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ResolveTargetSites'}
+      responses:
+        '200':
+          description: Groups and the URLs no site serves.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheTargetSites'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations/carrying-nodes:
+    get:
+      operationId: listTenantCacheCarryingNodes
+      summary: Nodes an operation of the caller's scope without node_ids runs on
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Active carrying nodes, by name.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheCarryingNodes'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations/{operation_id}:
+    get:
+      operationId: getTenantCacheOperation
+      summary: Get sanitized per-node operation progress
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/OperationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations/{operation_id}/retry:
+    post:
+      operationId: retryTenantCacheOperation
+      summary: Requeue retryable failed projections only
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/EmptyCommand'}
+      responses:
+        '200': {$ref: '#/components/responses/OperationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations/{operation_id}/cancel:
+    post:
+      operationId: cancelTenantCacheOperation
+      summary: Cancel a queued or running cache operation
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/EmptyCommand'}
+      responses:
+        '200': {$ref: '#/components/responses/OperationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operations/{operation_id}/resubmit:
+    post:
+      operationId: resubmitTenantCacheOperation
+      summary: Re-submit an operation as a new one
+      description: >-
+        Creates a new operation with the original's site, action, target type,
+        targets and retry budget, on the nodes the original named, or on every
+        node carrying the site now when it named none (auto_nodes). The
+        Idempotency-Key is the batch key: with the original operation it forms
+        the new operation's idempotency key, so a retry of one batch replays
+        (Idempotency-Replayed) and another batch creates another operation.
+        Audited as cache.operation.resubmit on the original operation.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/EmptyCommand'}
+      responses:
+        '202': {$ref: '#/components/responses/OperationAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/cache-operation-requests/{idempotency_key}:
+    get:
+      operationId: getTenantCacheWriteReceipt
+      summary: What the server did with a cache write sent with this Idempotency-Key
+      description: >-
+        For a write whose response was lost (network, timeout, 5xx): accepted
+        with the operation (the new one of a create or re-submit), or rejected
+        with the error code the write was refused with. 404 means the server
+        has no record of the key for the authenticated actor: the
+        write was not received and may be sent again with the same key and
+        body. Another actor's key is the same 404 (existence is never
+        disclosed). Not-found and permission refusals of the write itself are
+        not kept and also read as 404. Writes nothing.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/ReceiptIdempotencyKey'
+        - $ref: '#/components/parameters/ReceiptAction'
+        - $ref: '#/components/parameters/ReceiptOperationID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: The write was decided.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheWriteReceipt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-policies/{site_id}:
+    get:
+      operationId: getAdminCurrentCachePolicy
+      summary: Get a current policy in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: publishAdminCachePolicy
+      summary: Publish a policy in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/PublishPolicy'}
+      responses:
+        '201': {$ref: '#/components/responses/PolicyCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-policies/{site_id}/revisions:
+    get:
+      operationId: listAdminCachePolicyRevisions
+      summary: List policy history in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-policies/{site_id}/revisions/{revision}:
+    get:
+      operationId: getAdminCachePolicyRevision
+      summary: Get one policy revision in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/SiteID'
+        - $ref: '#/components/parameters/Revision'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations:
+    get:
+      operationId: listAdminCacheOperations
+      summary: List operations in an explicit tenant scope
+      description: >-
+        The cursor freezes the set of operations whose committed creation audit
+        position is at or below the first page watermark. Mutable state,
+        progress, and update/completion timestamps remain live on later pages.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/SiteFilter'
+        - $ref: '#/components/parameters/SiteDisplayFilter'
+        - $ref: '#/components/parameters/SearchFilter'
+        - $ref: '#/components/parameters/ActionFilter'
+        - $ref: '#/components/parameters/TargetTypeFilter'
+        - $ref: '#/components/parameters/StateFilter'
+      responses:
+        '200': {$ref: '#/components/responses/OperationPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: createAdminCacheOperation
+      summary: Persist an operation in an explicit tenant scope
+      description: queued means persisted, not dispatched.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/CreateOperation'}
+      responses:
+        '202': {$ref: '#/components/responses/OperationAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations/daily-usage:
+    get:
+      operationId: getAdminCacheDailyUsage
+      summary: Today's cache operation quotas of a tenant account (UTC+8 day; system follow-ups not counted)
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: The same limits and counts a create is checked against.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheDailyUsage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    put:
+      operationId: setAdminCacheAccountLimits
+      summary: Set a tenant account's own daily purge/prewarm limits (null follows the system setting default)
+      description: >-
+        Audited as cache.account_quota.update. Every key is required; a stale
+        expected_revision (the revision of the last read) is 412.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [identity.users.manage]
+      parameters:
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CacheAccountLimits'}
+      responses:
+        '200':
+          description: The account's quotas after the change.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheDailyUsage'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations/target-sites:
+    post:
+      operationId: resolveAdminCacheTargetSites
+      summary: Group target URLs by the sites serving their hosts (writes nothing)
+      description: >-
+        Without scope_id the URLs match every tenant's sites (each group names
+        its scope_id); with it, that tenant's only.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/OptionalScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ResolveTargetSites'}
+      responses:
+        '200':
+          description: Groups and the URLs no site serves.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheTargetSites'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations/carrying-nodes:
+    get:
+      operationId: listAdminCacheCarryingNodes
+      summary: Nodes an operation of the tenant scope without node_ids runs on
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: Active carrying nodes, by name.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheCarryingNodes'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations/{operation_id}:
+    get:
+      operationId: getAdminCacheOperation
+      summary: Get operation progress in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200': {$ref: '#/components/responses/OperationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations/{operation_id}/retry:
+    post:
+      operationId: retryAdminCacheOperation
+      summary: Retry an operation in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/EmptyCommand'}
+      responses:
+        '200': {$ref: '#/components/responses/OperationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations/{operation_id}/cancel:
+    post:
+      operationId: cancelAdminCacheOperation
+      summary: Cancel an operation in an explicit tenant scope
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/EmptyCommand'}
+      responses:
+        '200': {$ref: '#/components/responses/OperationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operations/{operation_id}/resubmit:
+    post:
+      operationId: resubmitAdminCacheOperation
+      summary: Re-submit an operation as a new one
+      description: >-
+        Creates a new operation with the original's site, action, target type,
+        targets and retry budget, on the nodes the original named, or on every
+        node carrying the site now when it named none (auto_nodes). The
+        Idempotency-Key is the batch key: with the original operation it forms
+        the new operation's idempotency key, so a retry of one batch replays
+        (Idempotency-Replayed) and another batch creates another operation.
+        Audited as cache.operation.resubmit on the original operation.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.manage]
+      parameters:
+        - $ref: '#/components/parameters/OperationID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody: {$ref: '#/components/requestBodies/EmptyCommand'}
+      responses:
+        '202': {$ref: '#/components/responses/OperationAccepted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/TooManyRequests'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/cache-operation-requests/{idempotency_key}:
+    get:
+      operationId: getPlatformCacheWriteReceipt
+      summary: What the server did with a cache write sent with this Idempotency-Key
+      description: >-
+        For a write whose response was lost (network, timeout, 5xx): accepted
+        with the operation (the new one of a create or re-submit), or rejected
+        with the error code the write was refused with. 404 means the server
+        has no record of the key for the authenticated actor in the scope: the
+        write was not received and may be sent again with the same key and
+        body. Another actor's key is the same 404 (existence is never
+        disclosed). Not-found and permission refusals of the write itself are
+        not kept and also read as 404. Writes nothing.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/ReceiptIdempotencyKey'
+        - $ref: '#/components/parameters/ReceiptAction'
+        - $ref: '#/components/parameters/ReceiptOperationID'
+        - $ref: '#/components/parameters/RequiredScopeID'
+        - $ref: '#/components/parameters/RequestID'
+      responses:
+        '200':
+          description: The write was decided.
+          headers:
+            X-Request-ID: {$ref: '#/components/headers/RequestID'}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CacheWriteReceipt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    SiteID:
+      name: site_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    QuerySiteID:
+      name: site_id
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    OperationID:
+      name: operation_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+    Revision:
+      name: revision
+      in: path
+      required: true
+      schema: {type: integer, format: int64, minimum: 1}
+    RequiredScopeID:
+      name: scope_id
+      in: query
+      required: true
+      description: Explicit active tenant scope; platform scope is never implied.
+      schema: {$ref: '#/components/schemas/UUID'}
+    OptionalScopeID:
+      name: scope_id
+      in: query
+      required: false
+      description: A tenant scope to match in; omitted, the URLs match every tenant's sites.
+      schema: {$ref: '#/components/schemas/UUID'}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/SafeID'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/SafeID'}
+    ReceiptIdempotencyKey:
+      name: idempotency_key
+      in: path
+      required: true
+      description: The Idempotency-Key the write was sent with (the batch key of a re-submit).
+      schema: {$ref: '#/components/schemas/SafeID'}
+    ReceiptAction:
+      name: action
+      in: query
+      required: true
+      schema: {type: string, enum: [create, retry, cancel, resubmit]}
+    ReceiptOperationID:
+      name: operation_id
+      in: query
+      required: false
+      description: The operation a retry, cancel or re-submit acts on; required for those, absent for create.
+      schema: {$ref: '#/components/schemas/UUID'}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 50}
+    Cursor:
+      name: cursor
+      in: query
+      description: >-
+        HMAC-authenticated cursor bound to scope, filters, and a committed
+        creation-audit watermark. It freezes membership, not mutable operation
+        state or progress.
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    SiteFilter:
+      name: site_id
+      in: query
+      description: >-
+        Non-disclosing filter within the effective tenant scope. A foreign or
+        nonexistent UUID returns the same 200 response with an empty items array.
+      schema: {$ref: '#/components/schemas/UUID'}
+    SiteDisplayFilter:
+      name: site_display_id
+      in: query
+      description: Tenant-scoped stable positive site identifier displayed by the UI.
+      schema: {$ref: '#/components/schemas/PositiveDisplayID'}
+    SearchFilter:
+      name: search
+      in: query
+      description: Exact operation/site short ID or a case-insensitive target URL fragment.
+      schema: {type: string, minLength: 1, maxLength: 128}
+    ActionFilter:
+      name: action
+      in: query
+      schema: {$ref: '#/components/schemas/OperationAction'}
+    TargetTypeFilter:
+      name: target_type
+      in: query
+      schema: {$ref: '#/components/schemas/TargetType'}
+    StateFilter:
+      name: state
+      in: query
+      description: One state or several, comma separated (any of them).
+      schema: {type: string, pattern: '^(queued|running|succeeded|partial_failed|failed|cancelled)(,(queued|running|succeeded|partial_failed|failed|cancelled)){0,5}$'}
+  requestBodies:
+    PublishPolicy:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [expected_revision]
+            properties:
+              expected_revision: {type: integer, format: int64, minimum: 0}
+              binding_mode:
+                allOf: [{$ref: '#/components/schemas/CachePolicyBindingMode'}]
+                default: override
+                description: Omit for the simple per-site override workflow.
+              definition_id: {$ref: '#/components/schemas/UUID'}
+              definition_revision: {type: integer, format: int64, minimum: 1}
+              expected_definition_revision: {type: integer, format: int64, minimum: 0}
+              document: {$ref: '#/components/schemas/PolicyDocument'}
+            allOf:
+              - if:
+                  required: [binding_mode]
+                  properties: {binding_mode: {const: inherit}}
+                then:
+                  required: [definition_id, definition_revision]
+                  properties:
+                    definition_id: {}
+                    definition_revision: {}
+                  not:
+                    anyOf:
+                      - {required: [document], properties: {document: {}}}
+                      - {required: [expected_definition_revision], properties: {expected_definition_revision: {}}}
+                else:
+                  required: [document]
+                  properties: {document: {}}
+                  not: {required: [definition_revision], properties: {definition_revision: {}}}
+              - if:
+                  required: [binding_mode, definition_id]
+                  properties: {binding_mode: {const: override}, definition_id: {}}
+                then:
+                  required: [expected_definition_revision]
+                  properties: {expected_definition_revision: {}}
+    CreateOperation:
+      required: true
+      description: >-
+        Property names use the exact casing shown by the schema. Unknown,
+        case-variant, case-fold duplicate, omitted required, and null required
+        properties are rejected.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CreateOperation'}
+    EmptyCommand:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            maxProperties: 0
+  responses:
+    PolicyOK:
+      description: Cache policy revision.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Policy'}
+    PolicyCreated:
+      description: Created revision or stored identical replay.
+      headers:
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Policy'}
+    PolicyPageOK:
+      description: Stable revision page.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PolicyPage'}
+    OperationAccepted:
+      description: Durable operation accepted in queued state; no delivery is implied.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Operation'}
+    OperationOK:
+      description: Sanitized cache operation.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Operation'}
+    OperationPageOK:
+      description: Stable operation page.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OperationPage'}
+    BadRequest: {$ref: '#/components/responses/Error400'}
+    Unauthorized: {$ref: '#/components/responses/Error401'}
+    Forbidden: {$ref: '#/components/responses/Error403'}
+    NotFound: {$ref: '#/components/responses/Error404'}
+    RequestCancelled: {$ref: '#/components/responses/Error408'}
+    Conflict: {$ref: '#/components/responses/Error409'}
+    PreconditionFailed: {$ref: '#/components/responses/Error412'}
+    TooManyRequests:
+      description: The account's daily purge or prewarm limit would be exceeded (daily_limit_exceeded; error.details names the quota).
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    ServiceUnavailable: {$ref: '#/components/responses/Error503'}
+    Error400:
+      description: Invalid or non-canonical request.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error401:
+      description: Authentication required.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error403:
+      description: Exact cache permission is absent or route audience is wrong.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error404:
+      description: Resource is absent or outside the effective tenant scope.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error408:
+      description: Request context was cancelled or exceeded its deadline.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error409:
+      description: Idempotency payload or operation state conflicts.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error412:
+      description: expected_revision no longer matches the current head.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Error503:
+      description: A required store is unavailable; raw dependency errors are never returned.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+  headers:
+    ETag:
+      schema: {type: string}
+    RequestID:
+      schema: {$ref: '#/components/schemas/SafeID'}
+    IdempotencyReplayed:
+      schema: {type: string, enum: ['true']}
+  schemas:
+    CacheDailyQuota:
+      type: object
+      additionalProperties: false
+      required: [limit, used, remaining, default_limit, override]
+      properties:
+        limit: {type: integer, minimum: 0, description: The limit a create is checked against (override, else default_limit).}
+        used: {type: integer, minimum: 0}
+        remaining: {type: integer, minimum: 0}
+        default_limit: {type: integer, minimum: 1, description: System settings → resources → daily limit.}
+        override:
+          type: [integer, 'null']
+          minimum: 0
+          description: The account's own limit; null follows default_limit.
+    CacheAccountLimits:
+      type: object
+      additionalProperties: false
+      required: [expected_revision, url_purge_limit, directory_purge_limit, prewarm_limit]
+      properties:
+        expected_revision: {type: integer, minimum: 0}
+        url_purge_limit: {type: [integer, 'null'], minimum: 0, maximum: 10000000}
+        directory_purge_limit: {type: [integer, 'null'], minimum: 0, maximum: 1000000}
+        prewarm_limit: {type: [integer, 'null'], minimum: 0, maximum: 10000000}
+    CacheDailyLimitDetails:
+      type: object
+      additionalProperties: false
+      required: [field, reason, quota, limit, used, requested]
+      properties:
+        field: {type: string, enum: [targets]}
+        reason: {type: string, enum: [daily_limit_exceeded]}
+        quota: {type: string, enum: [url_purge, directory_purge, prewarm]}
+        limit: {type: integer, minimum: 0}
+        used: {type: integer, minimum: 0}
+        requested: {type: integer, minimum: 1}
+    CacheDailyUsage:
+      type: object
+      additionalProperties: false
+      required: [scope_id, url_purge, directory_purge, prewarm, resets_at, revision]
+      properties:
+        scope_id: {$ref: '#/components/schemas/UUID'}
+        revision: {type: integer, minimum: 0, description: Revision of the account's own limits (0 = never set).}
+        url_purge: {$ref: '#/components/schemas/CacheDailyQuota'}
+        directory_purge:
+          description: Directory purges and whole-site purges share this limit.
+          allOf: [{$ref: '#/components/schemas/CacheDailyQuota'}]
+        prewarm: {$ref: '#/components/schemas/CacheDailyQuota'}
+        resets_at: {type: string, format: date-time, description: Next UTC+8 midnight.}
+    ResolveTargetSites:
+      type: object
+      additionalProperties: false
+      required: [action, target_type, targets]
+      properties:
+        action: {$ref: '#/components/schemas/OperationAction'}
+        target_type: {type: string, enum: [exact_url, directory_prefix]}
+        targets:
+          type: array
+          minItems: 1
+          maxItems: 500
+          x-max-total-utf8-bytes: 262144
+          items: {type: string, maxLength: 16384}
+    CacheTargetSites:
+      type: object
+      additionalProperties: false
+      required: [groups, unmatched]
+      properties:
+        groups:
+          type: array
+          description: One create per group (site_id, and scope_id on the platform route).
+          items:
+            type: object
+            additionalProperties: false
+            required: [site_id, scope_id, site_display_id, domain, target_ordinals]
+            properties:
+              site_id: {$ref: '#/components/schemas/UUID'}
+              scope_id: {$ref: '#/components/schemas/UUID'}
+              site_display_id: {type: string}
+              domain: {type: string}
+              target_ordinals:
+                type: array
+                description: 1-based positions in the request's targets.
+                items: {type: integer, minimum: 1}
+        unmatched:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [target_ordinal, reason]
+            properties:
+              target_ordinal: {type: integer, minimum: 1}
+              reason: {type: string, enum: [target_site_not_found, target_url_invalid, target_wildcard_prewarm]}
+    CacheCarryingNodes:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, display_id, name]
+            properties:
+              id: {$ref: '#/components/schemas/UUID'}
+              display_id: {type: string}
+              name: {type: string}
+              ipv4: {type: string}
+              ipv6: {type: string}
+    UUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    SafeID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    PolicyMode: {type: string, enum: [disabled, follow_origin, override]}
+    CachePolicyBindingMode: {type: string, enum: [inherit, override]}
+    QueryMode: {type: string, enum: [preserve, ignore, include, exclude]}
+    PolicyRuleV1:
+      type: object
+      additionalProperties: false
+      required: [order, ttl_seconds]
+      properties:
+        order: {type: integer, minimum: 1, maximum: 100}
+        extensions:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, pattern: '^\.[a-z0-9][a-z0-9_+-]{0,15}$'}
+        path_prefix: {type: string, maxLength: 8192}
+        status_codes:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {type: integer, minimum: 100, maximum: 599}
+        ttl_seconds: {type: integer, format: int64, minimum: 1, maximum: 31536000}
+    PolicyRuleV2:
+      type: object
+      additionalProperties: false
+      required: [order, action, ttl_seconds, browser_ttl_seconds]
+      properties:
+        order: {type: integer, minimum: 1, maximum: 100}
+        extensions:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {type: string, pattern: '^\.[a-z0-9][a-z0-9_+-]{0,15}$'}
+        path_prefix: {type: string, maxLength: 8192}
+        status_codes:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {type: integer, minimum: 100, maximum: 599}
+        path_regex:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: >-
+            The normalized request path must also match this regular
+            expression (PCRE/RE2 common subset; no nested unbounded
+            repetition, no repetition count above 100, no \C, \Q, (?U), \z
+            or named groups; on the node a match over 100000 backtracking
+            steps does not match). At most 8 rules per policy may carry
+            path_regex or content_types. Needs node capability
+            CACHE_RULE_MATCH (publication to nodes without it is refused).
+        content_types:
+          type: array
+          minItems: 1
+          maxItems: 16
+          uniqueItems: true
+          description: >-
+            The rule applies only to a response whose Content-Type (lower
+            case, parameters ignored) is one of these, or starts with an
+            entry ending in "*" (image/*, application/vnd.*). Decided when
+            the response header arrives; a response no remaining rule caches
+            is not stored (X-CDN-Cache-Reason content_type). Normalized to
+            lower case and sorted. Needs CACHE_RULE_MATCH.
+          items: {type: string, pattern: '^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}(/[a-z0-9!#$&^_.+-]{0,64})?\*?$'}
+        action: {type: string, enum: [cache, no_cache]}
+        ttl_seconds: {type: integer, format: int64, minimum: 0, maximum: 31536000}
+        browser_ttl_seconds:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 31536000
+          description: For cache actions the value cannot exceed ttl_seconds.
+        # Per-rule settings (新增缓存规则). The rule that
+        # decides a request is its first matching rule; its settings apply to
+        # the whole request, unset ones inherit the policy. Any of them needs
+        # node capability CACHE_RULE_MATCH api_version 2.
+        path_exact:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          pattern: '^/[!-~]*$'
+          description: >-
+            单个路径: the normalized request path must equal it ("/" is the
+            home page). Exclusive with path_prefix; no query, fragment, "//",
+            "." or ".." segments.
+        ignore_query:
+          type: boolean
+          description: 忽略 URL 参数 for this rule (the query is not part of the key). Cache actions only.
+        slice_bytes:
+          type: integer
+          format: int64
+          description: >-
+            分片回源 for this rule: 0 = whole objects, else 262144..67108864 in
+            64 KiB steps (the node slices at the largest of 256 KiB, 1, 4, 16,
+            64 MiB not above it). Absent = the policy's slice_bytes. Cache actions only.
+        force_cache:
+          type: boolean
+          description: >-
+            强制 CDN 缓存: true = the rule's TTL wins over the origin's
+            Cache-Control/Expires/X-Accel-Expires (mode override); false =
+            they are honoured, the rule TTL is the fallback (follow_origin);
+            absent = the policy's mode. A private/no-store/no-cache or
+            Set-Cookie response is never stored. Cache actions only.
+        ignore_vary:
+          type: boolean
+          description: "忽略 Vary - the origin's Vary does not split the cached object. Cache actions only."
+        no_cache:
+          type: array
+          minItems: 1
+          maxItems: 8
+          description: >-
+            不缓存条件: a request one of them matches is neither read from nor
+            stored in the cache (X-CDN-Cache BYPASS, reason
+            no_cache_condition). Cache actions only.
+          items:
+            type: object
+            additionalProperties: false
+            required: [source, pattern]
+            properties:
+              source:
+                type: string
+                enum: [uri, path, client_ip, scheme, args, host, header]
+                description: >-
+                  uri 请求URI (path and query), path 请求URI(不带参数), client_ip
+                  客户IP地址, scheme 请求协议, args 请求参数, host 域名, header
+                  one request header named by name (e.g. cookie).
+              name:
+                type: string
+                pattern: '^[A-Za-z0-9][A-Za-z0-9-]{0,63}$'
+                description: Request header name; required with source header only. Stored lower case.
+              pattern:
+                type: string
+                minLength: 1
+                maxLength: 256
+                description: Regular expression with the path_regex limits; an absent value matches as "".
+      allOf:
+        - if: {properties: {action: {const: cache}}}
+          then: {properties: {ttl_seconds: {minimum: 1}}}
+        - if: {properties: {action: {const: no_cache}}}
+          then:
+            properties:
+              ttl_seconds: {const: 0}
+              browser_ttl_seconds: {const: 0}
+    PolicyDocument:
+      oneOf:
+        - {$ref: '#/components/schemas/PolicyDocumentV1'}
+        - {$ref: '#/components/schemas/PolicyDocumentV2'}
+    PolicyDocumentV1:
+      type: object
+      additionalProperties: false
+      required: [mode, rules, query_mode, query_names, vary_headers, disk_quota_bytes]
+      properties:
+        mode: {$ref: '#/components/schemas/PolicyMode'}
+        rules:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/PolicyRuleV1'}
+        query_mode: {$ref: '#/components/schemas/QueryMode'}
+        query_names:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, maxLength: 128}
+        vary_headers:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: {type: string, maxLength: 128}
+        disk_quota_bytes: {type: integer, format: int64, minimum: 0, maximum: 17592186044416}
+    PolicyDocumentV2:
+      type: object
+      additionalProperties: false
+      required: [schema_version, mode, rules, query_mode, query_names, vary_headers, disk_quota_bytes]
+      properties:
+        schema_version: {type: integer, const: 2}
+        mode: {$ref: '#/components/schemas/PolicyMode'}
+        rules:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/PolicyRuleV2'}
+        query_mode: {$ref: '#/components/schemas/QueryMode'}
+        query_names:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, maxLength: 128}
+        vary_headers:
+          type: array
+          maxItems: 16
+          uniqueItems: true
+          items: {type: string, maxLength: 128}
+        disk_quota_bytes: {type: integer, format: int64, minimum: 0, maximum: 17592186044416}
+    Policy:
+      type: object
+      additionalProperties: false
+      required: [site_id, revision, binding_mode, definition_id, definition_revision, document, created_by_user_id, request_id, created_at]
+      properties:
+        site_id: {$ref: '#/components/schemas/UUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        binding_mode: {$ref: '#/components/schemas/CachePolicyBindingMode'}
+        definition_id: {$ref: '#/components/schemas/UUID'}
+        definition_revision: {type: integer, format: int64, minimum: 1}
+        document: {$ref: '#/components/schemas/PolicyDocument'}
+        created_by_user_id: {$ref: '#/components/schemas/UUID'}
+        request_id: {$ref: '#/components/schemas/SafeID'}
+        created_at: {type: string, format: date-time}
+    PolicyPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Policy'}}
+        next_cursor: {type: string, maxLength: 4096}
+    OperationAction: {type: string, enum: [purge, prewarm]}
+    TargetType: {type: string, enum: [exact_url, directory_prefix, whole_site]}
+    OperationState: {type: string, enum: [queued, running, succeeded, partial_failed, failed, cancelled]}
+    ItemState: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+    CreateOperation:
+      type: object
+      additionalProperties: false
+      required: [site_id, action, target_type, targets, node_ids, max_retries]
+      properties:
+        site_id: {$ref: '#/components/schemas/UUID'}
+        action: {$ref: '#/components/schemas/OperationAction'}
+        target_type: {$ref: '#/components/schemas/TargetType'}
+        targets:
+          type: array
+          description: >-
+            Edge cachetask schema v2 wire envelope. At most 16 targets, each at
+            most 16 KiB of UTF-8 bytes, with at most 64 KiB of raw target bytes
+            across the array. The aggregate byte limit is enforced by the
+            server in addition to this JSON Schema.
+          maxItems: 16
+          uniqueItems: true
+          x-max-total-utf8-bytes: 65536
+          items:
+            type: string
+            format: uri
+            maxLength: 16384
+            x-max-utf8-bytes: 16384
+        node_ids:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/UUID'}
+        max_retries: {type: integer, minimum: 0, maximum: 10}
+      allOf:
+        - if: {properties: {target_type: {const: whole_site}}}
+          then: {properties: {targets: {maxItems: 0}}}
+          else: {properties: {targets: {minItems: 1}}}
+        - if: {properties: {action: {const: prewarm}}}
+          then: {properties: {target_type: {const: exact_url}}}
+    Progress:
+      type: object
+      additionalProperties: false
+      required: [total, completed, succeeded, failed, cancelled]
+      properties:
+        total: {type: integer, minimum: 0}
+        completed: {type: integer, minimum: 0}
+        succeeded: {type: integer, minimum: 0}
+        failed: {type: integer, minimum: 0}
+        cancelled: {type: integer, minimum: 0}
+    Target:
+      type: object
+      additionalProperties: false
+      required: [ordinal, display_url, canonical_path, target_sha256, query_redacted]
+      properties:
+        ordinal: {type: integer, minimum: 1, maximum: 1000}
+        display_url:
+          type: string
+          description: Query values are replaced with query=redacted.
+        canonical_path: {type: string, minLength: 1, maxLength: 8192}
+        target_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        query_redacted: {type: boolean}
+    TargetProjection:
+      type: object
+      additionalProperties: false
+      required: [target_ordinal, state, attempt, sequence]
+      properties:
+        target_ordinal: {type: integer, minimum: 1, maximum: 1000}
+        state: {$ref: '#/components/schemas/ItemState'}
+        attempt: {type: integer, minimum: 0, maximum: 11}
+        sequence: {type: integer, format: int64, minimum: 0}
+        error_code: {$ref: '#/components/schemas/StableCode'}
+        completed_at: {type: string, format: date-time}
+    NodeProjection:
+      type: object
+      additionalProperties: false
+      required: [node_id, node_display_id, state, attempt, progress, targets, updated_at]
+      properties:
+        node_id: {$ref: '#/components/schemas/UUID'}
+        node_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        state: {$ref: '#/components/schemas/OperationState'}
+        attempt: {type: integer, minimum: 0, maximum: 11}
+        progress: {$ref: '#/components/schemas/Progress'}
+        last_error_code: {$ref: '#/components/schemas/StableCode'}
+        targets:
+          type: array
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/TargetProjection'}
+        updated_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+        # CACHE-ADD-07: the node's answer to the operation's cancel when it was
+        # running there. unsupported = the node version cannot be cancelled
+        # remotely (only scheduling stopped; what it received runs to the end).
+        cancel_confirmation: {type: string, enum: [pending, cancelled, completed, unresponsive, unsupported]}
+    Operation:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, site_id, site_display_id, action, target_type, state, max_attempts, progress, auto_nodes, targets, nodes, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        site_id: {$ref: '#/components/schemas/UUID'}
+        site_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        action: {$ref: '#/components/schemas/OperationAction'}
+        target_type: {$ref: '#/components/schemas/TargetType'}
+        state: {$ref: '#/components/schemas/OperationState'}
+        max_attempts: {type: integer, minimum: 1, maximum: 11}
+        progress: {$ref: '#/components/schemas/Progress'}
+        auto_nodes: {type: boolean, description: 'Created without node_ids (every carrying node); otherwise nodes are the nodes it named.'}
+        # CACHE-ADD-09b: set on a system follow-up the control plane created for
+        # a node that started carrying the site (the user operation it follows
+        # up); absent on operations a user created.
+        parent_operation_id: {$ref: '#/components/schemas/UUID'}
+        targets: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/Target'}}
+        nodes: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/NodeProjection'}}
+        cancel_requested_at: {type: string, format: date-time}
+        created_at: {type: string, format: date-time}
+        started_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    OperationSummary:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, site_id, site_display_id, action, target_type, state, max_attempts, target_count, node_count, first_target, auto_nodes, progress, created_at, updated_at]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        site_id: {$ref: '#/components/schemas/UUID'}
+        site_display_id: {$ref: '#/components/schemas/PositiveDisplayID'}
+        action: {$ref: '#/components/schemas/OperationAction'}
+        target_type: {$ref: '#/components/schemas/TargetType'}
+        state: {$ref: '#/components/schemas/OperationState'}
+        max_attempts: {type: integer, minimum: 1, maximum: 11}
+        target_count: {type: integer, minimum: 1, maximum: 1000}
+        node_count: {type: integer, minimum: 1, maximum: 1000}
+        first_target: {$ref: '#/components/schemas/Target'}
+        auto_nodes: {type: boolean}
+        parent_operation_id: {$ref: '#/components/schemas/UUID'}
+        progress: {$ref: '#/components/schemas/Progress'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        completed_at: {type: string, format: date-time}
+    OperationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/OperationSummary'}}
+        next_cursor: {type: string, maxLength: 4096}
+        state_counts:
+          description: First page only. Operations per state under every filter but state.
+          type: object
+          additionalProperties: false
+          required: [queued, running, succeeded, partial_failed, failed, cancelled]
+          properties:
+            queued: {type: integer, minimum: 0}
+            running: {type: integer, minimum: 0}
+            succeeded: {type: integer, minimum: 0}
+            partial_failed: {type: integer, minimum: 0}
+            failed: {type: integer, minimum: 0}
+            cancelled: {type: integer, minimum: 0}
+    CacheWriteReceipt:
+      type: object
+      additionalProperties: false
+      required: [status, decided_at]
+      properties:
+        status: {type: string, enum: [accepted, rejected]}
+        decided_at: {type: string, format: date-time}
+        operation:
+          description: Present when accepted.
+          allOf: [{$ref: '#/components/schemas/Operation'}]
+        rejection:
+          description: Present when rejected; code is the error code the write was answered with.
+          type: object
+          additionalProperties: false
+          required: [code]
+          properties:
+            code: {$ref: '#/components/schemas/StableCode'}
+            details:
+              type: object
+              additionalProperties: false
+              required: [field, target_ordinal, stage, reason]
+              properties:
+                field: {type: string, enum: [targets]}
+                target_ordinal: {type: integer, minimum: 1}
+                stage: {type: string, enum: [target_validation]}
+                reason: {type: string}
+    StableCode:
+      type: string
+      pattern: '^[a-z][a-z0-9._-]{0,127}$'
+    PositiveDisplayID:
+      type: string
+      pattern: '^[1-9][0-9]{0,18}$'
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {$ref: '#/components/schemas/StableCode'}
+            message: {type: string}
+            request_id: {type: string}
+            details:
+              description: >-
+                A create refused for one target (invalid_request; the console points at that line), or over
+                the account's daily quota (daily_limit_exceeded).
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [field, target_ordinal, stage, reason]
+                  properties:
+                    field: {type: string, enum: [targets]}
+                    target_ordinal: {type: integer, minimum: 1}
+                    stage: {type: string, enum: [target_validation]}
+                    reason:
+                      type: string
+                      enum: [target_url_invalid, target_host_not_served, target_listener_not_enabled, target_path_invalid,
+                        canonical_target_duplicate, targets_too_large]
+                - {$ref: '#/components/schemas/CacheDailyLimitDetails'}

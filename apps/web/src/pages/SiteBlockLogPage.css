@@ -1,0 +1,150 @@
+.analytics-log-page.site-block-log-page > .analytics-panel {
+  padding: 0 16px 16px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 4%, transparent), 0 12px 28px color-mix(in srgb, var(--cdnca-color-blue50, #0f172a) 6%, transparent);
+}
+
+.analytics-log-page.site-block-log-page .block-log-view {
+  min-width: 0;
+}
+
+.analytics-log-page.site-block-log-page .analytics-log-tabs .ant-tabs-nav {
+  margin: 0 0 14px;
+  padding-top: 16px;
+}
+
+.analytics-log-page.site-block-log-page .analytics-log-tabs .ant-tabs-nav::before {
+  border-bottom: 0;
+}
+
+.analytics-log-page.site-block-log-page .analytics-log-tabs .ant-tabs-tab {
+  margin: 0 6px 0 0 !important;
+  padding: 6px 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.analytics-log-page.site-block-log-page .analytics-log-tabs .ant-tabs-tab-active {
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 12%, transparent);
+}
+
+.analytics-log-page.site-block-log-page .analytics-log-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--cdnca-color-primary);
+}
+
+.analytics-log-page.site-block-log-page .analytics-log-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+/* 操作按钮行与筛选行是同一块无底色、无分隔线的区域。 */
+.analytics-log-page.site-block-log-page .analytics-filter-bar {
+  gap: 8px;
+  padding: 0;
+  margin-bottom: 10px;
+  background: transparent;
+  border-bottom: 0;
+  border-radius: 0;
+}
+
+.analytics-log-page.site-block-log-page .block-log-toolbar {
+  align-items: center;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+}
+
+.analytics-log-page.site-block-log-page .block-log-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.analytics-log-page.site-block-log-page .block-log-toolbar-filters {
+  display: grid;
+  width: 62%;
+  min-width: 0;
+  align-items: center;
+  grid-template-columns: repeat(3, minmax(160px, 1fr)) auto;
+  gap: 8px;
+}
+
+/* 历史拉黑的时间范围保持自然宽度（快捷项与自定义框同一行），
+   两个文本筛选分剩余宽度，整行靠右。 */
+.analytics-log-page.site-block-log-page .block-log-toolbar-filters:has(> .cdnca-time-range) {
+  width: auto;
+  flex: 1 1 auto;
+  justify-content: end;
+  /* max-content：下方 `> * { min-width: 0 }` 会把 auto 轨道压到比时间范围还窄，自定义框溢出卡片。 */
+  grid-template-columns: repeat(2, minmax(140px, 200px)) max-content auto;
+}
+
+.analytics-log-page.site-block-log-page .block-log-toolbar-filters > * {
+  min-width: 0;
+}
+
+.analytics-log-page.site-block-log-page .analytics-filter-bar .ant-input-group-addon,
+.analytics-log-page.site-block-log-page .analytics-filter-bar .ant-input,
+.analytics-log-page.site-block-log-page .analytics-filter-bar .ant-btn {
+  height: 32px;
+}
+
+.analytics-log-page.site-block-log-page .ant-table-thead > tr > th {
+  padding: 8px 0;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+}
+
+/* 解锁在节点上的进度（状态 · 就绪/总数 · 失败，及已忽略旧发布），就地显示在单元格内。 */
+.analytics-log-page.site-block-log-page .block-edge-progress {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: inherit;
+  gap: 0 8px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.analytics-log-page.site-block-log-page .block-edge-progress-failed {
+  color: var(--cdnca-color-error);
+}
+
+@media (max-width: 1100px) {
+  .analytics-log-page.site-block-log-page .block-log-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analytics-log-page.site-block-log-page .block-log-toolbar-filters {
+    width: 100%;
+  }
+
+  .analytics-log-page.site-block-log-page .block-log-toolbar-filters:has(> .cdnca-time-range) {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .analytics-log-page.site-block-log-page .block-log-toolbar-actions {
+    flex-wrap: wrap;
+  }
+
+  .analytics-log-page.site-block-log-page .block-log-toolbar-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .analytics-log-page.site-block-log-page .block-log-toolbar-filters:has(> .cdnca-time-range) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .analytics-log-page.site-block-log-page .block-log-toolbar-filters > .ant-btn {
+    width: max-content;
+  }
+}
+
+/* 当前拉黑列宽合计超过面板（面板 overflow: hidden），最右「解锁时间」列（边缘进度）被裁；表格内横向滚动。 */
+.analytics-log-page.site-block-log-page .block-log-view .ant-table-content {
+  overflow-x: auto;
+}

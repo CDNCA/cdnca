@@ -1,0 +1,212 @@
+{
+ "id": "admin-brand-assets",
+ "prefix": "/v1/admin/brand-assets",
+ "operations": [
+  {
+   "operation_id": "listPlatformBrandAssets",
+   "method": "GET",
+   "path": "/v1/admin/brand-assets",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Asset metadata",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.platform-brand-asset/v1",
+       "required": true
+      },
+      {
+       "name": "assets",
+       "type": "array<Asset>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "getPlatformBrandAsset",
+   "method": "GET",
+   "path": "/v1/admin/brand-assets/{slot}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "slot",
+     "in": "path",
+     "type": "string: favicon / logo / login_ad / logo_dark / login_background / app_icon",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Asset metadata",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.platform-brand-asset/v1",
+       "required": true
+      },
+      {
+       "name": "slot",
+       "type": "string: favicon / logo / login_ad / logo_dark / login_background / app_icon",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reference",
+       "type": "string"
+      },
+      {
+       "name": "mime_type",
+       "type": "string"
+      },
+      {
+       "name": "size_bytes",
+       "type": "integer"
+      },
+      {
+       "name": "sha256",
+       "type": "string"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "uploadPlatformBrandAsset",
+   "method": "PUT",
+   "path": "/v1/admin/brand-assets/{slot}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "params": [
+    {
+     "name": "slot",
+     "in": "path",
+     "type": "string: favicon / logo / login_ad / logo_dark / login_background / app_icon",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "image/png",
+     "image/jpeg",
+     "image/x-icon",
+     "image/vnd.microsoft.icon"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Uploaded asset",
+     "fields": [
+      {
+       "name": "schema",
+       "type": "const cdnca.platform-brand-asset/v1",
+       "required": true
+      },
+      {
+       "name": "slot",
+       "type": "string: favicon / logo / login_ad / logo_dark / login_background / app_icon",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "reference",
+       "type": "string"
+      },
+      {
+       "name": "mime_type",
+       "type": "string"
+      },
+      {
+       "name": "size_bytes",
+       "type": "integer"
+      },
+      {
+       "name": "sha256",
+       "type": "string"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid media or request"
+    },
+    {
+     "status": "401",
+     "description": "Unauthenticated"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Revision or idempotency conflict"
+    }
+   ]
+  }
+ ]
+}

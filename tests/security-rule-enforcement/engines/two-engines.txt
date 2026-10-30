@@ -1,0 +1,135 @@
+PASS total: 70
+FAIL total: 0
+ENGINE E01 self=block crs=block dual=block
+PASS E01-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E02 self=block crs=block dual=block
+PASS E02-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E03 self=block crs=block dual=block
+PASS E03-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E04 self=block crs=block dual=block
+PASS E04-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E05 self=block crs=block dual=block
+PASS E05-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E06 self=block crs=pass dual=block
+PASS E06-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=pass）
+ENGINE E07 self=block crs=block dual=block
+PASS E07-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E08 self=block crs=block dual=block
+PASS E08-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E09 self=block crs=block dual=block
+PASS E09-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E10 self=block crs=block dual=block
+PASS E10-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E11 self=block crs=block dual=block
+PASS E11-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E12 self=block crs=block dual=block
+PASS E12-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E13 self=block crs=block dual=block
+PASS E13-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E14 self=block crs=block dual=block
+PASS E14-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E15 self=block crs=block dual=block
+PASS E15-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE E16 self=block crs=block dual=block
+PASS E16-OR expected=block actual=block 两者都开：任一引擎拦截即拦截（自研=block CRS=block）
+ENGINE N01 self=pass crs=pass dual=pass
+PASS N01-FP expected=pass/pass/pass actual=pass/pass/pass 正常请求两套引擎都不误报
+ENGINE N02 self=pass crs=pass dual=pass
+PASS N02-FP expected=pass/pass/pass actual=pass/pass/pass 正常请求两套引擎都不误报
+ENGINE N03 self=pass crs=pass dual=pass
+PASS N03-FP expected=pass/pass/pass actual=pass/pass/pass 正常请求两套引擎都不误报
+ENGINE N04 self=pass crs=pass dual=pass
+PASS N04-FP expected=pass/pass/pass actual=pass/pass/pass 正常请求两套引擎都不误报
+ENGINE N05 self=pass crs=pass dual=pass
+PASS N05-FP expected=pass/pass/pass actual=pass/pass/pass 正常请求两套引擎都不误报
+ENGINE N06 self=pass crs=pass dual=pass
+PASS N06-FP expected=pass/pass/pass actual=pass/pass/pass 正常请求两套引擎都不误报
+ENGINE-SUMMARY attacks=16 self=16 crs=15 dual=16
+PASS E01-LOG expected=200 actual=200 两者仅记录：放行
+PASS E02-LOG expected=200 actual=200 两者仅记录：放行
+PASS E03-LOG expected=200 actual=200 两者仅记录：放行
+PASS E04-LOG expected=200 actual=200 两者仅记录：放行
+PASS E05-LOG expected=200 actual=200 两者仅记录：放行
+PASS E06-LOG expected=200 actual=200 两者仅记录：放行
+PASS E07-LOG expected=200 actual=200 两者仅记录：放行
+PASS E08-LOG expected=200 actual=200 两者仅记录：放行
+PASS E09-LOG expected=200 actual=200 两者仅记录：放行
+PASS E10-LOG expected=200 actual=200 两者仅记录：放行
+PASS E11-LOG expected=200 actual=200 两者仅记录：放行
+PASS E12-LOG expected=200 actual=200 两者仅记录：放行
+PASS E13-LOG expected=200 actual=200 两者仅记录：放行
+PASS E14-LOG expected=200 actual=200 两者仅记录：放行
+PASS E15-LOG expected=200 actual=200 两者仅记录：放行
+PASS E16-LOG expected=200 actual=200 两者仅记录：放行
+PASS N01-LOG expected=200 actual=200 两者仅记录：放行
+PASS N02-LOG expected=200 actual=200 两者仅记录：放行
+PASS N03-LOG expected=200 actual=200 两者仅记录：放行
+PASS N04-LOG expected=200 actual=200 两者仅记录：放行
+PASS N05-LOG expected=200 actual=200 两者仅记录：放行
+PASS N06-LOG expected=200 actual=200 两者仅记录：放行
+ENGINE-LOG E01 self_logged=1 crs_logged=1
+ENGINE-LOG E02 self_logged=1 crs_logged=1
+ENGINE-LOG E03 self_logged=1 crs_logged=1
+ENGINE-LOG E04 self_logged=1 crs_logged=1
+ENGINE-LOG E05 self_logged=1 crs_logged=1
+ENGINE-LOG E06 self_logged=1 crs_logged=0
+ENGINE-LOG E07 self_logged=1 crs_logged=1
+ENGINE-LOG E08 self_logged=1 crs_logged=1
+ENGINE-LOG E09 self_logged=1 crs_logged=1
+ENGINE-LOG E10 self_logged=1 crs_logged=1
+ENGINE-LOG E11 self_logged=1 crs_logged=1
+ENGINE-LOG E12 self_logged=1 crs_logged=1
+ENGINE-LOG E13 self_logged=1 crs_logged=1
+ENGINE-LOG E14 self_logged=1 crs_logged=1
+ENGINE-LOG E15 self_logged=1 crs_logged=1
+ENGINE-LOG E16 self_logged=1 crs_logged=1
+PASS ENG-LOG-SELF expected=16 actual=16 仅记录模式下自研检测命中都写入安全日志
+PASS ENG-LOG-CRS expected=15 actual=15 仅记录模式下 CRS 命中都写入 ModSecurity 审计日志
+PASS ENG-SELFALL expected=403 actual=403 全部 10 个自研规则集：命令注入拦截
+SUMMARY section=engines failures=0
+ENGINE-NOGATE E01 self=block crs=pass dual=block
+PASS E01-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E02 self=block crs=pass dual=block
+PASS E02-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E03 self=block crs=pass dual=block
+PASS E03-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E04 self=block crs=pass dual=block
+PASS E04-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E05 self=block crs=pass dual=block
+PASS E05-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E06 self=block crs=pass dual=block
+PASS E06-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E07 self=block crs=pass dual=block
+PASS E07-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E08 self=block crs=pass dual=block
+PASS E08-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E09 self=block crs=pass dual=block
+PASS E09-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E10 self=block crs=pass dual=block
+PASS E10-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E11 self=block crs=pass dual=block
+PASS E11-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E12 self=block crs=pass dual=block
+PASS E12-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E13 self=block crs=pass dual=block
+PASS E13-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E14 self=block crs=pass dual=block
+PASS E14-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E15 self=block crs=pass dual=block
+PASS E15-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE E16 self=block crs=pass dual=block
+PASS E16-NOGATE expected=block/pass actual=block/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE N01 self=pass crs=pass dual=pass
+PASS N01-NOGATE expected=pass/pass actual=pass/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE N02 self=pass crs=pass dual=pass
+PASS N02-NOGATE expected=pass/pass actual=pass/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE N03 self=pass crs=pass dual=pass
+PASS N03-NOGATE expected=pass/pass actual=pass/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE N04 self=pass crs=pass dual=pass
+PASS N04-NOGATE expected=pass/pass actual=pass/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE N05 self=pass crs=pass dual=pass
+PASS N05-NOGATE expected=pass/pass actual=pass/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+ENGINE-NOGATE N06 self=pass crs=pass dual=pass
+PASS N06-NOGATE expected=pass/pass actual=pass/pass 无扩展：两者都开的站点按自研检测，只开 CRS 的站点不检测
+PASS NOGATE-PATH expected=403 actual=403 无扩展：自定义路径规则照常生效
+SUMMARY section=engines-nogate failures=0

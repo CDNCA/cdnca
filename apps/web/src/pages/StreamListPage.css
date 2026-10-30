@@ -1,0 +1,564 @@
+/* Layer-four forwarding list, matched to the compact console surface. */
+.stream-page {
+  min-width: 0;
+  padding: 0 16px 16px;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 8px;
+  box-shadow: none;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.stream-page .stream-subnav {
+  margin: 0 -16px 27px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--cdnca-color-border);
+}
+
+.stream-page .stream-subnav .site-subnav-scroll {
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.stream-page .stream-subnav .site-subnav-scroll > button {
+  min-height: 32px;
+  padding: 0 16px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 32px;
+  border-radius: 8px;
+}
+
+.stream-page .stream-subnav .site-subnav-scroll > button.is-active {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+  background: var(--cdnca-color-primary-bg, #eaf4ff);
+}
+
+.stream-page .stream-subnav .site-subnav-arrow {
+  display: inline-flex;
+  width: 28px;
+  min-width: 28px;
+  align-items: center;
+  justify-content: center;
+  color: var(--cdnca-color-text-secondary);
+  background: transparent;
+  border: 0;
+}
+
+.stream-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.stream-toolbar-actions,
+.stream-toolbar-search,
+.stream-search-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stream-toolbar .ant-btn,
+.stream-toolbar .ant-input,
+.stream-toolbar .ant-select-selector {
+  min-height: 32px !important;
+  font-size: 14px;
+}
+
+.stream-search-control {
+  gap: 0;
+}
+
+.stream-search-control > .ant-select:first-child {
+  width: 92px;
+  flex: 0 0 92px;
+}
+
+.stream-search-control .ant-select-selector {
+  border-radius: 4px 0 0 4px !important;
+}
+
+.stream-search-control .ant-input {
+  width: 190px;
+  margin-left: -1px;
+  border-radius: 0;
+}
+
+/* fix-advfilter2：查询按钮移到共享 AdvancedFilters 的查询/重置组，搜索框右端补圆角。 */
+.stream-search-control > .ant-input-affix-wrapper,
+.stream-search-control > .ant-input {
+  margin-left: -1px;
+  border-radius: 0 4px 4px 0;
+}
+
+.stream-search-control > .ant-input-affix-wrapper {
+  width: 190px;
+  height: 32px;
+  padding-block: 0;
+}
+
+/* 带清除按钮的输入框：外框给 32px，里面的 input 不再另设 32px 最小高度（原来外框被撑到 43px）。 */
+.stream-search-control > .ant-input-affix-wrapper .ant-input {
+  width: auto;
+  min-height: 30px !important;
+  height: 30px;
+  margin-left: 0;
+}
+
+.stream-search-control > .ant-select:not(:first-child):last-child .ant-select-selector {
+  border-radius: 0 4px 4px 0 !important;
+}
+
+.stream-toolbar > .stream-advanced-filters {
+  margin-bottom: 0;
+}
+
+.stream-toolbar .stream-search-control {
+  margin-left: 16px;
+}
+
+.stream-search-control > .ant-select:not(:first-child) {
+  width: 190px;
+  min-width: 0;
+  margin-left: -1px;
+}
+
+.stream-search-control > .ant-select:not(:first-child) .ant-select-selector {
+  border-radius: 0 !important;
+}
+
+.stream-toolbar-actions > .ant-btn:nth-child(1),
+.stream-toolbar-actions > .ant-dropdown-trigger:nth-child(1) {
+  width: 106px;
+}
+
+.stream-toolbar-actions > .ant-btn:nth-child(2),
+.stream-toolbar-actions > .ant-dropdown-trigger:nth-child(2) {
+  width: 106px;
+}
+
+.stream-toolbar-actions > .ant-btn:nth-child(3),
+.stream-toolbar-actions > .ant-dropdown-trigger:nth-child(3) {
+  width: 128px;
+}
+
+.stream-page .identity-alert {
+  margin-bottom: 12px;
+}
+
+.stream-page .identity-table-scroll .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.stream-page .identity-table-scroll .ant-table-thead > tr > th {
+  height: 42px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 42px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border-bottom-color: var(--cdnca-color-border-secondary);
+}
+
+.stream-page .identity-table-scroll .ant-table-tbody > tr > td {
+  min-height: 58px;
+  padding: 8px 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  border-bottom-color: var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+.stream-page .identity-table-scroll .ant-table-cell-fix-right {
+  background: var(--cdnca-color-bg-container, #fff);
+}
+
+.stream-page .identity-table-scroll .ant-table-tbody > tr:hover > td {
+  background: var(--cdnca-color-bg-subtle, #f8fbff);
+}
+
+.stream-cell-stack,
+.stream-package-group {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  align-content: center;
+  line-height: 19px;
+}
+
+.stream-cell-stack strong {
+  overflow: hidden;
+  color: var(--cdnca-color-text);
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-cell-stack > span,
+.stream-unavailable {
+  overflow: hidden;
+  color: var(--cdnca-color-neutral55, #9aa1ad);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-package-group > span {
+  display: flex;
+  min-width: 0;
+  gap: 9px;
+}
+
+.stream-package-group em {
+  min-width: 30px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.stream-status {
+  color: var(--cdnca-color-success);
+}
+
+.stream-status--disabled {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.stream-status--warning {
+  color: var(--cdnca-color-warning);
+}
+
+.stream-row-actions {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.stream-row-actions .ant-btn-link {
+  height: 28px;
+  padding: 0 3px;
+}
+
+.stream-page .identity-pagination {
+  justify-content: flex-start;
+  margin-top: 18px;
+  font-size: 14px;
+}
+
+.stream-modal .ant-modal-body,
+.stream-batch-modify-modal .ant-modal-body {
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.stream-modal .ant-form-item {
+  margin-bottom: 26px;
+}
+
+.stream-modal .ant-form-item-label > label {
+  height: 32px;
+  color: var(--cdnca-color-text);
+}
+
+.stream-modal .ant-form-item-row {
+  flex-wrap: nowrap;
+}
+
+.stream-modal .ant-form-item-control {
+  min-width: 0;
+}
+
+.stream-create-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 35px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--cdnca-color-border-input, #d9dfe8);
+}
+
+.stream-create-tabs button {
+  min-width: 62px;
+  height: 32px;
+  padding: 0 16px;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-table-header);
+  border: 1px solid var(--cdnca-color-border-input, #d9dfe8);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+}
+
+.stream-create-tabs button.is-active {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-bg-container, #fff);
+  border-color: var(--cdnca-color-primary);
+}
+
+/* 「展开更多」：两侧虚线、居中文字按钮。 */
+.stream-advanced-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 0 0 22px;
+}
+
+.stream-advanced-divider::before,
+.stream-advanced-divider::after {
+  flex: 1;
+  border-top: 1px dashed var(--cdnca-color-border-input, #d9dfe8);
+  content: '';
+}
+
+.stream-advanced-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  color: var(--cdnca-color-text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.stream-advanced-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+.stream-advanced-toggle svg.is-open {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stream-advanced-toggle svg {
+    transition: none;
+  }
+}
+
+.stream-form-collapse {
+  margin-bottom: 4px;
+}
+
+.stream-form-collapse .ant-collapse-content-box {
+  padding-top: 16px !important;
+}
+
+.stream-form-collapse .ant-form-item {
+  margin-bottom: 18px;
+}
+
+.stream-batch-row {
+  display: grid;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.stream-batch-row-control {
+  padding-left: 24px;
+}
+
+.stream-batch-row-control .ant-form-item {
+  margin-bottom: 0;
+}
+
+.stream-batch-apply {
+  margin: 12px 0 4px 160px;
+}
+
+.stream-batch-alert {
+  margin-bottom: 12px;
+}
+
+.stream-owner-line em {
+  color: var(--cdnca-color-primary);
+  font-style: normal;
+}
+
+.stream-batch-target {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 14px;
+  padding: 12px;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-slate, #f8fafc);
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 4px;
+}
+
+@media (min-width: 768px) {
+  .stream-page .stream-subnav .site-subnav-arrow {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+@media (max-width: 980px) {
+  .stream-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stream-search-control {
+    flex: 1 1 auto;
+  }
+
+  .stream-search-control .ant-input,
+  .stream-search-control > .ant-select:not(:first-child) {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .stream-advanced-filters .cdnca-adv-filters-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .stream-page {
+    margin: 0;
+    padding: 0 12px 12px;
+  }
+
+  .stream-page .stream-subnav {
+    margin-inline: -12px;
+    padding-inline: 12px;
+  }
+
+  .stream-page .stream-subnav .site-subnav-arrow {
+    display: inline-flex;
+    width: 28px;
+    min-width: 28px;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .stream-toolbar-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .stream-toolbar .stream-search-control {
+    width: 100%;
+    margin-left: 0;
+    order: 2;
+  }
+
+  .stream-toolbar .cdnca-adv-filters-actions,
+  .stream-toolbar .cdnca-adv-filters-extra {
+    order: 3;
+  }
+
+  .stream-search-control > .ant-select:first-child {
+    width: 92px;
+  }
+
+  .stream-page .identity-pagination {
+    justify-content: flex-start;
+    min-width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .stream-modal .ant-drawer-content-wrapper,
+  .stream-batch-modify-drawer .ant-drawer-content-wrapper {
+    max-width: 100vw;
+  }
+
+  .stream-modal .ant-form-item {
+    display: block;
+  }
+
+  .stream-modal .ant-form-item-label {
+    width: auto;
+    padding-right: 0;
+  }
+
+  .stream-advanced-toggle {
+    margin-left: 0;
+  }
+}
+
+/* 分组管理 / 默认设置两个页签的工具条，沿用转发列表的按钮尺寸与间距。 */
+.stream-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.stream-panel-toolbar.is-end {
+  justify-content: flex-end;
+}
+
+.stream-panel-toolbar .ant-btn {
+  min-height: 32px !important;
+  font-size: 14px;
+}
+
+.stream-page .stream-groups-toolbar .ant-btn:nth-child(1) {
+  width: 110px;
+}
+
+.stream-page .stream-groups-toolbar .ant-btn:nth-child(2) {
+  width: 82px;
+}
+
+.stream-page .stream-groups-toolbar .ant-btn:nth-child(3) {
+  width: 82px;
+}
+
+.stream-page .stream-defaults-toolbar .ant-btn:nth-child(1) {
+  width: 106px;
+}
+
+.stream-page .stream-defaults-toolbar .ant-btn:nth-child(2) {
+  width: 78px;
+}
+
+.stream-panel-description {
+  margin: 0 0 16px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+/* stream-be：源站列表、ACL 规则、批量添加结果、同步状态 */
+.stream-origin-list,
+.stream-acl-list { display: flex; flex-direction: column; gap: 8px; }
+.stream-origin-row,
+.stream-acl-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px 96px 32px; gap: 8px; align-items: start; }
+.stream-acl-row { grid-template-columns: minmax(0, 1fr) 96px 32px; }
+.stream-origin-row .ant-form-item,
+.stream-acl-row .ant-form-item { margin-bottom: 0; }
+.stream-acl-empty { color: var(--cdnca-color-text-secondary); }
+.stream-origin-cell { display: flex; gap: 6px; align-items: baseline; }
+.stream-origin-cell + .stream-origin-cell { margin-top: 4px; }
+.stream-sync { font-size: 12px; color: var(--cdnca-color-text-secondary); }
+.stream-sync--failed { color: var(--cdnca-color-error); }
+.stream-batch-result { margin-top: 12px; }
+.stream-batch-result ol { margin: 8px 0 0; padding-left: 20px; max-height: 200px; overflow: auto; }
+.stream-batch-result li.is-failed span { color: var(--cdnca-color-error); }
+.stream-batch-footer { margin-top: 16px; display: flex; gap: 8px; }
+.stream-status-field { display: flex; flex-direction: column; gap: 6px; }
+
+/* fix-weighthint：批量修改源站列表的权重占比与说明 */
+.stream-origin-share { min-width: 64px; color: var(--cdnca-color-text-secondary); font-size: 12px; white-space: nowrap; }
+.stream-origin-weight-help { margin: 4px 0 0; color: var(--cdnca-color-text-secondary); font-size: 12px; }
+
+/* fix-l4flow2 L4-DEFAULT-01：批量新建说明未写协议的端口与负载方式取默认设置 */
+.stream-batch-defaults { margin: -12px 0 16px 110px; color: var(--cdnca-color-text-secondary); font-size: 12px; }
+@media (max-width: 575px) { .stream-batch-defaults { margin-left: 0; } }

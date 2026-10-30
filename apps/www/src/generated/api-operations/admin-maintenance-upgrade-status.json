@@ -1,0 +1,60 @@
+{
+ "id": "admin-maintenance-upgrade-status",
+ "prefix": "/v1/admin/maintenance-upgrade-status",
+ "operations": [
+  {
+   "operation_id": "readMaintenanceUpgradeStatus",
+   "method": "GET",
+   "path": "/v1/admin/maintenance-upgrade-status",
+   "summary": "Read authoritative maintenance upgrade status",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires a platform identity with control.upgrades.read. Repeated node_id parameters additionally require nodes.read. Membership and permissions are checked against current database state. Duplicate IDs, noncanonical UUIDs, more than 100 IDs and unknown query parameters are rejected. Nodes are sorted by ID and missing or foreign-scope nodes return 404. The main version comes from the running Control API build, never rollout history or configured version. Candidate metadata is verified against installation-bound signatures, current entitlement and release policy; it does not authorize execution. No grants, plans, reservations or audit records are written by this request.",
+   "permissions": [
+    "control.upgrades.read"
+   ],
+   "params": [
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "array<string(uuid)>",
+     "description": "Optional inventory batch; requires nodes.read."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Fresh read-only status; unavailable dependencies are explicit states.",
+     "fields": [
+      {
+       "name": "data",
+       "type": "object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid query or node IDs."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Platform scope or current permissions denied."
+    },
+    {
+     "status": "404",
+     "description": "A requested node is not visible in this scope."
+    },
+    {
+     "status": "503",
+     "description": "Required local runtime is unavailable."
+    }
+   ]
+  }
+ ]
+}

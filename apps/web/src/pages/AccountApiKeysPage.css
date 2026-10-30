@@ -1,0 +1,518 @@
+/* Scope the CDNCA-compatible account surface without changing shared pages. */
+.account-api-keys-page {
+  min-width: 0;
+  max-width: 100%;
+  padding: 16px;
+  overflow: hidden;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-api-key-compatibility,
+.account-api-key-advanced {
+  min-width: 0;
+  padding: 16px;
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  box-shadow: var(--cdnca-shadow-card, 0 1px 3px rgb(15 23 42 / 4%), 0 12px 28px rgb(15 23 42 / 6%));
+}
+
+.account-api-key-compatibility {
+  margin-bottom: 16px;
+}
+
+.account-api-key-compatibility-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1120px;
+  min-width: 0;
+  margin-bottom: 18px;
+  gap: 16px;
+}
+
+.account-api-key-compatibility-header > div {
+  min-width: 0;
+  padding-left: 10px;
+  border-left: 4px solid var(--cdnca-color-primary);
+}
+
+.account-api-key-compatibility-header h1,
+.account-api-key-advanced-heading h2,
+.account-api-key-compatibility-copy h2 {
+  letter-spacing: 0;
+}
+
+.account-api-key-compatibility-header h1 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.account-api-key-compatibility-header p,
+.account-api-key-advanced-heading p,
+.account-api-key-compatibility-copy p,
+.account-api-key-compatibility-note {
+  margin: 4px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.account-api-key-compatibility-header > .ant-tag {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  padding-inline: 10px;
+}
+
+.account-api-key-compatibility-alert {
+  width: 100%;
+  max-width: 1120px;
+  margin-bottom: 14px;
+}
+
+.account-api-key-compatibility-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  width: 100%;
+  max-width: 1120px;
+  gap: 14px;
+}
+
+.account-api-key-compatibility-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 143px;
+  padding: 16px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 8px;
+}
+
+.account-api-key-status-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 20px;
+}
+
+.account-api-key-compatibility-wide {
+  grid-column: 1 / -1;
+  min-height: 143px;
+}
+
+.account-api-key-compatibility-copy {
+  min-width: 0;
+}
+
+.account-api-key-compatibility-copy h2 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.account-api-key-compatibility-control,
+.account-api-key-compatibility-value {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin-top: 14px;
+  gap: 8px;
+}
+
+.account-api-key-status-item .account-api-key-compatibility-control {
+  margin-top: 0;
+}
+
+.account-api-key-compatibility-control > span,
+.account-api-key-compatibility-value > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.account-api-key-compatibility-value > div {
+  min-width: 0;
+}
+
+.account-api-key-compatibility-value code {
+  min-width: 0;
+  color: var(--cdnca-color-text);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.account-api-key-compatibility-value .ant-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.account-api-key-compatibility-note {
+  grid-column: 1 / -1;
+}
+
+.account-api-key-advanced-heading {
+  margin-bottom: 14px;
+}
+
+.account-api-key-advanced-heading h2 {
+  margin: 0;
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.account-api-keys-page .identity-toolbar {
+  min-height: 32px;
+  margin-bottom: 14px;
+  gap: 8px;
+}
+
+.account-api-keys-page .identity-toolbar > .ant-input,
+.account-api-keys-page .identity-toolbar > .ant-input-affix-wrapper,
+.account-api-keys-page .identity-toolbar > .ant-select-selector,
+.account-api-keys-page .identity-toolbar > .ant-btn {
+  height: 32px !important;
+  min-height: 32px;
+  font-size: 14px;
+  line-height: 30px;
+}
+
+.account-api-keys-page .identity-toolbar > .ant-input {
+  min-width: 240px;
+  max-width: 360px;
+}
+
+.account-api-keys-page .identity-toolbar > .ant-select {
+  width: 128px;
+}
+
+.account-api-keys-page .identity-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.account-api-keys-page .identity-table-scroll .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.account-api-keys-page .identity-table-scroll .ant-table-thead > tr > th {
+  height: 40px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 40px;
+  white-space: nowrap;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border-bottom-color: var(--cdnca-color-border-secondary);
+}
+
+.account-api-keys-page .identity-table-scroll .ant-table-tbody > tr > td {
+  height: 48px;
+  min-height: 48px;
+  padding: 0 12px !important;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+  vertical-align: middle;
+  border-bottom-color: var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+.account-api-keys-page .identity-table-scroll code {
+  color: var(--cdnca-color-text);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.account-api-keys-page .ant-table-pagination {
+  min-width: max-content;
+  margin: 16px 0 0 !important;
+}
+
+.account-api-keys-page .ant-table-pagination .ant-pagination-item,
+.account-api-keys-page .ant-table-pagination .ant-pagination-prev,
+.account-api-keys-page .ant-table-pagination .ant-pagination-next {
+  min-width: 32px;
+  height: 32px;
+  line-height: 30px;
+}
+
+.account-api-keys-page .identity-alert {
+  overflow-wrap: anywhere;
+}
+
+.account-api-keys-page .ant-table-cell-fix-right .ant-space {
+  gap: 4px !important;
+}
+
+.account-api-keys-page .ant-table-cell-fix-right .ant-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 26px;
+}
+
+.account-api-keys-page .ant-tag {
+  margin-inline-end: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.account-api-key-detail-modal,
+.account-api-key-editor-modal,
+.account-api-key-secret-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.account-api-key-detail-modal .ant-modal-content,
+.account-api-key-editor-modal .ant-modal-content,
+.account-api-key-secret-modal .ant-modal-content {
+  padding: 16px;
+}
+
+.account-api-key-detail-modal .ant-modal-title,
+.account-api-key-editor-modal .ant-modal-title,
+.account-api-key-secret-modal .ant-modal-title {
+  color: var(--cdnca-color-title);
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.account-api-key-editor-modal .ant-form-item {
+  margin-bottom: 10px;
+}
+
+.account-api-key-editor-modal .ant-form-item-label > label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.account-api-key-editor-modal .ant-input,
+.account-api-key-editor-modal .ant-input-affix-wrapper,
+.account-api-key-editor-modal .ant-select-selector,
+.account-api-key-editor-modal .ant-btn,
+.account-api-key-secret-modal .ant-btn {
+  min-height: 32px;
+  font-size: 14px;
+}
+
+.account-api-key-editor-modal .ant-modal-footer,
+.account-api-key-secret-modal .ant-modal-footer {
+  padding: 12px 0 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--cdnca-color-border-divider, #f0f1f2);
+}
+
+/* fix-apikeysimple：简单版白名单输入、密钥列表、一次性密钥分栏、折叠的高级区。 */
+.account-api-key-allowlist-field {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.account-api-key-allowlist-field > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.account-api-key-allowlist-field > .account-api-key-allowlist-error {
+  color: var(--cdnca-color-error, #ed4014);
+}
+
+.account-api-key-compatibility-copy label {
+  cursor: pointer;
+}
+
+.account-api-key-simple-keys {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  gap: 12px;
+}
+
+.account-api-key-simple-keys dl,
+.account-api-key-issued-pair {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  gap: 8px;
+}
+
+.account-api-key-simple-keys dl > div,
+.account-api-key-issued-pair > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  gap: 8px;
+}
+
+.account-api-key-simple-keys dt,
+.account-api-key-issued-pair dt {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.account-api-key-simple-keys dd,
+.account-api-key-issued-pair dd {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+  gap: 6px;
+}
+
+.account-api-key-simple-keys dd > span {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+}
+
+.account-api-key-compatibility-value .account-api-key-simple-keys > .ant-btn {
+  width: auto;
+  padding: 0 12px;
+}
+
+.account-api-key-issued-pair {
+  margin-top: 14px;
+}
+
+.account-api-key-issued-pair .ant-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.account-api-key-issued-usage {
+  margin: 12px 0 0;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+}
+
+.account-api-keys-page .account-api-key-advanced.ant-collapse > .ant-collapse-item > .ant-collapse-header {
+  align-items: center;
+  padding: 0;
+}
+
+.account-api-keys-page .account-api-key-advanced.ant-collapse > .ant-collapse-item > .ant-collapse-content > .ant-collapse-content-box {
+  padding: 14px 0 0;
+}
+
+.account-api-keys-page .account-api-key-advanced .account-api-key-advanced-heading {
+  margin-bottom: 0;
+}
+
+@media (max-width: 767px) {
+  .account-api-keys-page {
+    padding: 12px;
+  }
+
+  .account-api-key-compatibility,
+  .account-api-key-advanced {
+    padding: 14px;
+  }
+
+  .account-api-key-compatibility-header {
+    align-items: center;
+    margin-bottom: 14px;
+  }
+
+  .account-api-key-compatibility-header h1 {
+    font-size: 17px;
+    line-height: 24px;
+  }
+
+  .account-api-key-compatibility-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .account-api-key-compatibility-item,
+  .account-api-key-compatibility-wide {
+    grid-column: auto;
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .account-api-key-status-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+  }
+
+  .account-api-key-compatibility-value {
+    flex-wrap: wrap;
+  }
+
+  .account-api-key-simple-keys dl > div,
+  .account-api-key-issued-pair > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .account-api-keys-page .identity-toolbar {
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .account-api-keys-page .identity-toolbar > .ant-input,
+  .account-api-keys-page .identity-toolbar > .ant-select,
+  .account-api-keys-page .identity-toolbar > .ant-btn {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .account-api-keys-page .identity-toolbar > .ant-input {
+    flex: 1 1 150px;
+  }
+
+  .account-api-keys-page .identity-toolbar > .ant-select {
+    width: 116px;
+    flex: 0 0 116px;
+  }
+
+  .account-api-keys-page .identity-toolbar > .ant-btn {
+    flex: 0 0 auto;
+  }
+
+  .account-api-keys-page .identity-table-scroll {
+    max-width: 100%;
+  }
+
+  .account-api-keys-page .ant-table-pagination {
+    overflow-x: auto;
+  }
+
+  .account-api-key-detail-modal,
+  .account-api-key-editor-modal,
+  .account-api-key-secret-modal {
+    top: 10px;
+    margin: 0 auto;
+  }
+}

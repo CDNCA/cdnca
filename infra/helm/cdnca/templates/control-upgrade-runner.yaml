@@ -1,0 +1,153 @@
+{{- if .Values.controlUpgradeRunner.enabled }}
+{{- if ne (int .Values.controlUpgradeRunner.expectedReplicas) (int .Values.controlApi.replicaCount) }}
+{{- fail "controlUpgradeRunner.expectedReplicas must equal controlApi.replicaCount" }}
+{{- end }}
+{{- if le (int (mul 2 (int .Values.controlUpgradeRunner.quorum))) (int .Values.controlUpgradeRunner.expectedReplicas) }}
+{{- fail "controlUpgradeRunner.quorum must be a strict majority of expectedReplicas" }}
+{{- end }}
+{{- $component := "control-upgrade-runner" -}}
+{{- $name := include "cdnca.componentFullname" (dict "root" . "component" $component) -}}
+{{- $migrationName := printf "%s-migration" $name | trunc 63 | trimSuffix "-" -}}
+{{- $controlName := include "cdnca.componentFullname" (dict "root" . "component" "control-api") -}}
+{{- if not .Values.controlUpgradeRunner.state.existingClaim }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.controlUpgradeRunner.state.storageClass }}
+  storageClassName: {{ .Values.controlUpgradeRunner.state.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.controlUpgradeRunner.state.size | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $migrationName }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" "control-upgrade-migration") | nindent 4 }}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "cdnca.labels" (dict "root" . "component" $component) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "cdnca.selectorLabels" (dict "root" . "component" $component) | nindent 8 }}
+    spec:
+      serviceAccountName: {{ $name }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- include "cdnca.podSecurityContext" . | nindent 8 }}
+      {{- if .Values.imagePullSecrets }}
+      {{- include "cdnca.imagePullSecrets" . | trim | nindent 6 }}
+      {{- end }}
+      containers:
+        - name: control-upgrade-runner
+          image: {{ include "cdnca.image" .Values.controlApi.image | quote }}
+          imagePullPolicy: {{ .Values.controlApi.image.pullPolicy }}
+          command: ["/control-upgrade-runner"]
+          securityContext:
+            {{- include "cdnca.containerSecurityContext" . | nindent 12 }}
+          env:
+            - {name: CONTROL_UPGRADE_TARGET, value: kubernetes}
+            - {name: CONTROL_UPGRADE_INSTALLATION_ID_FILE, value: /var/run/secrets/cdnca/installation/id}
+            - {name: CONTROL_UPGRADE_TRUST_FILE, value: /var/run/secrets/cdnca/trust/keys.json}
+            - {name: CONTROL_UPGRADE_PLAN_SOURCE_URL, value: {{ .Values.controlUpgradeRunner.planSource.url | quote }}}
+            - {name: CONTROL_UPGRADE_PLAN_SOURCE_CA_FILE, value: /var/run/secrets/cdnca/plan-source/ca.crt}
+            - {name: CONTROL_UPGRADE_PLAN_SOURCE_CERT_FILE, value: /var/run/secrets/cdnca/plan-source/tls.crt}
+            - {name: CONTROL_UPGRADE_PLAN_SOURCE_KEY_FILE, value: /var/run/secrets/cdnca/plan-source/tls.key}
+            - {name: CONTROL_UPGRADE_PLAN_SOURCE_TIMEOUT, value: {{ .Values.controlUpgradeRunner.planSource.timeout | quote }}}
+            - {name: CONTROL_UPGRADE_PLAN_SOURCE_MAX_BYTES, value: {{ .Values.controlUpgradeRunner.planSource.maxBytes | quote }}}
+            - {name: CONTROL_UPGRADE_PLAN_LKG_FILE, value: /var/lib/cdnca-control-upgrade-volume/state/plan-lkg.json}
+            - {name: CONTROL_UPGRADE_INTERNAL_TOKEN_FILE, value: /var/run/secrets/cdnca/plan-source/internal-token}
+            - {name: CONTROL_UPGRADE_STATE_DIR, value: /var/lib/cdnca-control-upgrade-volume/state}
+            - {name: CONTROL_UPGRADE_POLL_INTERVAL, value: {{ .Values.controlUpgradeRunner.pollInterval | quote }}}
+            - {name: CONTROL_UPGRADE_STEP_TIMEOUT, value: {{ .Values.controlUpgradeRunner.stepTimeout | quote }}}
+            - {name: CONTROL_UPGRADE_HEALTH_TIMEOUT, value: {{ .Values.controlUpgradeRunner.healthTimeout | quote }}}
+            - {name: CONTROL_UPGRADE_PROTOCOL_VERSION, value: {{ .Values.controlUpgradeRunner.protocolVersion | quote }}}
+            - {name: CONTROL_UPGRADE_CURRENT_VERSION, value: {{ .Values.controlApi.controlVersion | quote }}}
+            - {name: CONTROL_UPGRADE_IMAGE_PULL_SECRETS_JSON, value: {{ .Values.imagePullSecrets | toJson | quote }}}
+            - {name: CONTROL_UPGRADE_INTERNAL_URL, value: {{ printf "http://%s:%v" $controlName .Values.controlApi.service.httpPort | quote }}}
+            - {name: CONTROL_UPGRADE_KUBERNETES_API, value: "https://kubernetes.default.svc"}
+            - name: CONTROL_UPGRADE_KUBERNETES_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - {name: CONTROL_UPGRADE_KUBERNETES_DEPLOYMENT, value: {{ $controlName | quote }}}
+            - {name: CONTROL_UPGRADE_KUBERNETES_CONTAINER, value: control-api}
+            - {name: CONTROL_UPGRADE_IMAGE_REPOSITORY, value: {{ .Values.controlApi.image.repository | quote }}}
+            - {name: CONTROL_UPGRADE_SERVICE_ACCOUNT, value: {{ $migrationName | quote }}}
+            - {name: CONTROL_UPGRADE_DATABASE_SECRET, value: {{ .Values.controlApi.dataStoresSecret.existingSecret | quote }}}
+            - {name: CONTROL_UPGRADE_DATABASE_SECRET_KEY, value: {{ .Values.controlApi.dataStoresSecret.keys.databaseURL | quote }}}
+            - {name: CONTROL_UPGRADE_KUBERNETES_TOKEN_FILE, value: /var/run/secrets/kubernetes.io/serviceaccount/token}
+            - {name: CONTROL_UPGRADE_KUBERNETES_CA_FILE, value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt}
+          resources:
+            {{- toYaml .Values.controlUpgradeRunner.resources | nindent 12 }}
+          volumeMounts:
+            - {name: installation, mountPath: /var/run/secrets/cdnca/installation, readOnly: true}
+            - {name: trust, mountPath: /var/run/secrets/cdnca/trust, readOnly: true}
+            - {name: plan-source, mountPath: /var/run/secrets/cdnca/plan-source, readOnly: true}
+            - {name: state, mountPath: /var/lib/cdnca-control-upgrade-volume}
+            - {name: kubernetes-api, mountPath: /var/run/secrets/kubernetes.io/serviceaccount, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: installation
+          secret:
+            secretName: {{ .Values.controlUpgradeRunner.installationSecret.existingSecret }}
+            defaultMode: 0440
+            items: [{key: {{ .Values.controlUpgradeRunner.installationSecret.key }}, path: id}]
+        - name: trust
+          secret:
+            secretName: {{ .Values.controlUpgradeRunner.trustSecret.existingSecret }}
+            defaultMode: 0440
+            items: [{key: {{ .Values.controlUpgradeRunner.trustSecret.key }}, path: keys.json}]
+        - name: plan-source
+          secret:
+            secretName: {{ .Values.controlUpgradeRunner.planSource.existingSecret }}
+            defaultMode: 0440
+            items:
+              - {key: {{ .Values.controlUpgradeRunner.planSource.keys.ca }}, path: ca.crt}
+              - {key: {{ .Values.controlUpgradeRunner.planSource.keys.clientCertificate }}, path: tls.crt}
+              - {key: {{ .Values.controlUpgradeRunner.planSource.keys.clientPrivateKey }}, path: tls.key}
+              - {key: {{ .Values.controlUpgradeRunner.planSource.keys.internalToken }}, path: internal-token}
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ default $name .Values.controlUpgradeRunner.state.existingClaim }}
+        - name: kubernetes-api
+          projected:
+            defaultMode: 0400
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: https://kubernetes.default.svc
+                  expirationSeconds: 3600
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - {key: ca.crt, path: ca.crt}
+        - {name: tmp, emptyDir: {}}
+{{- end }}

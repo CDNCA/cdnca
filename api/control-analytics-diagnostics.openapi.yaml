@@ -1,0 +1,153 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Site Quality Diagnostics API
+  version: 1.0.0
+paths:
+  /v1/admin/analytics/site-quality-diagnostics:
+    get:
+      operationId: listPlatformSiteQualityDiagnostics
+      summary: List one tenant's bounded quality diagnostics
+      security: [{bearerAuth: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/TenantID'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/NodeID'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200': {$ref: '#/components/responses/OK'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        '504': {$ref: '#/components/responses/Error'}
+  /v1/analytics/site-quality-diagnostics:
+    get:
+      operationId: listTenantSiteQualityDiagnostics
+      summary: List quality diagnostics for the authenticated tenant
+      description: tenant_id is forbidden; tenant scope comes only from the authenticated identity.
+      security: [{bearerAuth: []}, {cdncaApiKey: []}]
+      x-required-permissions: [sites.read]
+      parameters:
+        - {$ref: '#/components/parameters/From'}
+        - {$ref: '#/components/parameters/To'}
+        - {$ref: '#/components/parameters/SiteID'}
+        - {$ref: '#/components/parameters/NodeID'}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200': {$ref: '#/components/responses/OK'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '408': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+        '504': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+    cdncaApiKey: {type: apiKey, in: header, name: X-API-Key}
+  parameters:
+    From:
+      name: from
+      in: query
+      required: true
+      schema: {type: string, format: date-time}
+    To:
+      name: to
+      in: query
+      required: true
+      schema: {type: string, format: date-time}
+    TenantID:
+      name: tenant_id
+      in: query
+      required: true
+      schema: {type: string, format: uuid}
+    SiteID:
+      name: site_id
+      in: query
+      required: false
+      schema: {type: string, format: uuid}
+    NodeID:
+      name: node_id
+      in: query
+      required: false
+      schema: {type: string, format: uuid}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: {type: string, minLength: 1, maxLength: 2048}
+  schemas:
+    DiagnosticItem:
+      type: object
+      additionalProperties: false
+      required: [event_id, occurred_at, site_id, node_id, request_id, trace_id, config_version_id, host, uri_path, status_code, category, reason_code]
+      properties:
+        event_id: {type: string, minLength: 1, maxLength: 128}
+        occurred_at: {type: string, format: date-time}
+        site_id: {type: string, format: uuid}
+        node_id: {type: string, format: uuid}
+        request_id: {type: string, minLength: 1, maxLength: 128}
+        trace_id: {type: string, minLength: 1, maxLength: 128}
+        config_version_id: {type: string, minLength: 1, maxLength: 128}
+        host: {type: string, maxLength: 253}
+        uri_path: {type: string, maxLength: 4096}
+        status_code: {type: integer, minimum: 100, maximum: 599}
+        category: {type: string, enum: [upstream_5xx, config_mismatch, no_host, unknown]}
+        reason_code:
+          type: string
+          enum: [upstream_reported_no_host, host_missing, upstream_reported_config_mismatch, status_530, status_5xx_with_upstream_result, status_5xx_unclassified]
+    DiagnosticPage:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor, snapshot_at]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/DiagnosticItem'}}
+        next_cursor: {type: [string, 'null'], maxLength: 2048}
+        snapshot_at: {type: [string, 'null'], format: date-time}
+    DiagnosticMeta:
+      type: object
+      additionalProperties: false
+      required: [from, to, timezone]
+      properties:
+        from: {type: string, format: date-time}
+        to: {type: string, format: date-time}
+        timezone: {type: string, const: UTC}
+    DiagnosticResponse:
+      type: object
+      additionalProperties: false
+      required: [data, meta]
+      properties:
+        data: {$ref: '#/components/schemas/DiagnosticPage'}
+        meta: {$ref: '#/components/schemas/DiagnosticMeta'}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+  responses:
+    OK:
+      description: Stable diagnostics projected from one access-fact snapshot.
+      content: {application/json: {schema: {$ref: '#/components/schemas/DiagnosticResponse'}}}
+    Error:
+      description: Stable error envelope.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

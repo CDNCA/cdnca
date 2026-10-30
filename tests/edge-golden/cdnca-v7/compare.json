@@ -1,0 +1,307 @@
+{
+  "schema": "cdnca.edge-golden.compare/v1",
+  "incomparable": [],
+  "semantic_changes": [
+    {
+      "path": "tls-sni-host/hs-unknown/tls/error",
+      "reason": "动态路由 D4：未知/无 SNI 在 ssl_client_hello_by_lua 拒绝握手，ngx_lua 0.10.31rc5 只能 ngx.exit(ngx.ERROR)（客户端 hello 回调返回 SSL_CLIENT_HELLO_ERROR 且不设 alert，ngx_http_lua_ssl_client_helloby.c），OpenSSL 发 internal_error；v7 懒加载套接字是 ssl_reject_handshake 的 unrecognized_name（ngx_http_request.c ngx_http_ssl_servername）。共享 server 上 reject_handshake 会拒绝所有名字，不可用。两者都是握手致命失败、客户端都不重试，只有 alert 类别不同（docs/edge/dynroute-tls.md §6）",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "tls-sni-host/hs-no-sni/tls/error",
+      "reason": "动态路由 D4：未知/无 SNI 在 ssl_client_hello_by_lua 拒绝握手，ngx_lua 0.10.31rc5 只能 ngx.exit(ngx.ERROR)（客户端 hello 回调返回 SSL_CLIENT_HELLO_ERROR 且不设 alert，ngx_http_lua_ssl_client_helloby.c），OpenSSL 发 internal_error；v7 懒加载套接字是 ssl_reject_handshake 的 unrecognized_name（ngx_http_request.c ngx_http_ssl_servername）。共享 server 上 reject_handshake 会拒绝所有名字，不可用。两者都是握手致命失败、客户端都不重试，只有 alert 类别不同（docs/edge/dynroute-tls.md §6）",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "*/*/responses/*/headers/x-cdnca-config-version",
+      "reason": "动态路由 D8：共享 server 不再有每次发布的配置版本，X-CDNCA-Config-Version 响应头删除（v7 每站 server 的 add_header；缓存键不含 config_version_id 后该头也无缓存身份意义；预热校验改为 X-Cdnca-Site + 缓存键回显，仅对带 agent 令牌的回环请求）",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "*/*/responses/*/headers/x-cdn-cache-reason",
+      "reason": "动态路由 D8 的 X-CDN-Cache-Reason 原因名与先后次序与 v7 相同（method/authorization/cookie/upgrade/no_cache_rule/set_cookie/origin_no_store/object_size，ge-cache 第 2 轮对齐）；只有动态路由节点独有的 key（键投影超限）、purge_state（agent 尚未同步清空代际，失败即不缓存）、disabled（节点无缓存池）在 v7 中没有对应头",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "cache/*/cache/keys",
+      "reason": "动态路由 D8：缓存键 = key_prefix|freshness_token|清空代际|host|port|策略键（ge-cache A：不含 config_version_id，发布不换键空间）；渲染器只记录 host|port|策略键，与 v7 键的尾段逐条相同（同样的对象、同样的清理结果）",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "*/*/responses/*/headers/x-cdnca-http-policy-version",
+      "reason": "动态路由 D7：X-CDNCA-HTTP-Policy-Version 报该站 HTTP 策略的 revision（站点对象 http_policy.revision），v7 报 scope 快照的 policy_version；站点对象不携带 scope 快照版本。单版本发布时两者相同（本语料即如此，此条目前不触发），多站多版本时会不同（docs/edge/dynroute-security.md §3）",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "site-traffic-limit/drain/logs/*/fields/blocked",
+      "reason": "动态路由 D10（dynroute-filters.md 流量超限页）：509 超限提示页由节点自出，标 cdnca_security_block_page（FX60，不计套餐流量），访问日志 blocked=true；v7 SiteTrafficLimitDirectives 未打该标记（blocked=false）。sec-log-fix 接通金标 D12 日志后暴露，其余字段与 v7 逐项相同",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "access-logs/blocked/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "access-logs/drain/logs/*/fields/response_bytes",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/acl-blocked-source/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/acl-closed-path/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/allowlist-out/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/waf-header-exact/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/waf-method/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/waf-path-dot/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/waf-path-encoded/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/waf-path-exact/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/waf-prefix-double-slash/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "acl-waf/waf-prefix/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "host-routing/ip-host/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "host-routing/parent-of-wildcard/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "host-routing/unknown-host/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "ipv6-origin/v6-origin-default-port/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "managed-waf/sqli-form/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "managed-waf/sqli-query/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "managed-waf/xss-query/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "origin-tls/untrusted-ca/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "origin-tls/wrong-sni/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "package-limits/drain/logs/*/fields/response_bytes",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "package-limits/no-connections/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "retry-failover/all-down/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "retry-failover/single-read-timeout/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "site-traffic-limit/drain/logs/*/fields/response_bytes",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "site-traffic-limit/over-default-page/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "tls-sni-host/sni-shop-host-legacy/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "tls-sni-host/sni-shop-host-unknown/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "waf-ge/auto-block-1/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "waf-ge/base64-filter/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "waf-ge/drain/logs/*/fields/response_bytes",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "waf-ge/empty-ua/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "waf-ge/named-arg-hit/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "waf-ge/upload-ext/responses",
+      "reason": "错误页：节点自己给出、且未配置任何自定义页/主题页/槽位页的响应（未知域名/IP/无 Host 421、ACL/WAF/黑名单 403、连接数 503、流量超限 509、套餐到期 403、源站不可达 502/超时 504）改为节点内置默认页（cdnca_filters.default_page：错误码+标题、浏览器→CDN 节点→源站三段图示、发生了什么/我该怎么办、请求 ID/节点/IP，单 <style> 按 CSP hash，中英并列）；状态码不变，正文与页面头（Content-Type/CSP/Cache-Control 等，同槽位页 page_headers）及访问日志 response_bytes 随之变化；源站自身错误不替换",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    },
+    {
+      "path": "*/drain/logs/*/fields/upstream_addr",
+      "reason": "回源地址：访问日志新增回源地址 upstream_addr（$upstream_addr 截到 64 字节，未回源为空串），供访问日志“源地址”列；upstream_result 仍是诊断码不变。v7 金标录制时没有该字段；安全行不带",
+      "renderers": [
+        "cdnca-dynroute"
+      ]
+    }
+  ]
+}

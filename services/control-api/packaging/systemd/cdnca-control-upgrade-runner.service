@@ -1,0 +1,41 @@
+[Unit]
+Description=CDNCA signed control-plane upgrade runner
+After=network-online.target cdnca-control-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/cdnca/control-upgrade-runner.env
+ExecStart=/usr/local/libexec/cdnca/control-upgrade-runner
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ReadWritePaths=/opt/cdnca/control-api /var/lib/cdnca-control-upgrade
+
+[Install]
+WantedBy=multi-user.target

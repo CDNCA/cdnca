@@ -1,0 +1,525 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "acl-waf",
+  "scenario_sha256": "baa054992fb92549a1a3b3c38fbcdc9ea34152276a3cfec8721784d310de72f1",
+  "steps": [
+    {
+      "id": "allowed",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "33",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 33,
+            "sha256": "b18239ce68ec95d5c730a61c2de35b7e665816b865828c189492fd9de5669235",
+            "text": "rules secure-rules.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/",
+              "host": "secure-rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "acl-blocked-source",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "acl-open-path",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "39",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 39,
+            "sha256": "e5155966b0eddca9d334c5845cc26ca3f8cf1397167133b1930377ebbbd3be3f",
+            "text": "rules secure-rules.example.test /open/x"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/open/x",
+              "host": "secure-rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.3",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.3"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "acl-closed-path",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "waf-header-exact",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "waf-header-other-value",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "33",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 33,
+            "sha256": "b18239ce68ec95d5c730a61c2de35b7e665816b865828c189492fd9de5669235",
+            "text": "rules secure-rules.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/",
+              "host": "secure-rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-bad": "2",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waf-log-continues",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "33",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 33,
+            "sha256": "b18239ce68ec95d5c730a61c2de35b7e665816b865828c189492fd9de5669235",
+            "text": "rules secure-rules.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/",
+              "host": "secure-rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-probe": "a",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waf-method",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "waf-path-exact",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "waf-path-exact-slash",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "39",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 39,
+            "sha256": "e3fd1c6d558a689f100148e878be7e114751434fc54489e07fbc2dd86e720966",
+            "text": "rules secure-rules.example.test /admin/"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/admin/",
+              "host": "secure-rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waf-path-case",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "38",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 38,
+            "sha256": "20bce12053ea0f97b24c2b91fdaa4887570d8813692b66e475d0e10c3c5f9d4f",
+            "text": "rules secure-rules.example.test /ADMIN"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/ADMIN",
+              "host": "secure-rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waf-path-encoded",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "waf-path-dot",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "waf-prefix",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "waf-prefix-sibling",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "42",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 42,
+            "sha256": "8f9e9b3a83876685d21b4b151c0592022bde6c459e0f34edacf5e190c60fbb02",
+            "text": "rules secure-rules.example.test /privateer"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/privateer",
+              "host": "secure-rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "waf-prefix-double-slash",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "allowlist-in",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "34",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 34,
+            "sha256": "acc43c71b878a6a8af398d605379508aec5b822a67fb41921e39f5ee079d07df",
+            "text": "allowlist allowlist.example.test /"
+          },
+          "origin": [
+            {
+              "origin": "allowlist",
+              "method": "GET",
+              "uri": "/",
+              "host": "allowlist.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "allowlist-out",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    }
+  ]
+}

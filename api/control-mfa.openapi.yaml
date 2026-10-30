@@ -1,0 +1,436 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Account MFA API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable customer-control account MFA contract. The runtime accepts exactly
+    one canonical Bearer control-api session and derives user, scope, and session identifiers
+    from identity.AuthenticateSession. API keys, CdncaKey, and client-supplied actor headers are
+    rejected. The MFA service revalidates live principal facts inside its IAM-ordered PostgreSQL
+    transaction. Enrollment secrets, recovery codes, and proof tokens appear only in the first
+    successful response and are omitted from idempotent replay responses. Step-up proof
+    consumption is intentionally absent because it remains a trusted business-transaction adapter.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+tags:
+  - name: Account MFA
+    description: Authenticator enrollment, account MFA state, step-up proof issuance, and termination.
+paths:
+  /v1/account/mfa:
+    get:
+      tags: [Account MFA]
+      operationId: getMyMFAStatus
+      summary: Read the authenticated account's current MFA state
+      description: >-
+        Returns only inactive, enrollment_pending, or active plus non-sensitive credential metadata.
+        No account label, seed, ciphertext, recovery code, or proof material is returned.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200': {$ref: '#/components/responses/StatusOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowedGET'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/account/mfa/enrollments:
+    post:
+      tags: [Account MFA]
+      operationId: beginMyMFAEnrollment
+      summary: Begin TOTP enrollment
+      description: >-
+        A first successful response contains the seed and provisioning URI. A same-payload
+        Idempotency-Key replay returns only credential_id, expires_at, and replayed=true; the
+        service does not decrypt or reconstruct setup material during replay.
+      security: [{bearerAuth: []}]
+      parameters: &mutationParameters
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BeginEnrollmentRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/EnrollmentCreated'}
+        '200': {$ref: '#/components/responses/EnrollmentReplayed'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowedPOST'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/account/mfa/enrollments/{credential_id}/activate:
+    post:
+      tags: [Account MFA]
+      operationId: activateMyMFAEnrollment
+      summary: Activate a pending TOTP credential
+      description: >-
+        Recovery codes are returned only by the first successful activation. They are omitted
+        entirely from a same-payload Idempotency-Key replay.
+      security: [{bearerAuth: []}]
+      parameters:
+        - $ref: '#/components/parameters/CredentialID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/RequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ActivateEnrollmentRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/ActivationCreated'}
+        '200': {$ref: '#/components/responses/ActivationReplayed'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowedPOST'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/account/mfa/step-up-proofs:
+    post:
+      tags: [Account MFA]
+      operationId: createMyMFAStepUpProof
+      summary: Create a short-lived bound step-up proof
+      description: >-
+        The proof is bound server-side to the authenticated user, scope, session, live permissions,
+        tenant, audience, and action. The opaque token is returned only once and is omitted from
+        replay. There is no client-accessible proof consume operation.
+      security: [{bearerAuth: []}]
+      parameters: *mutationParameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateStepUpProofRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/StepUpProofCreated'}
+        '200': {$ref: '#/components/responses/StepUpProofReplayed'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowedPOST'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '410': {$ref: '#/components/responses/Gone'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/account/mfa/disable:
+    post:
+      tags: [Account MFA]
+      operationId: disableMyMFA
+      summary: Disable active MFA after strong reauthentication
+      description: >-
+        A TOTP or unused recovery code is consumed in the same transaction as the immutable
+        terminal fact and audit event. A same-payload Idempotency-Key retry is safe after an
+        unknown commit result and returns 204 without re-consuming authentication evidence.
+      security: [{bearerAuth: []}]
+      parameters: *mutationParameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeactivateRequest'}
+      responses: &terminalResponses
+        '204': {$ref: '#/components/responses/NoContent'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowedPOST'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '413': {$ref: '#/components/responses/PayloadTooLarge'}
+        '422': {$ref: '#/components/responses/UnprocessableEntity'}
+        '408': {$ref: '#/components/responses/RequestCancelled'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /v1/account/mfa/reset:
+    post:
+      tags: [Account MFA]
+      operationId: resetMyMFA
+      summary: Reset active MFA after strong reauthentication
+      description: >-
+        Reset has the same atomic authentication, terminal-fact, audit, idempotency, and unknown
+        commit semantics as disable. Account recovery without a TOTP or recovery code is a separate
+        audited workflow and is not represented by this operation.
+      security: [{bearerAuth: []}]
+      parameters: *mutationParameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DeactivateRequest'}
+      responses: *terminalResponses
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api-session
+      description: >-
+        Exactly one Authorization header carrying a canonical `Bearer <control-api-session>`.
+        CdncaKey, API keys, multiple Authorization values, whitespace variants, and actor, user,
+        scope, tenant, session, role, or permission headers are rejected. Authentication uses
+        identity.AuthenticateSession; MFA operations revalidate live facts under the IAM lock order.
+  parameters:
+    CredentialID:
+      name: credential_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    Traceparent:
+      name: Traceparent
+      in: header
+      required: true
+      description: Canonical W3C version 00 traceparent; the non-zero trace ID is used for correlation.
+      schema:
+        type: string
+        pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-(00|01)$'
+  schemas:
+    BeginEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [account_label]
+      properties:
+        account_label: {type: string, minLength: 1, maxLength: 254}
+    ActivateEnrollmentRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: {type: string, pattern: '^[0-9]{6}$'}
+    Authentication:
+      type: object
+      additionalProperties: false
+      required: [method, code]
+      properties:
+        method: {type: string, enum: [totp, recovery_code]}
+        code: {type: string, minLength: 6, maxLength: 64, writeOnly: true}
+    CreateStepUpProofRequest:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, audience, action, authentication, ttl_seconds, max_uses]
+      properties:
+        tenant_id: {type: string, format: uuid}
+        audience: {type: string, minLength: 1, maxLength: 128}
+        action: {type: string, minLength: 1, maxLength: 128}
+        authentication: {$ref: '#/components/schemas/Authentication'}
+        ttl_seconds: {type: integer, minimum: 1, maximum: 300}
+        max_uses: {type: integer, minimum: 1, maximum: 5}
+    DeactivateRequest:
+      type: object
+      additionalProperties: false
+      required: [authentication, reason]
+      properties:
+        authentication: {$ref: '#/components/schemas/Authentication'}
+        reason: {type: string, minLength: 1, maxLength: 512}
+    MFAStatus:
+      oneOf:
+        - $ref: '#/components/schemas/MFAInactiveStatus'
+        - $ref: '#/components/schemas/MFAPendingStatus'
+        - $ref: '#/components/schemas/MFAActiveStatus'
+      discriminator: {propertyName: status}
+    MFAInactiveStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: {const: inactive}
+    MFAPendingStatus:
+      type: object
+      additionalProperties: false
+      required: [status, credential_id, method, enrollment_expires_at]
+      properties:
+        status: {const: enrollment_pending}
+        credential_id: {type: string, format: uuid}
+        method: {const: totp}
+        enrollment_expires_at: {type: string, format: date-time}
+    MFAActiveStatus:
+      type: object
+      additionalProperties: false
+      required: [status, credential_id, method]
+      properties:
+        status: {const: active}
+        credential_id: {type: string, format: uuid}
+        method: {const: totp}
+    EnrollmentCreatedResult:
+      type: object
+      additionalProperties: false
+      required: [credential_id, secret, provisioning_uri, expires_at, replayed]
+      properties:
+        credential_id: {type: string, format: uuid}
+        secret: {type: string, minLength: 16, readOnly: true}
+        provisioning_uri: {type: string, format: uri, readOnly: true}
+        expires_at: {type: string, format: date-time}
+        replayed: {const: false}
+    EnrollmentReplayResult:
+      type: object
+      additionalProperties: false
+      required: [credential_id, expires_at, replayed]
+      properties:
+        credential_id: {type: string, format: uuid}
+        expires_at: {type: string, format: date-time}
+        replayed: {const: true}
+    ActivationCreatedResult:
+      type: object
+      additionalProperties: false
+      required: [credential_id, recovery_codes, activated_at, replayed]
+      properties:
+        credential_id: {type: string, format: uuid}
+        recovery_codes:
+          type: array
+          readOnly: true
+          minItems: 10
+          maxItems: 10
+          items: {type: string}
+        activated_at: {type: string, format: date-time}
+        replayed: {const: false}
+    ActivationReplayResult:
+      type: object
+      additionalProperties: false
+      required: [credential_id, activated_at, replayed]
+      properties:
+        credential_id: {type: string, format: uuid}
+        activated_at: {type: string, format: date-time}
+        replayed: {const: true}
+    StepUpProofCreatedResult:
+      type: object
+      additionalProperties: false
+      required: [proof_id, token, method, issued_at, expires_at, max_uses, replayed]
+      properties:
+        proof_id: {type: string, format: uuid}
+        token: {type: string, minLength: 43, maxLength: 43, readOnly: true}
+        method: {type: string, enum: [totp, recovery_code]}
+        issued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        max_uses: {type: integer, minimum: 1, maximum: 5}
+        replayed: {const: false}
+    StepUpProofReplayResult:
+      type: object
+      additionalProperties: false
+      required: [proof_id, method, issued_at, expires_at, max_uses, replayed]
+      properties:
+        proof_id: {type: string, format: uuid}
+        method: {type: string, enum: [totp, recovery_code]}
+        issued_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        max_uses: {type: integer, minimum: 1, maximum: 5}
+        replayed: {const: true}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string, pattern: '^mfa_[a-z0-9_]+$'}
+            message: {type: string}
+            request_id: {type: string}
+  headers:
+    RequestID:
+      description: Correlation ID for the response.
+      schema: {type: string}
+    AllowGET:
+      description: Allowed method for the matched resource.
+      schema: {type: string, const: GET}
+    AllowPOST:
+      description: Allowed method for the matched resource.
+      schema: {type: string, const: POST}
+  responses:
+    StatusOK:
+      description: Current non-sensitive MFA state.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/MFAStatus'}}}
+    EnrollmentCreated:
+      description: Enrollment created; secret and provisioning_uri are present exactly once.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/EnrollmentCreatedResult'}}}
+    EnrollmentReplayed:
+      description: Enrollment replayed; secret and provisioning_uri are absent.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/EnrollmentReplayResult'}}}
+    ActivationCreated:
+      description: Enrollment activated; recovery_codes are present exactly once.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ActivationCreatedResult'}}}
+    ActivationReplayed:
+      description: Activation replayed; recovery_codes are absent.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/ActivationReplayResult'}}}
+    StepUpProofCreated:
+      description: Step-up proof created; token is present exactly once.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/StepUpProofCreatedResult'}}}
+    StepUpProofReplayed:
+      description: Step-up proof replayed; token is absent.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/StepUpProofReplayResult'}}}
+    NoContent:
+      description: Terminal fact already exists or was committed by this request.
+      headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}
+    BadRequest: {description: 'Request metadata, path, query, body, or input is invalid', headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unauthorized: {description: 'Bearer session is absent, malformed, expired, revoked, or disabled', headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Forbidden: {description: 'Live principal, tenant, permissions, or proof binding changed', headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: 'Idempotency, lifecycle, code replay, or bounded-use conflict', headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Gone: {description: Enrollment or proof expired, headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    PreconditionFailed: {description: Active MFA is required, headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    PayloadTooLarge: {description: Request body exceeds the configured limit, headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    UnprocessableEntity: {description: MFA code or proof is invalid, headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    RequestCancelled: {description: Request was canceled, headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    ServiceUnavailable: {description: 'MFA, encryption, identity, IAM, or PostgreSQL dependency is unavailable', headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    GatewayTimeout: {description: Request deadline elapsed, headers: {X-Request-ID: {$ref: '#/components/headers/RequestID'}}, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    MethodNotAllowedGET:
+      description: Request method is not allowed.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Allow: {$ref: '#/components/headers/AllowGET'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    MethodNotAllowedPOST:
+      description: Request method is not allowed.
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Allow: {$ref: '#/components/headers/AllowPOST'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}

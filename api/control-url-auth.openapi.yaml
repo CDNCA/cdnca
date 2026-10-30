@@ -1,0 +1,639 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control URL Authentication Policies API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Stage1 control-plane API for HMAC-SHA256 URL authentication policies. This
+    package-owned contract is independently testable but is not mounted in the
+    canonical control-api OpenAPI or shared production router yet.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+  - cdncaKeyAuth: []
+tags:
+  - name: URL authentication policies
+    description: Tenant-scoped HMAC-SHA256 URL authentication policy lifecycle and edge snapshots.
+paths:
+  /v1/url-auth-policies:
+    get:
+      tags: [URL authentication policies]
+      operationId: listURLAuthPolicies
+      summary: List visible URL authentication policies
+      description: >-
+        Requires url_auth_policies.read. Tenant principals are restricted to
+        their live tenant scope and never receive owner metadata.
+      x-required-permissions: [url_auth_policies.read]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: name
+          in: query
+          schema: {type: string, maxLength: 128}
+        - name: status
+          in: query
+          schema: {type: string, enum: [enabled, disabled]}
+        - name: site_id
+          in: query
+          schema: {$ref: '#/components/schemas/CanonicalUUID'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyListOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [URL authentication policies]
+      operationId: createURLAuthPolicy
+      summary: Create a URL authentication policy and current key
+      description: >-
+        Requires url_auth_policies.manage. Tenant principals create only in
+        their own scope and for their own active site membership. Platform
+        principals must provide target_scope_id and owner_id. The plaintext
+        secret is returned only on the first committed response; an exact
+        idempotent replay omits it.
+      x-required-permissions: [url_auth_policies.manage]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePolicyRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/SecretWriteCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/url-auth-policies/{id}:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    get:
+      tags: [URL authentication policies]
+      operationId: getURLAuthPolicy
+      summary: Get one URL authentication policy without key material
+      x-required-permissions: [url_auth_policies.read]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/PolicyOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      tags: [URL authentication policies]
+      operationId: updateURLAuthPolicy
+      summary: Update policy fields, including enable or disable state
+      description: >-
+        Requires url_auth_policies.manage. The full field snapshot, quoted
+        revision, and idempotency key are required. Algorithm remains fixed to
+        hmac-sha256; migration_marker is not writable.
+      x-required-permissions: [url_auth_policies.manage]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdatePolicyRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/url-auth-policies/{id}/enable:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    post:
+      tags: [URL authentication policies]
+      operationId: enableURLAuthPolicy
+      summary: Enable a disabled URL authentication policy
+      x-required-permissions: [url_auth_policies.manage]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/url-auth-policies/{id}/disable:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    post:
+      tags: [URL authentication policies]
+      operationId: disableURLAuthPolicy
+      summary: Disable an enabled URL authentication policy
+      x-required-permissions: [url_auth_policies.manage]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/url-auth-policies/{id}/rotate:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    post:
+      tags: [URL authentication policies]
+      operationId: rotateURLAuthPolicyKey
+      summary: Rotate the current key with a one-key previous window
+      description: >-
+        The current key becomes previous, any older previous key is revoked,
+        and a new current secret is returned once. Exact replay omits secret.
+      x-required-permissions: [url_auth_policies.manage]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/EmptyObject'}
+      responses:
+        '200': {$ref: '#/components/responses/SecretWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/url-auth-policies/{id}/revoke:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    post:
+      tags: [URL authentication policies]
+      operationId: revokePreviousURLAuthPolicyKey
+      summary: Revoke the current previous key
+      description: >-
+        Only the exact key currently in the previous slot can be revoked. The
+        current key can never be revoked through this operation.
+      x-required-permissions: [url_auth_policies.manage]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RevokePreviousRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/PolicyWriteOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/PreconditionFailed'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/url-auth-policies/{id}/edge-snapshot:
+    parameters:
+      - $ref: '#/components/parameters/PolicyID'
+    get:
+      tags: [URL authentication policies]
+      operationId: getURLAuthPolicyEdgeSnapshot
+      summary: Get the deterministic cdnca.edge.urlauth/v1 source snapshot
+      description: >-
+        Returns key identifiers and deterministic Agent key-file references,
+        never plaintext, ciphertext, digests, or envelope metadata. This is a
+        control-plane source snapshot, not signed publication or rollout proof.
+      x-required-permissions: [url_auth_policies.read]
+      security:
+        - bearerAuth: []
+        - cdncaKeyAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OptionalRequestID'
+      responses:
+        '200': {$ref: '#/components/responses/EdgeSnapshotOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '405': {$ref: '#/components/responses/MethodNotAllowed'}
+        '431': {$ref: '#/components/responses/HeadersTooLarge'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: control-api-session
+      description: >-
+        Exactly one live Bearer session. User, membership, tenant status, and
+        current RBAC are re-read server-side on every request.
+    cdncaKeyAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: >-
+        Exactly one Authorization header in the form CdncaKey credential.
+        Active key state, tenant, user, membership, current RBAC, and key scopes
+        are re-read server-side on every request. Client actor headers are ignored.
+  parameters:
+    PolicyID:
+      name: id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    OptionalRequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Retry an unknown result only with this exact key and unchanged body and revision.
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string, pattern: '^"[1-9][0-9]*"$', maxLength: 21}
+    Page:
+      name: page
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+    Limit:
+      name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+  headers:
+    RequestID:
+      schema: {$ref: '#/components/schemas/MetadataID'}
+    ETag:
+      schema: {type: string}
+    Location:
+      schema: {type: string}
+    IdempotentReplay:
+      schema: {type: string, const: 'true'}
+    Allow:
+      schema: {type: string}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    MetadataID:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9._-]+$'
+    EmptyObject:
+      type: object
+      additionalProperties: false
+      maxProperties: 0
+    PolicyFields:
+      type: object
+      required: [name, enabled, algorithm, signature_parameter, expiration_parameter, key_id_parameter, bind_client_ip, max_clock_skew_seconds, max_validity_seconds, max_signature_uses, excluded_query_parameters, trusted_proxy_cidrs]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        enabled: {type: boolean}
+        algorithm: {type: string, const: hmac-sha256}
+        signature_parameter: {$ref: '#/components/schemas/QueryParameterName'}
+        expiration_parameter: {$ref: '#/components/schemas/QueryParameterName'}
+        key_id_parameter: {$ref: '#/components/schemas/QueryParameterName'}
+        bind_client_ip: {type: boolean}
+        max_clock_skew_seconds: {type: integer, minimum: 0, maximum: 300}
+        max_validity_seconds: {type: integer, minimum: 1, maximum: 86400}
+        max_signature_uses: {type: integer, minimum: 0, maximum: 1000000}
+        excluded_query_parameters:
+          type: array
+          maxItems: 32
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/QueryParameterName'}
+        trusted_proxy_cidrs:
+          type: array
+          maxItems: 64
+          uniqueItems: true
+          items: {type: string, minLength: 3, maxLength: 64}
+    QueryParameterName:
+      type: string
+      pattern: '^[A-Za-z0-9_.~-]{1,64}$'
+    CreatePolicyRequest:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/PolicyFields'
+        - type: object
+          required: [site_id]
+          properties:
+            site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            target_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            owner_id: {$ref: '#/components/schemas/CanonicalUUID'}
+    UpdatePolicyRequest:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/PolicyFields'
+        - type: object
+          required: [site_id]
+          properties:
+            site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+    OwnerReference:
+      type: object
+      additionalProperties: false
+      required: [id, display_name]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        display_name: {type: string}
+    SiteReference:
+      type: object
+      additionalProperties: false
+      required: [id, domain]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        domain: {type: string}
+    KeyMetadata:
+      type: object
+      additionalProperties: false
+      required: [key_id, created_at]
+      properties:
+        key_id: {type: string, pattern: '^[A-Za-z0-9._:-]{1,64}$'}
+        created_at: {type: string, format: date-time}
+        revoked_at: {type: string, format: date-time}
+    Policy:
+      unevaluatedProperties: false
+      allOf:
+        - $ref: '#/components/schemas/PolicyFields'
+        - type: object
+          required: [id, scope_id, site, current_key, version, created_at, updated_at]
+          properties:
+            id: {$ref: '#/components/schemas/CanonicalUUID'}
+            scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+            owner: {$ref: '#/components/schemas/OwnerReference'}
+            site: {$ref: '#/components/schemas/SiteReference'}
+            migration_marker:
+              type: string
+              enum: [cdnfly_type_a_md5, cdnfly_type_b_md5]
+              readOnly: true
+              description: Migration provenance only; never selects the runtime algorithm.
+            current_key: {$ref: '#/components/schemas/KeyMetadata'}
+            previous_key: {$ref: '#/components/schemas/KeyMetadata'}
+            version: {type: integer, minimum: 1}
+            created_at: {type: string, format: date-time}
+            updated_at: {type: string, format: date-time}
+    PolicyList:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit]
+      properties:
+        items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Policy'}}
+        total: {type: integer, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+    PolicyWriteResult:
+      type: object
+      additionalProperties: false
+      required: [policy, replayed]
+      properties:
+        policy: {$ref: '#/components/schemas/Policy'}
+        replayed: {type: boolean}
+    SecretWriteResult:
+      type: object
+      additionalProperties: false
+      required: [policy, replayed]
+      properties:
+        policy: {$ref: '#/components/schemas/Policy'}
+        secret:
+          type: string
+          writeOnly: true
+          minLength: 43
+          maxLength: 43
+          description: Present only on the first committed create or rotate response; absent on replay.
+        replayed: {type: boolean}
+    RevokePreviousRequest:
+      type: object
+      additionalProperties: false
+      required: [key_id]
+      properties:
+        key_id: {type: string, pattern: '^[A-Za-z0-9._:-]{1,64}$'}
+    EdgeKey:
+      type: object
+      additionalProperties: false
+      required: [key_id, key_file]
+      properties:
+        key_id: {type: string, pattern: '^[A-Za-z0-9._:-]{1,64}$'}
+        key_file: {type: string, pattern: '^/var/lib/cdnca-edge/urlauth/keys/[0-9a-f-]+/[A-Za-z0-9._:-]+\\.key$'}
+    EdgePolicy:
+      type: object
+      additionalProperties: false
+      required: [schema_version, policy_version, tenant_id, site_id, algorithm, signature_parameter, expiration_parameter, key_id_parameter, bind_client_ip, max_clock_skew_seconds, max_validity_seconds, max_signature_uses, excluded_query_parameters, trusted_proxies, current_key]
+      properties:
+        schema_version: {type: string, const: cdnca.edge.urlauth/v1}
+        policy_version: {type: integer, minimum: 1}
+        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        site_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        algorithm: {type: string, const: hmac-sha256}
+        signature_parameter: {$ref: '#/components/schemas/QueryParameterName'}
+        expiration_parameter: {$ref: '#/components/schemas/QueryParameterName'}
+        key_id_parameter: {$ref: '#/components/schemas/QueryParameterName'}
+        bind_client_ip: {type: boolean}
+        max_clock_skew_seconds: {type: integer, minimum: 0, maximum: 300}
+        max_validity_seconds: {type: integer, minimum: 1, maximum: 86400}
+        max_signature_uses: {type: integer, minimum: 0, maximum: 1000000}
+        excluded_query_parameters: {type: array, maxItems: 32, uniqueItems: true, items: {$ref: '#/components/schemas/QueryParameterName'}}
+        trusted_proxies: {type: array, maxItems: 64, uniqueItems: true, items: {type: string}}
+        current_key: {$ref: '#/components/schemas/EdgeKey'}
+        previous_key: {$ref: '#/components/schemas/EdgeKey'}
+    EdgeSnapshot:
+      type: object
+      additionalProperties: false
+      required: [policy_id, version, sha256, document]
+      properties:
+        policy_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        version: {type: integer, minimum: 1}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        document: {$ref: '#/components/schemas/EdgePolicy'}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code: {type: string}
+            message: {type: string}
+            request_id: {$ref: '#/components/schemas/MetadataID'}
+            details:
+              description: >-
+                On a 400 validation_error of a policy create/update that names the refused body field: field is the JSON name
+                as sent (site_id, name, signature_parameter, max_validity_seconds, excluded_query_parameters[1],
+                trusted_proxy_cidrs[0], ...); reason is a machine code (required, too_long, invalid_format, out_of_range,
+                duplicate, invalid). Other refusals have no details.
+              x-description-zh: 规则创建/编辑 400 validation_error 能定位字段时附带 field（请求体 JSON 名，列表按提交顺序编号）与 reason 机器码；其它拒绝不带 details。
+              type: object
+              additionalProperties: false
+              required: [field, reason]
+              properties:
+                field:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_]{0,63}(?:\.[a-z0-9_]{1,64}|\[\d{1,4}\])*$'
+                reason:
+                  type: string
+                  pattern: '^[a-z][a-z0-9_]{0,63}$'
+              example: {field: 'trusted_proxy_cidrs[1]', reason: invalid_format}
+  responses:
+    PolicyListOK:
+      description: Bounded policy page without key material
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PolicyList'}
+    PolicyOK:
+      description: Policy metadata without key material
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Policy'}
+    PolicyWriteOK:
+      description: Policy mutation committed or exactly replayed
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PolicyWriteResult'}
+    SecretWriteCreated:
+      description: Policy created; secret appears only on first committed response
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        Location: {$ref: '#/components/headers/Location'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SecretWriteResult'}
+    SecretWriteOK:
+      description: Key rotated; secret appears only on first committed response
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+        X-Idempotent-Replay: {$ref: '#/components/headers/IdempotentReplay'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SecretWriteResult'}
+    EdgeSnapshotOK:
+      description: Deterministic cdnca.edge.urlauth/v1 source snapshot
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        ETag: {$ref: '#/components/headers/ETag'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/EdgeSnapshot'}
+    BadRequest: {$ref: '#/components/responses/Error400'}
+    Unauthorized: {$ref: '#/components/responses/Error401'}
+    Forbidden: {$ref: '#/components/responses/Error403'}
+    NotFound: {$ref: '#/components/responses/Error404'}
+    MethodNotAllowed:
+      description: Method is not supported by this route
+      headers:
+        X-Request-ID: {$ref: '#/components/headers/RequestID'}
+        Allow: {$ref: '#/components/headers/Allow'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Conflict: {$ref: '#/components/responses/Error409'}
+    PreconditionFailed: {$ref: '#/components/responses/Error412'}
+    Unprocessable: {$ref: '#/components/responses/Error422'}
+    HeadersTooLarge: {$ref: '#/components/responses/Error431'}
+    Unavailable: {$ref: '#/components/responses/Error503'}
+    Error400: {description: Invalid request protocol, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error401: {description: Authentication required, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error403: {description: Current permission or scope denied, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error404: {description: Resource not visible, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error409: {description: Resource or idempotency conflict, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error412: {description: If-Match revision is stale, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error422: {description: Request fields are invalid, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error431: {description: Request headers exceed the configured application limit, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Error503: {description: Required dependency unavailable or response exceeds the configured limit, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}

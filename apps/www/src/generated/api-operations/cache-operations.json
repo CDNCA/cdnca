@@ -1,0 +1,1022 @@
+{
+ "id": "cache-operations",
+ "prefix": "/v1/cache-operations",
+ "operations": [
+  {
+   "operation_id": "listTenantCacheOperations",
+   "method": "GET",
+   "path": "/v1/cache-operations",
+   "summary": "List cache operations in a stable tenant snapshot",
+   "auth": [
+    "bearer"
+   ],
+   "description": "The cursor freezes the set of operations whose committed creation audit position is at or below the first page watermark. Mutable state, progress, and update/completion timestamps remain live on later pages.",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "HMAC-authenticated cursor bound to scope, filters, and a committed creation-audit watermark. It freezes membership, not mutable operation state or progress."
+    },
+    {
+     "name": "site_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Non-disclosing filter within the effective tenant scope. A foreign or nonexistent UUID returns the same 200 response with an empty items array."
+    },
+    {
+     "name": "site_display_id",
+     "in": "query",
+     "type": "string",
+     "description": "Tenant-scoped stable positive site identifier displayed by the UI."
+    },
+    {
+     "name": "search",
+     "in": "query",
+     "type": "string",
+     "description": "Exact operation/site short ID or a case-insensitive target URL fragment."
+    },
+    {
+     "name": "action",
+     "in": "query",
+     "type": "string: purge / prewarm"
+    },
+    {
+     "name": "target_type",
+     "in": "query",
+     "type": "string: exact_url / directory_prefix / whole_site"
+    },
+    {
+     "name": "state",
+     "in": "query",
+     "type": "string",
+     "description": "One state or several, comma separated (any of them)."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable operation page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<OperationSummary>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string"
+      },
+      {
+       "name": "state_counts",
+       "type": "object",
+       "description": "First page only. Operations per state under every filter but state."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "createTenantCacheOperation",
+   "method": "POST",
+   "path": "/v1/cache-operations",
+   "summary": "Persist a purge or prewarm operation",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Returns 202 after the operation and node/target projections are committed. queued never means that a node command was dispatched. Unknown results must be retried with the same Idempotency-Key and body.",
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "site_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "action",
+      "type": "string: purge / prewarm",
+      "required": true
+     },
+     {
+      "name": "target_type",
+      "type": "string: exact_url / directory_prefix / whole_site",
+      "required": true
+     },
+     {
+      "name": "targets",
+      "type": "array<string(uri)>",
+      "required": true,
+      "description": "Edge cachetask schema v2 wire envelope. At most 16 targets, each at most 16 KiB of UTF-8 bytes, with at most 64 KiB of raw target bytes across the array. The aggregate byte limit is enforced by the server in addition to this JSON Schema."
+     },
+     {
+      "name": "node_ids",
+      "type": "array<string(uuid)>",
+      "required": true
+     },
+     {
+      "name": "max_retries",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Durable operation accepted in queued state; no delivery is implied.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: purge / prewarm",
+       "required": true
+      },
+      {
+       "name": "target_type",
+       "type": "string: exact_url / directory_prefix / whole_site",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "Progress",
+       "required": true
+      },
+      {
+       "name": "auto_nodes",
+       "type": "boolean",
+       "required": true,
+       "description": "Created without node_ids (every carrying node); otherwise nodes are the nodes it named."
+      },
+      {
+       "name": "parent_operation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "targets",
+       "type": "array<Target>",
+       "required": true
+      },
+      {
+       "name": "nodes",
+       "type": "array<NodeProjection>",
+       "required": true
+      },
+      {
+       "name": "cancel_requested_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "completed_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload or operation state conflicts."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantCacheDailyUsage",
+   "method": "GET",
+   "path": "/v1/cache-operations/daily-usage",
+   "summary": "Today's cache operation quotas of the caller's account (UTC+8 day; system follow-ups not counted)",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Quotas count per account (tenant scope): the owner and its members share them across all its sites. A platform administrator's submissions on the tenant's behalf are neither counted nor refused (still audited as the administrator).",
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The same limits and counts a create is checked against.",
+     "fields": [
+      {
+       "name": "scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true,
+       "description": "Revision of the account's own limits (0 = never set)."
+      },
+      {
+       "name": "url_purge",
+       "type": "CacheDailyQuota",
+       "required": true
+      },
+      {
+       "name": "directory_purge",
+       "type": "object",
+       "required": true,
+       "description": "Directory purges and whole-site purges share this limit."
+      },
+      {
+       "name": "prewarm",
+       "type": "CacheDailyQuota",
+       "required": true
+      },
+      {
+       "name": "resets_at",
+       "type": "string(date-time)",
+       "required": true,
+       "description": "Next UTC+8 midnight."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "getTenantCacheOperation",
+   "method": "GET",
+   "path": "/v1/cache-operations/{operation_id}",
+   "summary": "Get sanitized per-node operation progress",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.read"
+   ],
+   "params": [
+    {
+     "name": "operation_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized cache operation.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: purge / prewarm",
+       "required": true
+      },
+      {
+       "name": "target_type",
+       "type": "string: exact_url / directory_prefix / whole_site",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "Progress",
+       "required": true
+      },
+      {
+       "name": "auto_nodes",
+       "type": "boolean",
+       "required": true,
+       "description": "Created without node_ids (every carrying node); otherwise nodes are the nodes it named."
+      },
+      {
+       "name": "parent_operation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "targets",
+       "type": "array<Target>",
+       "required": true
+      },
+      {
+       "name": "nodes",
+       "type": "array<NodeProjection>",
+       "required": true
+      },
+      {
+       "name": "cancel_requested_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "completed_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelTenantCacheOperation",
+   "method": "POST",
+   "path": "/v1/cache-operations/{operation_id}/cancel",
+   "summary": "Cancel a queued or running cache operation",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "operation_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized cache operation.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: purge / prewarm",
+       "required": true
+      },
+      {
+       "name": "target_type",
+       "type": "string: exact_url / directory_prefix / whole_site",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "Progress",
+       "required": true
+      },
+      {
+       "name": "auto_nodes",
+       "type": "boolean",
+       "required": true,
+       "description": "Created without node_ids (every carrying node); otherwise nodes are the nodes it named."
+      },
+      {
+       "name": "parent_operation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "targets",
+       "type": "array<Target>",
+       "required": true
+      },
+      {
+       "name": "nodes",
+       "type": "array<NodeProjection>",
+       "required": true
+      },
+      {
+       "name": "cancel_requested_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "completed_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload or operation state conflicts."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "resubmitTenantCacheOperation",
+   "method": "POST",
+   "path": "/v1/cache-operations/{operation_id}/resubmit",
+   "summary": "Re-submit an operation as a new one",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Creates a new operation with the original's site, action, target type, targets and retry budget, on the nodes the original named, or on every node carrying the site now when it named none (auto_nodes). The Idempotency-Key is the batch key: with the original operation it forms the new operation's idempotency key, so a retry of one batch replays (Idempotency-Replayed) and another batch creates another operation. Audited as cache.operation.resubmit on the original operation.",
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "operation_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "202",
+     "description": "Durable operation accepted in queued state; no delivery is implied.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: purge / prewarm",
+       "required": true
+      },
+      {
+       "name": "target_type",
+       "type": "string: exact_url / directory_prefix / whole_site",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "Progress",
+       "required": true
+      },
+      {
+       "name": "auto_nodes",
+       "type": "boolean",
+       "required": true,
+       "description": "Created without node_ids (every carrying node); otherwise nodes are the nodes it named."
+      },
+      {
+       "name": "parent_operation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "targets",
+       "type": "array<Target>",
+       "required": true
+      },
+      {
+       "name": "nodes",
+       "type": "array<NodeProjection>",
+       "required": true
+      },
+      {
+       "name": "cancel_requested_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "completed_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload or operation state conflicts."
+    },
+    {
+     "status": "429",
+     "description": "The account's daily purge or prewarm limit would be exceeded (daily_limit_exceeded; error.details names the quota)."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  },
+  {
+   "operation_id": "retryTenantCacheOperation",
+   "method": "POST",
+   "path": "/v1/cache-operations/{operation_id}/retry",
+   "summary": "Requeue retryable failed projections only",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "sites.manage"
+   ],
+   "params": [
+    {
+     "name": "operation_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Sanitized cache operation.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "site_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "site_display_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: purge / prewarm",
+       "required": true
+      },
+      {
+       "name": "target_type",
+       "type": "string: exact_url / directory_prefix / whole_site",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "Progress",
+       "required": true
+      },
+      {
+       "name": "auto_nodes",
+       "type": "boolean",
+       "required": true,
+       "description": "Created without node_ids (every carrying node); otherwise nodes are the nodes it named."
+      },
+      {
+       "name": "parent_operation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "targets",
+       "type": "array<Target>",
+       "required": true
+      },
+      {
+       "name": "nodes",
+       "type": "array<NodeProjection>",
+       "required": true
+      },
+      {
+       "name": "cancel_requested_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "started_at",
+       "type": "string(date-time)"
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "completed_at",
+       "type": "string(date-time)"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid or non-canonical request."
+    },
+    {
+     "status": "401",
+     "description": "Authentication required."
+    },
+    {
+     "status": "403",
+     "description": "Exact cache permission is absent or route audience is wrong."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent or outside the effective tenant scope."
+    },
+    {
+     "status": "408",
+     "description": "Request context was cancelled or exceeded its deadline."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency payload or operation state conflicts."
+    },
+    {
+     "status": "503",
+     "description": "A required store is unavailable; raw dependency errors are never returned."
+    }
+   ]
+  }
+ ]
+}

@@ -1,0 +1,1318 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Rebuild Traffic Packages API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    Independently mountable BILL-04 HTTP contract over migrations 032, 051, and
+    066.
+    Tenant reads derive both tenant scope and owner user from the authenticated
+    principal. Platform grant reads require an explicit target tenant. Traffic
+    purchase remains unavailable until the existing package-commerce purchase
+    service can be wired without changing its payment-critical path. Metering
+    commands require a separate trusted-workload authenticator which resolves a
+    durable migration-066 binding and cannot use an ordinary session.
+    Product lifecycle uses append-only signed facts from migration 110. Enable and
+    disable are transactional, idempotent platform commands; tenant current-product
+    reads exclude disabled products while immutable revision history remains visible.
+    The control-api runtime mounts Bearer session routes on the public listener.
+    Internal workload commands are available only on a separately enabled mTLS
+    listener and are never forwarded by the public listener.
+servers:
+  - url: /
+tags:
+  - name: Traffic package products
+    description: Platform product revision administration and tenant-visible products.
+  - name: Tenant traffic packages
+    description: Current user's purchases, grants, balances, and usage results.
+  - name: Platform traffic package operations
+    description: Explicit-tenant grant inspection and reconciliation.
+  - name: Traffic package workloads
+    description: Commands restricted to separately authenticated trusted workloads.
+paths:
+  /v1/admin/traffic-packages/products:
+    get:
+      tags: [Traffic package products]
+      operationId: listCurrentTrafficPackageProducts
+      summary: List current product revisions
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/ProductPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/traffic-packages/products/{product_id}:
+    get:
+      tags: [Traffic package products]
+      operationId: getCurrentTrafficPackageProduct
+      summary: Get the current revision of one product
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+      responses:
+        '200': {$ref: '#/components/responses/ProductOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/traffic-packages/products/{product_id}/revisions:
+    get:
+      tags: [Traffic package products]
+      operationId: listTrafficPackageProductRevisions
+      summary: List immutable product revision history
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/ProductPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+    post:
+      tags: [Traffic package products]
+      operationId: createTrafficPackageProductRevision
+      summary: Create an immutable product revision
+      description: >-
+        Publishes the next immutable revision with transactional platform IAM.
+        The quoted If-Match value is the expected current revision (zero creates
+        a new product). Reusing the same Idempotency-Key with the same canonical
+        payload returns the original 201 receipt and Idempotency-Replayed: true;
+        different input returns 409 and a stale expected revision returns 412.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductRevisionRequest'}
+      responses:
+        '201': {$ref: '#/components/responses/ProductRevisionCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '412': {$ref: '#/components/responses/RevisionConflict'}
+        '502': {$ref: '#/components/responses/CommittedResultUnknown'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/admin/traffic-packages/products/{product_id}/enable:
+    post:
+      tags: [Traffic package products]
+      operationId: enableTrafficPackageProduct
+      summary: Enable a product
+      description: >-
+        Appends an enabled lifecycle fact. Reusing the same idempotency key and
+        payload returns the original receipt; a changed payload returns 409.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200': {$ref: '#/components/responses/ProductLifecycleOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+  /v1/admin/traffic-packages/products/{product_id}/disable:
+    post:
+      tags: [Traffic package products]
+      operationId: disableTrafficPackageProduct
+      summary: Disable a product
+      description: >-
+        Appends a disabled lifecycle fact. Disabled products disappear from
+        tenant current-product lists and cannot receive new grants; immutable
+        revision history remains readable.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200': {$ref: '#/components/responses/ProductLifecycleOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+  /v1/traffic-packages/products:
+    get:
+      tags: [Traffic package products]
+      operationId: listAvailableTrafficPackageProducts
+      summary: List current products visible to the authenticated tenant
+      description: >-
+        Tenant scope is derived from the current principal. The result includes
+        global products and products targeted to that tenant whose latest
+        lifecycle fact is enabled. Disabled products remain in admin and history.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/ProductPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/traffic-packages/purchases:
+    post:
+      tags: [Tenant traffic packages]
+      operationId: purchaseTrafficPackageThroughCommerce
+      summary: Traffic package purchase boundary
+      description: >-
+        Tenant and buyer are derived from the current principal. This route never
+        calls trafficpackage.Grant directly. Until a reviewed adapter can invoke
+        packagecommercehttp.Service.PurchaseTraffic unchanged, it always returns
+        traffic_package_purchase_unavailable (503) and performs no write.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './control-package-commerce.openapi.yaml#/components/schemas/TrafficPurchaseRequest'
+      responses:
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/PurchaseUnavailable'}
+  /v1/traffic-packages/grants:
+    get:
+      tags: [Tenant traffic packages]
+      operationId: listMyTrafficPackageGrants
+      summary: List grants purchased by the authenticated tenant user
+      description: >-
+        Both tenant and owner user are derived from the current principal. A grant
+        is visible to a tenant session only when migration 051 links it to that
+        user's traffic-package commerce order. tenant_id is rejected.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - name: page
+          in: query
+          description: Page-jump mode (1-based, max 10000, mutually exclusive with cursor). Uses OFFSET within the same frozen snapshot and returns total.
+          schema: {type: integer, minimum: 1, maximum: 10000}
+        - name: status
+          in: query
+          description: Only grants whose current status matches; filtered before paging, and total follows the filter. A cursor is bound to the status it was issued for.
+          schema: {type: string, enum: [active, exhausted, expired, reversed]}
+      responses:
+        '200': {$ref: '#/components/responses/GrantPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/traffic-packages/grants/{grant_id}:
+    get:
+      tags: [Tenant traffic packages]
+      operationId: getMyTrafficPackageGrant
+      summary: Read one grant purchased by the authenticated tenant user
+      description: >-
+        Same tenant and owner scope as the grant list; a grant of another tenant
+        or user is 404. No query parameters are accepted.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/GrantID'
+      responses:
+        '200': {$ref: '#/components/responses/GrantOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/traffic-packages/balances:
+    get:
+      tags: [Tenant traffic packages]
+      operationId: listMyTrafficPackageBalances
+      summary: List current-user balances grouped by metering bucket
+      description: >-
+        All quantities are integer bytes. Only migration-051 grants purchased by
+        the current user participate in the aggregation.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/BalancePageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/traffic-packages/usage-events:
+    get:
+      tags: [Tenant traffic packages]
+      operationId: listMyTrafficPackageUsageEvents
+      summary: List current-user consumption and refund results
+      description: >-
+        Only consume and refund operations are visible. Internal source event
+        keys, request/trace IDs, product snapshots, ledger IDs, billing IDs, and
+        provider payloads are omitted.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/UsageOperation'
+        - name: grant_id
+          in: query
+          required: false
+          description: 只看该流量包（授予）的分录，amount_bytes 只计该包承担的部分。
+          schema: {$ref: '#/components/schemas/CanonicalUUID'}
+      responses:
+        '200': {$ref: '#/components/responses/UsagePageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/traffic-packages/usage-events/{event_id}/allocations:
+    get:
+      tags: [Tenant traffic packages]
+      operationId: listMyTrafficPackageUsageAllocations
+      summary: List bounded allocation details for one visible usage event
+      description: >-
+        Tenant and owner user are derived from the authenticated principal. The
+        command receipt never embeds allocations; clients page this immutable
+        projection explicitly.
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/EventID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/AllocationPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/traffic-packages/grants:
+    get:
+      tags: [Platform traffic package operations]
+      operationId: listTenantTrafficPackageGrants
+      summary: List grants for one explicit tenant
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/TenantID'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200': {$ref: '#/components/responses/GrantPageOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/admin/traffic-packages/grants/{grant_id}/reconciliation:
+    get:
+      tags: [Platform traffic package operations]
+      operationId: reconcileTenantTrafficPackageGrant
+      summary: Compare one grant's cached and ledger-recomputed balance
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - $ref: '#/components/parameters/GrantID'
+        - $ref: '#/components/parameters/TenantID'
+      responses:
+        '200': {$ref: '#/components/responses/ReconciliationOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/QueryCancelled'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+        '504': {$ref: '#/components/responses/QueryTimeout'}
+  /v1/internal/traffic-packages/consume:
+    post:
+      tags: [Traffic package workloads]
+      operationId: consumeTrafficPackageBytes
+      summary: Atomically consume bytes from eligible grants
+      description: >-
+        Before consuming, one transaction expires at most 100 due grants. If
+        more due grants remain, the transaction commits those 100 expiry facts
+        and a durable request receipt, then returns 409
+        traffic_package_expiry_backlog without a consume event. The same key
+        replays that result; a new caller-generated key advances the next batch.
+      security: [{workloadMtls: []}]
+      x-required-audience: traffic-package-workload
+      x-required-permissions: [traffic_packages.consume]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ConsumeRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/UsageCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/WorkloadUnauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/CommittedResultUnknown'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/internal/traffic-packages/refund:
+    post:
+      tags: [Traffic package workloads]
+      operationId: refundTrafficPackageUsage
+      summary: Refund bytes against an original consume event
+      description: >-
+        Before refunding, one transaction expires at most 100 due grants. If
+        more due grants remain, it commits a durable 100-grant reconciliation
+        batch and returns 409 traffic_package_expiry_backlog without a refund
+        event. The same key replays that result; a new key advances the backlog.
+      security: [{workloadMtls: []}]
+      x-required-audience: traffic-package-workload
+      x-required-permissions: [traffic_packages.usage_refund]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RefundRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/UsageCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/WorkloadUnauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/CommittedResultUnknown'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/internal/traffic-packages/expire:
+    post:
+      tags: [Traffic package workloads]
+      operationId: expireDueTrafficPackageGrants
+      summary: Advance due grants in one metering bucket to expired
+      description: >-
+        Atomically transitions active and exhausted grants whose expires_at is
+        at or before due_before, up to batch_limit. Migration 066 stores the
+        caller-generated Idempotency-Key, exact binding, canonical request digest,
+        frozen bucket/due_before/batch_limit, and bounded receipt. Same-key same-
+        payload replay returns the original receipt; changed input returns 409.
+      security: [{workloadMtls: []}]
+      x-required-audience: traffic-package-workload
+      x-required-permissions: [traffic_packages.expire]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ExpireRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/ExpireCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/WorkloadUnauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/CommittedResultUnknown'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/internal/traffic-packages/grants/{grant_id}/reverse:
+    post:
+      tags: [Traffic package workloads]
+      operationId: reverseTrafficPackageGrant
+      summary: Reverse a wholly unused grant
+      description: >-
+        Before reversing, one transaction expires at most 100 due grants. If
+        more due grants remain, it commits a durable 100-grant reconciliation
+        batch and returns 409 traffic_package_expiry_backlog without a reverse
+        event. The same key replays that result; a new key advances the backlog.
+      security: [{workloadMtls: []}]
+      x-required-audience: traffic-package-workload
+      x-required-permissions: [traffic_packages.reverse]
+      parameters:
+        - $ref: '#/components/parameters/GrantID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BucketRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/UsageCommandOK'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/WorkloadUnauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '408': {$ref: '#/components/responses/UnknownResult'}
+        '502': {$ref: '#/components/responses/CommittedResultUnknown'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+        '504': {$ref: '#/components/responses/UnknownResult'}
+  /v1/admin/traffic-packages/products/{product_id}/archive:
+    post:
+      tags: [Traffic package products]
+      operationId: archiveTrafficPackageProduct
+      summary: Remove a product from sale while preserving sold entitlements and history
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/ProductID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Immutable audited command receipt; identical retries return the same fact.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ManagementCommand'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+  /v1/admin/traffic-packages/grants/{grant_id}/enable:
+    post:
+      tags: [Traffic package products]
+      operationId: enableSoldTrafficPackage
+      summary: Resume deduction for an unexpired active grant
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/GrantID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Immutable audited command receipt; identical retries return the same fact.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ManagementCommand'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+  /v1/admin/traffic-packages/grants/{grant_id}/disable:
+    post:
+      tags: [Traffic package products]
+      operationId: disableSoldTrafficPackage
+      summary: Pause deduction without changing remaining bytes or expiry
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.manage]
+      parameters:
+        - $ref: '#/components/parameters/GrantID'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/WriteRequestID'
+        - $ref: '#/components/parameters/Traceparent'
+      responses:
+        '200':
+          description: Immutable audited command receipt; identical retries return the same fact.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ManagementCommand'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+  /v1/admin/traffic-packages/sold:
+    get:
+      tags: [Traffic package products]
+      operationId: listSoldTrafficPackages
+      summary: List sold grants across tenants with server-side filters and count
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - {name: page, in: query, schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
+        - {name: search, in: query, schema: {type: string, maxLength: 128}, description: User name, display name, email, phone, UUID or numeric display ID.}
+        - {name: product_id, in: query, schema: {$ref: '#/components/schemas/CanonicalUUID'}}
+        - {name: status, in: query, schema: {type: string, enum: [active, disabled, exhausted, expired, reversed]}}
+      responses:
+        '200':
+          description: Count and items use one database statement snapshot; pages reflect live state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total, page, limit]
+                additionalProperties: false
+                properties:
+                  items: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/SoldItem'}}
+                  total: {type: integer, minimum: 0}
+                  page: {type: integer, minimum: 1}
+                  limit: {type: integer, minimum: 1, maximum: 100}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+  /v1/admin/traffic-packages/options:
+    get:
+      tags: [Traffic package products]
+      operationId: listTrafficPackageManagementOptions
+      summary: Search base or traffic product names for management selectors
+      security: [{bearerAuth: []}]
+      x-required-permissions: [traffic_packages.read]
+      parameters:
+        - {name: kind, in: query, required: true, schema: {type: string, enum: [base, traffic]}}
+        - {name: search, in: query, schema: {type: string, maxLength: 128}}
+      responses:
+        '200':
+          description: Up to 100 matching names; traffic options include archived products for historical sold filters.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 100
+                    items:
+                      type: object
+                      required: [id, name]
+                      properties:
+                        id: {$ref: '#/components/schemas/CanonicalUUID'}
+                        name: {type: string}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/CommandUnavailableOrUnknown'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: access-token
+    workloadMtls:
+      type: mutualTLS
+      description: >-
+        Separate trusted-workload identity. An ordinary platform or tenant
+        bearer session is never accepted for these operations.
+  parameters:
+    ProductID:
+      name: product_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    GrantID:
+      name: grant_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    EventID:
+      name: event_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    TenantID:
+      name: tenant_id
+      in: query
+      required: true
+      description: Explicit access-scope UUID of the target tenant.
+      schema: {$ref: '#/components/schemas/CanonicalUUID'}
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: {type: integer, minimum: 1, maximum: 100, default: 20}
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: >-
+        Opaque HMAC-signed cursor bound to endpoint, principal scope, target
+        tenant, owner user, UTC-microsecond snapshot_at, and the applicable
+        migration-066 catalog/usage snapshot_version or grant-state watermark.
+      schema: {type: string, minLength: 1, maxLength: 4096}
+    UsageOperation:
+      name: operation
+      in: query
+      required: false
+      schema: {type: string, enum: [consume, refund]}
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"(0|[1-9][0-9]*)"$'
+        examples: ['"0"', '"7"']
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/MetadataToken'}
+    WriteRequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/MetadataToken'}
+    Traceparent:
+      name: traceparent
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/Traceparent'}
+  schemas:
+    CanonicalUUID:
+      type: string
+      format: uuid
+      pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    MetadataToken:
+      type: string
+      minLength: 1
+      maxLength: 128
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'
+    Traceparent:
+      type: string
+      pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
+    ManagementCommand:
+      type: object
+      additionalProperties: false
+      required: [id, target_id, operation, revision, replayed]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        target_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        operation: {type: string, enum: [archive_product, enable_grant, disable_grant]}
+        revision: {type: integer, minimum: 1}
+        replayed: {type: boolean}
+    SoldItem:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, owner_name, product_id, name, granted_bytes, remaining_bytes, starts_at, expires_at, status, enabled]
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_display_id: {type: integer, minimum: 1}
+        owner_name: {type: string}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        name: {type: string}
+        granted_bytes: {type: integer, minimum: 1}
+        remaining_bytes: {type: integer, minimum: 0}
+        starts_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        status: {type: string, enum: [active, disabled, expired, exhausted, reversed]}
+        enabled: {type: boolean}
+    Product:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - product_id
+        - revision
+        - audience
+        - name
+        - quota_bytes
+        - validity_days
+        - expiry_timezone
+        - priority
+        - currency
+        - price_minor
+        - metering_scope
+        - metering_version
+        - created_at
+        - enabled
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        audience: {type: string, enum: [global, tenant]}
+        owner_tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 1024, description: 'Maximum 1024 UTF-8 bytes; no control characters.'}
+        allowed_package_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+          description: Empty means all base packages. Restrictions are captured per immutable revision and checked for purchase and consumption.
+        quota_bytes: {type: integer, format: int64, minimum: 1}
+        validity_days: {type: integer, minimum: 1, maximum: 3650}
+        expiry_timezone: {type: string, minLength: 3, maxLength: 128, examples: [UTC, Asia/Shanghai]}
+        priority: {type: integer, minimum: 0, maximum: 10000}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        price_minor: {type: integer, format: int64, minimum: 0}
+        metering_scope: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        metering_version: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'}
+        created_at: {type: string, format: date-time}
+        enabled: {type: boolean}
+    ProductRevisionRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - audience
+        - name
+        - quota_bytes
+        - validity_days
+        - expiry_timezone
+        - priority
+        - currency
+        - price_minor
+        - metering_scope
+        - metering_version
+      properties:
+        audience: {type: string, enum: [global, tenant]}
+        owner_tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        name: {type: string, minLength: 1, maxLength: 128}
+        remark: {type: string, maxLength: 1024, description: 'Maximum 1024 UTF-8 bytes; no control characters.'}
+        allowed_package_ids:
+          type: array
+          maxItems: 100
+          uniqueItems: true
+          items: {$ref: '#/components/schemas/CanonicalUUID'}
+          description: Empty means all base packages. Restrictions are captured per immutable revision and checked for purchase and consumption.
+        quota_bytes: {type: integer, format: int64, minimum: 1}
+        validity_days: {type: integer, minimum: 1, maximum: 3650}
+        expiry_timezone: {type: string, minLength: 3, maxLength: 128, examples: [UTC, Asia/Shanghai]}
+        priority: {type: integer, minimum: 0, maximum: 10000}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        price_minor: {type: integer, format: int64, minimum: 0}
+        metering_scope: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        metering_version: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'}
+        enabled: {type: boolean, description: Omit to retain current status; defaults to enabled for new products.}
+      oneOf:
+        - properties:
+            audience: {const: global}
+            owner_tenant_scope_id: false
+        - required: [owner_tenant_scope_id]
+          properties:
+            audience: {const: tenant}
+            owner_tenant_scope_id: {$ref: '#/components/schemas/CanonicalUUID'}
+    ProductCommand:
+      type: object
+      additionalProperties: false
+      required: [product_snapshot_id, product_id, revision, replayed]
+      properties:
+        product_snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        revision: {type: integer, format: int64, minimum: 1}
+        replayed: {type: boolean}
+    ProductLifecycleCommand:
+      type: object
+      additionalProperties: false
+      required: [product_id, product_revision, revision, sequence, enabled, replayed]
+      properties:
+        product_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_revision: {type: integer, format: int64, minimum: 1}
+        revision: {type: integer, format: int64, minimum: 1}
+        sequence: {type: integer, format: int64, minimum: 1}
+        enabled: {type: boolean}
+        replayed: {type: boolean}
+    ProductPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Product'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    Grant:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - product_snapshot_id
+        - product_name
+        - allowed_package_names
+        - price_minor
+        - granted_bytes
+        - remaining_bytes
+        - starts_at
+        - expires_at
+        - expiry_timezone
+        - priority
+        - currency
+        - metering_scope
+        - metering_version
+        - status
+        - revision
+        - created_at
+        - updated_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        owner_user_id:
+          allOf: [{$ref: '#/components/schemas/CanonicalUUID'}]
+          description: Present only when migration 051 identifies a commerce-order owner.
+        product_snapshot_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        product_name: {type: string, minLength: 1, maxLength: 128, description: Product snapshot name at grant time.}
+        allowed_package_names:
+          type: array
+          maxItems: 100
+          items: {type: string}
+          description: Names of the base packages the product snapshot is restricted to; empty means every package.
+        price_minor: {type: integer, format: int64, minimum: 0, description: Product snapshot price in minor units of currency.}
+        granted_bytes: {type: integer, format: int64, minimum: 1}
+        remaining_bytes: {type: integer, format: int64, minimum: 0}
+        starts_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        expiry_timezone: {type: string, minLength: 3, maxLength: 128}
+        priority: {type: integer, minimum: 0, maximum: 10000}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        metering_scope: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        metering_version: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'}
+        status: {type: string, enum: [active, exhausted, expired, reversed]}
+        revision: {type: integer, format: int64, minimum: 1}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    GrantPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Grant'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+        total: {type: integer, format: int64, minimum: 0, description: Present only in page-jump mode.}
+    Balance:
+      type: object
+      additionalProperties: false
+      required: [currency, metering_scope, metering_version, grant_count, granted_bytes, available_bytes]
+      properties:
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        metering_scope: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        metering_version: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'}
+        grant_count: {type: integer, format: int64, minimum: 1}
+        granted_bytes: {type: integer, format: int64, minimum: 1}
+        available_bytes: {type: integer, format: int64, minimum: 0}
+    BalancePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Balance'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    Allocation:
+      type: object
+      additionalProperties: false
+      required: [grant_id, order, side, bytes, grant_revision, remaining_after_bytes]
+      properties:
+        grant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        order: {type: integer, minimum: 0}
+        side: {type: string, enum: [credit, debit]}
+        bytes: {type: integer, format: int64, minimum: 1}
+        grant_revision: {type: integer, format: int64, minimum: 1}
+        remaining_after_bytes: {type: integer, format: int64, minimum: 0}
+    AllocationPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/Allocation'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    UsageEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - operation
+        - amount_bytes
+        - allocation_count
+        - currency
+        - metering_scope
+        - metering_version
+        - created_at
+      properties:
+        id: {$ref: '#/components/schemas/CanonicalUUID'}
+        operation: {type: string, enum: [consume, refund]}
+        related_event_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        amount_bytes: {type: integer, format: int64, minimum: 1}
+        allocation_count: {type: integer, format: int64, minimum: 1}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        metering_scope: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        metering_version: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'}
+        created_at: {type: string, format: date-time}
+        site_domains:
+          description: 事件发生时绑定该套餐的站点域名（周期扣量按套餐结算，最多 20 个）；无站点时为空数组。
+          type: array
+          maxItems: 20
+          items: {type: string, minLength: 1, maxLength: 253}
+    UsageCommand:
+      type: object
+      additionalProperties: false
+      required: [event_id, operation, requested_bytes, replayed]
+      properties:
+        event_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        operation: {type: string, enum: [consume, refund, reverse]}
+        requested_bytes: {type: integer, format: int64, minimum: 1}
+        replayed: {type: boolean}
+    UsagePage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/UsageEvent'}
+        next_cursor: {type: string, minLength: 1, maxLength: 4096}
+    Reconciliation:
+      type: object
+      additionalProperties: false
+      required:
+        - grant_id
+        - cached_remaining
+        - recomputed_remaining
+        - cached_revision
+        - entry_count
+        - consistent
+      properties:
+        grant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        cached_remaining: {type: integer, format: int64, minimum: 0}
+        recomputed_remaining: {type: integer, format: int64, minimum: 0}
+        cached_revision: {type: integer, format: int64, minimum: 1}
+        entry_count: {type: integer, format: int64, minimum: 1}
+        consistent: {type: boolean}
+    Bucket:
+      type: object
+      additionalProperties: false
+      required: [tenant_id, currency, metering_scope, metering_version]
+      properties:
+        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+        metering_scope: {type: string, pattern: '^[a-z][a-z0-9._-]{0,63}$'}
+        metering_version: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$'}
+    BucketRequest:
+      type: object
+      additionalProperties: false
+      required: [bucket]
+      properties:
+        bucket: {$ref: '#/components/schemas/Bucket'}
+    ConsumeRequest:
+      type: object
+      additionalProperties: false
+      required: [bucket, source_event_key, bytes]
+      properties:
+        subscription_id:
+          allOf: [{$ref: '#/components/schemas/CanonicalUUID'}]
+          description: Required to spend grants restricted to base packages. The subscription must be active in the same tenant and match the captured product restriction. Omitted requests only spend unrestricted grants.
+        bucket: {$ref: '#/components/schemas/Bucket'}
+        source_event_key: {$ref: '#/components/schemas/MetadataToken'}
+        bytes: {type: integer, format: int64, minimum: 1}
+    RefundRequest:
+      type: object
+      additionalProperties: false
+      required: [bucket, original_event_id, bytes]
+      properties:
+        bucket: {$ref: '#/components/schemas/Bucket'}
+        original_event_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        bytes: {type: integer, format: int64, minimum: 1}
+    ExpireRequest:
+      type: object
+      additionalProperties: false
+      required: [bucket, due_before, batch_limit]
+      properties:
+        bucket: {$ref: '#/components/schemas/Bucket'}
+        due_before:
+          type: string
+          format: date-time
+          description: Canonical UTC timestamp with at most microsecond precision.
+        batch_limit: {type: integer, minimum: 1, maximum: 100}
+    ExpireCommand:
+      type: object
+      additionalProperties: false
+      required: [expire_request_id, due_before, batch_limit, expired_count, replayed]
+      properties:
+        expire_request_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        due_before: {type: string, format: date-time}
+        batch_limit: {type: integer, minimum: 1, maximum: 100}
+        expired_count: {type: integer, minimum: 0, maximum: 100}
+        replayed: {type: boolean}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              enum:
+                - authentication_required
+                - workload_authentication_failed
+                - workload_binding_denied
+                - permission_denied
+                - traffic_package_validation_error
+                - traffic_package_not_found
+                - traffic_package_tenant_not_found
+                - traffic_package_route_not_found
+                - traffic_package_method_not_allowed
+                - revision_conflict
+                - idempotency_conflict
+                - refund_amount_exceeded
+                - traffic_package_state_conflict
+                - traffic_package_fanout_limit_exceeded
+                - traffic_package_expiry_backlog
+                - insufficient_traffic
+                - insufficient_funds
+                - traffic_package_product_disabled
+                - traffic_package_purchase_unavailable
+                - traffic_package_write_authorization_unavailable
+                - workload_authentication_unavailable
+                - traffic_package_result_unknown
+                - traffic_package_committed_result_unknown
+                - traffic_package_request_cancelled
+                - traffic_package_query_timeout
+                - traffic_package_response_too_large
+                - traffic_package_invalid_response
+                - traffic_package_store_unavailable
+            message: {type: string, minLength: 1}
+            request_id: {$ref: '#/components/schemas/MetadataToken'}
+  responses:
+    ProductPageOK:
+      description: Current products or immutable revision history.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProductPage'}
+    ProductOK:
+      description: Current product revision.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Product'}
+    ProductRevisionCreated:
+      description: New immutable revision or the identical committed replay.
+      headers:
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProductCommand'}
+    ProductLifecycleOK:
+      description: Appended lifecycle fact or identical committed replay.
+      headers:
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProductLifecycleCommand'}
+    GrantPageOK:
+      description: Grants visible under the derived or explicit tenant scope.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/GrantPage'}
+    BalancePageOK:
+      description: Current-user byte balances grouped by metering bucket.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/BalancePage'}
+    UsagePageOK:
+      description: Sanitized current-user usage and refund results.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/UsagePage'}
+    AllocationPageOK:
+      description: Bounded page of immutable allocation details for one visible usage event.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/AllocationPage'}
+    GrantOK:
+      description: One traffic package grant.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Grant'}
+    ReconciliationOK:
+      description: Cached and recomputed grant balance comparison.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Reconciliation'}
+    UsageCommandOK:
+      description: Bounded committed receipt; allocation details require the paged read route.
+      headers:
+        Idempotency-Replayed: {$ref: '#/components/headers/IdempotencyReplayed'}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/UsageCommand'}
+    ExpireCommandOK:
+      description: >-
+        Durable bounded receipt for active and exhausted due grants. Identical
+        replay returns the same expire_request_id and result with replayed true.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ExpireCommand'}
+    BadRequest:
+      description: Malformed headers, query, JSON, UUID, cursor, unit, or range.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unauthorized:
+      description: Ordinary session authentication is required.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    WorkloadUnauthorized:
+      description: Trusted-workload authentication failed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Forbidden:
+      description: Principal scope or required permission is absent.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    NotFound:
+      description: Resource is absent or not visible in the authorized scope.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Conflict:
+      description: >-
+        Idempotency, refund amount, grant-state, or bounded automatic-expiry
+        backlog conflict. For traffic_package_expiry_backlog the original key
+        replays the frozen result and a new caller-generated key advances at
+        most the next 100 due grants.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    RevisionConflict:
+      description: The quoted If-Match revision is stale.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    Unprocessable:
+      description: Insufficient traffic or account funds.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    PurchaseUnavailable:
+      description: Reviewed package-commerce purchase wiring is absent; no write occurred.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    QueryCancelled:
+      description: Read context was cancelled.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    QueryTimeout:
+      description: Read deadline expired.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    UnknownResult:
+      description: >-
+        Write result is unknown. Retry only with the same Idempotency-Key and
+        identical payload.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    CommittedResultUnknown:
+      description: >-
+        The command committed but its bounded receipt could not be delivered.
+        Recover only by retrying the same Idempotency-Key and identical payload.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    CommandUnavailableOrUnknown:
+      description: >-
+        The stable error code distinguishes an unavailable dependency or
+        authenticator (no write attempted) from an unknown or committed result.
+        Unknown results require same-key, identical-payload recovery.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    BadGateway:
+      description: Stored or core facts did not satisfy the public response contract.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+    ServiceUnavailable:
+      description: Read storage is unavailable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  headers:
+    IdempotencyReplayed:
+      description: Present and true only for an identical committed replay.
+      schema: {type: string, const: 'true'}

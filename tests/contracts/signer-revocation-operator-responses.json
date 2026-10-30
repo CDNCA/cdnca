@@ -1,0 +1,154 @@
+{
+  "current_v1": {
+    "manifest_id": "019f0000-0000-7000-8000-000000000101",
+    "workflow_version": 1,
+    "sequence": 1,
+    "manifest_sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "signed_manifest_sha256": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "etag": "\"BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB\"",
+    "published_at": "2026-06-01T00:00:00Z",
+    "published_by": null,
+    "response_bytes": 512,
+    "proposal": {
+      "id": "019f0000-0000-7000-8000-000000000102",
+      "workflow_version": 1,
+      "status": "published",
+      "sequence": 1,
+      "previous_sequence": null,
+      "previous_manifest_sha256": null,
+      "revoked_key_id": "signing-compromised-v1",
+      "revoked_key_generation": 1,
+      "artifact_classes": ["lease", "policy", "release"],
+      "effective_not_before": "2026-06-01T00:00:00Z",
+      "reason_code": "signer_compromise",
+      "issued_at": "2026-06-01T00:00:00Z",
+      "expires_at": "2026-07-01T00:00:00Z",
+      "authority_kind": "lineage",
+      "authority_key_id": "signing-current-v2",
+      "authority_key_generation": 2,
+      "canonical_manifest_sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "created_by": "019f0000-0000-7000-8000-000000000103",
+      "created_at": "2026-06-01T00:00:00Z",
+      "publication": {
+        "published_by": null,
+        "published_at": "2026-06-01T00:00:00Z"
+      },
+      "impact": {
+        "installations": 4,
+        "active_leases": 8,
+        "platform_policies": 2,
+        "release_artifacts": 3
+      }
+    }
+  },
+  "current_v2": {
+    "manifest_id": "019f0000-0000-7000-8000-000000000201",
+    "workflow_version": 2,
+    "sequence": 2,
+    "manifest_sha256": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+    "signed_manifest_sha256": "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+    "etag": "\"DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD\"",
+    "published_at": "2026-07-23T00:00:00Z",
+    "published_by": "019f0000-0000-7000-8000-000000000204",
+    "response_bytes": 640,
+    "proposal": {
+      "id": "019f0000-0000-7000-8000-000000000202",
+      "workflow_version": 2,
+      "status": "published",
+      "sequence": 2,
+      "previous_sequence": 1,
+      "previous_manifest_sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "revoked_key_id": "signing-compromised-v2",
+      "revoked_key_generation": 2,
+      "artifact_classes": ["lease", "policy", "release"],
+      "effective_not_before": "2026-07-23T00:00:00Z",
+      "reason_code": "signer_compromise",
+      "issued_at": "2026-07-23T00:00:00Z",
+      "expires_at": "2026-08-22T00:00:00Z",
+      "authority_kind": "lineage",
+      "authority_key_id": "signing-current-v3",
+      "authority_key_generation": 3,
+      "canonical_manifest_sha256": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      "created_by": "019f0000-0000-7000-8000-000000000203",
+      "created_at": "2026-07-23T00:00:00Z",
+      "approval": {
+        "approved_by": "019f0000-0000-7000-8000-000000000204",
+        "approved_at": "2026-07-23T00:00:00Z",
+        "expires_at": "2026-07-23T12:00:00Z"
+      },
+      "publication": {
+        "published_by": "019f0000-0000-7000-8000-000000000204",
+        "published_at": "2026-07-23T00:00:00Z"
+      },
+      "impact": {
+        "installations": 6,
+        "active_leases": 12,
+        "platform_policies": 3,
+        "release_artifacts": 4
+      }
+    }
+  },
+  "approved_v2": {
+    "id": "019f0000-0000-7000-8000-000000000401",
+    "workflow_version": 2,
+    "status": "approved",
+    "sequence": 3,
+    "previous_sequence": 2,
+    "previous_manifest_sha256": "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+    "revoked_key_id": "signing-compromised-v3",
+    "revoked_key_generation": 3,
+    "artifact_classes": ["lease", "policy"],
+    "effective_not_before": "2026-07-24T00:00:00Z",
+    "reason_code": "signer_compromise",
+    "issued_at": "2026-07-24T00:00:00Z",
+    "expires_at": "2026-08-23T00:00:00Z",
+    "authority_kind": "lineage",
+    "authority_key_id": "signing-current-v4",
+    "authority_key_generation": 4,
+    "canonical_manifest_sha256": "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE",
+    "created_by": "019f0000-0000-7000-8000-000000000402",
+    "created_at": "2026-07-24T00:00:00Z",
+    "approval": {
+      "approved_by": "019f0000-0000-7000-8000-000000000403",
+      "approved_at": "2026-07-24T00:05:00Z",
+      "expires_at": "2026-07-24T12:05:00Z"
+    },
+    "impact": {
+      "installations": 7,
+      "active_leases": 14,
+      "platform_policies": 5,
+      "release_artifacts": 0
+    }
+  },
+  "schema_cases": {
+    "artifact_classes_canonical": ["lease", "policy"],
+    "artifact_classes_noncanonical": ["policy", "lease"],
+    "proof_canonical": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "proof_noncanonical_unused_bits": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB",
+    "installation_id": "019f0000-0000-7000-8000-000000000404",
+    "nil_installation_id": "00000000-0000-0000-0000-000000000000"
+  },
+  "history": {
+    "items": [
+      {
+        "id": "019f0000-0000-7000-8000-000000000301",
+        "action": "signer_revocation.create",
+        "result": "success",
+        "actor_id": "019f0000-0000-7000-8000-000000000203",
+        "request_id": "fixture-create",
+        "occurred_at": "2026-07-23T00:00:00Z"
+      },
+      {
+        "id": "019f0000-0000-7000-8000-000000000302",
+        "action": "signer_revocation.publish",
+        "result": "success",
+        "actor_id": "019f0000-0000-7000-8000-000000000204",
+        "request_id": "fixture-publish",
+        "occurred_at": "2026-07-23T00:05:00Z"
+      }
+    ],
+    "total": 2,
+    "page": 1,
+    "page_size": 20
+  }
+}

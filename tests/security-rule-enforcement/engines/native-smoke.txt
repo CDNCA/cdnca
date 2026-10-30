@@ -1,0 +1,14 @@
+runtime: nginx version: openresty/1.31.1.1
+tampered: {"module":"","status":{"state":"degraded","reason":"digest_mismatch","version":"3.0.17-1.0.4-1","config_version_id":"rule-audit","updated_at":1792106166}}
+PASS BAD-STATUS expected=degraded/digest_mismatch actual=degraded/digest_mismatch 篡改的载荷（等长改 1 字节）被 SHA256SUMS 拒绝
+PASS BAD-GATE expected=absent actual=absent 篡改的载荷不写门控
+PASS NOGATE-T expected=ok actual=ok 无扩展：nginx -t 通过
+installed: {"module":"/runtime/extensions/waf-crs/versions/8ce73867b8de6114595930018bedc18e140e85545df07c03c28d0e994bb0004f/modules/ngx_http_modsecurity_module.so","status":{"state":"active","version":"3.0.17-1.0.4-1","config_version_id":"rule-audit","updated_at":1792106167}}
+PASS GOOD-STATUS expected=active actual=active 验签通过后安装
+PASS GATE-T expected=ok actual=ok 带门控：原生 OpenResty 1.31.1.1 加载模块与 CRS 规则，nginx -t 通过
+PASS OK-1 expected=200 actual=200 正常请求
+PASS CRS-1 expected=403 actual=403 CRS 拦截 SQL 注入
+PASS CRS-2 expected=403 actual=403 CRS 拦截 XSS
+PASS DUAL-1 expected=403 actual=403 两者都开：CRS PL1 不拦的 admin'# 由自研检测拦截
+PASS SELF-1 expected=403 actual=403 自研检测拦截
+SUMMARY failures=0

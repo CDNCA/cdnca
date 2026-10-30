@@ -1,0 +1,228 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Recharge Payment Maker-Checker API
+  version: 1.0.0
+  description: >-
+    充值退款与撤销的不可变双人审批事实。提议不会触碰 provider、订单或账本；只有不同
+    operator 在未过期、精确绑定订单 revision 和租户后批准，执行授权才可被支付 adapter 消费。
+    unknown provider result 只能用相同请求身份重试。
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /v1/admin/recharge-payment-approvals:
+    post:
+      operationId: proposeRechargePaymentApproval
+      summary: 创建充值退款或撤销审批提议
+      x-required-permissions: [billing.recharges.compensate]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProposalRequest'}
+      responses:
+        '201': {description: 新提议或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+    get:
+      operationId: listRechargePaymentApprovals
+      summary: 稳定快照分页读取充值审批
+      x-required-permissions: [billing.recharges.read]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {name: page, in: query, required: true, schema: {type: integer, minimum: 1}}
+        - {name: limit, in: query, required: true, schema: {type: integer, minimum: 1, maximum: 100}}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [refund, void]}}
+        - {name: state, in: query, required: false, schema: {type: string, enum: [pending, approved, rejected, expired]}}
+        - {name: snapshot_at, in: query, required: false, schema: {type: string, format: date-time}}
+      responses:
+        '200': {description: 稳定快照分页, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalPage'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharge-payment-approvals/{approval_id}:
+    get:
+      operationId: getRechargePaymentApproval
+      summary: 读取单条充值审批事实
+      x-required-permissions: [billing.recharges.read]
+      parameters:
+        - {$ref: '#/components/parameters/ApprovalID'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {description: 充值审批事实, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharge-payment-approvals/{approval_id}/approve:
+    post:
+      operationId: approveRechargePaymentApproval
+      summary: 由不同 operator 批准充值补偿
+      x-required-permissions: [billing.recharges.approve]
+      parameters:
+        - {$ref: '#/components/parameters/ApprovalID'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DecisionRequest'}
+      responses:
+        '200': {description: 批准或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharge-payment-approvals/{approval_id}/reject:
+    post:
+      operationId: rejectRechargePaymentApproval
+      summary: 拒绝充值补偿提议
+      x-required-permissions: [billing.recharges.approve]
+      parameters:
+        - {$ref: '#/components/parameters/ApprovalID'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DecisionRequest'}
+      responses:
+        '200': {description: 拒绝或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharge-payment-approvals/statistics:
+    get:
+      operationId: rechargePaymentApprovalStatistics
+      summary: 读取充值审批金额统计
+      x-required-permissions: [billing.recharges.read]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [refund, void]}}
+        - {name: state, in: query, required: false, schema: {type: string, enum: [pending, approved, rejected, expired]}}
+        - {name: snapshot_at, in: query, required: false, schema: {type: string, format: date-time}}
+      responses:
+        '200': {description: 稳定快照统计, content: {application/json: {schema: {$ref: '#/components/schemas/Statistics'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /v1/admin/recharge-payment-approvals/export:
+    get:
+      operationId: exportRechargePaymentApprovals
+      summary: 导出充值审批 CSV
+      x-required-permissions: [billing.recharges.read]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [refund, void]}}
+        - {name: state, in: query, required: false, schema: {type: string, enum: [pending, approved, rejected, expired]}}
+        - {name: snapshot_at, in: query, required: false, schema: {type: string, format: date-time}}
+      responses:
+        '200': {description: UTF-8 CSV with stable snapshot, content: {text/csv: {schema: {type: string}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    ApprovalID:
+      name: approval_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/UUID'}
+  responses:
+    Error:
+      description: 稳定错误码
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}
+  schemas:
+    UUID: {type: string, format: uuid, pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'}
+    ProposalRequest:
+      type: object
+      additionalProperties: false
+      required: [order_id, tenant_scope_id, kind, amount_minor, expected_order_revision, reason]
+      properties:
+        order_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        kind: {type: string, enum: [refund, void]}
+        amount_minor: {type: integer, format: int64, minimum: 0, maximum: 9000000000000000}
+        expected_order_revision: {type: integer, format: int64, minimum: 1}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    DecisionRequest:
+      type: object
+      additionalProperties: false
+      required: [expected_revision]
+      properties:
+        expected_revision: {type: integer, const: 1}
+    Approval:
+      type: object
+      additionalProperties: false
+      required: [id, order_id, tenant_scope_id, kind, amount_minor, currency, expected_order_revision, reason, state, revision, proposed_by_scope_id, proposed_by_user_id, proposed_at, expires_at, replayed]
+      properties:
+        id: {$ref: '#/components/schemas/UUID'}
+        order_id: {$ref: '#/components/schemas/UUID'}
+        tenant_scope_id: {$ref: '#/components/schemas/UUID'}
+        kind: {type: string, enum: [refund, void]}
+        amount_minor: {type: integer, format: int64, minimum: 0}
+        currency: {type: string, const: CNY}
+        expected_order_revision: {type: integer, format: int64, minimum: 1}
+        reason: {type: string}
+        state: {type: string, enum: [pending, approved, rejected, expired]}
+        revision: {type: integer, enum: [1, 2]}
+        proposed_by_scope_id: {$ref: '#/components/schemas/UUID'}
+        proposed_by_user_id: {$ref: '#/components/schemas/UUID'}
+        proposed_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        decided_by_scope_id: {$ref: '#/components/schemas/UUID'}
+        decided_by_user_id: {$ref: '#/components/schemas/UUID'}
+        decided_at: {type: string, format: date-time}
+        replayed: {type: boolean}
+    ApprovalPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, page, limit, snapshot_at]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Approval'}}
+        total: {type: integer, format: int64, minimum: 0}
+        page: {type: integer, minimum: 1}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        snapshot_at: {type: string, format: date-time}
+    Statistics:
+      type: object
+      additionalProperties: false
+      required: [snapshot_at, pending_count, approved_count, rejected_count, expired_count, refund_amount_minor, void_amount_minor]
+      properties:
+        snapshot_at: {type: string, format: date-time}
+        pending_count: {type: integer, format: int64, minimum: 0}
+        approved_count: {type: integer, format: int64, minimum: 0}
+        rejected_count: {type: integer, format: int64, minimum: 0}
+        expired_count: {type: integer, format: int64, minimum: 0}
+        refund_amount_minor: {type: integer, format: int64, minimum: 0}
+        void_amount_minor: {type: integer, format: int64, minimum: 0}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}

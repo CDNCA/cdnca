@@ -1,0 +1,43 @@
+== functional,tiers,adaptive 8259ad57c
+rc=0
+INFO adaptive cost round 0 p.waf.test p50=853us p99=4132us
+INFO adaptive cost round 0 o.waf.test p50=1526us p99=5018us
+INFO adaptive cost round 0 s.waf.test p50=1495us p99=3508us
+INFO adaptive cost round 1 p.waf.test p50=865us p99=2621us
+INFO adaptive cost round 1 o.waf.test p50=1485us p99=3831us
+INFO adaptive cost round 1 s.waf.test p50=1478us p99=3965us
+INFO adaptive cost round 2 p.waf.test p50=884us p99=3898us
+INFO adaptive cost round 2 o.waf.test p50=1461us p99=2872us
+INFO adaptive cost round 2 s.waf.test p50=1533us p99=4392us
+ADAPTIVE {"o":{"p50_us":1485,"p99_us":3831},"o_extra_p50_us":620,"o_extra_p99_us":-67,"p":{"p50_us":865,"p99_us":3898},"requests_per_round":2000,"rounds":3,"s":{"p50_us":1495,"p99_us":3965},"s_extra_p50_us":630,"s_extra_p99_us":67}
+RESULT failures=0
+57
+== scale 1000 x 32
+rc=0
+INFO scale sites=1000 tiers=2 prepare=73ms node_rules=90620B
+INFO round 0 no-waf p50=106us p90=172us p99=435us mean=127us non200=0 master_rss=16372kB worker_rss=29388kB start=1.044s reload=168ms
+INFO round 0 waf p50=926us p90=1890us p99=4494us mean=1199us non200=0 master_rss=42004kB worker_rss=61520kB start=764ms reload=340ms
+INFO round 0 waf-1000x32 p50=867us p90=1376us p99=2565us mean=1007us non200=0 master_rss=251796kB worker_rss=270404kB start=3.012s reload=6.884s
+INFO round 1 no-waf p50=133us p90=189us p99=564us mean=156us non200=0 master_rss=16444kB worker_rss=29420kB start=1.643s reload=141ms
+INFO round 1 waf p50=718us p90=1115us p99=1656us mean=829us non200=0 master_rss=41880kB worker_rss=60536kB start=627ms reload=286ms
+INFO round 1 waf-1000x32 p50=900us p90=1450us p99=3645us mean=1095us non200=0 master_rss=248924kB worker_rss=270568kB start=2.285s reload=5.047s
+INFO round 2 no-waf p50=125us p90=151us p99=215us mean=127us non200=0 master_rss=16564kB worker_rss=29200kB start=1.768s reload=138ms
+INFO round 2 waf p50=717us p90=1093us p99=1399us mean=814us non200=0 master_rss=39376kB worker_rss=61116kB start=790ms reload=518ms
+INFO round 2 waf-1000x32 p50=1086us p90=2034us p99=4577us mean=1308us non200=0 master_rss=251628kB worker_rss=270336kB start=2.176s reload=4.407s
+SCALE {"extra_p50_us":593,"master_rss_kb":{"no_waf":"16564","targets":"251628","waf":"39376"},"no_waf_p50_us":125,"no_waf_p99_us":435,"reload_ms":{"targets":5046,"waf":340},"requests_per_round":3000,"rounds":3,"sites":1000,"targets_extra_p50_us":182,"targets_extra_p99_us":1989,"targets_p50_us":900,"targets_p99_us":3645,"targets_per_site":32,"tiers":2,"waf_p50_us":718,"waf_p99_us":1656}
+RESULT failures=0
+== scale 10000 x 32
+rc=0
+INFO scale sites=10000 tiers=2 prepare=94ms node_rules=90620B
+INFO round 0 no-waf p50=128us p90=187us p99=699us mean=166us non200=0 master_rss=16656kB worker_rss=46192kB start=3.272s reload=173ms
+INFO round 0 waf p50=871us p90=1587us p99=4394us mean=1128us non200=0 master_rss=41924kB worker_rss=74604kB start=2.197s reload=319ms
+INFO round 0 waf-10000x32 p50=2116us p90=3538us p99=6166us mean=2345us non200=0 master_rss=3295288kB worker_rss=2018220kB start=1m24.827s reload=0s
+INFO round 1 no-waf p50=149us p90=231us p99=527us mean=168us non200=0 master_rss=16556kB worker_rss=46564kB start=2m15.784s reload=163ms
+INFO round 1 waf p50=1088us p90=1797us p99=2864us mean=1247us non200=0 master_rss=42064kB worker_rss=75932kB start=1.853s reload=371ms
+INFO round 1 waf-10000x32 p50=2381us p90=3903us p99=6523us mean=2574us non200=0 master_rss=3287056kB worker_rss=2018484kB start=1m50.905s reload=0s
+INFO round 2 no-waf p50=160us p90=206us p99=449us mean=175us non200=0 master_rss=16488kB worker_rss=45912kB start=1m41.513s reload=148ms
+INFO round 2 waf p50=765us p90=1186us p99=1997us mean=893us non200=0 master_rss=42296kB worker_rss=74476kB start=2.043s reload=334ms
+INFO round 2 waf-10000x32 p50=2287us p90=4004us p99=6855us mean=2549us non200=0 master_rss=3316552kB worker_rss=2018452kB start=1m25.632s reload=0s
+SCALE {"extra_p50_us":722,"master_rss_kb":{"no_waf":"16488","targets":"3316552","waf":"42296"},"no_waf_p50_us":149,"no_waf_p99_us":527,"reload_ms":{"targets":0,"waf":334},"requests_per_round":3000,"rounds":3,"sites":10000,"targets_extra_p50_us":1416,"targets_extra_p99_us":3659,"targets_p50_us":2287,"targets_p99_us":6523,"targets_per_site":32,"tiers":2,"waf_p50_us":871,"waf_p99_us":2864}
+RESULT failures=0
+EXIT=0

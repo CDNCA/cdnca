@@ -1,0 +1,152 @@
+{
+  "default_pool_id": "default",
+  "pools": [
+    {
+      "id": "backups",
+      "kind": "origin",
+      "algorithm": "round_robin",
+      "endpoints": [
+        {
+          "id": "x",
+          "scheme": "http",
+          "host": "192.0.2.11",
+          "port": 8080,
+          "weight": 10
+        },
+        {
+          "id": "y",
+          "scheme": "http",
+          "host": "192.0.2.12",
+          "port": 8080,
+          "weight": 10
+        }
+      ],
+      "retry": {
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "max_attempts": 2,
+        "connect_timeout_ms": 1000,
+        "read_timeout_ms": 2000,
+        "total_budget_ms": 5000
+      }
+    },
+    {
+      "id": "default",
+      "kind": "origin",
+      "algorithm": "round_robin",
+      "endpoints": [
+        {
+          "id": "origin-00",
+          "scheme": "http",
+          "host": "192.0.2.10",
+          "port": 8080,
+          "weight": 10
+        },
+        {
+          "id": "origin-01",
+          "scheme": "http",
+          "host": "192.0.2.11",
+          "port": 8080,
+          "weight": 10,
+          "level": 1
+        },
+        {
+          "id": "origin-02",
+          "scheme": "http",
+          "host": "192.0.2.12",
+          "port": 8080,
+          "weight": 10,
+          "level": 2
+        }
+      ],
+      "retry": {
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "max_attempts": 2,
+        "connect_timeout_ms": 1000,
+        "read_timeout_ms": 2000,
+        "total_budget_ms": 5000
+      },
+      "active_level": 1
+    },
+    {
+      "id": "primary",
+      "kind": "origin",
+      "algorithm": "least_conn",
+      "endpoints": [
+        {
+          "id": "a",
+          "scheme": "http",
+          "host": "192.0.2.10",
+          "port": 8080,
+          "weight": 50
+        },
+        {
+          "id": "b",
+          "scheme": "http",
+          "host": "192.0.2.11",
+          "port": 8080,
+          "weight": 50,
+          "level": 1
+        },
+        {
+          "id": "c",
+          "scheme": "http",
+          "host": "198.51.100.7",
+          "port": 8080,
+          "weight": 50
+        }
+      ],
+      "retry": {
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "max_attempts": 2,
+        "connect_timeout_ms": 1000,
+        "read_timeout_ms": 2000,
+        "total_budget_ms": 5000
+      },
+      "active_level": 1
+    },
+    {
+      "id": "static",
+      "kind": "origin",
+      "algorithm": "round_robin",
+      "endpoints": [
+        {
+          "id": "s",
+          "scheme": "http",
+          "host": "203.0.113.5",
+          "port": 8080,
+          "weight": 10
+        }
+      ],
+      "retry": {
+        "methods": [
+          "GET",
+          "HEAD"
+        ],
+        "max_attempts": 2,
+        "connect_timeout_ms": 1000,
+        "read_timeout_ms": 2000,
+        "total_budget_ms": 5000
+      }
+    }
+  ],
+  "routes": [
+    {
+      "id": "r",
+      "priority": 1,
+      "path_prefix": "/s",
+      "pool_id": "static",
+      "fallback_pool_id": "backups"
+    }
+  ],
+  "ingress_source": false,
+  "auth": []
+}

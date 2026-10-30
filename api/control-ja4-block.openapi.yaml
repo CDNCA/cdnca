@@ -1,0 +1,200 @@
+openapi: 3.1.0
+info:
+  title: JA4 Block Workflow API
+  version: 1.0.0
+paths:
+  /v1/security/ja4-blocks:
+    post:
+      operationId: createTenantJA4BlockWorkflow
+      summary: Create a tenant-scoped JA4 block from one authoritative ranking snapshot
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/IfMatchCreate'}
+        - {$ref: '#/components/parameters/StepUpToken'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TenantCreateRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/Accepted'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '428': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/security/ja4-blocks/{workflow_id}:
+    get:
+      operationId: getTenantJA4BlockWorkflow
+      summary: Get fixed JA4 block policy, binding, publication, and rollout state
+      security: [{bearerAuth: []}]
+      x-required-permissions: [security_policies.read]
+      parameters:
+        - {$ref: '#/components/parameters/WorkflowID'}
+        - {$ref: '#/components/parameters/RequestID'}
+      responses:
+        '200': {$ref: '#/components/responses/Workflow'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/ja4-blocks:
+    post:
+      operationId: createAdminJA4BlockWorkflow
+      summary: Create a tenant/site-scoped JA4 block as a platform administrator
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.manage]
+      parameters:
+        - {$ref: '#/components/parameters/RequestID'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+        - {$ref: '#/components/parameters/IfMatchCreate'}
+        - {$ref: '#/components/parameters/StepUpToken'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdminCreateRequest'}
+      responses:
+        '202': {$ref: '#/components/responses/Accepted'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '412': {$ref: '#/components/responses/Error'}
+        '428': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+  /v1/admin/security/ja4-blocks/{workflow_id}:
+    get:
+      operationId: getAdminJA4BlockWorkflow
+      summary: Get one exact tenant JA4 block workflow without raw access events
+      security: [{bearerAuth: []}]
+      x-required-permissions: [platform.admin, security_policies.read]
+      parameters:
+        - {$ref: '#/components/parameters/WorkflowID'}
+        - {$ref: '#/components/parameters/RequestID'}
+        - name: tenant_scope_id
+          in: query
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        '200': {$ref: '#/components/responses/Workflow'}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '503': {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: session
+  parameters:
+    WorkflowID:
+      name: workflow_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+    RequestID:
+      name: X-Request-ID
+      in: header
+      required: false
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$'}
+    IfMatchCreate:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string, const: '"0"'}
+    StepUpToken:
+      name: X-Step-Up-Token
+      in: header
+      required: true
+      description: Single-use proof consumed by the configured step-up verifier; never persisted.
+      schema: {type: string, minLength: 1, maxLength: 8192}
+  schemas:
+    TenantCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [site_id, ja4, snapshot_at, duration_seconds, reason]
+      properties:
+        site_id: {type: string, format: uuid}
+        ja4: {type: string, pattern: '^[A-Za-z0-9_+.-]{1,128}$'}
+        snapshot_at: {type: string, format: date-time}
+        duration_seconds: {type: integer, minimum: 60, maximum: 2592000}
+        reason: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+    AdminCreateRequest:
+      allOf:
+        - {$ref: '#/components/schemas/TenantCreateRequest'}
+        - type: object
+          required: [tenant_scope_id]
+          properties:
+            tenant_scope_id: {type: string, format: uuid}
+    Workflow:
+      type: object
+      additionalProperties: false
+      required: [id, tenant_scope_id, site_id, ja4_sha256, snapshot_at, duration_seconds, reason, phase, revision, rollout_id, edge_state, attempt_count]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        site_id: {type: string, format: uuid}
+        ja4_sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        snapshot_at: {type: string, format: date-time}
+        duration_seconds: {type: integer, minimum: 60, maximum: 2592000}
+        reason: {type: string}
+        phase: {type: string, enum: [queued, policy_ready, edge_pending, active, failed, expired]}
+        revision: {type: integer, minimum: 1}
+        policy_id: {type: string, format: uuid}
+        policy_revision: {type: integer, minimum: 1}
+        binding_id: {type: string, format: uuid}
+        binding_revision: {type: integer, minimum: 1}
+        edge_publication_id: {type: string, format: uuid}
+        rollout_id: {type: string, format: uuid}
+        edge_state: {type: string, enum: ['', pending, active, failed, rolled_back]}
+        attempt_count: {type: integer, minimum: 0, maximum: 100}
+        last_error_code: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+        replayed: {type: boolean}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            request_id: {type: string}
+  responses:
+    Accepted:
+      description: Durable workflow created or exact idempotent replay returned.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Request-ID: {schema: {type: string}}
+        ETag: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Workflow'}
+    Workflow:
+      description: Fixed workflow state; raw access events are never returned.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Request-ID: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Workflow'}
+    Error:
+      description: Stable error response.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}

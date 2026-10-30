@@ -1,0 +1,1402 @@
+{
+ "id": "admin-site-rollouts",
+ "prefix": "/v1/admin/site-rollouts",
+ "operations": [
+  {
+   "operation_id": "listAdminSiteRollouts",
+   "method": "GET",
+   "path": "/v1/admin/site-rollouts",
+   "summary": "List rollouts for one tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "edge_publications.read"
+   ],
+   "params": [
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route target tenant access-scope UUID."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope returned by the immediately preceding page. It is bound to audience, resolved tenant scope, resource kind, and the rollout ID for deployment pages. It cannot be reused across those boundaries or modified."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable platform rollout page.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AdminRollout>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "description": "Opaque authenticated pagination state. Clients must not parse or construct it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "reconcileAdminNodeConfiguration",
+   "method": "POST",
+   "path": "/v1/admin/site-rollouts/reconciliations",
+   "summary": "Record the configuration proven to be active after an uncertain deployment result",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Clears the rollback_failed reconciliation gate only when the named node, tenant scope, source deployment attempt, and observed immutable config all match persisted facts. It also permits operator-confirmed recovery of a legacy failed apply only when the deployment artifact, previous identity, fresh mTLS heartbeat pointer chain, missing current/loaded identity, stopped conservative OpenResty projection, and absence of active deployments all agree. That recovery moves only the version pointers; the next healthy publication establishes the current immutable identity. The append-only reconciliation record, live IAM authorization, node-state update, and audit event commit atomically. Retrying with the same Idempotency-Key returns the same fact; changing the payload with that key returns 409.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "node_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "source_deployment_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "source_deployment_attempt",
+      "type": "integer(int32)",
+      "required": true
+     },
+     {
+      "name": "observed_config_version_id",
+      "type": "string(uuid) | null",
+      "required": true
+     },
+     {
+      "name": "resolution",
+      "type": "string: agent_observed / operator_confirmed",
+      "required": true
+     },
+     {
+      "name": "evidence",
+      "type": "string",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Created reconciliation fact, or the stored result of an identical retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "node_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_deployment_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "source_deployment_attempt",
+       "type": "integer(int32)",
+       "required": true
+      },
+      {
+       "name": "previous_config_version_id",
+       "type": "string(uuid) | null",
+       "required": true
+      },
+      {
+       "name": "current_config_version_id",
+       "type": "string(uuid) | null",
+       "required": true
+      },
+      {
+       "name": "resolution",
+       "type": "string: agent_observed / operator_confirmed",
+       "required": true
+      },
+      {
+       "name": "reconciliation_required",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "reconciled_at",
+       "type": "string(date-time)",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "getAdminSiteRollout",
+   "method": "GET",
+   "path": "/v1/admin/site-rollouts/{rollout_id}",
+   "summary": "Get deterministic rollout progress for one tenant scope",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "edge_publications.read"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route target tenant access-scope UUID."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Platform rollout detail derived from latest deployment attempts.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: apply / rollback",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / paused / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "RolloutProgress",
+       "required": true
+      },
+      {
+       "name": "can_cancel",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_retry",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_start",
+       "type": "boolean"
+      },
+      {
+       "name": "can_pause",
+       "type": "boolean"
+      },
+      {
+       "name": "can_resume",
+       "type": "boolean"
+      },
+      {
+       "name": "rollout",
+       "type": "RolloutPolicyView"
+      },
+      {
+       "name": "pause_reason",
+       "type": "string:  / operator / failure_threshold"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "cancelSiteRollout",
+   "method": "POST",
+   "path": "/v1/admin/site-rollouts/{rollout_id}/cancel",
+   "summary": "Cancel queued work in a rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Progressive cancellation marks held or unclaimed commands and their queued deployment facts cancelled; already claimed or in-flight work may still report durable terminal facts. Legacy rollouts retain their all-pending precondition. Uses rollout revision CAS and idempotency.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated rollout, or the stored result of an identical command retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: apply / rollback",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / paused / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "RolloutProgress",
+       "required": true
+      },
+      {
+       "name": "can_cancel",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_retry",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_start",
+       "type": "boolean"
+      },
+      {
+       "name": "can_pause",
+       "type": "boolean"
+      },
+      {
+       "name": "can_resume",
+       "type": "boolean"
+      },
+      {
+       "name": "rollout",
+       "type": "RolloutPolicyView"
+      },
+      {
+       "name": "pause_reason",
+       "type": "string:  / operator / failure_threshold"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "412",
+     "description": "The source or rollout expected revision is stale."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "listAdminSiteRolloutDeployments",
+   "method": "GET",
+   "path": "/v1/admin/site-rollouts/{rollout_id}/deployments",
+   "summary": "List latest per-node deployment attempts",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "edge_publications.read"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true,
+     "description": "Platform route target tenant access-scope UUID."
+    },
+    {
+     "name": "limit",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "cursor",
+     "in": "query",
+     "type": "string",
+     "description": "Versioned base64url HMAC-SHA256 envelope returned by the immediately preceding page. It is bound to audience, resolved tenant scope, resource kind, and the rollout ID for deployment pages. It cannot be reused across those boundaries or modified."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Latest deployment attempt for each targeted node.",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<AdminDeployment>",
+       "required": true
+      },
+      {
+       "name": "next_cursor",
+       "type": "string",
+       "description": "Opaque authenticated pagination state. Clients must not parse or construct it."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "pauseSiteRollout",
+   "method": "POST",
+   "path": "/v1/admin/site-rollouts/{rollout_id}/pause",
+   "summary": "Pause a running progressive rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Re-holds commands in the released cohort that have not been claimed. Status reports already in flight remain durable facts but cannot release another cohort while the rollout is paused.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated rollout, or the stored result of an identical command retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: apply / rollback",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / paused / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "RolloutProgress",
+       "required": true
+      },
+      {
+       "name": "can_cancel",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_retry",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_start",
+       "type": "boolean"
+      },
+      {
+       "name": "can_pause",
+       "type": "boolean"
+      },
+      {
+       "name": "can_resume",
+       "type": "boolean"
+      },
+      {
+       "name": "rollout",
+       "type": "RolloutPolicyView"
+      },
+      {
+       "name": "pause_reason",
+       "type": "string:  / operator / failure_threshold"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "412",
+     "description": "The source or rollout expected revision is stale."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "resumeSiteRollout",
+   "method": "POST",
+   "path": "/v1/admin/site-rollouts/{rollout_id}/resume",
+   "summary": "Resume a paused progressive rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Recomputes the current cohort under the rollout lock. If it is terminal, the next cohort alone is released or the rollout becomes terminal; otherwise remaining held commands in the current cohort are released.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated rollout, or the stored result of an identical command retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: apply / rollback",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / paused / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "RolloutProgress",
+       "required": true
+      },
+      {
+       "name": "can_cancel",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_retry",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_start",
+       "type": "boolean"
+      },
+      {
+       "name": "can_pause",
+       "type": "boolean"
+      },
+      {
+       "name": "can_resume",
+       "type": "boolean"
+      },
+      {
+       "name": "rollout",
+       "type": "RolloutPolicyView"
+      },
+      {
+       "name": "pause_reason",
+       "type": "string:  / operator / failure_threshold"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "412",
+     "description": "The source or rollout expected revision is stale."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "retryFailedSiteRolloutDeployments",
+   "method": "POST",
+   "path": "/v1/admin/site-rollouts/{rollout_id}/retry-failed",
+   "summary": "Append attempts for retryable failed deployments",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Only failed or rollback_failed latest attempts below max_attempts are retried. Existing attempts and artifact bindings remain immutable. The original rollout deadline remains authoritative; at or after that deadline can_retry is false and retry returns 409.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated rollout, or the stored result of an identical command retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: apply / rollback",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / paused / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "RolloutProgress",
+       "required": true
+      },
+      {
+       "name": "can_cancel",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_retry",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_start",
+       "type": "boolean"
+      },
+      {
+       "name": "can_pause",
+       "type": "boolean"
+      },
+      {
+       "name": "can_resume",
+       "type": "boolean"
+      },
+      {
+       "name": "rollout",
+       "type": "RolloutPolicyView"
+      },
+      {
+       "name": "pause_reason",
+       "type": "string:  / operator / failure_threshold"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "412",
+     "description": "The source or rollout expected revision is stale."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "startSiteRollout",
+   "method": "POST",
+   "path": "/v1/admin/site-rollouts/{rollout_id}/start",
+   "summary": "Start a held progressive rollout",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Releases only frozen cohort zero. Target membership and cohort assignment were fixed at publication time by ascending UUID bytes; later inventory changes cannot alter the rollout. Uses rollout revision CAS and domain idempotency.",
+   "permissions": [
+    "edge_publications.manage"
+   ],
+   "params": [
+    {
+     "name": "rollout_id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true,
+     "description": "Stable for the frozen business payload. Request, correlation, trace, and task identifiers may change on an identical retry."
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "Traceparent",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Correlation-ID",
+     "in": "header",
+     "type": "string(uuid)",
+     "description": "Defaults to X-Request-ID when omitted."
+    },
+    {
+     "name": "X-Task-ID",
+     "in": "header",
+     "type": "string"
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "configuration_scope_id",
+      "type": "string(uuid)",
+      "required": true
+     },
+     {
+      "name": "expected_revision",
+      "type": "integer(int64)",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Updated rollout, or the stored result of an identical command retry.",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "configuration_scope_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "config_version_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "action",
+       "type": "string: apply / rollback",
+       "required": true
+      },
+      {
+       "name": "state",
+       "type": "string: queued / running / paused / succeeded / partial_failed / failed / cancelled",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer(int64)",
+       "required": true
+      },
+      {
+       "name": "max_attempts",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "progress",
+       "type": "RolloutProgress",
+       "required": true
+      },
+      {
+       "name": "can_cancel",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_retry",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "can_start",
+       "type": "boolean"
+      },
+      {
+       "name": "can_pause",
+       "type": "boolean"
+      },
+      {
+       "name": "can_resume",
+       "type": "boolean"
+      },
+      {
+       "name": "rollout",
+       "type": "RolloutPolicyView"
+      },
+      {
+       "name": "pause_reason",
+       "type": "string:  / operator / failure_threshold"
+      },
+      {
+       "name": "created_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "replayed",
+       "type": "boolean"
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid UUID, RFC3339 value, enum, cursor, header, query, or JSON body."
+    },
+    {
+     "status": "401",
+     "description": "Authentication is missing or invalid."
+    },
+    {
+     "status": "403",
+     "description": "Wrong audience, missing permission, or tenant scope override."
+    },
+    {
+     "status": "404",
+     "description": "Resource is absent in the authorized tenant scope. Cross-tenant IDs use the same response."
+    },
+    {
+     "status": "409",
+     "description": "Idempotency, target snapshot, rollout state, active deployment, or retry conflict."
+    },
+    {
+     "status": "412",
+     "description": "The source or rollout expected revision is stale."
+    },
+    {
+     "status": "503",
+     "description": "Storage, signing, cancellation, response validation, or another internal dependency is unavailable."
+    }
+   ]
+  }
+ ]
+}

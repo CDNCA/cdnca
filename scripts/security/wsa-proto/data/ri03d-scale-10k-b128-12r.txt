@@ -1,0 +1,44 @@
+# ri-03d scale, bucket 128: CDNCA_D11_DOCKER_ARGS=--cpuset-cpus=6,7 ONLY=scale SCALE=10000 SCALE_TARGETS=32 WORKERS=1 REQUESTS=3000 ROUNDS=12 (2026-10-20, HEAD b947213e6)
+INFO scale sites=10000 tiers=2 prepare=82ms node_rules=90620B
+INFO round 0 no-waf p50=135us p90=157us p99=367us mean=147us non200=0 master_rss=16540kB worker_rss=46528kB start=1.653s reload=163ms
+INFO round 0 waf p50=764us p90=1282us p99=2467us mean=937us non200=0 master_rss=42296kB worker_rss=75596kB start=1.608s reload=295ms
+INFO round 0 waf-10000x32 p50=884us p90=1398us p99=2415us mean=1052us non200=0 master_rss=165156kB worker_rss=204024kB start=3.559s reload=1.702s
+INFO round 1 no-waf p50=138us p90=158us p99=327us mean=143us non200=0 master_rss=16636kB worker_rss=46224kB start=2.079s reload=156ms
+INFO round 1 waf p50=828us p90=1477us p99=2811us mean=1009us non200=0 master_rss=39540kB worker_rss=75100kB start=1.443s reload=310ms
+INFO round 1 waf-10000x32 p50=1003us p90=1669us p99=3547us mean=1189us non200=0 master_rss=165028kB worker_rss=204020kB start=3.15s reload=2.679s
+INFO round 2 no-waf p50=197us p90=495us p99=1579us mean=298us non200=0 master_rss=16488kB worker_rss=46148kB start=3.147s reload=224ms
+INFO round 2 waf p50=1201us p90=2435us p99=5401us mean=1468us non200=0 master_rss=42148kB worker_rss=75540kB start=2.117s reload=371ms
+INFO round 2 waf-10000x32 p50=931us p90=1443us p99=2128us mean=1061us non200=0 master_rss=165068kB worker_rss=204788kB start=4.642s reload=1.938s
+INFO round 3 no-waf p50=139us p90=181us p99=579us mean=154us non200=0 master_rss=16484kB worker_rss=45736kB start=2.462s reload=135ms
+INFO round 3 waf p50=1081us p90=2229us p99=9776us mean=1440us non200=0 master_rss=42088kB worker_rss=75428kB start=1.653s reload=303ms
+INFO round 3 waf-10000x32 p50=1085us p90=1819us p99=4266us mean=1340us non200=0 master_rss=165160kB worker_rss=204800kB start=3.98s reload=2.539s
+INFO round 4 no-waf p50=159us p90=230us p99=582us mean=181us non200=0 master_rss=16384kB worker_rss=45704kB start=4.389s reload=207ms
+INFO round 4 waf p50=1380us p90=2901us p99=6343us mean=1723us non200=0 master_rss=42004kB worker_rss=75080kB start=2.437s reload=377ms
+INFO round 4 waf-10000x32 p50=1049us p90=2044us p99=4615us mean=1353us non200=0 master_rss=165372kB worker_rss=204316kB start=4.705s reload=3.203s
+INFO round 5 no-waf p50=146us p90=435us p99=985us mean=216us non200=0 master_rss=16436kB worker_rss=46236kB start=4.025s reload=169ms
+INFO round 5 waf p50=1309us p90=3366us p99=7690us mean=1796us non200=0 master_rss=42100kB worker_rss=74804kB start=2.621s reload=462ms
+INFO round 5 waf-10000x32 p50=1094us p90=1898us p99=3641us mean=1274us non200=0 master_rss=164796kB worker_rss=204096kB start=4.841s reload=3.757s
+INFO round 6 no-waf p50=316us p90=917us p99=3176us mean=484us non200=0 master_rss=16588kB worker_rss=46368kB start=3.084s reload=161ms
+INFO round 6 waf p50=1031us p90=1906us p99=3891us mean=1225us non200=0 master_rss=42252kB worker_rss=75268kB start=2.853s reload=584ms
+INFO round 6 waf-10000x32 p50=1425us p90=3357us p99=7808us mean=1890us non200=0 master_rss=165376kB worker_rss=204348kB start=4.896s reload=3.129s
+INFO round 7 no-waf p50=154us p90=204us p99=446us mean=169us non200=0 master_rss=16504kB worker_rss=43868kB start=3.863s reload=185ms
+INFO round 7 waf p50=1252us p90=2614us p99=6050us mean=1594us non200=0 master_rss=42008kB worker_rss=75232kB start=2.894s reload=361ms
+INFO round 7 waf-10000x32 p50=1011us p90=1640us p99=2932us mean=1166us non200=0 master_rss=165328kB worker_rss=204972kB start=3.99s reload=1.889s
+INFO round 8 no-waf p50=158us p90=244us p99=699us mean=186us non200=0 master_rss=16480kB worker_rss=46336kB start=2.952s reload=171ms
+INFO round 8 waf p50=982us p90=1893us p99=4669us mean=1247us non200=0 master_rss=42320kB worker_rss=75384kB start=2.334s reload=552ms
+INFO round 8 waf-10000x32 p50=928us p90=1436us p99=2176us mean=1061us non200=0 master_rss=165280kB worker_rss=204976kB start=3.465s reload=2.181s
+INFO round 9 no-waf p50=146us p90=203us p99=471us mean=160us non200=0 master_rss=16552kB worker_rss=45972kB start=2.655s reload=171ms
+INFO round 9 waf p50=1016us p90=1899us p99=4098us mean=1232us non200=0 master_rss=42032kB worker_rss=74828kB start=2.432s reload=366ms
+INFO round 9 waf-10000x32 p50=927us p90=1517us p99=3267us mean=1119us non200=0 master_rss=165288kB worker_rss=203836kB start=3.095s reload=1.837s
+INFO round 10 no-waf p50=152us p90=186us p99=440us mean=162us non200=0 master_rss=16580kB worker_rss=46432kB start=2.618s reload=158ms
+INFO round 10 waf p50=822us p90=1364us p99=2424us mean=988us non200=0 master_rss=42192kB worker_rss=75148kB start=1.68s reload=349ms
+INFO round 10 waf-10000x32 p50=954us p90=1510us p99=2712us mean=1092us non200=0 master_rss=165344kB worker_rss=203636kB start=3.384s reload=2.298s
+INFO round 11 no-waf p50=154us p90=277us p99=1156us mean=223us non200=0 master_rss=16596kB worker_rss=46440kB start=2.662s reload=159ms
+INFO round 11 waf p50=812us p90=1330us p99=2271us mean=969us non200=0 master_rss=42064kB worker_rss=75660kB start=1.922s reload=348ms
+INFO round 11 waf-10000x32 p50=982us p90=1695us p99=3811us mean=1185us non200=0 master_rss=165248kB worker_rss=204192kB start=3.702s reload=2.315s
+SCALE {"extra_p50_us":877,"master_rss_kb":{"no_waf":"16596","targets":"165248","waf":"42064"},"no_waf_p50_us":154,"no_waf_p99_us":582,"reload_ms":{"targets":2314,"waf":366},"requests_per_round":3000,"rounds":12,"sites":10000,"targets_extra_p50_us":-28,"targets_extra_p99_us":-1122,"targets_p50_us":1003,"targets_p99_us":3547,"targets_per_site":32,"tiers":2,"waf_p50_us":1031,"waf_p99_us":4669}
+PASS scale every clean request 200 (0 failures)
+RESULT failures=0
+# scale_ci.py
+extra p50 us: n=12 median -25 95% CI [-228, +151] rounds [120, 175, -270, 4, -331, -215, 394, -241, -54, -89, 132, 170] base median 1024
+extra p99 us: n=12 median -1280 95% CI [-3196, +512] rounds [-52, 736, -3273, -5510, -1728, -4049, 3917, -3118, -2493, -831, 288, 1540] base median 4384

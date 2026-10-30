@@ -1,0 +1,346 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Administrator Sold Packages API
+  version: 0.1.0
+  description: >-
+    Global sold package administration and listing for customer control-plane platform
+    administrators with billing.adjustments.manage. Existing tenant subscription
+    endpoints retain their tenant and owner isolation. Count, items and product
+    options are read in one read-only repeatable-read transaction. Commands require a live platform session,
+    immutable subscription versions, per-item revision checks, idempotency, and an audited runtime transaction.
+servers:
+  - url: /
+paths:
+  /v1/admin/package-commerce/sold:
+    get:
+      operationId: listAdminSoldPackages
+      summary: List sold packages across tenants
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      description: >-
+        Requires a platform-scope principal. Empty optional parameters must be
+        omitted; duplicate and unknown parameters are rejected. Product options
+        include all sold products independent of filters, without a 100-item cap.
+        Names come from the effective immutable product snapshot. User display
+        IDs come from users.display_id. A subscription ID is its actual UUID,
+        never its revision. Expiry week is the next 7 days; month is the next
+        calendar month, both excluding already expired records. Expired includes
+        ends_at equal to the query time. Status is the stored lifecycle status;
+        an expired active subscription still has lifecycle_status active.
+        Usage is currently null because the commerce read model has no
+        authoritative settled per-cycle counter; unknown usage matches neither
+        exhausted nor remaining. A traffic limit of -1 means unlimited.
+        CNAME searches current and last-known-good hostname claims associated
+        with the subscription or one of its sites. Search values are literal
+        case-insensitive substrings, not SQL patterns.
+      parameters:
+        - name: page
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 1000000, default: 1}
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 100, default: 10}
+        - name: expiry
+          in: query
+          schema: {type: string, enum: [all, month, week, expired], default: all}
+        - name: product_id
+          in: query
+          schema: {type: string, format: uuid}
+        - name: sort
+          in: query
+          schema: {type: string, enum: [created_at_desc, ends_at_asc], default: created_at_desc}
+        - name: status
+          in: query
+          schema: {type: string, enum: [all, enabled, disabled, active, cancelled], default: all}
+        - name: usage
+          in: query
+          schema: {type: string, enum: [all, exhausted, remaining], default: all}
+        - name: user_id
+          in: query
+          description: Exact owner UUID or positive decimal user display ID.
+          schema: {type: string, minLength: 1, maxLength: 36}
+        - name: q
+          in: query
+          description: Literal substring of the package snapshot name or (when not all digits) of the subscription UUID; a positive decimal also matches the package display ID exactly.
+          schema: {type: string, minLength: 1, maxLength: 253}
+        - name: cname
+          in: query
+          schema: {type: string, minLength: 1, maxLength: 253}
+      responses:
+        '200':
+          description: Globally filtered page with count and complete sold-product options.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SoldPackagePage'}
+        '400':
+          description: Invalid parameters (package_commerce_validation_error).
+        '401':
+          description: Authentication required.
+        '403':
+          description: Platform scope and billing.adjustments.manage required.
+        '408':
+          description: Request cancelled.
+        '502':
+          description: Invalid stored facts or oversized response.
+        '503':
+          description: Read store unavailable.
+        '504':
+          description: Query deadline exceeded.
+  /v1/admin/package-commerce/sold/{subscription_id}:
+    get:
+      operationId: getAdminSoldPackage
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - {name: subscription_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Effective sold snapshot and complete authorized reference options.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SoldDetailResponse'}
+        '403': {description: Platform read permission required.}
+        '404': {description: Subscription not found.}
+  /v1/admin/package-commerce/sold/commands:
+    post:
+      operationId: administerSoldPackages
+      security: [{bearerAuth: []}]
+      x-required-permissions: [package_subscriptions.manage]
+      description: >-
+        Executes all selected items in one transaction. The live session and RBAC are rechecked,
+        including replay. A changed body under an existing key is rejected. Editing appends an
+        entitlement snapshot without rewriting the purchased catalog version or historical prices.
+        Enable/disable is independent of cancellation. Safe deletion rejects live resources;
+        cascade deletion uses audited resource deletion and edge publication. Neither mode refunds
+        money; unsettled orders, held balances and scheduled entitlements block deletion. Sync
+        copies only selected fields to bound websites and L4 forwarding resources, then persists
+        signed edge publication, rollout and node command outbox. Publication receipts are polled
+        separately and command success does not imply every node has applied it.
+      parameters:
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: X-Request-ID, in: header, required: true, schema: {type: string, minLength: 1, maxLength: 128}}
+        - {name: traceparent, in: header, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SoldCommand'}
+      responses:
+        '200':
+          description: Persisted command or exact idempotent replay.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SoldCommandResult'}
+        '400': {description: Invalid or duplicate fields/items; edit requires one item and a full config.}
+        '401': {description: A live platform session is required.}
+        '403': {description: Required package/resource/DNS/publication permission denied.}
+        '409':
+          description: >-
+            package_sold_dependencies, package_sold_financial_dependencies,
+            package_sold_setting_unsupported, package_sold_invalid_state or idempotency_conflict.
+        '412': {description: revision_conflict; no item was modified.}
+        '503': {description: package_sold_runtime_unavailable; no item was modified.}
+  /v1/admin/package-commerce/sold/{subscription_id}/sync:
+    get:
+      operationId: getAdminSoldPackageSync
+      security: [{bearerAuth: []}]
+      x-required-permissions: [billing.adjustments.manage]
+      parameters:
+        - {name: subscription_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Latest 20 publications with authoritative rollout and latest node attempt counts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [publications]
+                properties:
+                  publications:
+                    type: array
+                    items:
+                      allOf:
+                        - {$ref: '#/components/schemas/SoldPublication'}
+                        - type: object
+                          required: [state, node_count, succeeded_count, failed_count, superseded_count]
+                          properties:
+                            state: {type: string, enum: [building, queued, paused, completed, failed, cancelled]}
+                            node_count: {type: integer, minimum: 0}
+                            succeeded_count: {type: integer, minimum: 0}
+                            failed_count: {type: integer, minimum: 0}
+                            superseded_count:
+                              type: integer
+                              minimum: 0
+                              description: Nodes that ignored the publication as an old release (they already run a newer revision); not failed.
+        '403': {description: Platform read permission required.}
+        '404': {description: Subscription not found.}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    SoldPackagePage:
+      type: object
+      additionalProperties: false
+      required: [items, count, products]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/SoldPackage'}
+        count: {type: integer, format: int64, minimum: 0}
+        products:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, name]
+            properties:
+              id: {type: string, format: uuid}
+              name: {type: string, minLength: 1}
+    SoldPackage:
+      type: object
+      additionalProperties: false
+      required: [id, display_id, tenant_scope_id, owner_user_id, owner_user_display_id, owner_name, name, product_id, product_name, created_at, ends_at, lifecycle_status, traffic_limit_bytes, used_traffic_bytes, revision, enabled]
+      properties:
+        id: {type: string, format: uuid}
+        display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        tenant_scope_id: {type: string, format: uuid}
+        owner_user_id: {type: string, format: uuid}
+        owner_user_display_id: {type: string, pattern: '^[1-9][0-9]{0,18}$'}
+        owner_name: {type: string, minLength: 1}
+        name: {type: string, minLength: 1}
+        product_id: {type: string, format: uuid}
+        product_name: {type: string, minLength: 1}
+        created_at: {type: string, format: date-time}
+        ends_at: {type: string, format: date-time}
+        lifecycle_status: {type: string, enum: [active, cancelled]}
+        enabled: {type: boolean}
+        traffic_limit_bytes: {type: integer, format: int64, minimum: -1}
+        used_traffic_bytes: {type: [integer, 'null'], format: int64, minimum: 0}
+        revision: {type: integer, format: int64, minimum: 1}
+    SoldConfig:
+      type: object
+      additionalProperties: false
+      required: [name, region_id, node_group_id, backup_node_group_id, limits, prices, cname]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 128}
+        region_id: {type: string, format: uuid}
+        node_group_id: {type: string, format: uuid}
+        backup_node_group_id: {type: [string, 'null'], format: uuid}
+        limits:
+          type: object
+          additionalProperties: false
+          required: [monthly_traffic_bytes, bandwidth_bps, connections, stream_ports, domains, root_domains, http_ports, custom_cc, websocket, http3, l2_origin, waf]
+          properties:
+            monthly_traffic_bytes: {type: integer, minimum: -1, maximum: 1152921504606846976}
+            bandwidth_bps: {type: integer, minimum: -1, maximum: 1000000000000000}
+            connections: {type: integer, minimum: -1, maximum: 65535}
+            stream_ports: {type: integer, minimum: -1, maximum: 1000000000}
+            domains: {type: integer, minimum: -1, maximum: 1000000000}
+            root_domains: {type: integer, minimum: -1, maximum: 1000000000}
+            http_ports: {type: integer, minimum: -1, maximum: 1000000000}
+            custom_cc: {type: boolean}
+            websocket: {type: boolean}
+            http3: {type: boolean}
+            l2_origin: {type: boolean}
+            waf: {type: boolean}
+        prices:
+          type: object
+          additionalProperties: false
+          required: [currency, monthly_minor, quarterly_minor, yearly_minor]
+          properties:
+            currency: {type: string, const: CNY}
+            monthly_minor: {type: integer, minimum: 0, maximum: 1000000000000000}
+            quarterly_minor: {type: integer, minimum: 0, maximum: 1000000000000000}
+            yearly_minor: {type: integer, minimum: 0, maximum: 1000000000000000}
+        cname:
+          type: object
+          additionalProperties: false
+          required: [hostname, domain, mode]
+          properties:
+            hostname: {type: string, maxLength: 253}
+            domain: {type: string, minLength: 1, maxLength: 253}
+            mode: {type: string, enum: [per_site, shared]}
+    SoldDetail:
+      type: object
+      required: [id, tenant_scope_id, owner_user_id, revision, enabled, deleted, ends_at, config]
+      properties:
+        id: {type: string, format: uuid}
+        tenant_scope_id: {type: string, format: uuid}
+        owner_user_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        enabled: {type: boolean}
+        deleted: {type: boolean}
+        ends_at: {type: string, format: date-time}
+        config: {$ref: '#/components/schemas/SoldConfig'}
+    SoldDetailResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SoldDetail'}
+        - type: object
+          required: [options]
+          properties:
+            options:
+              type: object
+              required: [regions, node_groups, cname_domains]
+              properties:
+                regions:
+                  type: array
+                  items: {$ref: '#/components/schemas/SoldOption'}
+                node_groups:
+                  type: array
+                  items:
+                    allOf:
+                      - {$ref: '#/components/schemas/SoldOption'}
+                      - type: object
+                        required: [region_id]
+                        properties:
+                          region_id: {type: [string, 'null'], format: uuid}
+                cname_domains: {type: array, items: {type: string}}
+    SoldOption:
+      type: object
+      required: [id, name]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+    SoldCommand:
+      type: object
+      additionalProperties: false
+      required: [action, items]
+      properties:
+        action: {type: string, enum: [edit, enable, disable, delete, sync]}
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, expected_revision]
+            properties:
+              id: {type: string, format: uuid}
+              expected_revision: {type: integer, minimum: 1}
+        config: {$ref: '#/components/schemas/SoldConfig'}
+        ends_at: {type: string, format: date-time}
+        delete_mode: {type: string, enum: [safe, cascade]}
+        sync_fields:
+          type: array
+          minItems: 1
+          maxItems: 3
+          uniqueItems: true
+          items: {type: string, enum: [line_group, cname_domain, cname_mode]}
+    SoldPublication:
+      type: object
+      required: [tenant_scope_id, publication_id, rollout_id]
+      properties:
+        tenant_scope_id: {type: string, format: uuid}
+        publication_id: {type: string, format: uuid}
+        rollout_id: {type: string, format: uuid}
+    SoldCommandResult:
+      type: object
+      additionalProperties: false
+      required: [items, publications, replayed]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/SoldDetail'}}
+        publications: {type: array, items: {$ref: '#/components/schemas/SoldPublication'}}
+        replayed: {type: boolean}

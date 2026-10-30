@@ -1,0 +1,782 @@
+{
+ "id": "openresty-security",
+ "prefix": "/v1/openresty-security",
+ "operations": [
+  {
+   "operation_id": "queueCCImageDownload",
+   "method": "POST",
+   "path": "/v1/openresty-security/actions/download-cc-image",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.manage"
+   ],
+   "params": [
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "202",
+     "description": "Durable download_cc_img task queued"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Duplicate target or idempotency conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "getGlobalOpenRestySecurityConfig",
+   "method": "GET",
+   "path": "/v1/openresty-security/configs/global",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.read"
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current redacted configuration document",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_type",
+       "type": "string: global / region / node",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_label",
+       "type": "string"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "config",
+       "type": "Config",
+       "required": true
+      },
+      {
+       "name": "key_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "sources",
+       "type": "object",
+       "description": "Effective documents only (GET /v1/openresty-security/effective) - the layer each config field comes from."
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "patchGlobalOpenRestySecurityConfig",
+   "method": "PATCH",
+   "path": "/v1/openresty-security/configs/global",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Applies the smallest auto-save patch. A logical retry must reuse the same Idempotency-Key.",
+   "permissions": [
+    "openresty_security.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "patch",
+      "type": "Config",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current redacted configuration document",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_type",
+       "type": "string: global / region / node",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_label",
+       "type": "string"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "config",
+       "type": "Config",
+       "required": true
+      },
+      {
+       "name": "key_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "sources",
+       "type": "object",
+       "description": "Effective documents only (GET /v1/openresty-security/effective) - the layer each config field comes from."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid field, conditional value, range, or relationship"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Duplicate target or idempotency conflict"
+    },
+    {
+     "status": "412",
+     "description": "If-Match revision conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "getEffectiveOpenRestySecurityConfig",
+   "method": "GET",
+   "path": "/v1/openresty-security/effective",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Resolves the deterministic node-over-region-over-global configuration.",
+   "permissions": [
+    "openresty_security.read"
+   ],
+   "params": [
+    {
+     "name": "node_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current redacted configuration document",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_type",
+       "type": "string: global / region / node",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_label",
+       "type": "string"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "config",
+       "type": "Config",
+       "required": true
+      },
+      {
+       "name": "key_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "sources",
+       "type": "object",
+       "description": "Effective documents only (GET /v1/openresty-security/effective) - the layer each config field comes from."
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Target absent or hidden across tenant boundary"
+    }
+   ]
+  },
+  {
+   "operation_id": "listOpenRestySecurityOverrides",
+   "method": "GET",
+   "path": "/v1/openresty-security/overrides",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.read"
+   ],
+   "params": [
+    {
+     "name": "scope_type",
+     "in": "query",
+     "type": "string: region / node"
+    },
+    {
+     "name": "query",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "page_size",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Stable page ordered by update time",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Document>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page_size",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  },
+  {
+   "operation_id": "createOpenRestySecurityOverride",
+   "method": "POST",
+   "path": "/v1/openresty-security/overrides",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.manage"
+   ],
+   "params": [
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "scope_type",
+      "type": "string: region / node",
+      "required": true
+     },
+     {
+      "name": "scope_id",
+      "type": "string",
+      "required": true
+     },
+     {
+      "name": "config",
+      "type": "OverrideConfig",
+      "required": true,
+      "description": "Sparse override allowlist of exactly the 24 observed selectable configuration groups."
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "201",
+     "description": "Current redacted configuration document",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_type",
+       "type": "string: global / region / node",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_label",
+       "type": "string"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "config",
+       "type": "Config",
+       "required": true
+      },
+      {
+       "name": "key_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "sources",
+       "type": "object",
+       "description": "Effective documents only (GET /v1/openresty-security/effective) - the layer each config field comes from."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid field, conditional value, range, or relationship"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "409",
+     "description": "Duplicate target or idempotency conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "patchOpenRestySecurityOverride",
+   "method": "PATCH",
+   "path": "/v1/openresty-security/overrides/{id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "patch",
+      "type": "OverrideConfig",
+      "required": true,
+      "description": "Sparse override allowlist of exactly the 24 observed selectable configuration groups."
+     },
+     {
+      "name": "removed_fields",
+      "type": "array<string>"
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Current redacted configuration document",
+     "fields": [
+      {
+       "name": "id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "scope_type",
+       "type": "string: global / region / node",
+       "required": true
+      },
+      {
+       "name": "scope_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "scope_label",
+       "type": "string"
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "config",
+       "type": "Config",
+       "required": true
+      },
+      {
+       "name": "key_configured",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "updated_at",
+       "type": "string(date-time)",
+       "required": true
+      },
+      {
+       "name": "sources",
+       "type": "object",
+       "description": "Effective documents only (GET /v1/openresty-security/effective) - the layer each config field comes from."
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Invalid field, conditional value, range, or relationship"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Target absent or hidden across tenant boundary"
+    },
+    {
+     "status": "409",
+     "description": "Duplicate target or idempotency conflict"
+    },
+    {
+     "status": "412",
+     "description": "If-Match revision conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "deleteOpenRestySecurityOverride",
+   "method": "DELETE",
+   "path": "/v1/openresty-security/overrides/{id}",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "If-Match",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "204",
+     "description": "Deleted; a replay returns the same result"
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    },
+    {
+     "status": "404",
+     "description": "Target absent or hidden across tenant boundary"
+    },
+    {
+     "status": "412",
+     "description": "If-Match revision conflict"
+    }
+   ]
+  },
+  {
+   "operation_id": "searchOpenRestySecurityTargets",
+   "method": "GET",
+   "path": "/v1/openresty-security/targets",
+   "summary": "",
+   "auth": [
+    "bearer"
+   ],
+   "permissions": [
+    "openresty_security.read"
+   ],
+   "params": [
+    {
+     "name": "scope_type",
+     "in": "query",
+     "type": "string: region / node",
+     "required": true
+    },
+    {
+     "name": "query",
+     "in": "query",
+     "type": "string"
+    },
+    {
+     "name": "page",
+     "in": "query",
+     "type": "integer"
+    },
+    {
+     "name": "page_size",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Remote node or distinct-region search results",
+     "fields": [
+      {
+       "name": "items",
+       "type": "array<Target>",
+       "required": true
+      },
+      {
+       "name": "page",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "page_size",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "total",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication required"
+    },
+    {
+     "status": "403",
+     "description": "Permission denied"
+    }
+   ]
+  }
+ ]
+}

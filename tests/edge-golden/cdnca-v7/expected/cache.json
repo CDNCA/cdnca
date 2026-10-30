@@ -1,0 +1,1106 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "cache",
+  "scenario_sha256": "2071868e05e5296cec002f9c943172e261bd8790b97903d2192fdfed81c351e2",
+  "steps": [
+    {
+      "id": "miss",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 32,
+            "sha256": "48898e847bb49532ce9fcdfab328dcad83cfb8c31f1b1fca352d59b0dd309888",
+            "text": "simple cache.example.test /a.css"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/a.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hit",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "HIT",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 32,
+            "sha256": "48898e847bb49532ce9fcdfab328dcad83cfb8c31f1b1fca352d59b0dd309888",
+            "text": "simple cache.example.test /a.css"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "alias-same-path",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "38",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 38,
+            "sha256": "ece60b16b96bd4f1fff83cfb76ae0e1e3872db989006f87bda12582b0675077e",
+            "text": "simple alias.cache.example.test /a.css"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/a.css",
+              "host": "alias.cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "query-variant",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "36",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 36,
+            "sha256": "36a4f1a396b032d1b71e339f6040b377e836d59a2ecbabbb6c482f8bcd8f63d7",
+            "text": "simple cache.example.test /a.css?v=2"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/a.css?v=2",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "query-variant-hit",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "36",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "HIT",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 36,
+            "sha256": "36a4f1a396b032d1b71e339f6040b377e836d59a2ecbabbb6c482f8bcd8f63d7",
+            "text": "simple cache.example.test /a.css?v=2"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "head-after-get",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "HIT",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "post-bypasses",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "method",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 32,
+            "sha256": "48898e847bb49532ce9fcdfab328dcad83cfb8c31f1b1fca352d59b0dd309888",
+            "text": "simple cache.example.test /a.css"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "POST",
+              "uri": "/a.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "content-length": "1",
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "body": {
+                "length": 1,
+                "sha256": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+                "text": "x"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "set-cookie-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "11",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "set-cookie": "k=v",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "set_cookie",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 11,
+            "sha256": "d6d407240c5066834f361cc8accaa612192a75c28f1001ad1a35d44296fd6499",
+            "text": "with cookie"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/cookie.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "set-cookie-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "11",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "set-cookie": "k=v",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "set_cookie",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 11,
+            "sha256": "d6d407240c5066834f361cc8accaa612192a75c28f1001ad1a35d44296fd6499",
+            "text": "with cookie"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/cookie.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "no-store-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "no-store",
+            "content-length": "8",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "origin_no_store",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 8,
+            "sha256": "bea1998493d051d215ee825f500713172d2baaaf181a05df84bac6192073438d",
+            "text": "no store"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/nostore.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "no-store-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "no-store",
+            "content-length": "8",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "origin_no_store",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 8,
+            "sha256": "bea1998493d051d215ee825f500713172d2baaaf181a05df84bac6192073438d",
+            "text": "no store"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/nostore.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "status-404-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "7",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 7,
+            "sha256": "ffa63583dfa6706b87d284b86b0d693a161e4840aad2c5cf6b5d27c3b9621f7d",
+            "text": "missing"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/404.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "status-404-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "7",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 7,
+            "sha256": "ffa63583dfa6706b87d284b86b0d693a161e4840aad2c5cf6b5d27c3b9621f7d",
+            "text": "missing"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/404.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ignore-query-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "38",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 38,
+            "sha256": "1f9a1a36fa715a433670ce16429bb138c6b364d01998ec747a985eacf032a18f",
+            "text": "ignoreq ignoreq.example.test /i.js?a=1"
+          },
+          "origin": [
+            {
+              "origin": "ignoreq",
+              "method": "GET",
+              "uri": "/i.js?a=1",
+              "host": "ignoreq.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ignore-query-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "38",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "HIT",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 38,
+            "sha256": "1f9a1a36fa715a433670ce16429bb138c6b364d01998ec747a985eacf032a18f",
+            "text": "ignoreq ignoreq.example.test /i.js?a=1"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "rule-css-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "31",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 31,
+            "sha256": "89e63ee945ab7b317a8432e5cc349c40340975a27271e5833e41f05ad23674d0",
+            "text": "rules rules.example.test /s.css"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/s.css",
+              "host": "rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-css-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "31",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "HIT",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 31,
+            "sha256": "89e63ee945ab7b317a8432e5cc349c40340975a27271e5833e41f05ad23674d0",
+            "text": "rules rules.example.test /s.css"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "rule-api-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "no-cache",
+            "content-length": "31",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "Thu, 01 Jan 1970 00:00:01 GMT",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "no_cache_rule",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 31,
+            "sha256": "f4d9c18ccee7e62a3ca42341e125543650d8d5b204d99d7de6158e391e1869a9",
+            "text": "rules rules.example.test /api/x"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/api/x",
+              "host": "rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-api-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "no-cache",
+            "content-length": "31",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "expires": "Thu, 01 Jan 1970 00:00:01 GMT",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "no_cache_rule",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 31,
+            "sha256": "f4d9c18ccee7e62a3ca42341e125543650d8d5b204d99d7de6158e391e1869a9",
+            "text": "rules rules.example.test /api/x"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/api/x",
+              "host": "rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-other-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "36",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "no_cache_rule",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 36,
+            "sha256": "c6feee220ba3b9aa5415b78727f9530c0ff04967e1dd9c0e33ff6130866ae93b",
+            "text": "rules rules.example.test /other.html"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/other.html",
+              "host": "rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rule-other-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "36",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "no_cache_rule",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 36,
+            "sha256": "c6feee220ba3b9aa5415b78727f9530c0ff04967e1dd9c0e33ff6130866ae93b",
+            "text": "rules rules.example.test /other.html"
+          },
+          "origin": [
+            {
+              "origin": "rules",
+              "method": "GET",
+              "uri": "/other.html",
+              "host": "rules.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "follow-max-age-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "max-age=60",
+            "content-length": "9",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 9,
+            "sha256": "1f2318b0077c62a582c8084a5451c2fb49339b3e57263253ad9f8ea8fcf580e4",
+            "text": "cacheable"
+          },
+          "origin": [
+            {
+              "origin": "follow",
+              "method": "GET",
+              "uri": "/max-age",
+              "host": "follow.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "follow-max-age-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "max-age=60",
+            "content-length": "9",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "HIT",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 9,
+            "sha256": "1f2318b0077c62a582c8084a5451c2fb49339b3e57263253ad9f8ea8fcf580e4",
+            "text": "cacheable"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "follow-private-1",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "private",
+            "content-length": "7",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "origin_no_store",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 7,
+            "sha256": "715dc8493c36579a5b116995100f635e3572fdf8703e708ef1a08d943b36774e",
+            "text": "private"
+          },
+          "origin": [
+            {
+              "origin": "follow",
+              "method": "GET",
+              "uri": "/private",
+              "host": "follow.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "follow-private-2",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "cache-control": "private",
+            "content-length": "7",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "BYPASS",
+            "x-cdn-cache-reason": "origin_no_store",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 7,
+            "sha256": "715dc8493c36579a5b116995100f635e3572fdf8703e708ef1a08d943b36774e",
+            "text": "private"
+          },
+          "origin": [
+            {
+              "origin": "follow",
+              "method": "GET",
+              "uri": "/private",
+              "host": "follow.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "entries-simple",
+      "kind": "cache_entries",
+      "cache": {
+        "count": 3,
+        "keys": [
+          "v2|0a1b9999-0000-4000-8000-000000000001|0a1b2005-0000-4000-8000-000000000101|4b0d0f69709fb562|alias.cache.example.test|18084|/a.css",
+          "v2|0a1b9999-0000-4000-8000-000000000001|0a1b2005-0000-4000-8000-000000000101|4b0d0f69709fb562|cache.example.test|18084|/a.css",
+          "v2|0a1b9999-0000-4000-8000-000000000001|0a1b2005-0000-4000-8000-000000000101|4b0d0f69709fb562|cache.example.test|18084|/a.css?v=2"
+        ]
+      }
+    },
+    {
+      "id": "purge-url",
+      "kind": "task",
+      "task": {
+        "state": "succeeded",
+        "items": [
+          {
+            "target": "http://cache.example.test:18084/a.css",
+            "status": "success",
+            "code": "PURGED",
+            "affected": 1
+          }
+        ],
+        "origin": []
+      }
+    },
+    {
+      "id": "after-purge-url",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "32",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "MISS",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 32,
+            "sha256": "48898e847bb49532ce9fcdfab328dcad83cfb8c31f1b1fca352d59b0dd309888",
+            "text": "simple cache.example.test /a.css"
+          },
+          "origin": [
+            {
+              "origin": "simple",
+              "method": "GET",
+              "uri": "/a.css",
+              "host": "cache.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "purge-dir",
+      "kind": "task",
+      "task": {
+        "state": "succeeded",
+        "items": [
+          {
+            "target": "http://cache.example.test:18084/",
+            "status": "success",
+            "code": "PURGED",
+            "affected": 2
+          }
+        ],
+        "origin": []
+      }
+    },
+    {
+      "id": "entries-after-dir",
+      "kind": "cache_entries",
+      "cache": {
+        "count": 1,
+        "keys": [
+          "v2|0a1b9999-0000-4000-8000-000000000001|0a1b2005-0000-4000-8000-000000000101|4b0d0f69709fb562|alias.cache.example.test|18084|/a.css"
+        ]
+      }
+    },
+    {
+      "id": "prewarm",
+      "kind": "task",
+      "task": {
+        "state": "succeeded",
+        "items": [
+          {
+            "target": "http://cache.example.test:18084/warm.css",
+            "status": "success",
+            "code": "PREWARMED",
+            "affected": 0
+          }
+        ],
+        "origin": [
+          {
+            "origin": "simple",
+            "method": "GET",
+            "uri": "/warm.css",
+            "host": "cache.example.test",
+            "proto": "HTTP/1.1",
+            "headers": {},
+            "peer": "127.0.0.1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "prewarmed-hit",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "accept-ranges": "bytes",
+            "content-length": "35",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty",
+            "x-cdn-cache": "HIT",
+            "x-cdnca-config-version": "0a1b2005-0000-4000-8000-0000000000c1"
+          },
+          "body": {
+            "length": 35,
+            "sha256": "98f92712a24ec02a001a80c5e24695fdb9d569583153bcf74bea1ea8d8abaa73",
+            "text": "simple cache.example.test /warm.css"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "purge-site",
+      "kind": "task",
+      "task": {
+        "state": "succeeded",
+        "items": [
+          {
+            "target": "http://cache.example.test:18084/*",
+            "status": "success",
+            "code": "PURGED",
+            "affected": 2
+          }
+        ],
+        "origin": []
+      }
+    },
+    {
+      "id": "entries-after-site",
+      "kind": "cache_entries",
+      "cache": {
+        "count": 0,
+        "keys": []
+      }
+    }
+  ]
+}

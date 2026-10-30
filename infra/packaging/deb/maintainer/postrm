@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+case "${1:-}" in
+  remove|purge|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    ;;
+  *) printf 'reason_code=PKG_POSTREMOVE_FAILED unsupported postrm action %s\n' "${1:-missing}" >&2; exit 1 ;;
+esac
+
+# Default removal retains identity, configuration, state, backups, and logs.
+# Destructive purge remains the explicit guarded uninstall.sh --purge workflow.
+printf 'reason_code=PKG_STATE_RETAINED package metadata removed; node state retained\n'

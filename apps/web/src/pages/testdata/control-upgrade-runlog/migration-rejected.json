@@ -1,0 +1,80 @@
+{
+  "schema": "cdnca.control-plane-upgrade-runlog/v1",
+  "plan_id": "00000000-0000-4000-8000-000000000002",
+  "sequence": 42,
+  "started_at": 1800000060,
+  "attempts": 1,
+  "dropped": 0,
+  "entries": [
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "run_started",
+      "version": "1.5.0",
+      "attempt": 1
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "step_started",
+      "step": "expand"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "services_verified",
+      "version": "1.4.0"
+    },
+    {
+      "at": 1800000060,
+      "level": "info",
+      "event": "artifact_cached",
+      "version": "1.5.0",
+      "bytes": 20480
+    },
+    {
+      "at": 1800000060,
+      "level": "error",
+      "event": "lineage_rejected",
+      "reason": "migrations_not_append_only",
+      "version": "1.5.0"
+    },
+    {
+      "at": 1800000060,
+      "level": "error",
+      "event": "step_failed",
+      "step": "expand",
+      "reason": "candidate_rejected",
+      "error_code": "expand_failed"
+    },
+    {
+      "at": 1800000060,
+      "level": "error",
+      "event": "run_failed",
+      "error_code": "expand_failed"
+    }
+  ],
+  "programs": [
+    {
+      "unit": "cdnca-control-api.service",
+      "captured_at": 1800000060,
+      "trigger": "run_failed",
+      "unavailable": true,
+      "lines": []
+    },
+    {
+      "unit": "cdnca-agent-gateway.service",
+      "captured_at": 1800000060,
+      "trigger": "run_failed",
+      "unavailable": true,
+      "lines": []
+    },
+    {
+      "unit": "control-upgrade-runner",
+      "captured_at": 1800000060,
+      "trigger": "run_failed",
+      "unavailable": true,
+      "lines": []
+    }
+  ]
+}

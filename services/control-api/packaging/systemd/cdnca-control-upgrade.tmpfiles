@@ -1,0 +1,3 @@
+d /opt/cdnca/control-api 0700 root root -
+d /opt/cdnca/control-api/releases 0700 root root -
+d /var/lib/cdnca-control-upgrade 0700 root root -

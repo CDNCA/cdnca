@@ -1,0 +1,231 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/naxsi-sqli",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "SQL 注入函数特征（naxsi）",
+ "description": "参数、URL、请求头中的 xp_cmdshell、SLEEP(、BENCHMARK(、UNION…注释 等 SQL 注入函数特征即记录，可改为拦截或挑战。",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "log",
+    "block",
+    "challenge"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": []
+   }
+  }
+ },
+ "exports": [
+  "nx-sqli-args-r00",
+  "nx-sqli-args-r01",
+  "nx-sqli-cookie-r00",
+  "nx-sqli-cookie-r01",
+  "nx-sqli-path-r00",
+  "nx-sqli-path-r01",
+  "nx-sqli-referer-r00",
+  "nx-sqli-referer-r01",
+  "nx-sqli-user-agent-r00",
+  "nx-sqli-user-agent-r01"
+ ],
+ "rules": [
+  {
+   "id": "nx-sqli-args-r00",
+   "name": "参数匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:xp_(cmdshell|enumgroups|grantlogin|logevent|loginconfig|logininfo|msver|revokelogin|sprintf|sqlmaint|sscanf))|(?:(CHAR|CONCAT|CONCAT_WS)\\([0-9a-fx,]+\\))|(?:SLEEP(\\s+)?\\()|(?:\\bBENCHMARK\\b\\([0-9,]+.+\\)))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-args-r01",
+   "name": "参数匹配已知特征 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "args",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:\\b(UNION|INFORMATION_SCHEMA)\\b.*(#|--|\\*))|(?:(MD\\d|SHA\\d+)(\\s+)?\\()|(?:DBMS_PIPE|RECEIVE_MESSAGE|WAITFOR|DELAY))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-cookie-r00",
+   "name": "Cookie匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:xp_(cmdshell|enumgroups|grantlogin|logevent|loginconfig|logininfo|msver|revokelogin|sprintf|sqlmaint|sscanf))|(?:(CHAR|CONCAT|CONCAT_WS)\\([0-9a-fx,]+\\))|(?:SLEEP(\\s+)?\\()|(?:\\bBENCHMARK\\b\\([0-9,]+.+\\)))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-cookie-r01",
+   "name": "Cookie匹配已知特征 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "cookie",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:\\b(UNION|INFORMATION_SCHEMA)\\b.*(#|--|\\*))|(?:(MD\\d|SHA\\d+)(\\s+)?\\()|(?:DBMS_PIPE|RECEIVE_MESSAGE|WAITFOR|DELAY))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-path-r00",
+   "name": "路径匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:xp_(cmdshell|enumgroups|grantlogin|logevent|loginconfig|logininfo|msver|revokelogin|sprintf|sqlmaint|sscanf))|(?:(CHAR|CONCAT|CONCAT_WS)\\([0-9a-fx,]+\\))|(?:SLEEP(\\s+)?\\()|(?:\\bBENCHMARK\\b\\([0-9,]+.+\\)))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-path-r01",
+   "name": "路径匹配已知特征 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "path",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:\\b(UNION|INFORMATION_SCHEMA)\\b.*(#|--|\\*))|(?:(MD\\d|SHA\\d+)(\\s+)?\\()|(?:DBMS_PIPE|RECEIVE_MESSAGE|WAITFOR|DELAY))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-referer-r00",
+   "name": "Referer匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "referer",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:xp_(cmdshell|enumgroups|grantlogin|logevent|loginconfig|logininfo|msver|revokelogin|sprintf|sqlmaint|sscanf))|(?:(CHAR|CONCAT|CONCAT_WS)\\([0-9a-fx,]+\\))|(?:SLEEP(\\s+)?\\()|(?:\\bBENCHMARK\\b\\([0-9,]+.+\\)))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-referer-r01",
+   "name": "Referer匹配已知特征 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "referer",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:\\b(UNION|INFORMATION_SCHEMA)\\b.*(#|--|\\*))|(?:(MD\\d|SHA\\d+)(\\s+)?\\()|(?:DBMS_PIPE|RECEIVE_MESSAGE|WAITFOR|DELAY))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-user-agent-r00",
+   "name": "UA匹配已知特征 第 1 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:xp_(cmdshell|enumgroups|grantlogin|logevent|loginconfig|logininfo|msver|revokelogin|sprintf|sqlmaint|sscanf))|(?:(CHAR|CONCAT|CONCAT_WS)\\([0-9a-fx,]+\\))|(?:SLEEP(\\s+)?\\()|(?:\\bBENCHMARK\\b\\([0-9,]+.+\\)))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  },
+  {
+   "id": "nx-sqli-user-agent-r01",
+   "name": "UA匹配已知特征 第 2 组",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "user_agent",
+       "operator": "regex",
+       "values": [
+        "(?i)(?:(?:\\b(UNION|INFORMATION_SCHEMA)\\b.*(#|--|\\*))|(?:(MD\\d|SHA\\d+)(\\s+)?\\()|(?:DBMS_PIPE|RECEIVE_MESSAGE|WAITFOR|DELAY))"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "log"
+ }
+}

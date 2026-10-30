@@ -1,0 +1,290 @@
+{
+  "name": "websocket-range",
+  "description": "WebSocket 升级与回显（开/关）、Range 请求（单段/多段/越界/If-Range）透传。",
+  "covers": [
+    "WebSocket",
+    "Range"
+  ],
+  "facts": {
+    "document": {
+      "schema": "cdnca.edge.site-runtime/v2",
+      "configuration_scope_id": "0a1b2006-0000-4000-8000-000000000001",
+      "source_revision": 7,
+      "config_version_id": "0a1b2006-0000-4000-8000-0000000000c1",
+      "required_capabilities": [
+        {
+          "name": "http1",
+          "api_version": 1
+        },
+        {
+          "name": "ipv4",
+          "api_version": 1
+        },
+        {
+          "name": "ipv6",
+          "api_version": 1
+        },
+        {
+          "name": "site_runtime",
+          "api_version": 6
+        },
+        {
+          "name": "websocket",
+          "api_version": 1
+        }
+      ],
+      "sites": [
+        {
+          "id": "0a1b2006-0000-4000-8000-000000000101",
+          "revision": 1,
+          "domains": [
+            "ws.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18085",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18085,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o1",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19261,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": true,
+          "range": true,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        },
+        {
+          "id": "0a1b2006-0000-4000-8000-000000000102",
+          "revision": 1,
+          "domains": [
+            "nows.example.test"
+          ],
+          "listeners": [
+            {
+              "id": "l-18085",
+              "position": 0,
+              "address_family": "dual_stack",
+              "port": 18085,
+              "protocols": [
+                "http1"
+              ]
+            }
+          ],
+          "origin_pools": [
+            {
+              "id": "primary",
+              "position": 0,
+              "kind": "origin",
+              "algorithm": "round_robin",
+              "origins": [
+                {
+                  "id": "o2",
+                  "position": 0,
+                  "tier": "origin",
+                  "scheme": "http",
+                  "host": "127.0.0.1",
+                  "port": 19262,
+                  "weight": 1
+                }
+              ],
+              "retry": {
+                "methods": [
+                  "GET",
+                  "HEAD"
+                ],
+                "bodyless_only": true,
+                "response_not_started": true,
+                "retry_on": [
+                  "connect_error",
+                  "connect_timeout",
+                  "read_timeout",
+                  "http_502",
+                  "http_503",
+                  "http_504"
+                ],
+                "max_attempts": 1,
+                "connect_timeout_ms": 2000,
+                "read_timeout_ms": 5000,
+                "total_budget_ms": 10000
+              }
+            }
+          ],
+          "default_pool_id": "primary",
+          "websocket": false,
+          "range": false,
+          "l2": {
+            "enabled": false,
+            "probe_interval_ms": 10000,
+            "failure_threshold": 3,
+            "recovery_threshold": 3,
+            "single_half_open_probe": true,
+            "max_hops": 1
+          }
+        }
+      ]
+    },
+    "node": {
+      "health_port": 18905
+    }
+  },
+  "origins": [
+    {
+      "name": "ws",
+      "address": "127.0.0.1:19261",
+      "websocket": true,
+      "routes": [
+        {
+          "path": "/file",
+          "body": "0123456789abcdefghij",
+          "ranges": true,
+          "headers": {
+            "ETag": "\"e1\""
+          }
+        }
+      ]
+    },
+    {
+      "name": "nows",
+      "address": "127.0.0.1:19262",
+      "websocket": true,
+      "routes": [
+        {
+          "path": "/file",
+          "body": "0123456789abcdefghij",
+          "ranges": true
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "ws-echo",
+      "kind": "websocket",
+      "port": 18085,
+      "host": "ws.example.test",
+      "path": "/socket",
+      "message": "hello"
+    },
+    {
+      "id": "ws-disabled",
+      "kind": "websocket",
+      "port": 18085,
+      "host": "nows.example.test",
+      "path": "/socket",
+      "message": "hello"
+    },
+    {
+      "id": "range-single",
+      "port": 18085,
+      "host": "ws.example.test",
+      "path": "/file",
+      "headers": {
+        "Range": "bytes=2-5"
+      }
+    },
+    {
+      "id": "range-suffix",
+      "port": 18085,
+      "host": "ws.example.test",
+      "path": "/file",
+      "headers": {
+        "Range": "bytes=-3"
+      }
+    },
+    {
+      "id": "range-multi",
+      "port": 18085,
+      "host": "ws.example.test",
+      "path": "/file",
+      "headers": {
+        "Range": "bytes=0-1,4-5"
+      }
+    },
+    {
+      "id": "range-unsatisfiable",
+      "port": 18085,
+      "host": "ws.example.test",
+      "path": "/file",
+      "headers": {
+        "Range": "bytes=100-200"
+      }
+    },
+    {
+      "id": "range-if-range",
+      "port": 18085,
+      "host": "ws.example.test",
+      "path": "/file",
+      "headers": {
+        "Range": "bytes=0-3",
+        "If-Range": "\"other\""
+      }
+    },
+    {
+      "id": "range-off-site",
+      "port": 18085,
+      "host": "nows.example.test",
+      "path": "/file",
+      "headers": {
+        "Range": "bytes=2-5"
+      }
+    }
+  ],
+  "mask": {
+    "origin_headers": [
+      "sec-websocket-key"
+    ],
+    "patterns": [
+      "boundary=[0-9a-f]+",
+      "--[0-9a-f]{40,}"
+    ]
+  }
+}

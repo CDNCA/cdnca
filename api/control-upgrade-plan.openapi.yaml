@@ -1,0 +1,700 @@
+openapi: 3.1.0
+info:
+  title: CDNCA Control Plane Upgrade Plan API
+  version: 0.1.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: Signed control-plane plan publication, native execution status, and authenticated HA drain coordination.
+servers:
+  - url: /
+paths:
+  /v1/admin/control-upgrade-plan:
+    get:
+      operationId: getNativeControlUpgradePlanStatus
+      summary: Read native standalone publication and matching execution status
+      description: >-
+        Available only in explicitly enabled native-standalone mode. Requires a platform
+        session with control.upgrades.manage and rejects every query parameter. This
+        no-store projection does not expose signed bundle bytes, download URLs, tokens,
+        process identifiers, or filesystem paths. Unknown, corrupt, stale, or mismatched
+        execution evidence is unavailable, never an invented not_started or success.
+        Publication revision is zero exactly when publication is null. A running or
+        completed execution is bound to that publication's plan, bundle digest, release
+        sequence and, for a receipt, its versions and native-standalone target.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [control.upgrades.manage]
+      responses:
+        '200':
+          description: Installation-bound publication, execution, and runtime readiness.
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativePlanStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+    post:
+      operationId: publishControlUpgradePlan
+      summary: Publish a verified signed control-plane upgrade bundle
+      description: >-
+        Requires a platform session with control.upgrades.manage. If-Match is the current
+        publication revision and Idempotency-Key is bound to the exact signed bundle.
+        The bundle is verified against the local License trust snapshot before the
+        Kubernetes Secret or installation-bound systemd PostgreSQL repository is
+        updated with revision compare-and-swap. Systemd HA uses the same repository
+        as the internal plan source and does not relax its strict-majority quorum.
+        Native-standalone uses a separate root-owned executor, package digest and
+        fail-closed maintenance gate; a new publication requires a trusted ready runner
+        and recent authenticated plan-source read. It may interrupt the single management
+        host and is not an HA upgrade. An exact authenticated native replay remains a
+        read-only operation during drain and after the installed version changes: raw
+        bundle bytes, idempotency key, expected revision, actor and scope must match the
+        durable publication. The original publication receipt and ETag are returned.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [control.upgrades.manage]
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, minProperties: 1, additionalProperties: true}
+      responses:
+        '201': {$ref: '#/components/responses/PublicationCreated'}
+        '200': {$ref: '#/components/responses/PublicationReplayed'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/control-upgrade-plan/run-log:
+    get:
+      operationId: getNativeControlUpgradeRunLog
+      summary: Read the native master upgrade script log and service-log tail
+      description: >-
+        Available only in native-standalone mode. Requires a platform session with
+        control.upgrades.manage and rejects every query parameter. The root-owned runner
+        publishes a bounded log for the current execution: stable event and reason codes
+        (rendered per locale by the console, never server text) and, at terminal points,
+        the last journal lines of the control API, gateway and runner. Journal lines are
+        stripped of control characters and redacted (URL query strings and userinfo,
+        bearer/basic credentials, JWTs, secret-named flags and key/value pairs, private
+        keys) by the runner and again before this response. Download events record only
+        the artifact host. A log of another plan or sequence, or one that is missing or
+        corrupt, is state unavailable with a null run_log.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [control.upgrades.manage]
+      responses:
+        '200':
+          description: The current execution's run log, or unavailable.
+          headers:
+            Cache-Control: {schema: {type: string, const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeRunLogStatus'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/control-upgrade-plan/options:
+    get:
+      operationId: listNativeControlUpgradeOptions
+      summary: List the versions the master may upgrade to (version picker)
+      description: >-
+        Available only in native-standalone mode. Requires a platform session with
+        control.upgrades.manage and rejects every query parameter. The License service lists
+        the installation's selectable versions for the running control API version and
+        protocol. Without a License client the answer is 503 plan_source_unavailable; a
+        License service that cannot list versions is 503 upgrade_options_unavailable.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [control.upgrades.manage]
+      responses:
+        '200':
+          description: The License service's upgrade options.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/NativeUpgradeOptions'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/admin/control-upgrade-plan/issue:
+    post:
+      operationId: issueNativeControlUpgradePlan
+      summary: Have the License service issue a signed plan and publish it
+      description: >-
+        Available only in native-standalone mode. Requires a platform session with
+        control.upgrades.manage, exactly one Idempotency-Key and no query parameter. The
+        control API asks the License service for a parent upgrade grant (the channel target,
+        the pin, or requested_artifact_id from the version picker) and a signed plan artifact
+        bundle, then publishes it as POST /v1/admin/control-upgrade-plan does, at the current
+        publication revision. A target the License service refuses is 409
+        upgrade_target_blocked with its reason_code (for example same_version when the
+        parent grant is a reinstall, downgrade_not_supported for a rollback). Any other
+        License business refusal (403/409/422 with a code) is passed through as 409 with the
+        License code, for example upgrade_plan_artifact_bundle_unavailable or
+        installation_banned. Only an unreachable License service, a timeout or a License 5xx
+        is 503 control_upgrade_state_unavailable. Without a License client the answer is
+        503 plan_source_unavailable; a draining master is 503 control_upgrade_draining.
+      security:
+        - bearerAuth: []
+      x-required-permissions: [control.upgrades.manage]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                requested_artifact_id:
+                  type: string
+                  format: uuid
+                  description: >-
+                    The chosen option's artifact_id (lower case canonical UUID); absent keeps the
+                    channel target or the pin.
+      responses:
+        '201': {$ref: '#/components/responses/PublicationCreated'}
+        '200': {$ref: '#/components/responses/PublicationReplayed'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409':
+          description: >-
+            version_conflict, idempotency_conflict, control_upgrade_plan_conflict, a
+            passed-through License refusal code (ErrorEnvelope), or upgrade_target_blocked
+            with reason_code.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorEnvelope'
+                  - $ref: '#/components/schemas/UpgradeTargetBlockedError'
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/internal/control-upgrade/plan:
+    get:
+      operationId: getInternalControlUpgradePlan
+      summary: Fetch the latest verified signed control-plane upgrade plan
+      description: >-
+        Internal handler authenticates the mounted opaque bearer token.
+        Production deployment must additionally enforce TLS 1.3 client certificate
+        verification on a dedicated ingress and deny this path at public ingress;
+        configuring a client certificate alone does not establish server-side mTLS.
+        Operator and administrator sessions are not accepted. If-None-Match may replay
+        the exact strong ETag returned by a prior successful response.
+        A successful authorized read of a repository with no publication returns 204
+        with installation and operation bindings. Database errors and corrupt or partial
+        documents remain 503. A runner with a previously verified cached plan must reject
+        204 as lost publication rather than treat it as healthy rollback to an empty state.
+      security:
+        - internalBearer: []
+      parameters:
+        - $ref: '#/components/parameters/IfNoneMatch'
+      responses:
+        '200': {$ref: '#/components/responses/InternalPlanOK'}
+        '204': {$ref: '#/components/responses/InternalPlanNotPublished'}
+        '304': {$ref: '#/components/responses/InternalPlanNotModified'}
+        '401': {$ref: '#/components/responses/InternalPlanUnauthorized'}
+        '404': {$ref: '#/components/responses/InternalPlanNotFound'}
+        '405': {$ref: '#/components/responses/InternalPlanMethodNotAllowed'}
+        '503': {$ref: '#/components/responses/InternalPlanUnavailable'}
+  /v1/internal/control-upgrade/drain:
+    post:
+      operationId: drainControlPlane
+      summary: Enter the fail-closed write drain after replica quorum
+      security:
+        - internalBearer: []
+      requestBody: {$ref: '#/components/requestBodies/PlanID'}
+      responses:
+        '200': {$ref: '#/components/responses/ControlSnapshot'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '503': {$ref: '#/components/responses/QuorumUnavailable'}
+  /v1/internal/control-upgrade/resume:
+    post:
+      operationId: resumeControlPlane
+      summary: Resume writes after target or rollback replica quorum
+      security:
+        - internalBearer: []
+      requestBody: {$ref: '#/components/requestBodies/PlanID'}
+      responses:
+        '200':
+          description: Durable applied or rolled-back quorum receipt.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ControlReceipt'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '415': {$ref: '#/components/responses/UnsupportedMediaType'}
+        '503': {$ref: '#/components/responses/QuorumUnavailable'}
+  /v1/internal/control-upgrade/health:
+    get:
+      operationId: observeControlPlaneUpgradeHealth
+      summary: Register this replica and return the durable quorum snapshot
+      security:
+        - internalBearer: []
+      responses:
+        '200': {$ref: '#/components/responses/ControlSnapshot'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+  /v1/internal/control-upgrade/version:
+    get:
+      operationId: getControlPlaneReplicaVersion
+      summary: Read this replica's embedded version and immutable image digest
+      security:
+        - internalBearer: []
+      responses:
+        '200':
+          description: Replica identity and immutable artifact facts.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ReplicaFacts'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/ServiceUnavailable'}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: session-token
+    internalBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-256-bit-token
+      description: Mounted from the existing plan-source Secret and never accepted as an operator session.
+  parameters:
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: {type: string, pattern: '^"(0|[1-9][0-9]*)"$'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 128}
+    IfNoneMatch:
+      name: If-None-Match
+      in: header
+      required: false
+      description: Exact strong ETag returned by the latest successful plan response.
+      schema: {type: string, pattern: '^"[1-9][0-9]*:[0-9a-f]{64}"$'}
+  requestBodies:
+    PlanID:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [plan_id]
+            properties:
+              plan_id: {type: string, format: uuid}
+  schemas:
+    NativePlanStatus:
+      type: object
+      additionalProperties: false
+      required: [schema, observed_at, mode, publication_revision, publication, execution, runtime]
+      properties:
+        schema: {type: string, const: cdnca.native-control-upgrade-status/v1}
+        observed_at: {type: string, format: date-time}
+        mode: {type: string, const: native-standalone}
+        publication_revision: {type: integer, format: int64, minimum: 0}
+        publication:
+          oneOf:
+            - {$ref: '#/components/schemas/PublicationReceipt'}
+            - {type: 'null'}
+        execution: {$ref: '#/components/schemas/NativeExecutionStatus'}
+        runtime:
+          type: object
+          additionalProperties: false
+          required: [ready, reason]
+          properties:
+            ready: {type: boolean}
+            reason:
+              type: string
+              enum: [ready, control_upgrade_runner_unconfirmed, control_upgrade_draining, execution_unavailable]
+    NativeExecutionStatus:
+      type: object
+      additionalProperties: false
+      required: [state, phase, receipt]
+      properties:
+        state: {type: string, enum: [not_started, running, completed, unavailable]}
+        phase:
+          type: [string, 'null']
+          enum: [null, verified, expanded, preflighted, drained, activated, healthy, contracted, rolling_back, completed, rolled_back, failed]
+        receipt:
+          oneOf:
+            - {$ref: '#/components/schemas/NativeExecutionReceipt'}
+            - {type: 'null'}
+      description: >-
+        not_started and unavailable have null phase and receipt. running has a
+        nonterminal phase and null receipt. completed has completed, rolled_back,
+        or failed phase with the corresponding applied, rolled_back, or failed receipt.
+    NativeRunLogStatus:
+      type: object
+      additionalProperties: false
+      required: [schema, observed_at, state, run_log]
+      properties:
+        schema: {type: string, const: cdnca.native-control-upgrade-runlog/v1}
+        observed_at: {type: string, format: date-time}
+        state: {type: string, enum: [available, unavailable]}
+        run_log:
+          oneOf:
+            - {$ref: '#/components/schemas/NativeRunLog'}
+            - {type: 'null'}
+      description: available has a run_log bound to the current execution's plan and sequence; unavailable has null.
+    NativeRunLog:
+      type: object
+      additionalProperties: false
+      required: [schema, plan_id, sequence, started_at, attempts, dropped, entries, programs]
+      properties:
+        schema: {type: string, const: cdnca.control-plane-upgrade-runlog/v1}
+        plan_id: {type: string, minLength: 1, maxLength: 128}
+        sequence: {type: integer, format: int64, minimum: 1}
+        started_at: {type: integer, format: int64, minimum: 1, description: Unix seconds.}
+        attempts: {type: integer, minimum: 1, description: Runs of this plan; above 1 after a retry or runner restart.}
+        dropped: {type: integer, minimum: 0, description: Entries removed between the first 40 and the newest to stay within 400.}
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 400
+          items: {$ref: '#/components/schemas/NativeRunLogEntry'}
+        programs:
+          type: array
+          maxItems: 3
+          items: {$ref: '#/components/schemas/NativeRunLogProgram'}
+    NativeRunLogEntry:
+      type: object
+      additionalProperties: false
+      required: [at, level, event]
+      description: >-
+        One runner step event in time order. event, step and reason are stable
+        lower_snake_case codes such as artifact_download_failed / http_status,
+        lineage_rejected / previous_commit_mismatch or health_check_timeout /
+        control_api_not_ready. Health waits name the failing check
+        (control_api_not_ready, agent_gateway_not_ready, console_index_not_ready,
+        console_index_mismatch) with its host and http_status (0: no response).
+        Clients map unknown codes to a generic line.
+      properties:
+        at: {type: integer, format: int64, minimum: 1, description: Unix seconds.}
+        level: {type: string, enum: [info, warning, error]}
+        event: {$ref: '#/components/schemas/RunLogCode'}
+        step: {$ref: '#/components/schemas/RunLogCode'}
+        reason: {$ref: '#/components/schemas/RunLogCode'}
+        error_code: {type: string, pattern: '^[a-z][a-z0-9_]{0,95}$'}
+        version: {type: string, maxLength: 64}
+        host: {type: string, maxLength: 253, description: 'Artifact or health-check host[:port] only; never a path or query.'}
+        unit: {type: string, maxLength: 127}
+        bytes: {type: integer, format: int64, minimum: 0}
+        duration_ms: {type: integer, format: int64, minimum: 0}
+        http_status: {type: integer, minimum: 0, maximum: 999}
+        attempt: {type: integer, minimum: 0}
+        count: {type: integer, minimum: 0}
+        migrations:
+          type: array
+          minItems: 1
+          maxItems: 64
+          description: Append-only migration identifiers a database step covers (migrations_pending, database_migrated).
+          items: {type: string, maxLength: 96, pattern: '^[0-9]{3}_[a-z0-9]+(?:_[a-z0-9]+)*$'}
+    NativeRunLogProgram:
+      type: object
+      additionalProperties: false
+      required: [unit, captured_at, trigger, lines]
+      description: Latest redacted journal tail of one unit; unavailable when the journal could not be read.
+      properties:
+        unit: {type: string, minLength: 1, maxLength: 127}
+        captured_at: {type: integer, format: int64, minimum: 1}
+        trigger: {$ref: '#/components/schemas/RunLogCode'}
+        unavailable: {type: boolean}
+        lines:
+          type: array
+          maxItems: 80
+          items: {type: string, maxLength: 512}
+    RunLogCode: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}
+    NativeExecutionReceipt:
+      type: object
+      additionalProperties: false
+      required: [id, plan_id, bundle_sha256, sequence, target, current_version, target_version, result, completed_at]
+      properties:
+        id: {type: string, minLength: 1}
+        plan_id: {type: string, format: uuid}
+        bundle_sha256: {$ref: '#/components/schemas/SHA256'}
+        sequence: {type: integer, format: int64, minimum: 1}
+        target: {type: string, const: native-standalone}
+        current_version: {type: string, minLength: 1}
+        target_version: {type: string, minLength: 1}
+        result: {type: string, enum: [applied, rolled_back, failed]}
+        error_code: {type: string}
+        completed_at: {type: integer, format: int64, minimum: 1}
+    PublicationReceipt:
+      type: object
+      additionalProperties: false
+      required: [schema, receipt_id, plan_id, bundle_sha256, publication_revision,
+        expected_revision, channel_revision, release_sequence, installation_id,
+        component, current_version, current_digest, target_version, target_digest,
+        rollback_version, rollback_digest, protocol_version, idempotency_sha256,
+        request_id, actor_user_id, actor_scope_id, published_at]
+      properties:
+        schema: {type: string, const: cdnca.control-plane-upgrade-publication/v1}
+        receipt_id: {type: string}
+        plan_id: {type: string, format: uuid}
+        bundle_sha256: {$ref: '#/components/schemas/SHA256'}
+        publication_revision: {type: integer, format: int64, minimum: 1}
+        expected_revision: {type: integer, format: int64, minimum: 0}
+        channel_revision: {type: integer, format: int64, minimum: 1}
+        release_sequence: {type: integer, format: int64, minimum: 1}
+        installation_id: {type: string, format: uuid}
+        component: {type: string, const: control-api}
+        current_version: {type: string}
+        current_digest: {$ref: '#/components/schemas/SHA256'}
+        target_version: {type: string}
+        target_digest: {$ref: '#/components/schemas/SHA256'}
+        rollback_version: {type: string}
+        rollback_digest: {$ref: '#/components/schemas/SHA256'}
+        protocol_version: {type: integer, minimum: 1}
+        idempotency_sha256: {$ref: '#/components/schemas/SHA256'}
+        request_id: {type: string}
+        actor_user_id: {type: string, format: uuid}
+        actor_scope_id: {type: string, format: uuid}
+        published_at: {type: integer, format: int64, minimum: 1}
+    ReplicaFacts:
+      type: object
+      additionalProperties: false
+      required: [replica_id, version, digest]
+      properties:
+        replica_id: {type: string}
+        version: {type: string}
+        digest: {$ref: '#/components/schemas/SHA256'}
+    ReplicaObservation:
+      allOf:
+        - $ref: '#/components/schemas/ReplicaFacts'
+        - type: object
+          additionalProperties: false
+          required: [observed_at]
+          properties:
+            replica_id: {type: string}
+            version: {type: string}
+            digest: {$ref: '#/components/schemas/SHA256'}
+            observed_at: {type: integer, format: int64, minimum: 1}
+    ControlSnapshot:
+      type: object
+      additionalProperties: false
+      required: [generation, phase, expected_replicas, quorum, healthy_replicas, replicas]
+      properties:
+        generation: {type: integer, format: int64, minimum: 0}
+        phase: {type: string, enum: [active, draining]}
+        plan_id: {type: string, format: uuid}
+        publication_revision: {type: integer, format: int64, minimum: 0}
+        expected_replicas: {type: integer, minimum: 1}
+        quorum: {type: integer, minimum: 1}
+        healthy_replicas: {type: integer, minimum: 0}
+        replicas:
+          type: array
+          items: {$ref: '#/components/schemas/ReplicaObservation'}
+        receipt: {$ref: '#/components/schemas/ControlReceipt'}
+    ControlReceipt:
+      type: object
+      additionalProperties: false
+      required: [receipt_id, plan_id, generation, result, version, digest, quorum, completed_at]
+      properties:
+        receipt_id: {type: string}
+        plan_id: {type: string, format: uuid}
+        generation: {type: integer, format: int64, minimum: 1}
+        result: {type: string, enum: [applied, rolled_back]}
+        version: {type: string}
+        digest: {$ref: '#/components/schemas/SHA256'}
+        quorum: {type: integer, minimum: 1}
+        completed_at: {type: integer, format: int64, minimum: 1}
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, request_id]
+          properties:
+            code: {type: string}
+            request_id: {type: string}
+    UpgradeTargetBlockedError:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, reason_code, request_id]
+          properties:
+            code: {type: string, const: upgrade_target_blocked}
+            reason_code: {type: string}
+            request_id: {type: string}
+    NativeUpgradeOptions:
+      type: object
+      additionalProperties: false
+      required: [schema, observed_at, options]
+      properties:
+        schema: {type: string, const: cdnca.native-control-upgrade-options/v1}
+        observed_at: {type: string, format: date-time}
+        options: {$ref: '#/components/schemas/UpgradeOptions'}
+    UpgradeOptions:
+      type: object
+      additionalProperties: false
+      required: [schema, installation_id, component, current_version, current_schema_head, target_mode, items]
+      properties:
+        schema: {type: string}
+        installation_id: {type: string}
+        component: {type: string}
+        current_version: {type: string}
+        current_schema_head: {type: [integer, 'null']}
+        target_mode: {type: string}
+        items:
+          type: [array, 'null']
+          items: {$ref: '#/components/schemas/UpgradeOption'}
+    UpgradeOption:
+      type: object
+      additionalProperties: false
+      required: [artifact_id, version, release_notes, published_at, operation, control_schema_head,
+        channel_target, pinned, selectable, reason]
+      properties:
+        artifact_id: {type: string}
+        version: {type: string}
+        release_notes: {type: string}
+        published_at: {type: integer, format: int64}
+        operation: {type: string}
+        control_schema_head: {type: [integer, 'null']}
+        channel_target: {type: boolean}
+        pinned: {type: boolean}
+        selectable: {type: boolean}
+        reason: {type: string}
+    SHA256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'
+    SignedUpgradePlanArtifactBundle:
+      type: object
+      additionalProperties: false
+      required: [algorithm, key_id, bundle, signature]
+      properties:
+        algorithm: {type: string, const: Ed25519}
+        key_id: {type: string, minLength: 1, maxLength: 128}
+        bundle: {type: object, minProperties: 1, additionalProperties: true}
+        signature: {type: string, pattern: '^[A-Za-z0-9_-]{86}$'}
+  responses:
+    InternalPlanNotPublished:
+      description: Authorized repository read succeeded, but no upgrade has been published. There is no body or ETag.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+        X-CDNCA-Installation-ID: {schema: {type: string, format: uuid}}
+        X-CDNCA-Control-Upgrade-Operation: {schema: {type: string, const: control-upgrade}}
+    InternalPlanOK:
+      description: Exact verified signed plan bytes and their monotonic revision/digest ETag.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+        ETag: {schema: {type: string, pattern: '^"[1-9][0-9]*:[0-9a-f]{64}"$'}}
+        X-CDNCA-Installation-ID: {schema: {type: string, format: uuid}}
+        X-CDNCA-Control-Upgrade-Operation: {schema: {type: string, const: control-upgrade}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/SignedUpgradePlanArtifactBundle'}
+    InternalPlanNotModified:
+      description: The caller already holds the exact current signed plan.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+        ETag: {schema: {type: string, pattern: '^"[1-9][0-9]*:[0-9a-f]{64}"$'}}
+        X-CDNCA-Installation-ID: {schema: {type: string, format: uuid}}
+        X-CDNCA-Control-Upgrade-Operation: {schema: {type: string, const: control-upgrade}}
+    InternalPlanUnauthorized:
+      description: The internal bearer token is missing or does not match.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+      content:
+        text/plain:
+          schema: {type: string, const: "unauthorized\n"}
+    InternalPlanNotFound:
+      description: The requested path or query does not match the internal plan source.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+      content:
+        text/plain:
+          schema: {type: string, const: "404 page not found\n"}
+    InternalPlanMethodNotAllowed:
+      description: Only GET is accepted by the internal plan source.
+      headers:
+        Allow: {schema: {type: string, const: GET}}
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+      content:
+        text/plain:
+          schema: {type: string, const: "method not allowed\n"}
+    InternalPlanUnavailable:
+      description: No valid installation-bound signed plan is available.
+      headers:
+        Cache-Control: {schema: {type: string, const: no-store}}
+        X-Content-Type-Options: {schema: {type: string, const: nosniff}}
+      content:
+        text/plain:
+          schema: {type: string, const: "plan unavailable\n"}
+    PublicationCreated:
+      description: A new monotonic publication was persisted.
+      headers:
+        ETag: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PublicationReceipt'}
+    PublicationReplayed:
+      description: The exact idempotent publication was replayed without another write.
+      headers:
+        ETag: {schema: {type: string}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PublicationReceipt'}
+    ControlSnapshot:
+      description: Durable state plus fresh replica observations.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ControlSnapshot'}
+    BadRequest: {$ref: '#/components/responses/ErrorResponse'}
+    Unauthorized: {$ref: '#/components/responses/ErrorResponse'}
+    Forbidden: {$ref: '#/components/responses/ErrorResponse'}
+    Conflict: {$ref: '#/components/responses/ErrorResponse'}
+    UnsupportedMediaType: {$ref: '#/components/responses/ErrorResponse'}
+    ServiceUnavailable: {$ref: '#/components/responses/ErrorResponse'}
+    QuorumUnavailable:
+      description: Replica quorum has not been observed yet; the caller may retry.
+      headers:
+        Retry-After: {schema: {type: integer, minimum: 1}}
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ErrorEnvelope'
+              - type: object
+                properties:
+                  state: {$ref: '#/components/schemas/ControlSnapshot'}
+    ErrorResponse:
+      description: Stable error code and request identifier.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorEnvelope'}

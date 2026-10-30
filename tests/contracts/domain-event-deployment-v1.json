@@ -1,0 +1,23 @@
+{
+  "specversion": "1.0",
+  "id": "019b143c-7e64-7cc6-b886-a1354a006291",
+  "source": "/control-plane/plugin-webhooks",
+  "type": "io.cdnca.deployment.v1.status_changed",
+  "subject": "deployment/019b143c-7e64-7cc6-b886-a1354a006292",
+  "time": "2026-07-22T08:30:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "https://schemas.cdnca.example/marketplace/v1/domain-event.schema.json",
+  "tenant_id": "019b143c-7e64-7cc6-b886-a1354a006283",
+  "request_id": "019b143c-7e64-7cc6-b886-a1354a006294",
+  "sequence": 18,
+  "data": {
+    "subscription_id": "019b143c-7e64-7cc6-b886-a1354a006285",
+    "subject_sequence": 3,
+    "deployment_id": "019b143c-7e64-7cc6-b886-a1354a006292",
+    "rollout_id": "019b143c-7e64-7cc6-b886-a1354a006293",
+    "node_id": "019b143c-7e64-7cc6-b886-a1354a006296",
+    "attempt": 1,
+    "transition_sequence": 3,
+    "state": "healthy"
+  }
+}

@@ -1,0 +1,428 @@
+{
+  "schema": "cdnca.edge-golden.observation/v1",
+  "scenario": "access-logs",
+  "scenario_sha256": "e6860cf74b8295411b270c6f30515dcd30eff05c89a6403d87f10df0565d57ce",
+  "steps": [
+    {
+      "id": "ok",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "29",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 29,
+            "sha256": "040a6c62b14b7e2a6a09e66eb477dcddad3198026ed48f80558a6ca1be899bb6",
+            "text": "logs logs.example.test /a?b=1"
+          },
+          "origin": [
+            {
+              "origin": "logs",
+              "method": "GET",
+              "uri": "/a?b=1",
+              "host": "logs.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "referer": "http://r.example.test/",
+                "user-agent": "golden-log/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wildcard",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "27",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 27,
+            "sha256": "26964e75221478b48f1def571ea25c7b9e28845f09525620dbfde168ebf888bd",
+            "text": "logs x.logs.example.test /w"
+          },
+          "origin": [
+            {
+              "origin": "logs",
+              "method": "GET",
+              "uri": "/w",
+              "host": "x.logs.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "post",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 200,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "28",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 28,
+            "sha256": "f672d0b6f2e756d923d5e9294173a44f097286ca4af7df0d127702e411c1244b",
+            "text": "logs logs.example.test /form"
+          },
+          "origin": [
+            {
+              "origin": "logs",
+              "method": "POST",
+              "uri": "/form",
+              "host": "logs.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "content-length": "3",
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "body": {
+                "length": 3,
+                "sha256": "9246d2c0e0f213ae2b86ac78a432a55edfd31d07a072331d58763c08d5292212",
+                "text": "k=v"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "origin-404",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 404,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "2",
+            "content-type": "text/plain; charset=utf-8",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 2,
+            "sha256": "4ce7bcf6e148d5048b8ebb6760ef1b0b11f67ac0a1d1aad41e31087a1b6a1db7",
+            "text": "nf"
+          },
+          "origin": [
+            {
+              "origin": "logs",
+              "method": "GET",
+              "uri": "/missing",
+              "host": "logs.example.test",
+              "proto": "HTTP/1.1",
+              "headers": {
+                "user-agent": "cdnca-edge-golden/1",
+                "x-forwarded-for": "127.0.0.1",
+                "x-forwarded-proto": "http",
+                "x-real-ip": "127.0.0.1"
+              },
+              "peer": "127.0.0.1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "blocked",
+      "kind": "http",
+      "responses": [
+        {
+          "status": 403,
+          "proto": "HTTP/1.1",
+          "headers": {
+            "content-length": "150",
+            "content-type": "text/html",
+            "date": "<masked>",
+            "server": "openresty"
+          },
+          "body": {
+            "length": 150,
+            "sha256": "32cbc376cd769a26d108ae31678f975b863b7066e110c59d9a212c7281bd8c81",
+            "text": "<html>\r\n<head><title>403 Forbidden</title></head>\r\n<body>\r\n<center><h1>403 Forbidden</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n"
+          },
+          "origin": []
+        }
+      ]
+    },
+    {
+      "id": "drain",
+      "kind": "logs",
+      "logs": [
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b200f-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "logs.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/a",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 126,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 184,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b200f-0000-4000-8000-000000000101",
+            "status_code": 200,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b200f-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "x.logs.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/w",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 98,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 182,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b200f-0000-4000-8000-000000000101",
+            "status_code": 200,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b200f-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "logs.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "POST",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/form",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 122,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 183,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b200f-0000-4000-8000-000000000101",
+            "status_code": 200,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": false,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b200f-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "logs.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/missing",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 102,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 163,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b200f-0000-4000-8000-000000000101",
+            "status_code": 404,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "access",
+          "fields": {
+            "blocked": true,
+            "cache_status": "BYPASS",
+            "client_browser": "other",
+            "client_ip": "127.0.0.1",
+            "client_os": "other",
+            "config_version_id": "0a1b200f-0000-4000-8000-0000000000c1",
+            "connection": "<masked>",
+            "connection_requests": "<masked>",
+            "duration_us": "<masked>",
+            "host": "logs.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/blocked/x",
+            "protocol": "HTTP/1.1",
+            "request_body": null,
+            "request_bytes": 104,
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 297,
+            "response_headers": null,
+            "schema_version": 1,
+            "site_id": "0a1b200f-0000-4000-8000-000000000101",
+            "status_code": 403,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "access.v1"
+          }
+        },
+        {
+          "stream": "security",
+          "fields": {
+            "action": "block",
+            "client_ip": "127.0.0.1",
+            "config_version_id": "0a1b200f-0000-4000-8000-0000000000c1",
+            "detector": "",
+            "host": "logs.example.test",
+            "installation_id": "",
+            "ja4": "",
+            "listen_port": 18094,
+            "matched": "",
+            "method": "GET",
+            "node_id": "",
+            "occurred_at": "<masked>",
+            "origin_connect_us": "<masked>",
+            "origin_first_byte_us": "<masked>",
+            "origin_total_us": "<masked>",
+            "path": "/blocked/x",
+            "policy_id": "0a1b200f-0000-4000-8000-0000000000d1",
+            "protocol": "http",
+            "request_body": null,
+            "request_body_excerpt": "",
+            "request_bytes": 104,
+            "request_class": "standard",
+            "request_headers": null,
+            "request_id": "<masked>",
+            "response_body": null,
+            "response_bytes": 297,
+            "response_headers": null,
+            "rule_id": "0a1b200f-0000-4000-8000-0000000000e1",
+            "schema_version": 1,
+            "security_type": "waf",
+            "severity": "high",
+            "site_id": "0a1b200f-0000-4000-8000-000000000101",
+            "status_code": 403,
+            "task_id": null,
+            "tenant_id": "0a1b9999-0000-4000-8000-000000000003",
+            "trace_id": "",
+            "type": "security.v1",
+            "user_agent": "cdnca-edge-golden/1"
+          }
+        }
+      ]
+    }
+  ]
+}

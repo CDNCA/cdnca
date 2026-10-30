@@ -1,0 +1,140 @@
+From 7c7363266d54bc3836c1d13d1ed1e1d93ee9ed98 Mon Sep 17 00:00:00 2001
+From: Sergey Kandaurov <pluknet@nginx.com>
+Date: Tue, 8 Sep 2026 19:56:38 +0000
+Subject: [PATCH] QUIC: registering the compat extension in all SSL contexts
+
+With the OpenSSL compatibility layer, the transport parameters custom
+TLS extension used to be registered only in SSL contexts of virtual
+servers reachable over QUIC.
+
+The ClientHello callback introduced in 0373fe5d9 (1.29.2) is called
+by OpenSSL between collecting and parsing extensions, so the custom
+extensions may not match the expected number if the SSL context was
+replaced with SSL_set_SSL_CTX().
+
+The fix is to register the extension in all SSL contexts, including
+those that cannot be reached over QUIC, so that the array bounds are
+preserved; the compatibility layer as a whole is initialized only
+if the configuration has QUIC listeners.  The keylog callback,
+meaningful for QUIC connections, is kept on QUIC addresses.
+
+Reported by Banny Liao.
+---
+ .../quic/ngx_event_quic_openssl_compat.c      |  9 +++--
+ .../quic/ngx_event_quic_openssl_compat.h      |  3 +-
+ src/http/modules/ngx_http_ssl_module.c        | 36 ++++++++++++++++---
+ 3 files changed, 41 insertions(+), 7 deletions(-)
+
+diff --git a/src/event/quic/ngx_event_quic_openssl_compat.c b/src/event/quic/ngx_event_quic_openssl_compat.c
+index c5f4a0f74d..933cd7670f 100644
+--- a/src/event/quic/ngx_event_quic_openssl_compat.c
++++ b/src/event/quic/ngx_event_quic_openssl_compat.c
+@@ -70,11 +70,16 @@ static ngx_int_t ngx_quic_compat_create_record(ngx_quic_compat_record_t *rec,
+     ngx_str_t *res);
+ 
+ 
+-ngx_int_t
+-ngx_quic_compat_init(ngx_conf_t *cf, SSL_CTX *ctx)
++void
++ngx_quic_compat_keylog_init(SSL_CTX *ctx)
+ {
+     SSL_CTX_set_keylog_callback(ctx, ngx_quic_compat_keylog_callback);
++}
+ 
++
++ngx_int_t
++ngx_quic_compat_ext_init(ngx_conf_t *cf, SSL_CTX *ctx)
++{
+     if (SSL_CTX_has_client_custom_ext(ctx, NGX_QUIC_COMPAT_SSL_TP_EXT)) {
+         return NGX_OK;
+     }
+diff --git a/src/event/quic/ngx_event_quic_openssl_compat.h b/src/event/quic/ngx_event_quic_openssl_compat.h
+index 89ee41e898..2bdbb389b4 100644
+--- a/src/event/quic/ngx_event_quic_openssl_compat.h
++++ b/src/event/quic/ngx_event_quic_openssl_compat.h
+@@ -38,7 +38,8 @@ typedef struct ssl_quic_method_st {
+ } SSL_QUIC_METHOD;
+ 
+ 
+-ngx_int_t ngx_quic_compat_init(ngx_conf_t *cf, SSL_CTX *ctx);
++void ngx_quic_compat_keylog_init(SSL_CTX *ctx);
++ngx_int_t ngx_quic_compat_ext_init(ngx_conf_t *cf, SSL_CTX *ctx);
+ 
+ int SSL_set_quic_method(SSL *ssl, const SSL_QUIC_METHOD *quic_method);
+ int SSL_provide_quic_data(SSL *ssl, enum ssl_encryption_level_t level,
+diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
+index 0afcc9dd1f..286058fbe3 100644
+--- a/src/http/modules/ngx_http_ssl_module.c
++++ b/src/http/modules/ngx_http_ssl_module.c
+@@ -1379,6 +1379,9 @@ static ngx_int_t
+ ngx_http_ssl_init(ngx_conf_t *cf)
+ {
+     ngx_uint_t                   a, p, s;
++#if (NGX_QUIC_OPENSSL_COMPAT)
++    ngx_uint_t                   compat;
++#endif
+     const char                  *name;
+     ngx_http_conf_addr_t        *addr;
+     ngx_http_conf_port_t        *port;
+@@ -1423,6 +1426,25 @@ ngx_http_ssl_init(ngx_conf_t *cf)
+         return NGX_OK;
+     }
+ 
++#if (NGX_QUIC_OPENSSL_COMPAT)
++
++    compat = 0;
++
++    port = cmcf->ports->elts;
++    for (p = 0; p < cmcf->ports->nelts && !compat; p++) {
++
++        addr = port[p].addrs.elts;
++        for (a = 0; a < port[p].addrs.nelts; a++) {
++
++            if (addr[a].opt.quic) {
++                compat = 1;
++                break;
++            }
++        }
++    }
++
++#endif
++
+     port = cmcf->ports->elts;
+     for (p = 0; p < cmcf->ports->nelts; p++) {
+ 
+@@ -1433,15 +1455,17 @@ ngx_http_ssl_init(ngx_conf_t *cf)
+                 continue;
+             }
+ 
+-            if (addr[a].opt.quic) {
+-                name = "quic";
+-
+ #if (NGX_QUIC_OPENSSL_COMPAT)
++            if (compat) {
+                 if (ngx_http_ssl_quic_compat_init(cf, &addr[a]) != NGX_OK) {
+                     return NGX_ERROR;
+                 }
++            }
+ #endif
+ 
++            if (addr[a].opt.quic) {
++                name = "quic";
++
+             } else {
+                 name = "ssl";
+             }
+@@ -1514,9 +1538,13 @@ ngx_http_ssl_quic_compat_init(ngx_conf_t *cf, ngx_http_conf_addr_t *addr)
+         sscf = cscf->ctx->srv_conf[ngx_http_ssl_module.ctx_index];
+ 
+         if (sscf->certificates || sscf->reject_handshake) {
+-            if (ngx_quic_compat_init(cf, sscf->ssl.ctx) != NGX_OK) {
++            if (ngx_quic_compat_ext_init(cf, sscf->ssl.ctx) != NGX_OK) {
+                 return NGX_ERROR;
+             }
++
++            if (addr->opt.quic) {
++                ngx_quic_compat_keylog_init(sscf->ssl.ctx);
++            }
+         }
+     }
+ 

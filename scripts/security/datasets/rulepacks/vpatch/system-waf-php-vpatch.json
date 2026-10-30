@@ -1,0 +1,183 @@
+{
+ "schema": "cdnca.rule-pack/v1",
+ "pack_id": "system/waf-php-vpatch",
+ "version": "1.0.0",
+ "layer": "system",
+ "engine": "waf_v2",
+ "engine_min_version": 1,
+ "name": "PHP 高危漏洞虚拟补丁",
+ "description": "边缘拦截 PHP2Shell（CVE-2026-109618/109619）、multipart 放大、CVE-2024-4577 PHP-CGI 参数注入，并记录 CVE-2026-6722 SOAP 可疑请求。默认开启，可在站点关闭或调整阈值。边缘缓解不替代升级 PHP（8.5.12 / 8.4.27 / 8.3.36 / 8.2.35 或更高）。自有写法",
+ "params_schema": {
+  "action": {
+   "type": "string",
+   "enum": [
+    "block",
+    "log"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": [
+     "cve-2024-4577",
+     "multipart-field-length",
+     "multipart-part-count",
+     "php2shell-upload-progress"
+    ]
+   }
+  },
+  "soap_action": {
+   "type": "string",
+   "enum": [
+    "block",
+    "log"
+   ],
+   "bind": {
+    "target": "waf.action",
+    "rules": [
+     "soap-apache-map"
+    ]
+   }
+  },
+  "max_parts": {
+   "type": "integer",
+   "minimum": 100,
+   "maximum": 100000,
+   "bind": {
+    "target": "waf.inspect.number",
+    "rules": [
+     "multipart-part-count"
+    ]
+   }
+  },
+  "max_field_bytes": {
+   "type": "integer",
+   "minimum": 65536,
+   "maximum": 67108864,
+   "bind": {
+    "target": "waf.inspect.number",
+    "rules": [
+     "multipart-field-length"
+    ]
+   }
+  }
+ },
+ "exports": [
+  "cve-2024-4577",
+  "multipart-field-length",
+  "multipart-part-count",
+  "php2shell-upload-progress",
+  "soap-apache-map"
+ ],
+ "rules": [
+  {
+   "id": "cve-2024-4577",
+   "name": "CVE-2024-4577 PHP-CGI 软连字符参数注入",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "request_uri",
+       "operator": "regex",
+       "values": [
+        "(?i)\\xad-?d.*(allow_url_include|auto_prepend_file)"
+       ]
+      }
+     ]
+    },
+    "action": "block",
+    "flow": "stop"
+   }
+  },
+  {
+   "id": "multipart-field-length",
+   "name": "multipart 单字段超长（PHP2Shell 放大）",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "multipart_field_max_length",
+       "operator": "gt",
+       "values": [
+        "1048576"
+       ]
+      }
+     ]
+    },
+    "action": "block",
+    "flow": "stop"
+   }
+  },
+  {
+   "id": "multipart-part-count",
+   "name": "multipart 分段过多（PHP2Shell 放大）",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "multipart_part_count",
+       "operator": "gt",
+       "values": [
+        "1000"
+       ]
+      }
+     ]
+    },
+    "action": "block",
+    "flow": "stop"
+   }
+  },
+  {
+   "id": "php2shell-upload-progress",
+   "name": "PHP2Shell 上传进度字段（CVE-2026-109618/109619）",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "multipart_field_names",
+       "operator": "equals",
+       "values": [
+        "php_session_upload_progress"
+       ],
+       "filters": [
+        "lowercase"
+       ]
+      }
+     ]
+    },
+    "action": "block",
+    "flow": "stop"
+   }
+  },
+  {
+   "id": "soap-apache-map",
+   "name": "CVE-2026-6722 SOAP apache:Map 信号（仅记录）",
+   "waf": {
+    "match": {
+     "inspect": [
+      {
+       "target": "content_type",
+       "operator": "regex",
+       "values": [
+        "(?i)^\\s*(text/xml|application/soap[+ ]xml)"
+       ]
+      },
+      {
+       "target": "body",
+       "operator": "contains",
+       "values": [
+        "apache:map"
+       ]
+      }
+     ]
+    },
+    "action": "log",
+    "flow": "continue"
+   }
+  }
+ ],
+ "defaults": {
+  "action": "block",
+  "soap_action": "log",
+  "max_parts": 1000,
+  "max_field_bytes": 1048576
+ }
+}

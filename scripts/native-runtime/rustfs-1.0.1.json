@@ -1,0 +1,16 @@
+{
+  "schema": "cdnca.native-rustfs-input/v2",
+  "version": "1.0.1",
+  "platform": "linux-x86_64-musl-static",
+  "archive_url": "https://github.com/rustfs/rustfs/releases/download/1.0.1/rustfs-linux-x86_64-musl-v1.0.1.zip",
+  "archive_sha256": "a834096dafa1f1a55825a2cdaf49d006a193978d344f2d508c2be475133738a3",
+  "binary_sha256": "a5ac41209ca8eca6c591c1584cc108b308850e1b74955afd4af9fe1b0379f2eb",
+  "legacy_receipts": [
+    {
+      "platform": "ubuntu-24.04-linux-amd64",
+      "archive_url": "https://github.com/rustfs/rustfs/releases/download/1.0.1/rustfs-linux-x86_64-gnu-v1.0.1.zip",
+      "archive_sha256": "9742e183cb0dfb0d48fa909797af572fe47b7f827569036baa4156e0d3958ee5",
+      "binary_sha256": "e6544a42a09a16d6fea47ad3d8aaa1a8793c9afa9c723bb8ae884f1238cd7c25"
+    }
+  ]
+}

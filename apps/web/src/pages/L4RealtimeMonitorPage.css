@@ -1,0 +1,265 @@
+.l4-realtime-baseline-page {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.l4-realtime-baseline-panel {
+  min-width: 0;
+  padding: 18px 20px 20px;
+  overflow: hidden;
+  background: var(--surface, var(--cdnca-color-bg-container, #fff));
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 8px;
+}
+
+.l4-realtime-baseline-tabs > .ant-tabs-nav {
+  min-height: 33px;
+  margin: 0 0 14px;
+}
+
+.l4-realtime-baseline-tabs > .ant-tabs-nav::before,
+.l4-realtime-baseline-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+.l4-realtime-baseline-tabs .ant-tabs-tab {
+  height: 33px;
+  margin: 0 6px 0 0 !important;
+  padding: 6px 16px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+  border-radius: 8px;
+}
+
+.l4-realtime-baseline-tabs .ant-tabs-tab:hover,
+.l4-realtime-baseline-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--primary, var(--cdnca-color-primary, #2d8cf0));
+}
+
+.l4-realtime-baseline-tabs .ant-tabs-tab-active {
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 12%, transparent);
+}
+
+.l4-realtime-baseline-filter,
+.l4-realtime-baseline-ranking-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 12px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 6px;
+}
+
+.l4-realtime-baseline-filter {
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.l4-realtime-baseline-ranking-toolbar {
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+/* 四层访问日志/实时连接的筛选是共享 AdvancedFilters，外框保留，行、面板、标签上下排列并靠左。 */
+.l4-realtime-baseline-filter.cdnca-adv-filters {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+}
+
+.l4-realtime-baseline-port {
+  width: 260px;
+}
+
+/* 1440 宽下租户、节点、端口、时间范围、查询一行放下：时间范围保持自然宽度，
+   租户/节点/端口按剩余宽度收缩（窄屏规则仍为整行）。 */
+@media (min-width: 921px) {
+  .l4-realtime-baseline-filter:has(> .l4-realtime-baseline-range) {
+    flex-wrap: nowrap;
+  }
+
+  .l4-realtime-baseline-filter:has(> .l4-realtime-baseline-range) > .l4-scope-filter.ant-select,
+  .l4-realtime-baseline-filter:has(> .l4-realtime-baseline-range) > .l4-realtime-baseline-port {
+    flex: 0 1 200px;
+    width: auto !important;
+    min-width: 110px;
+  }
+}
+
+.l4-realtime-baseline-search,
+.l4-realtime-baseline-refresh {
+  min-width: 82px;
+}
+
+.l4-realtime-baseline-range .ant-radio-button-wrapper-disabled {
+  color: var(--cdnca-color-placeholder);
+}
+
+.l4-realtime-baseline-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.l4-realtime-baseline-chart {
+  position: relative;
+  min-width: 0;
+  min-height: 350px;
+  padding: 12px 16px 16px;
+  color: var(--cdnca-color-title);
+  background: var(--surface, var(--cdnca-color-bg-container, #fff));
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+}
+
+.l4-realtime-baseline-chart h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.l4-realtime-baseline-chart-canvas {
+  position: absolute;
+  inset: 50px 18px 18px 12px;
+}
+
+.l4-realtime-baseline-chart-canvas svg {
+  width: 100%;
+  height: 100%;
+}
+
+.l4-realtime-grid-line,
+.l4-realtime-axis-line {
+  fill: none;
+  stroke: var(--cdnca-color-border-secondary);
+  stroke-width: 1;
+}
+
+.l4-realtime-axis-label {
+  fill: var(--cdnca-color-text-secondary);
+  font-size: 11px;
+}
+
+.l4-realtime-series {
+  fill: none;
+  stroke: var(--primary, var(--cdnca-color-primary, #2d8cf0));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.l4-realtime-baseline-chart-zero {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  transform: translate(-50%, -50%);
+}
+
+.l4-realtime-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+}
+
+.l4-realtime-alert {
+  margin-bottom: 14px;
+}
+
+.l4-realtime-baseline-chart-canvas::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 1px;
+  content: '';
+  background: var(--cdnca-color-border-secondary);
+}
+
+.l4-realtime-baseline-ranking {
+  min-width: 0;
+}
+
+.l4-realtime-baseline-ranking-table-scroll {
+  max-width: 900px;
+  overflow: hidden;
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 6px;
+}
+
+.l4-realtime-baseline-ranking-table {
+  width: 100%;
+  max-width: 900px;
+}
+
+.l4-realtime-baseline-ranking-table .ant-table {
+  border-radius: 6px;
+}
+
+.l4-realtime-baseline-ranking-table .ant-table-thead > tr > th {
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+@media (max-width: 1300px) {
+  .l4-realtime-baseline-chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 920px) {
+  .l4-realtime-baseline-port,
+  .l4-realtime-baseline-search {
+    width: 100%;
+  }
+
+  .l4-realtime-baseline-range,
+  .l4-realtime-baseline-range .cdnca-time-range-presets {
+    display: flex;
+    width: 100%;
+  }
+
+  .l4-realtime-baseline-range .ant-radio-button-wrapper {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+@media (max-width: 767px) {
+  .app-main > .l4-realtime-baseline-page {
+    margin: 24px;
+  }
+
+  .l4-realtime-baseline-panel {
+    padding: 14px 12px 16px;
+  }
+}
+
+@media (max-width: 760px) {
+  .l4-realtime-baseline-ranking-range,
+  .l4-realtime-baseline-refresh {
+    width: 100%;
+  }
+
+  .l4-realtime-baseline-ranking-range {
+    display: flex;
+  }
+
+  .l4-realtime-baseline-ranking-range .ant-radio-button-wrapper {
+    flex: 1;
+    text-align: center;
+  }
+}
+
+.l4-session-panel { display: flex; flex-direction: column; gap: 12px; }
+.l4-session-muted { color: var(--ant-color-text-secondary, var(--cdnca-color-neutral62, #8c8c8c)); font-size: 12px; margin: 0; }
+.l4-session-pager { display: flex; gap: 8px; justify-content: flex-end; }
+.l4-session-actions { display: inline-flex; gap: 6px; }
+.l4-session-problems { margin: 0; padding-left: 18px; }
+.l4-session-ban { display: inline-block; max-width: 320px; }
+.l4-session-ban .ant-input-number { margin-left: 6px; width: 110px; }

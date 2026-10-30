@@ -1,0 +1,20 @@
+CDNCA control plane chart rendered for release {{ .Release.Name }}.
+
+Images under registry.example.invalid are intentional non-routable placeholders.
+Override every image repository and immutable tag before installation.
+
+Required existing Secrets:
+  {{ .Values.controlApi.dataStoresSecret.existingSecret }}
+  {{ .Values.controlApi.runtimeSecret.existingSecret }}
+  {{ .Values.agentGateway.runtimeSecret.existingSecret }}
+
+The chart does not create PostgreSQL, Redis, NATS, ClickHouse, credentials, or
+private keys. See docs/runbooks/kubernetes-control-plane.md for the exact key
+inventory and docs/runbooks/control-plane-ha.md for HA, scaling, disaster
+recovery, executable acceptance, and remaining production gates.
+
+agent-gateway serves Pod-local HTTP health checks on container port
+{{ .Values.agentGateway.service.healthPort }}. /health/live reports the server
+coordinator loop; /health/ready checks both gRPC listeners, Redis, required NATS
+JetStream streams, and the named ControlInternal health RPC. The health port is
+not exposed by the Gateway Service.

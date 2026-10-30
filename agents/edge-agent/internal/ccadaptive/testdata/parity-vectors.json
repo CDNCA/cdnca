@@ -1,0 +1,131 @@
+{
+  "policy": {
+    "schema_version": "cdnca.edge.cc-adaptive/v1",
+    "revision": 7,
+    "enabled": true,
+    "mode": "expert",
+    "static": {"rate_per_second": 100, "burst": 20},
+    "adaptive": {
+      "mode": "shadow",
+      "fallback": "static",
+      "min_samples": 5,
+      "max_samples": 32,
+      "sample_freshness_micros": 10000000,
+      "ewma_alpha_permille": 250,
+      "mad_multiplier_milli": 3000,
+      "min_rate_per_second": 1,
+      "max_rate_per_second": 1000,
+      "min_burst": 1,
+      "max_burst": 100,
+      "max_step_permille": 200,
+      "hysteresis_permille": 50,
+      "cooldown_micros": 1000000,
+      "max_groups": 32
+    }
+  },
+  "identifier_cases": [
+    {"name":"leading-underscore","value":"_tenant","valid":false},
+    {"name":"leading-dot","value":".tenant","valid":false},
+    {"name":"leading-colon","value":":tenant","valid":false},
+    {"name":"leading-hyphen","value":"-tenant","valid":false},
+    {"name":"internal-punctuation","value":"tenant._:-value","valid":true},
+    {"name":"single-alphanumeric","value":"a","valid":true},
+    {"name":"empty","value":"","valid":false},
+    {"name":"unicode","value":"租户","valid":false},
+    {"name":"max-length","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","valid":true},
+    {"name":"too-long","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","valid":false}
+  ],
+  "gcra_cases": [
+    {
+      "name": "burst-boundary",
+      "key": {"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-a","key_scope":"client_ip","key_digest":"e0b107f9f96f69a2b6165a2ac7ae551643a4240881e2c14a01e8e9a56212a39a","revision":7},
+      "limit": {"rate_per_second":10,"burst":3},
+      "steps": [
+        {"now_micros":1000000,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":2,"next_eligible_micros":1000000,"reason":"gcra_limit_applied"},
+        {"now_micros":1000000,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":1,"next_eligible_micros":1000000,"reason":"gcra_limit_applied"},
+        {"now_micros":1000000,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":0,"next_eligible_micros":1100000,"reason":"gcra_limit_applied"},
+        {"now_micros":1000000,"cost":1,"outcome":"deny","retry_after_micros":100000,"remaining":0,"next_eligible_micros":1100000,"reason":"gcra_limit_applied"},
+        {"now_micros":1099999,"cost":1,"outcome":"deny","retry_after_micros":1,"remaining":0,"next_eligible_micros":1100000,"reason":"gcra_limit_applied"},
+        {"now_micros":1100000,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":0,"next_eligible_micros":1200000,"reason":"gcra_limit_applied"}
+      ]
+    },
+    {
+      "name": "weighted",
+      "key": {"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-b","key_scope":"path","key_digest":"f5f0b7008b9ef554ad4c565ff03b024ff543edd9008951b738cb2f35c8b8e829","revision":7},
+      "limit": {"rate_per_second":10,"burst":3},
+      "steps": [
+        {"now_micros":1000000,"cost":2,"outcome":"allow","retry_after_micros":0,"remaining":1,"next_eligible_micros":1000000,"reason":"gcra_limit_applied"},
+        {"now_micros":1000000,"cost":2,"outcome":"deny","retry_after_micros":100000,"remaining":0,"next_eligible_micros":1100000,"reason":"gcra_limit_applied"}
+      ]
+    },
+    {
+      "name": "clock-regression",
+      "key": {"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-c","key_scope":"site","key_digest":"d8198efa3604d164853468608c55efa148bc56e3564d5a30232bf98b8ab43aeb","revision":7},
+      "limit": {"rate_per_second":1,"burst":1},
+      "steps": [
+        {"now_micros":10,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":0,"next_eligible_micros":1000010,"reason":"gcra_limit_applied"},
+        {"now_micros":9,"cost":1,"outcome":"fallback","retry_after_micros":0,"remaining":0,"next_eligible_micros":0,"reason":"clock_regression"}
+      ]
+    },
+    {
+      "name": "deny-clock-regression",
+      "key": {"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-d","key_scope":"site","key_digest":"4f4a9410ffcdf895c4adb880659e9b5c0dd1f23a30790684340b3eaacb045398","revision":7},
+      "limit": {"rate_per_second":10,"burst":1},
+      "steps": [
+        {"now_micros":0,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":0,"next_eligible_micros":100000,"reason":"gcra_limit_applied"},
+        {"now_micros":50000,"cost":1,"outcome":"deny","retry_after_micros":50000,"remaining":0,"next_eligible_micros":100000,"reason":"gcra_limit_applied"},
+        {"now_micros":49999,"cost":1,"outcome":"fallback","retry_after_micros":0,"remaining":0,"next_eligible_micros":0,"reason":"clock_regression"},
+        {"now_micros":100000,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":0,"next_eligible_micros":200000,"reason":"gcra_limit_applied"}
+      ]
+    },
+    {
+      "name": "maximum-timestamp",
+      "key": {"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-max","key_scope":"site","key_digest":"0000000000000000000000000000000000000000000000000000000000000000","revision":7},
+      "limit": {"rate_per_second":1,"burst":1},
+      "steps": [
+        {"now_micros":9007199254740991,"cost":1,"outcome":"allow","retry_after_micros":0,"remaining":0,"next_eligible_micros":9007199254740991,"reason":"gcra_limit_applied"},
+        {"now_micros":9007199254740991,"cost":1,"outcome":"deny","retry_after_micros":1000000,"remaining":0,"next_eligible_micros":9007199254740991,"reason":"gcra_limit_applied"}
+      ]
+    }
+  ],
+  "adaptive_case": {
+    "key": {"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-a","revision":7},
+    "samples": [
+      {"at_micros":0,"requests":50,"window_micros":1000000},
+      {"at_micros":1000000,"requests":50,"window_micros":1000000},
+      {"at_micros":2000000,"requests":50,"window_micros":1000000},
+      {"at_micros":3000000,"requests":50,"window_micros":1000000},
+      {"at_micros":4000000,"requests":50,"window_micros":1000000}
+    ],
+    "expected": {"rate_per_second":50,"burst":10,"confidence_permille":156,"reason":"adaptive_shadow_only","apply":false}
+  },
+  "adaptive_auto_case": {
+    "key": {"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-auto","revision":7},
+    "samples": [
+      {"at_micros":0,"requests":10000,"window_micros":1000000},
+      {"at_micros":1000000,"requests":10000,"window_micros":1000000},
+      {"at_micros":2000000,"requests":10000,"window_micros":1000000},
+      {"at_micros":3000000,"requests":10000,"window_micros":1000000},
+      {"at_micros":4000000,"requests":10000,"window_micros":1000000}
+    ],
+    "expected": {"rate_per_second":100,"burst":20,"confidence_permille":156,"reason":"adaptive_change_capped","apply":true}
+  },
+  "adaptive_exact_integer_case": {
+    "config": {
+      "mode":"auto","auto_approved":true,"fallback":"static","min_samples":5,"max_samples":32,
+      "sample_freshness_micros":10000000,"ewma_alpha_permille":250,"mad_multiplier_milli":3000,
+      "min_rate_per_second":1,"max_rate_per_second":1000000,"min_burst":1,"max_burst":1000000,
+      "max_step_permille":1000,"hysteresis_permille":0,"cooldown_micros":0,"max_groups":32
+    },
+    "baseline":{"rate_per_second":1000000,"burst":20},
+    "key":{"tenant_id":"tenant-a","site_id":"site-a","rule_id":"rule-exact","revision":12},
+    "samples":[
+      {"at_micros":0,"requests":9007199252,"window_micros":9007199252},
+      {"at_micros":1,"requests":9007199252,"window_micros":9007199252},
+      {"at_micros":2,"requests":9007199252,"window_micros":9007199252},
+      {"at_micros":3,"requests":9007199252,"window_micros":9007199252},
+      {"at_micros":4,"requests":9007199252,"window_micros":9007199252}
+    ],
+    "expected":{"rate_per_second":1000000,"burst":20,"confidence_permille":156,"reason":"gcra_limit_applied","apply":true,"state_capped":false}
+  }
+}

@@ -1,0 +1,575 @@
+.node-realtime-page {
+  min-width: 0;
+  padding: 18px 20px 20px;
+  overflow: hidden;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-container, #fff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.node-realtime-page .identity-page-header {
+  display: flex;
+  min-height: 24.3px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.node-realtime-page .identity-page-header > div {
+  min-width: 0;
+}
+
+.node-realtime-page .identity-page-header .ant-typography {
+  margin: 0;
+}
+
+.node-realtime-page .identity-page-header .ant-typography-title,
+.node-realtime-page .identity-page-header h2.ant-typography,
+.node-realtime-page .identity-page-header h3.ant-typography {
+  overflow: hidden;
+  color: var(--cdnca-color-title);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 24.3px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-realtime-tabs {
+  height: 33px;
+  margin: 0 0 16px;
+}
+
+.node-realtime-tabs > .ant-tabs-nav {
+  min-height: 33px;
+  margin: 0;
+}
+
+.node-realtime-tabs > .ant-tabs-nav::before,
+.node-realtime-tabs .ant-tabs-ink-bar {
+  display: none;
+}
+
+.node-realtime-tabs .ant-tabs-tab {
+  min-height: 33px;
+  margin: 0 6px 0 0;
+  padding: 6px 16px;
+  color: var(--cdnca-color-text);
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-realtime-tabs .ant-tabs-tab + .ant-tabs-tab {
+  margin-left: 0 !important;
+}
+
+.node-realtime-tabs .ant-tabs-tab-active {
+  background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 12%, transparent);
+}
+
+.node-realtime-tabs .ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--cdnca-color-primary);
+  font-weight: 600;
+}
+
+.node-realtime-tabs .ant-tabs-content-holder {
+  display: none;
+}
+
+.node-realtime-network-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 12px 0;
+}
+
+.node-realtime-controls {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px 16px;
+  margin: 0 0 16px;
+  padding: 12px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 6px;
+}
+
+.node-realtime-control-group {
+  display: flex;
+  min-width: 0;
+  min-height: 34px;
+  flex: 0 1 auto;
+  align-items: flex-start;
+}
+
+.node-realtime-control-group--metric {
+  flex-basis: 297px;
+}
+
+.node-realtime-control-group--ranking-range {
+  flex-basis: 336px;
+}
+
+.node-realtime-control-group--monitor-range {
+  flex-basis: 342.16px;
+}
+
+.node-realtime-control-group--monitor-range.node-realtime-control-group--custom-range {
+  flex-basis: 720px;
+}
+
+.node-realtime-control-group--traffic-types {
+  flex-basis: 256px;
+}
+
+.node-realtime-control-group--traffic-range {
+  flex-basis: 320.16px;
+}
+
+.node-realtime-control-group--traffic-range.node-realtime-control-group--custom-range {
+  flex-basis: 700px;
+}
+
+.node-realtime-control-group--node {
+  flex-basis: 250px;
+}
+
+.node-realtime-controls--traffic .node-realtime-control-group--node {
+  flex-basis: 270px;
+}
+
+.node-realtime-control-group--exclude-nic {
+  flex-basis: 252px;
+}
+
+.node-realtime-refresh-item {
+  flex-basis: 138px;
+  min-height: 33.3828px;
+  height: 33.3828px;
+}
+
+.node-realtime-controls--traffic .node-realtime-refresh-item {
+  flex-basis: 158px;
+}
+
+/* 出口网卡开关与刷新同一行，说明收进问号提示 */
+.node-realtime-egress-item {
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  height: 34px;
+  white-space: nowrap;
+}
+
+.node-realtime-egress-item .ant-checkbox-wrapper {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.node-realtime-egress-help {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--cdnca-color-text-secondary);
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  cursor: help;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.node-realtime-egress-help:hover {
+  color: var(--cdnca-color-primary);
+  background: var(--cdnca-color-bg-hover);
+}
+
+.node-realtime-egress-help:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: 1px;
+}
+
+.node-realtime-control-label {
+  height: 34px;
+  flex: 0 0 60px;
+  padding: 10px 12px 10px 0;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 14px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.node-realtime-controls--traffic .node-realtime-control-label {
+  flex-basis: 80px;
+}
+
+.node-realtime-controls .ant-radio-group {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+  margin-top: 1.3828px;
+}
+
+.node-realtime-controls .ant-radio-button-wrapper {
+  height: 32px;
+  margin-inline-end: 0;
+  padding-inline: 15px;
+  font-size: 14px;
+  line-height: 30px;
+}
+
+.node-realtime-controls .ant-radio-button-wrapper:not(:first-child) {
+  margin-inline-start: 0;
+  border-inline-start-width: 0;
+}
+
+.node-realtime-range-control {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-wrap: wrap;
+}
+
+.node-realtime-control-group--node > .ant-select {
+  width: 190px;
+  max-width: 100%;
+  margin-top: 1.3828px;
+}
+
+.node-realtime-control-group--node .ant-select-selector {
+  height: 32px !important;
+  font-size: 14px;
+}
+
+.node-realtime-control-group--node .ant-select-selection-item,
+.node-realtime-control-group--node .ant-select-selection-placeholder {
+  line-height: 30px !important;
+}
+
+.node-realtime-traffic-types {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+}
+
+.node-realtime-traffic-types .ant-checkbox-wrapper {
+  min-height: 32px;
+  margin-inline: 0 8px;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 32px;
+  white-space: nowrap;
+}
+
+.node-realtime-control-group--exclude-nic .ant-input {
+  width: 172px;
+  max-width: 100%;
+  height: 32px;
+  margin-top: 1.3828px;
+  font-size: 14px;
+}
+
+.node-realtime-refresh {
+  width: 78px;
+  height: 32px;
+  margin-top: 1.3828px;
+  padding-inline: 15px;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.node-realtime-table-scroll {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--cdnca-color-border-panel, #edf1f7);
+  scrollbar-width: thin;
+}
+
+.node-realtime-table-scroll::-webkit-scrollbar,
+.node-realtime-table-scroll .ant-table-content::-webkit-scrollbar {
+  height: 11px !important;
+}
+
+.node-realtime-table-scroll .ant-table-content {
+  scrollbar-width: thin;
+}
+
+.node-realtime-table-scroll .ant-table {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-realtime-table-scroll .ant-table-container {
+  border: 0 !important;
+  border-radius: 6px;
+}
+
+.node-realtime-table-scroll .ant-table-thead > tr > th {
+  height: 39.3828px;
+  padding: 8px 0;
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 21px;
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  white-space: nowrap;
+}
+
+.node-realtime-table-scroll .ant-table-tbody > tr > td {
+  height: 44px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.node-realtime-table-scroll .ant-table-placeholder .ant-table-cell {
+  height: 48px;
+  padding: 0 !important;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.node-realtime-table-scroll .ant-table-placeholder .ant-table-expanded-row-fixed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 47px;
+  margin: 0 !important;
+  padding: 0;
+  overflow: hidden;
+}
+
+.node-realtime-table-scroll .ant-table-tbody > tr > td .ant-space {
+  line-height: 18px;
+}
+
+.node-realtime-table-scroll .ant-table-tbody > tr > td .ant-typography-secondary {
+  color: var(--cdnca-color-neutral56, #9b9ea8);
+  font-size: 12px;
+}
+
+.node-realtime-table-scroll .ant-tag {
+  margin-inline-end: 0;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.node-realtime-traffic-result {
+  min-width: 0;
+}
+
+.node-realtime-traffic-total {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 12px;
+  color: var(--cdnca-color-text);
+  background: var(--cdnca-color-bg-panel, #fbfdff);
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.node-realtime-chart {
+  min-width: 0;
+  height: 350px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--cdnca-color-border-panel, #edf1f7);
+  border-radius: 6px;
+}
+
+.node-realtime-monitoring-charts {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.node-realtime-chart h2 {
+  margin: 0;
+  padding: 12px 20px 0;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 21px;
+}
+
+.node-realtime-chart-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 348px;
+}
+
+.node-realtime-chart .data-state {
+  min-height: 270px;
+}
+
+.node-realtime-traffic-chart {
+  margin-bottom: 0;
+}
+
+/* 监控指标 / 节点流量筛选条在桌面一行放下。
+   组按内容取宽，标签收紧到文字宽，「自定义」只弹出日期面板不撑行，排除网卡收进行尾「高级筛选」。 */
+.node-realtime-advanced-item {
+  flex: 0 0 auto;
+  align-items: center;
+  height: 34px;
+}
+
+.node-realtime-advanced-toggle.ant-btn {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1.3828px;
+  padding-inline: 12px;
+  font-size: 14px;
+}
+
+.node-realtime-advanced-toggle--active.ant-btn {
+  color: var(--cdnca-color-primary);
+  border-color: var(--cdnca-color-primary);
+}
+
+.node-realtime-advanced-chevron {
+  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.node-realtime-advanced-toggle[aria-expanded="true"] .node-realtime-advanced-chevron {
+  transform: rotate(180deg);
+}
+
+.node-realtime-advanced-panel {
+  width: 300px;
+  max-width: calc(100vw - 48px);
+}
+
+.node-realtime-advanced-field {
+  display: grid;
+  gap: 6px;
+}
+
+.node-realtime-advanced-label {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .node-realtime-advanced-chevron {
+    transition: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .node-realtime-controls--inline {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .node-realtime-controls--inline .node-realtime-control-group {
+    flex: 0 0 auto;
+    align-items: center;
+  }
+
+  .node-realtime-controls--inline .node-realtime-control-label {
+    flex: 0 0 auto;
+    padding-right: 8px;
+  }
+
+  .node-realtime-controls--inline .node-realtime-refresh-item .node-realtime-control-label {
+    display: none;
+  }
+
+  .node-realtime-controls--inline .ant-radio-group {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    margin-top: 0;
+  }
+
+  .node-realtime-controls--inline .ant-radio-button-wrapper {
+    padding-inline: 11px;
+  }
+
+  .node-realtime-controls--inline .node-realtime-range-control,
+  .node-realtime-controls--inline .node-realtime-traffic-types {
+    flex: 0 0 auto;
+  }
+
+  .node-realtime-controls--inline .node-realtime-control-group--node > .ant-select {
+    width: 140px;
+    margin-top: 0;
+  }
+
+  .node-realtime-controls--inline .node-realtime-advanced-toggle.ant-btn {
+    margin-top: 0;
+  }
+
+  .node-realtime-controls--inline .node-realtime-advanced-item {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 767px) {
+  .node-realtime-page {
+    margin: 24px !important;
+    padding: 18px 20px 20px;
+  }
+
+  .node-realtime-page .identity-page-header {
+    align-items: flex-start;
+  }
+
+  .node-realtime-tabs .ant-tabs-nav-wrap {
+    overflow: visible !important;
+  }
+
+  .node-realtime-tabs .ant-tabs-nav-operations {
+    display: none !important;
+  }
+
+  .node-realtime-tabs .ant-tabs-nav-list {
+    width: max-content;
+    min-width: 100%;
+    transform: none !important;
+    white-space: nowrap;
+  }
+
+  .node-realtime-control-group {
+    max-width: 100%;
+  }
+
+  .node-realtime-controls .ant-radio-group {
+    margin-top: 0;
+  }
+
+  .node-realtime-table-scroll .ant-table-expanded-row-fixed {
+    position: static !important;
+    width: 501px !important;
+  }
+
+  .node-realtime-chart {
+    height: 350px;
+  }
+}

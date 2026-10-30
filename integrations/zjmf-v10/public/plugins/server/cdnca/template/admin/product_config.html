@@ -1,0 +1,83 @@
+<!-- CDNCA CDN 后台商品接口配置（Cdnca::serverConfigOption）：选 CDN 套餐 + 月/季/年售价 -->
+<style>
+  .cdnca-config { max-width: 640px; padding: 12px 0; font-size: 14px; color: #303133; }
+  .cdnca-config .row { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .cdnca-config select, .cdnca-config input { width: 100%; max-width: 360px; height: 32px; padding: 0 8px; border: 1px solid #dcdfe6; border-radius: 3px; }
+  .cdnca-config .hint { color: #909399; font-size: 12px; }
+  .cdnca-config .warn { padding: 8px 12px; margin-bottom: 14px; border-radius: 3px; background: #fdf6ec; color: #b88230; }
+  .cdnca-config .btn { padding: 6px 20px; border: 0; border-radius: 3px; background: #0052d9; color: #fff; cursor: pointer; }
+  .cdnca-config .btn:focus-visible { outline: 2px solid #003cab; outline-offset: 2px; }
+  .cdnca-config .msg { margin-left: 12px; }
+</style>
+<div class="cdnca-config" id="cdnca-config">
+  <div class="warn" id="cdnca-load-error" role="alert" hidden></div>
+  <div class="row">
+    <label for="cdnca-plan">CDN 套餐</label>
+    <div>
+      <select id="cdnca-plan"></select>
+      <input id="cdnca-plan-manual" type="text" placeholder="套餐 ID" hidden>
+      <div class="hint" id="cdnca-plan-hint">主控上已上架的套餐；主控不支持的周期不会出现在售价里。</div>
+    </div>
+  </div>
+  <div class="row"><label for="cdnca-price-month">月付售价</label><div><input id="cdnca-price-month" type="number" min="0" step="0.01" placeholder="留空不开放"></div></div>
+  <div class="row"><label for="cdnca-price-quarter">季付售价</label><div><input id="cdnca-price-quarter" type="number" min="0" step="0.01" placeholder="留空不开放"></div></div>
+  <div class="row"><label for="cdnca-price-year">年付售价</label><div><input id="cdnca-price-year" type="number" min="0" step="0.01" placeholder="留空不开放"></div></div>
+  <div class="row"><span></span><div><button type="button" class="btn" id="cdnca-save">保存</button><span class="msg" id="cdnca-save-msg" role="status" aria-live="polite"></span></div></div>
+</div>
+<script>
+(function () {
+  var cfg = {$cdnca_config_json|raw};
+  var periodNames = { month: '月付', quarter: '季付', year: '年付' };
+  var select = document.getElementById('cdnca-plan');
+  var manual = document.getElementById('cdnca-plan-manual');
+  var loadError = document.getElementById('cdnca-load-error');
+  if (cfg.load_error) {
+    loadError.hidden = false;
+    loadError.textContent = '无法从 CDN 主控拉取套餐，可手填套餐 ID：' + cfg.load_error;
+  }
+  if (cfg.products.length) {
+    cfg.products.forEach(function (p) {
+      var o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.name + (p.periods.length ? '（' + p.periods.map(function (x) { return periodNames[x] || x; }).join('/') + '）' : '');
+      o.selected = p.id === cfg.cdn_product_id;
+      o.setAttribute('data-name', p.name);
+      select.appendChild(o);
+    });
+  } else {
+    select.hidden = true;
+    manual.hidden = false;
+    manual.value = cfg.cdn_product_id;
+  }
+  ['month', 'quarter', 'year'].forEach(function (k) {
+    var v = cfg['price_' + k];
+    document.getElementById('cdnca-price-' + k).value = v === null || v === undefined ? '' : v;
+  });
+  document.getElementById('cdnca-save').addEventListener('click', function () {
+    var msg = document.getElementById('cdnca-save-msg');
+    var useSelect = !select.hidden;
+    var opt = useSelect ? select.options[select.selectedIndex] : null;
+    var body = {
+      cdn_product_id: useSelect ? (opt ? opt.value : '') : manual.value.trim(),
+      cdn_product_name: useSelect ? (opt ? opt.getAttribute('data-name') : '') : (cfg.cdn_product_name || ''),
+      price_month: document.getElementById('cdnca-price-month').value,
+      price_quarter: document.getElementById('cdnca-price-quarter').value,
+      price_year: document.getElementById('cdnca-price-year').value
+    };
+    msg.textContent = '保存中…';
+    // 后台接口前缀 /{后台目录}/v1，与系统 request.js 相同取法；鉴权头为 Bearer backJwt。
+    var base = '/' + location.pathname.split('/')[1] + '/v1';
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', base + '/cdnca/product/' + encodeURIComponent(cfg.product_id));
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    xhr.setRequestHeader('Authorization', 'Bearer ' + (localStorage.getItem('backJwt') || ''));
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4) { return; }
+      var data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      msg.textContent = (data && data.msg) || ('保存失败（HTTP ' + xhr.status + '）');
+    };
+    xhr.send(JSON.stringify(body));
+  });
+})();
+</script>

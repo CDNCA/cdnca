@@ -1,0 +1,42 @@
+{
+  "mounts": [
+    {
+      "layer": "user",
+      "pack_id": "user/11111111-1111-4111-8111-111111111111/office",
+      "version": "0.1.0",
+      "sha256": "4ecdc21fbe2cfc5aa1e6913e6c1b135a801f10bf559e96a39892222ada2e98ad",
+      "engine": "waf_v2",
+      "priority": 500,
+      "params": {
+        "exclusions": []
+      }
+    },
+    {
+      "layer": "system",
+      "pack_id": "system/cc-basic",
+      "version": "1.2.0",
+      "sha256": "dbd91c4cb96708cd87469b03b8fb4cb101245923196445a29372b024eaab9103",
+      "engine": "cc_v2",
+      "priority": 200,
+      "params": {
+        "exclusions": [],
+        "requests": 300
+      }
+    },
+    {
+      "layer": "system",
+      "pack_id": "system/sqli-basic",
+      "version": "1.0.0",
+      "sha256": "4c2829ec683c47c73cf7df25dbace3c74259cdcd62b604c6b4e266675c2cf6c6",
+      "engine": "waf_v2",
+      "priority": 500,
+      "params": {
+        "action": "log",
+        "exclusions": [
+          "r020"
+        ]
+      }
+    }
+  ],
+  "resolved_sha256": "5bf69c36d5a29539054bf2873bd22eef1d10b51d1e26f9117a0ccc247d3b783d"
+}

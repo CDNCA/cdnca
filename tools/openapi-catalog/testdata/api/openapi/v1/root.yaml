@@ -1,0 +1,56 @@
+openapi: 3.1.0
+info: {title: t, version: '1'}
+security:
+  - bearerAuth: []
+paths:
+  /v1/sites:
+    get:
+      operationId: listSites
+      summary: 列出站点
+      x-summary-zh: 列出站点
+      description: Requires sites.read (ADR 0018 RS-02). Pages start at 1.
+      x-description-zh: 需要 sites.read 权限，页码从 1 开始。
+      x-required-permissions: [sites.read]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - {name: kind, in: query, x-description-zh: 站点类型, schema: {type: string, enum: [http, l4]}}
+      responses:
+        '200':
+          description: Page of sites.
+          x-description-zh: 站点分页。
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/SiteList'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+  /v1/sites/{id}:
+    $ref: '../../ext.openapi.yaml#/paths/~1v1~1sites~1{id}'
+  /v1/admin/analytics/top:
+    $ref: '../../ext.openapi.yaml#/paths/~1v1~1admin~1analytics~1top'
+  /v1/chain:
+    $ref: '#/x-items/chain'
+  /v1/internal/secret:
+    get:
+      operationId: internalSecret
+      summary: internal only
+      responses: {'200': {description: ok}}
+x-items:
+  chain:
+    $ref: '../../ext.openapi.yaml#/paths/~1v1~1chain'
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer}
+  parameters:
+    Page: {name: page, in: query, required: true, description: 1-based page, x-description-zh: 页码，从 1 开始, schema: {type: integer, minimum: 1}}
+  responses:
+    Forbidden: {description: Not allowed (see libs/x/y.go)., x-description-zh: 无权操作。}
+  schemas:
+    SiteList:
+      type: object
+      required: [items]
+      properties:
+        items: {type: array, items: {$ref: '#/components/schemas/Site'}}
+        next_cursor: {type: [string, 'null'], description: Opaque cursor (PA-19), x-description-zh: 不透明游标}
+    Site:
+      allOf:
+        - {type: object, required: [id], properties: {id: {type: string, format: uuid}}}
+        - {type: object, properties: {name: {type: string}}}
