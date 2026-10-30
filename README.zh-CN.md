@@ -150,6 +150,82 @@ CDNCA 是独立的开源核心（open-core）CDN 平台，控制面与边缘数�
 
 ---
 
+## 安装（从主控到第一个网站）
+
+需要两台 x86_64 Linux 服务器（Ubuntu 24.04 正式支持；Ubuntu 22.04、Debian 12/13、Rocky/AlmaLinux/RHEL 9/10 兼容）：一台装主控，一台装节点，都用 root 执行。点击截图可查看原图。终端截图按安装器真实的进度格式生成，用时为示例。
+
+### 第 1 步：安装主控
+
+在主控服务器上从社区版发布站下载 `install-control.sh` 并执行（同一批文件也在 [GitHub Releases](https://github.com/CDNCA/cdnca/releases/tag/v1.0.35-ce)，附 SHA256 与发布公钥；本地文件安装见 [安装指南](docs/installation-guide.md)）：
+
+```bash
+curl -fsSLO https://www.cdnca.com/downloads/ce/install-control.sh
+```
+
+```bash
+bash install-control.sh --release-server https://www.cdnca.com/downloads/ce
+```
+
+安装器共 12 步，会依次询问管理端公网域名或 IP、HTTPS 端口（默认 443）、证书联系邮箱、首个管理员用户名和密码（密码不回显）。结束时打印管理端地址，以及节点通道（网关）的两个端口：**请在防火墙/安全组放行这两个端口和 443**。
+
+<a href="docs/images/readme/install-1-control.png"><img src="docs/images/readme/install-1-control.png" width="720" alt="主控安装进度"></a>
+
+### 第 2 步：登录管理端
+
+用浏览器打开安装结束时打印的 `https://<管理端域名>/dashboard/`，用刚设置的管理员账号登录。
+
+<a href="docs/images/readme/install-2-login.png"><img src="docs/images/readme/install-2-login.png" width="720" alt="登录管理端"></a>
+
+### 第 3 步：复制节点安装命令
+
+打开「节点管理 → 节点列表」，点「安装节点」，复制弹窗里的安装命令。所有节点用同一条命令，不需要先在主控上添加节点；命令里含注册凭据，不要公开，泄露后点「重置注册凭据」。
+
+<a href="docs/images/readme/install-3-node-command.png"><img src="docs/images/readme/install-3-node-command.png" width="720" alt="复制节点安装命令"></a>
+
+### 第 4 步：在节点服务器上执行
+
+在节点服务器上以 root 粘贴执行这条命令。安装器共 8 步，最后与主控网关建立会话即完成；OpenResty 在主控下发首个配置后由 Agent 启动。
+
+<a href="docs/images/readme/install-4-node.png"><img src="docs/images/readme/install-4-node.png" width="720" alt="节点安装进度"></a>
+
+### 第 5 步：初始化节点
+
+回到「节点列表」的「待初始化」页签，节点已自动注册出现在这里，点「初始化」。初始化后节点转为正常，开始同步配置。请在 24 小时内完成初始化。
+
+<a href="docs/images/readme/install-5-node-init.png"><img src="docs/images/readme/install-5-node-init.png" width="720" alt="初始化节点"></a>
+
+### 第 6 步：建线路组并设为平台默认
+
+打开「节点管理 → 线路分组」，点「新增分组」，把节点加进去，填解析值（访客 CNAME 指向的域名）；保存后点「设为平台默认」。社区版没有套餐，网站一律走平台默认线路组，没有它网站无法发布。
+
+<a href="docs/images/readme/install-6-line-group.png"><img src="docs/images/readme/install-6-line-group.png" width="720" alt="平台默认线路组"></a>
+
+### 第 7 步：添加网站
+
+网站要归属一个用户：先在「系统管理 → 用户列表」点「新增用户」建一个用户。再打开「网站管理 → 网站列表」，点「添加网站」，选所属用户，填网站域名和源站地址，点「创建网站」。
+
+<a href="docs/images/readme/install-7-site-create.png"><img src="docs/images/readme/install-7-site-create.png" width="720" alt="添加网站"></a>
+
+### 第 8 步：发布
+
+网站保存后系统自动发布，不需要手动操作。在网站列表点「管理」进入网站编辑页，点右上角的「查看发布记录」，在「配置发布」页能看到发布记录和下发的节点数。
+
+<a href="docs/images/readme/install-8-publications.png"><img src="docs/images/readme/install-8-publications.png" width="720" alt="发布记录"></a>
+
+### 第 9 步：访问验证
+
+发布完成后，先不改 DNS，直接对节点 IP 发请求验证（把 IP 换成你的节点）：
+
+```bash
+curl -I --resolve www.example.com:80:203.0.113.11 http://www.example.com/
+```
+
+返回源站的响应（如 `HTTP/1.1 200 OK`）即说明节点回源正常。然后在域名的 DNS 服务商处把网站域名 CNAME 到网站列表里显示的 CNAME 地址；后台每 10 分钟检查一次解析，通过后状态显示「接入已就绪」。
+
+<a href="docs/images/readme/install-9-site-ready.png"><img src="docs/images/readme/install-9-site-ready.png" width="720" alt="网站接入已就绪"></a>
+
+---
+
 ## 快速开始
 
 安装包发布在 [GitHub Releases](https://github.com/CDNCA/cdnca/releases) 和 `https://www.cdnca.com/downloads/ce/`，详见 [cdnca.com](https://cdnca.com)。

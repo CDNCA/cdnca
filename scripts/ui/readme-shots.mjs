@@ -441,6 +441,55 @@ const analyticsResponse = (sub, u, scale, scopeSites) => {
   return undefined
 }
 
+// ---------- 安装指南（全新安装后的状态）----------
+// 只用于 install-*.png：一台刚装好的主控，一个自注册的待初始化节点，一个刚建好的站点。
+const freshNode = (state) => ({
+  id: uuid('a1000000', 1), display_id: '1', name: 'edge-01', description: 'Ubuntu 24.04.3 LTS · 6.8.0-71-generic · x86_64',
+  region: state === 'pending' ? '' : 'cn-east', ipv4: '203.0.113.11', admin_state: state, revision: state === 'pending' ? 1 : 2,
+  created_at: ago(6 * 60_000), updated_at: ago(state === 'pending' ? 6 * 60_000 : 60_000),
+  management_settings: { ...nodes[0].management_settings, sort: 0, node_type: 'L1' },
+  presence: { ...nodes[0].presence, session_epoch: 1, heartbeat_sequence: 40, last_heartbeat_at: ago(5_000), projected_at: ago(5_000) },
+})
+const freshLineGroup = (withNode) => ({
+  ...lineGroups[0], id: uuid('b2000000', 1), display_id: '1', name: '默认线路', revision: withNode ? 2 : 1, resolved_value: 'lg1.cdn.example.com',
+  endpoints: withNode ? [{ ...lineGroups[0].endpoints[0], id: uuid('b2100000', 1), node_id: uuid('a1000000', 1), address: '203.0.113.11' }] : [],
+  statistics: { node_count: withNode ? 1 : 0, site_count: 0, forward_count: 0 }, is_platform_default: true,
+})
+const freshUser = { id: uuid('11111111', 3), display_id: '1001', scope_id: TENANT_SCOPE, tenant_id: TENANT_ID, username: 'demo', display_name: '示例租户',
+  email: 'demo@example.com', phone: null, status: 'active', role: 'tenant_owner', group_id: null, group_name: null, revision: 1,
+  created_at: ago(30 * 60_000), updated_at: ago(30 * 60_000), metadata: { remark: null, qq: null } }
+const freshSite = { ...sites[0], id: uuid('c1000000', 1), display_id: '1', domain: 'www.example.com', domains: ['www.example.com'], owner: owners[0],
+  listen_ports: ['80'], origins: ['198.51.100.20:80'], cname: 's1.lg1.cdn.example.com', cname_domain: 'lg1.cdn.example.com',
+  https_enabled: false, https_certificate_bound: false, package: null, group_name: null, region: { name: '中国大陆', node_group_name: '默认线路' },
+  created_at: ago(3 * 60_000), version: 2 }
+const sha = (c) => c.repeat(64)
+const freshPublication = { id: uuid('c2000000', 1), configuration_scope_id: TENANT_SCOPE, source_revision: 2, config_version_id: uuid('c3000000', 1),
+  rollout_id: uuid('c4000000', 1), canonical_source_sha256: sha('c'), artifact_sha256: sha('d'),
+  target: { kind: 'line_group_snapshot', snapshot_id: uuid('c5000000', 1), revision: 2, resolver_sha256: sha('e'), resolved_sha256: sha('f') },
+  node_count: 1, created_at: ago(2 * 60_000) }
+const freshRollout = { id: freshPublication.rollout_id, configuration_scope_id: TENANT_SCOPE, config_version_id: freshPublication.config_version_id,
+  action: 'apply', state: 'succeeded', revision: 3, max_attempts: 3, can_cancel: false, can_retry: false,
+  progress: { total: 1, pending: 0, running: 0, succeeded: 1, failed: 0, cancelled: 0, superseded: 0, frozen: 0 },
+  created_at: ago(2 * 60_000), updated_at: ago(90_000) }
+const installHandlers = (step) => (p, u, method) => {
+  if (p === '/v1/nodes/registration-credential') return { key_id: 'a'.repeat(32), credential: `nrk1.${'3f9c2a7e'.repeat(4)}.${'Qm9kZVJlZ2lzdHJhdGlvbktleUV4YW1wbGVWYWx1ZQ'}A`, issued_at: ago(10 * 60_000) }
+  if (p === '/v1/nodes' && method === 'GET') {
+    const status = u.searchParams.get('status')
+    const state = step === 'pending' ? 'pending' : 'active'
+    return { order: 'management_sort_desc', items: step !== 'command' && (!status || status === state) ? [freshNode(state)] : [] }
+  }
+  if (p === '/v1/nodes/metrics/latest') return { observed_at: ago(10_000), items: [], not_reported_node_ids: u.searchParams.getAll('node_id') }
+  if (p === '/v1/node-line-groups') return { items: [freshLineGroup(step !== 'pending')] }
+  if (p === '/v1/admin/users') return { items: [freshUser], page: Number(u.searchParams.get('page') ?? 1), limit: Number(u.searchParams.get('limit') ?? 20), total: 1 }
+  if (p === '/v1/sites' && method === 'GET') {
+    const page = Number(u.searchParams.get('page') ?? 1), limit = Number(u.searchParams.get('limit') ?? 10)
+    return { items: step === 'site' || step === 'published' ? [freshSite] : [], total: step === 'site' || step === 'published' ? 1 : 0, page, limit }
+  }
+  if (p === '/v1/admin/site-publications') return { items: [freshPublication], current_source_revision: 2 }
+  if (p === '/v1/admin/site-rollouts') return { items: [freshRollout] }
+  return undefined
+}
+
 // ---------- 路由 ----------
 const runtimeFeatures = { cache_control: true, custom_rbac: true, plugin_webhooks: true, approval_center: true, market: true, package_auto_renew: true, origin_auth: true }
 const unknown = new Set()
@@ -566,18 +615,51 @@ function toEnglish(value) {
   return value
 }
 
-async function shoot(browser, { file, role, path: route, ready, before }) {
+// 终端截图：scripts/ui/readme-install-transcript.sh 用真实 install-progress.sh 生成的输出（含 ANSI 颜色）。
+const ansiHTML = (text) => {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const colors = { 1: 'font-weight:700', 31: 'color:#f87171', 32: 'color:#4ade80' }
+  let open = false
+  return esc(text).replace(/\x1b\[(\d*)m/g, (_, code) => {
+    const close = open ? '</span>' : ''
+    open = Boolean(colors[code])
+    return close + (open ? `<span style="${colors[code]}">` : '')
+  }).replace(/^(root@[^#]+#)/gm, '<span style="color:#60a5fa">$1</span>') + (open ? '</span>' : '')
+}
+async function shootTerminal(browser, { file, terminal }) {
+  const { execFileSync } = await import('node:child_process')
+  const text = execFileSync('bash', [path.join(repoRoot, 'scripts/ui/readme-install-transcript.sh'), terminal], { encoding: 'utf8' })
+  const page = await browser.newPage({ viewport: { width: 1280, height: 400 }, deviceScaleFactor: 1 })
+  await page.setContent(`<!doctype html><meta charset="utf-8"><body style="margin:0;background:#0f172a">
+    <div style="padding:14px 18px 6px;display:flex;gap:8px">${['#ef4444', '#f59e0b', '#22c55e'].map((c) => `<i style="width:12px;height:12px;border-radius:50%;background:${c}"></i>`).join('')}</div>
+    <pre style="margin:0;padding:6px 22px 22px;color:#e2e8f0;font:14px/1.55 Menlo,'PingFang SC',monospace;white-space:pre-wrap">${ansiHTML(text.trimEnd())}</pre></body>`)
+  await page.screenshot({ path: path.join(outDir, file), fullPage: true })
+  console.log(`${file} OK`)
+  await page.close()
+}
+
+async function shoot(browser, { file, role, path: route, ready, before, install, final }) {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 }, locale: lang === 'en' ? 'en-US' : 'zh-CN', timezoneId: 'Asia/Shanghai', deviceScaleFactor: 1 })
   await page.addInitScript((locale) => window.localStorage.setItem('cdnca.locale', locale), lang === 'en' ? 'en-US' : 'zh-CN')
+  // 节点安装命令需要 install-control.sh 写进 runtime-config.js 的升级信任摘要（这里是占位值）。
+  if (install) await page.addInitScript(() => { window.__CDNCA_NODE_UPGRADE_TRUST_SHA256__ = '7'.repeat(64) })
   const problems = []
   page.on('pageerror', (e) => problems.push(`pageerror ${e.message.slice(0, 200)}`))
   page.on('console', async (m) => { if (m.type() === 'error') problems.push(`console ${(await Promise.all(m.args().slice(1, 2).map((a) => a.jsonValue().catch(() => '')))).join(' ')} ${m.text().slice(0, 120)}`) })
   const handle = handlers(role)
+  const installHandle = install ? installHandlers(install) : () => undefined
   await page.route('**/v1/**', async (r) => {
     const req = r.request(); const u = new URL(req.url()); const p = u.pathname
     if (p === '/v1/observability/frontend-events') return r.fulfill({ status: 204 })
+    // 未登录（登录页）：刷新会话返回 401，登录方式只开密码登录。
+    // 没有进行中的四层线路切换（服务端对此返回 404 l4_line_switch_not_found）。
+    if (install && /\/l4-line-switches\/current$/.test(p)) return r.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: { code: 'l4_line_switch_not_found', message: 'not found' } }) })
+    if (role === 'guest') {
+      if (p === '/v1/auth/refresh') return r.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ error: { code: 'unauthorized', message: 'unauthorized' } }) })
+      if (p === '/v1/auth/login-methods') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { registration_enabled: false } }) })
+    }
     let body
-    try { body = handle(p, u, req.method()) } catch (e) { problems.push(`mock ${p} ${e.message}`) }
+    try { body = installHandle(p, u, req.method()) ?? handle(p, u, req.method()) } catch (e) { problems.push(`mock ${p} ${e.message}`) }
     if (body === undefined && !/^\/v1\/(theme\/current|admin\/inbox|account\/inbox|installation-lock|admin\/system-settings|system-settings\/public|admin\/tickets\/summary|plugin-ui\/pages|account\/messages)/.test(p)) unknown.add(`${file} ${req.method()} ${p}${u.search}`)
     if (body === undefined) body = { items: [] }
     return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(lang === 'en' ? toEnglish(body) : body) })
@@ -587,6 +669,7 @@ async function shoot(browser, { file, role, path: route, ready, before }) {
   if (ready) await page.getByText(ready).first().waitFor({ timeout: 15000 }).catch(() => problems.push(`未出现「${ready}」`))
   await page.waitForTimeout(1500)
   await page.mouse.move(0, 899)
+  if (final) await final(page)
   await page.screenshot({ path: path.join(outDir, file), fullPage: false })
   console.log(`${file}${problems.length ? `\n  ${problems.join('\n  ')}` : ' OK'}`)
   await page.close()
@@ -604,11 +687,33 @@ const shots = [
   { file: 'user-analysis.png', role: 'user', path: '/monitor/site/analysis' },
   { file: 'market-plugins.png', role: 'admin', path: '/sys/plugin-store' },
   { file: 'market-nodes.png', role: 'admin', path: '/sys/node-market' },
+  // 安装指南（README「安装」一节），按安装顺序。
+  { file: 'install-1-control.png', terminal: 'control' },
+  { file: 'install-2-login.png', role: 'guest', path: '/login' },
+  { file: 'install-3-node-command.png', role: 'admin', path: '/node/list', install: 'command',
+    before: async (page) => { await page.locator('.node-toolbar-actions button.ant-btn-primary').first().click(); await page.locator('.node-install-command textarea').waitFor() },
+    // 开发服务器的本机地址换成示例管理端域名（命令其余部分是 buildNodeInstallCommand 的原样输出）。
+    final: (page) => page.locator('.node-install-command textarea').evaluate((el) => { el.value = el.value.replaceAll(window.location.origin, 'https://console.example.com') }) },
+  { file: 'install-4-node.png', terminal: 'node' },
+  { file: 'install-5-node-init.png', role: 'admin', path: '/node/list', install: 'pending',
+    before: async (page) => { await page.locator('.node-tabs .ant-tabs-tab').nth(1).click(); await page.waitForTimeout(800) } },
+  { file: 'install-6-line-group.png', role: 'admin', path: '/node/line-group', install: 'active' },
+  { file: 'install-7-site-create.png', role: 'admin', path: '/site/list', install: 'active',
+    before: async (page) => { await page.locator('.site-list-page button.ant-btn-primary, button.ant-btn-primary').filter({ hasText: /添加|Add/ }).first().click(); await page.waitForTimeout(800)
+      const dialog = page.locator('.ant-modal-content')
+      await dialog.locator('.ant-select').first().click(); await page.locator('.ant-select-item-option').first().click()
+      const inputs = dialog.locator('input.ant-input, textarea.ant-input')
+      await inputs.nth(0).fill('www.example.com'); await inputs.nth(1).fill('198.51.100.20:80'); await page.waitForTimeout(400) } },
+  { file: 'install-8-publications.png', role: 'admin', path: `/site/publications?target_scope_id=${TENANT_SCOPE}`, install: 'published' },
+  { file: 'install-9-site-ready.png', role: 'admin', path: '/site/list', install: 'published' },
 ]
 const wanted = only ? only.split(',') : []
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
-  for (const shot of shots) if (!wanted.length || wanted.some((w) => shot.file.startsWith(w))) await shoot(browser, shot)
+  for (const shot of shots) {
+    if (wanted.length && !wanted.some((w) => shot.file.startsWith(w))) continue
+    await (shot.terminal ? shootTerminal(browser, shot) : shoot(browser, shot))
+  }
 } finally {
   await browser.close()
 }

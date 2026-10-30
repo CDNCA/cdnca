@@ -150,6 +150,82 @@ The Community Edition does not connect to the license service: a community licen
 
 ---
 
+## Installation (control plane to first site)
+
+You need two x86_64 Linux servers (Ubuntu 24.04 official; Ubuntu 22.04, Debian 12/13 and Rocky/AlmaLinux/RHEL 9/10 compatible): one for the control plane and one for a node. Run everything as root. Click a screenshot to see it full size. Terminal screenshots follow the installer's real progress format with sample timings; the installers print their progress and prompts in Chinese.
+
+### Step 1: Install the control plane
+
+On the control plane server, download `install-control.sh` from the Community Edition release server and run it (the same files, with SHA256 sums and the release public key, are on [GitHub Releases](https://github.com/CDNCA/cdnca/releases/tag/v1.0.35-ce); for local package files, see the [installation guide](docs/installation-guide.md)):
+
+```bash
+curl -fsSLO https://www.cdnca.com/downloads/ce/install-control.sh
+```
+
+```bash
+bash install-control.sh --release-server https://www.cdnca.com/downloads/ce
+```
+
+The installer runs 12 steps and asks for the console's public domain or IP, the HTTPS port (default 443), a certificate contact email, and the first administrator's username and password (not echoed). At the end it prints the console URL and the two node channel (Gateway) ports. **Open those two ports and 443 in your firewall / security group.**
+
+<a href="docs/images/readme/en/install-1-control.png"><img src="docs/images/readme/en/install-1-control.png" width="720" alt="Control plane installation progress"></a>
+
+### Step 2: Sign in to the console
+
+Open `https://<console domain>/dashboard/` (printed at the end of the install) and sign in with the administrator account you just created.
+
+<a href="docs/images/readme/en/install-2-login.png"><img src="docs/images/readme/en/install-2-login.png" width="720" alt="Sign in to the console"></a>
+
+### Step 3: Copy the node install command
+
+Go to **Nodes → Node list**, click **Install node**, and copy the command in the dialog. Every node uses the same command and nothing needs to be added on the control plane first. The command carries the registration key: keep it private, and click **Reset registration key** if it leaks.
+
+<a href="docs/images/readme/en/install-3-node-command.png"><img src="docs/images/readme/en/install-3-node-command.png" width="720" alt="Copy the node install command"></a>
+
+### Step 4: Run it on the node server
+
+Paste and run the command as root on the node server. The installer runs 8 steps and finishes once it has a session with the control plane Gateway. The agent starts OpenResty after the control plane sends the first configuration.
+
+<a href="docs/images/readme/en/install-4-node.png"><img src="docs/images/readme/en/install-4-node.png" width="720" alt="Node installation progress"></a>
+
+### Step 5: Initialize the node
+
+Back in **Node list**, open the **Pending initialization** tab. The node has registered itself there; click **Initialize**. It becomes active and starts syncing configuration. Initialize it within 24 hours.
+
+<a href="docs/images/readme/en/install-5-node-init.png"><img src="docs/images/readme/en/install-5-node-init.png" width="720" alt="Initialize the node"></a>
+
+### Step 6: Create a line group and make it the platform default
+
+Go to **Nodes → Line groups**, click **Add Group**, add the node, and set the resolved value (the hostname visitors' CNAMEs point to). After saving, click **Set as Platform Default**. The Community Edition has no packages, so every site uses the platform default line group; without one, sites cannot be published.
+
+<a href="docs/images/readme/en/install-6-line-group.png"><img src="docs/images/readme/en/install-6-line-group.png" width="720" alt="Platform default line group"></a>
+
+### Step 7: Add a site
+
+A site belongs to a user, so first create one under **System → Users → Add user**. Then go to **Sites → Site list**, click **Add site**, pick the owner user, enter the site domain and origin address, and click **Create site**.
+
+<a href="docs/images/readme/en/install-7-site-create.png"><img src="docs/images/readme/en/install-7-site-create.png" width="720" alt="Add a site"></a>
+
+### Step 8: Publish
+
+Saving a site publishes it automatically; there is no manual step. Click **Manage** on the site in the site list, then **View publications** at the top of the edit page: the **Configuration publication** page shows the publication record and how many nodes received it.
+
+<a href="docs/images/readme/en/install-8-publications.png"><img src="docs/images/readme/en/install-8-publications.png" width="720" alt="Publication records"></a>
+
+### Step 9: Verify access
+
+Once it is published, test through the node before touching DNS (replace the IP with your node's):
+
+```bash
+curl -I --resolve www.example.com:80:203.0.113.11 http://www.example.com/
+```
+
+Your origin's response (for example `HTTP/1.1 200 OK`) means the node is fetching from the origin. Then, at your DNS provider, CNAME the site domain to the CNAME shown in the site list. DNS is checked every 10 minutes; once it passes, the status shows **Access ready**.
+
+<a href="docs/images/readme/en/install-9-site-ready.png"><img src="docs/images/readme/en/install-9-site-ready.png" width="720" alt="Site access ready"></a>
+
+---
+
 ## Quick start
 
 Release packages are published on [GitHub Releases](https://github.com/CDNCA/cdnca/releases) and at `https://www.cdnca.com/downloads/ce/`. See [cdnca.com](https://cdnca.com) for details.
