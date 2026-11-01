@@ -230,6 +230,9 @@ func (g *Gateway) validateHeartbeatActiveConfigIdentities(heartbeat *agentv1.Hea
 		if !validNativeRuntimeStatus(heartbeat.Runtime.NativeRuntime) {
 			return fmt.Errorf("heartbeat.runtime.native_runtime is invalid")
 		}
+		if !validTelemetryHealth(heartbeat.Runtime.Telemetry) {
+			return fmt.Errorf("heartbeat.runtime.telemetry is invalid")
+		}
 		if summary := heartbeat.Runtime.ErrorLog; summary != nil {
 			if len(summary.Recent) > 16 {
 				return fmt.Errorf("heartbeat.runtime.error_log.recent exceeds 16 lines")
@@ -806,6 +809,33 @@ func (g *Gateway) validateStreamMetadata(metadata *commonv1.StreamMetadata) erro
 		return err
 	}
 	return g.validateIdentifier("stream.traceparent", metadata.Traceparent, false)
+}
+
+// validTelemetryHealth: EdgeRuntimeStatus.telemetry is absent
+// or an upper-case error code seen count >= 1 times between two valid
+// timestamps, first <= last.
+func validTelemetryHealth(health *agentv1.TelemetryHealth) bool {
+	if health == nil {
+		return true
+	}
+	if !validUpperCode(health.ErrorCode) || health.Count < 1 || health.FirstSeenTime == nil || health.LastSeenTime == nil ||
+		health.FirstSeenTime.CheckValid() != nil || health.LastSeenTime.CheckValid() != nil {
+		return false
+	}
+	return !health.LastSeenTime.AsTime().Before(health.FirstSeenTime.AsTime())
+}
+
+// validUpperCode: ^[A-Z][A-Z0-9_]{0,63}$.
+func validUpperCode(code string) bool {
+	if code == "" || len(code) > 64 || code[0] < 'A' || code[0] > 'Z' {
+		return false
+	}
+	for _, character := range code {
+		if (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 // validNativeRuntimeStatus: EdgeRuntimeStatus.native_runtime (node-runtime-

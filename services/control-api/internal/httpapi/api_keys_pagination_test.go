@@ -29,6 +29,8 @@ func TestParseAPIKeyListRawQueryContract(t *testing.T) {
 		{name: "offset", raw: "limit=10&offset=20", want: apikey.APIKeyListInput{Limit: 10, Offset: 20}},
 		{name: "zero offset", raw: "offset=0", want: apikey.APIKeyListInput{Limit: 50}},
 		{name: "maximum offset", raw: "offset=10000", want: apikey.APIKeyListInput{Limit: 50, Offset: 10000}},
+		// AA-UI02：usable=true 只要实际可用的密钥。
+		{name: "usable", raw: "limit=2&status=active&usable=true", want: apikey.APIKeyListInput{Limit: 2, Status: "active", Usable: true}},
 		{name: "maximum cursor", raw: "cursor=" + strings.Repeat("a", 4096), want: apikey.APIKeyListInput{Limit: 50, Cursor: strings.Repeat("a", 4096)}},
 	}
 	for _, test := range valid {
@@ -46,6 +48,7 @@ func TestParseAPIKeyListRawQueryContract(t *testing.T) {
 		"cursor=a&cursor=b", "status=", "name=", "key_id=", "cursor=", "unknown=value",
 		"cursor=" + strings.Repeat("a", 4097), "limit=%zz", "limit=1;status=active",
 		"offset=", "offset=-1", "offset=01", "offset=1.0", "offset=10001", "offset=100000", "offset=1&offset=2",
+		"usable=false", "usable=1", "usable=TRUE", "usable=", "usable=true&usable=true",
 	}
 	for _, raw := range invalid {
 		if _, err := parseAPIKeyListRawQuery(raw); err == nil {

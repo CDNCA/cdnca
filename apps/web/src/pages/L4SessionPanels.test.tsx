@@ -78,7 +78,7 @@ describe('L4 access log and live connections', () => {
     const close = vi.spyOn(l4SessionLogsApi, 'closeLive').mockResolvedValue({ node_id: nodeA, state: 'ok', results: [{ session_key: '10.0.0.1|443|192.0.2.9|50000' }] })
     const user = userEvent.setup()
     renderWithProviders(<L4LiveConnectionsPage />)
-    expect(screen.getByText(/只有开启“会话日志”的 TCP 转发会登记连接/)).toBeInTheDocument()
+    expect(screen.getByText('显示当前 TCP 连接；UDP 连接不在本表中。')).toBeInTheDocument()
     // No forward picked and no button pressed: the page already asked.
     await waitFor(() => expect(listAll).toHaveBeenCalledWith(expect.any(String), {}, expect.anything()))
     expect(await screen.findByText('203.0.113.10:61000')).toBeInTheDocument()
@@ -194,5 +194,26 @@ describe('L4 access log and live connections', () => {
     renderWithProviders(<L4AccessLogPage />)
     expect(screen.getByText('当前身份缺少网站读取权限，无法查看四层访问日志。')).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  // 说明与能力同步——所有 TCP 连接都已登记（L4-USAGE-01），会话日志只控制历史访问日志；
+  // 页面名可见，长说明收进折叠帮助。
+  it('names the page visibly, keeps a one-line summary and folds the details without the stale session-log claim', async () => {
+    authenticate(['sites.read', 'streams.read'])
+    vi.spyOn(l4SessionLogsApi, 'listAll').mockResolvedValue({ streams: 0, streams_truncated: false, truncated: false, problems: [], connections: [] })
+    const user = userEvent.setup()
+    renderWithProviders(<L4LiveConnectionsPage />)
+    const heading = screen.getByRole('heading', { level: 1, name: '四层实时连接' })
+    expect(heading).not.toHaveClass('visually-hidden')
+    expect(screen.getByText('显示当前 TCP 连接；UDP 连接不在本表中。')).toBeVisible()
+    expect(screen.queryByText(/只有开启“会话日志”的 TCP 转发会登记连接/)).not.toBeInTheDocument()
+    const summary = screen.getByText('说明')
+    const details = summary.closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent('会话日志开关只决定是否保存历史访问日志，不影响这里查看实时连接')
+    expect(details).toHaveTextContent('断开需节点 agent 以 root 运行')
+    await user.click(summary)
+    expect(details).toHaveAttribute('open')
+    expect(await screen.findByText('当前没有连接')).toBeInTheDocument()
   })
 })

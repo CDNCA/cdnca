@@ -15,6 +15,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -501,7 +502,36 @@ func postgresError(ctx context.Context, err error) error {
 	if err == nil {
 		return ErrStorageUnavailable
 	}
-	return fmt.Errorf("%w: plugin installation postgres", ErrStorageUnavailable)
+	// Keep only the safe classification of the cause (SQLSTATE, constraint name): never the database message or
+	// detail, which can carry row values such as an idempotency key.
+	failure := StorageFailure{}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		failure.SQLState, failure.Constraint = pgErr.Code, pgErr.ConstraintName
+	}
+	return failure
+}
+
+// StorageFailure is a plugin installation storage error reduced to what is safe to log.
+type StorageFailure struct {
+	SQLState   string
+	Constraint string
+}
+
+func (failure StorageFailure) Error() string {
+	if failure.SQLState == "" {
+		return ErrStorageUnavailable.Error()
+	}
+	return ErrStorageUnavailable.Error() + ": sqlstate " + failure.SQLState
+}
+
+func (StorageFailure) Unwrap() error { return ErrStorageUnavailable }
+
+// StorageFailureOf returns the storage classification carried by err (zero when none).
+func StorageFailureOf(err error) StorageFailure {
+	var failure StorageFailure
+	errors.As(err, &failure)
+	return failure
 }
 
 func configuredPluginInstallationPool(pool *pgxpool.Pool) (configured bool) {

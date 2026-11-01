@@ -7,6 +7,8 @@
  * (/v1/theme/theme.<sha>.css, web only) sets the same names on
  * :root[data-cdnca-theme], which wins over :root.
  */
+@import './dark.css';
+
 :root {
   --cdnca-color-primary: #2d8cf0;
   --cdnca-color-link: #2d8cf0;
@@ -533,6 +535,19 @@ samp {
   margin-top: 16px;
 }
 
+/* 页面根就是一张 PageSection 页卡，标题、说明、标签页、内容都在里面。
+   卡里再出现的 PageSection 只是分区：保留细边框，不带阴影，不叠成"卡套卡"。 */
+.cdnca-page-section .cdnca-page-section {
+  box-shadow: none;
+}
+
+/* 页卡顶上的页面标题不带 antd 的段前距（排在弹窗上下文等空节点后面时 antd 会给 1.2em）。 */
+.cdnca-page-section > .ant-typography:is(h1, h2, h3, h4):first-of-type,
+.cdnca-page-section > :first-child .ant-typography:is(h1, h2, h3, h4):first-child,
+.cdnca-page-section > :is(div, header):first-of-type .ant-typography:is(h1, h2, h3, h4):first-child {
+  margin-top: 0;
+}
+
 .cdnca-page-section-head {
   display: flex;
   flex-wrap: wrap;
@@ -647,6 +662,12 @@ html[data-cdnca-look="tech"] .cdnca-page-section {
   box-shadow: var(--cdnca-shadow-card);
 }
 
+/* 页卡里的分区与 antd Card 不再各带一层卡片阴影（tech 外观给 .ant-card 加了阴影）。 */
+html[data-cdnca-look="tech"] .cdnca-page-section .cdnca-page-section,
+html[data-cdnca-look="tech"] .cdnca-page-section .ant-card {
+  box-shadow: none;
+}
+
 html[data-cdnca-look="tech"] .cdnca-page-section-head {
   margin: -16px -16px 16px;
   padding: 12px 16px;
@@ -678,9 +699,50 @@ html[data-cdnca-look="tech"] .cdnca-modal-footer .ant-btn {
 }
 
 /*
+ * Scrollbars: hidden everywhere in every front
+ * end, scrolling stays (wheel, touchpad, touch, keyboard). The grey default
+ * bar did not match the themed sidebar or page. One rule here, !important so
+ * no page rule brings a bar back; antd virtual lists (Select dropdowns) draw
+ * their own bar and are hidden too. Discoverability: a wide table shades the
+ * edge it can still scroll to, the sidebar menu fades at the bottom while more
+ * is below, and a keyboard-focused scroll box shows the focus ring.
+ * Guard: scrollbar-hidden.guard.test.ts.
+ */
+*,
+*::before,
+*::after {
+  scrollbar-width: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+}
+
+.rc-virtual-list-scrollbar,
+.rc-virtual-list-scrollbar-thumb {
+  display: none !important;
+}
+
+/* Wider and theme-tinted than antd's own (it was barely visible on white). */
+.ant-table-wrapper .ant-table-ping-left:not(.ant-table-has-fix-left) .ant-table-container::before {
+  box-shadow: inset 14px 0 12px -10px color-mix(in srgb, var(--cdnca-color-sidebar-dark) 28%, transparent);
+}
+
+.ant-table-wrapper .ant-table-ping-right:not(.ant-table-has-fix-right) .ant-table-container::after {
+  box-shadow: inset -14px 0 12px -10px color-mix(in srgb, var(--cdnca-color-sidebar-dark) 28%, transparent);
+}
+
+.ant-table-content:focus-visible,
+.ant-table-body:focus-visible,
+.cdnca-dialog-scroll:focus-visible {
+  outline: 2px solid var(--cdnca-color-focus-ring);
+  outline-offset: -2px;
+}
+
+/*
  * Dialog scroll areas (Modal / Drawer bodies and .cdnca-dialog-scroll boxes
- * inside them): no visible scrollbar, still scrolls by wheel, touchpad, touch
- * and keyboard. Page scroll and table scrollers keep their bars.
+ * inside them): no visible scrollbar (the rule above), still scrolls by wheel,
+ * touchpad, touch and keyboard.
  * Hint: while there is more below, the bottom 24px fades out (alpha mask, so it
  * works on any theme colour); scroll-padding keeps a Tab-focused control clear
  * of the fade. The timeline is inactive when the box does not scroll, so boxes

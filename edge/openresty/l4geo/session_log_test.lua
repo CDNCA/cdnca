@@ -110,8 +110,11 @@ assert(var.cdnca_l4_live_key == direct and live_store[direct].value == "stream-a
 local direct_var = var
 connection({ server_addr = "10.0.0.1", server_port = "9001", remote_addr = "192.0.2.9", remote_port = "50000",
     proxy_protocol_addr = "203.0.113.10", proxy_protocol_port = "61000", connection = "12" })
-engine.session_track("stream-b", "listener-b", "203.0.113.10", false)
+engine.session_track("stream-b", "listener-b", "203.0.113.10", false, "tenant-b|site-b|version-b|7|package-b")
 assert(live_store["10.0.0.1|9001|192.0.2.9|50000"].value:find("|203.0.113.10|61000|", 1, true), "trusted proxy client port")
+-- NR-M01: the release identity sits between the start and the token
+assert(live_store["10.0.0.1|9001|192.0.2.9|50000"].value == "stream-b|listener-b|203.0.113.10|61000|1000.000|tenant-b|site-b|version-b|7|package-b|4242:12|0",
+    "release identity: " .. live_store["10.0.0.1|9001|192.0.2.9|50000"].value)
 connection({ server_addr = "unix:", server_port = "", proxy_protocol_server_addr = "10.0.0.1", proxy_protocol_server_port = "443",
     remote_addr = "2001:db8::5", remote_port = "40002", connection = "13" })
 engine.session_track("stream-c", "listener-c", "2001:db8::5", true)
@@ -165,4 +168,4 @@ ngx.shared.l4_v2_live = live
 assert(control({ "stats" }) == "untracked 0\n", "stats")
 os.remove(prefix .. "config.json")
 os.remove(prefix:sub(1, -2))
-print("L4_SESSION_LOG_LUA_PASS reasons=8 tracked=3 control=4 end=3 full=1 exits=" .. exits)
+print("L4_SESSION_LOG_LUA_PASS reasons=8 tracked=3 identity=1 control=4 end=3 full=1 exits=" .. exits)

@@ -126,6 +126,21 @@ body.i-theme-dark .shell-account-menu .ant-dropdown-menu-item:hover {
   }
 }
 
+/* the sidebar menu shows no scrollbar (@cdnca/ui styles.css);
+   while more items are below, its bottom fades (shared cdnca-scroll-fade
+   keyframes), so the user sees it scrolls. Keyboard focus keeps clear of it. */
+.shell-menu {
+  scroll-padding-block-end: 24px;
+}
+
+@supports (animation-timeline: scroll()) {
+  .shell-menu {
+    animation: cdnca-scroll-fade linear both;
+    animation-timeline: scroll(self block);
+    animation-range: calc(100% - 48px) 100%;
+  }
+}
+
 /* PA-17 themes. The shell chrome below is hard-coded to the default theme in
    styles.css; with a theme loaded (:root[data-cdnca-theme], set by
    ThemeProvider) it follows the theme's variables instead. */
@@ -184,6 +199,73 @@ body.i-theme-dark .shell-account-menu .ant-dropdown-menu-item:hover {
 .app-shell.is-sidebar-dark .shell-menu .ant-menu-submenu .ant-menu-item-selected {
   color: var(--cdnca-color-text-inverse, #ffffff);
   background: color-mix(in srgb, var(--cdnca-color-primary, #2d8cf0) 32%, transparent);
+}
+
+/* with a theme loaded, the light-sidebar selected rules above
+   (:root[data-cdnca-theme] .app-shell:not(.is-dark) …) out-ranked the dark
+   sidebar's, so a selected item on the dark sidebar showed primary text on
+   the dark fill (official.slate: #0f766e on #0f172a, 3.3:1). */
+:root[data-cdnca-theme] .app-shell.is-sidebar-dark:not(.is-dark) .shell-menu.ant-menu-inline .ant-menu-item-selected,
+:root[data-cdnca-theme] .app-shell.is-sidebar-dark:not(.is-dark) .shell-menu .ant-menu-submenu .ant-menu-item-selected {
+  color: var(--cdnca-color-text-inverse);
+  background: color-mix(in srgb, var(--cdnca-color-primary) 32%, transparent);
+}
+
+:root[data-cdnca-theme] .app-shell.is-sidebar-dark:not(.is-dark) .shell-menu.ant-menu-inline > .ant-menu-submenu-selected > .ant-menu-submenu-title,
+:root[data-cdnca-theme] .app-shell.is-sidebar-dark:not(.is-dark) .shell-menu .ant-menu-submenu-selected > .ant-menu-submenu-title .ant-menu-item-icon,
+:root[data-cdnca-theme] .app-shell.is-sidebar-dark:not(.is-dark) .shell-menu .ant-menu-item-selected .ant-menu-item-icon {
+  color: var(--cdnca-color-text-inverse) !important;
+}
+
+/* dark mode's submenu was white (styles.css .shell-menu
+   .ant-menu-sub sets the light container with !important). */
+.app-shell.is-dark .shell-menu .ant-menu-sub {
+  background: var(--cdnca-color-chrome-dark, #111827) !important;
+}
+
+/* layout_slots.header = dark: the top bar takes the dark
+   sidebar's color, so sidebar and top bar are one frame around the light
+   page. Text and icons are the inverse color at the sidebar's strengths
+   (72% rest, full on hover / current). */
+.app-shell.is-header-dark:not(.is-dark) .app-header {
+  color: color-mix(in srgb, var(--cdnca-color-text-inverse) 72%, transparent);
+  background: var(--cdnca-color-sidebar-dark);
+  border-bottom-color: color-mix(in srgb, var(--cdnca-color-text-inverse) 8%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.app-shell.is-header-dark:not(.is-dark) .header-icon-button,
+.app-shell.is-header-dark:not(.is-dark) .shell-breadcrumb,
+.app-shell.is-header-dark:not(.is-dark) .shell-header-links a {
+  color: color-mix(in srgb, var(--cdnca-color-text-inverse) 72%, transparent);
+}
+
+.app-shell.is-header-dark:not(.is-dark) .shell-breadcrumb-current,
+.app-shell.is-header-dark:not(.is-dark) .header-icon-button:hover,
+.app-shell.is-header-dark:not(.is-dark) .shell-header-links a:hover,
+.app-shell.is-header-dark:not(.is-dark) .shell-header-links a:focus-visible {
+  color: var(--cdnca-color-text-inverse);
+}
+
+.app-shell.is-header-dark:not(.is-dark) .header-icon-button:hover,
+.app-shell.is-header-dark:not(.is-dark) .account-trigger:hover {
+  background: color-mix(in srgb, var(--cdnca-color-text-inverse) 8%, transparent);
+}
+
+.app-shell.is-header-dark:not(.is-dark) .shell-theme-toggle {
+  color: color-mix(in srgb, var(--cdnca-color-text-inverse) 60%, transparent);
+  background: color-mix(in srgb, var(--cdnca-color-text-inverse) 6%, transparent);
+  border-color: color-mix(in srgb, var(--cdnca-color-text-inverse) 14%, transparent);
+}
+
+.app-shell.is-header-dark:not(.is-dark) .shell-theme-option {
+  color: color-mix(in srgb, var(--cdnca-color-text-inverse) 60%, transparent);
+}
+
+.app-shell.is-header-dark:not(.is-dark) .shell-theme-option.is-active {
+  color: var(--cdnca-color-text-inverse);
+  background: color-mix(in srgb, var(--cdnca-color-text-inverse) 16%, transparent);
 }
 
 .shell-header-links {

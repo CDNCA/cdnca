@@ -819,8 +819,14 @@ describe('NodeRealtimePage', () => {
       const checkbox = screen.getByRole('checkbox', { name: '自动选择出口网卡' })
       const item = checkbox.closest('.node-realtime-egress-item')
       expect(item).not.toBeNull()
-      expect(item?.parentElement).toHaveClass('node-realtime-controls')
-      expect(item?.previousElementSibling).toHaveClass('node-realtime-refresh-item')
+      // 节点流量的筛选条是共享 AdvancedFilters：开关在按钮组（刷新 / 高级筛选）之后的 extra 里。
+      if (item?.closest('.cdnca-adv-filters')) {
+        expect(item.parentElement).toHaveClass('cdnca-adv-filters-extra')
+        expect(item.parentElement?.previousElementSibling).toHaveClass('cdnca-adv-filters-actions')
+      } else {
+        expect(item?.parentElement).toHaveClass('node-realtime-controls')
+        expect(item?.previousElementSibling).toHaveClass('node-realtime-refresh-item')
+      }
       expect(within(item as HTMLElement).getByRole('button', { name: hint })).toBeInTheDocument()
       expect(screen.queryByText(hint)).not.toBeInTheDocument()
       expect(container.querySelector('.node-realtime-network-selection #node-realtime-external-only')).toBeNull()
@@ -858,17 +864,27 @@ describe('NodeRealtimePage', () => {
       expect(within(controls).queryByRole('textbox', { name: '选择时间范围' })).not.toBeInTheDocument()
     }
 
-    // 节点流量：排除网卡收进行尾「高级筛选」，启用后按钮带条件数。
+    // 节点流量：排除网卡收进共享 AdvancedFilters 的「高级筛选」，刷新是组件的查询按钮，
+    // 出口网卡开关紧跟其后；输入即生效，启用后按钮带条件数、行下出标签，× 清除。
     const controls = container.querySelector('.node-realtime-controls') as HTMLElement
-    const advanced = within(controls).getByRole('button', { name: '高级筛选' })
-    expect(controls.lastElementChild).toContainElement(advanced)
+    const filters = controls.querySelector('.cdnca-adv-filters') as HTMLElement
+    expect(filters).not.toBeNull()
+    const actions = filters.querySelector('.cdnca-adv-filters-actions') as HTMLElement
+    expect(within(actions).getByRole('button', { name: '刷新' })).toHaveClass('ant-btn-primary')
+    const advanced = within(actions).getByRole('button', { name: /^高级筛选/ })
+    expect(actions.nextElementSibling).toContainElement(screen.getByRole('checkbox', { name: '自动选择出口网卡' }))
     expect(advanced).toHaveAttribute('aria-expanded', 'false')
-    expect(within(controls).queryByPlaceholderText('排除网卡，多个网卡用空格分隔')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '排除网卡', hidden: true })).not.toBeVisible()
     await user.click(advanced)
     expect(advanced).toHaveAttribute('aria-expanded', 'true')
     const panel = screen.getByRole('group', { name: '高级筛选' })
     await user.type(within(panel).getByRole('textbox', { name: '排除网卡' }), 'docker0')
-    expect(within(controls).getByRole('button', { name: '高级筛选（已启用 1 项）' })).toBeInTheDocument()
+    expect(advanced).toHaveTextContent('高级筛选 · 1')
+    const tags = screen.getByRole('list', { name: '已启用的高级条件' })
+    expect(tags).toHaveTextContent('排除网卡：docker0')
+    await user.click(within(tags).getByRole('button', { name: '移除条件 排除网卡' }))
+    expect(within(panel).getByRole('textbox', { name: '排除网卡' })).toHaveValue('')
+    expect(advanced).toHaveTextContent(/^高级筛选$/)
     expect(nodeRealtimeCSS).toMatch(/@media \(min-width: 768px\)\s*\{[\s\S]*?\.node-realtime-controls--inline\s*\{[\s\S]*?flex-wrap:\s*nowrap;/)
   })
 
@@ -987,6 +1003,40 @@ describe('NodeRealtimePage', () => {
     expect(screen.getAllByRole('row')[1]).toHaveTextContent('无效连接 3 / 孤立 FIN 1 / Xmas 12')
   })
 
+  it('shows the level D site drop packets of the latest sample in the connections ranking', async () => {
+    authenticate()
+    vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [node] })
+    mockLatest(() => ({ ...metrics, telemetry: {
+      schema_version: 1, total_rx_bytes: 100, total_tx_bytes: 200, disks: [], network_interfaces: [],
+      site_drop: { site_ids: ['018f0000-0000-7000-8000-0000000000a1', '018f0000-0000-7000-8000-0000000000a2'], packets: 1234, bytes: 74040 },
+    } }))
+    vi.spyOn(nodesApi, 'getNodeRealtimeTop').mockResolvedValue({ data: [], msg: '', code: 0 })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('tab', { name: '资源排行' }))
+    await screen.findByText(`${node.name} (${node.display_id})`)
+    await user.click(screen.getByText('连接', { exact: true }))
+    const row = screen.getAllByRole('row')[1]!
+    expect(row).toHaveTextContent('1234（2 个站点）')
+    expect(within(row).getByTitle(/攻击自动升级 D 级/)).toBeInTheDocument()
+  })
+
+  it('shows no site drop when the latest sample has none', async () => {
+    authenticate()
+    vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [node] })
+    mockLatest(() => ({ ...metrics, telemetry: {
+      schema_version: 1, total_rx_bytes: 100, total_tx_bytes: 200, disks: [], network_interfaces: [],
+    } }))
+    vi.spyOn(nodesApi, 'getNodeRealtimeTop').mockResolvedValue({ data: [], msg: '', code: 0 })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(screen.getByRole('tab', { name: '资源排行' }))
+    await screen.findByText(`${node.name} (${node.display_id})`)
+    await user.click(screen.getByText('连接', { exact: true }))
+    const cells = within(screen.getAllByRole('row')[1]!).getAllByRole('cell')
+    expect(cells[cells.length - 1]).toHaveTextContent('无')
+  })
+
   it('switches ranking columns and keeps metric sorting tied to the selected value', async () => {
     authenticate()
     const second = { ...node, id: '018f0000-0000-7000-8000-000000000002', name: '北京边缘节点' }
@@ -1006,7 +1056,7 @@ describe('NodeRealtimePage', () => {
     expect(rows()[0]).toHaveTextContent(`${second.name} (${second.display_id})`)
 
     await user.click(screen.getByText('连接', { exact: true }))
-    expect(screen.getAllByRole('columnheader').map((header) => header.textContent?.trim())).toEqual(['排行', '节点', '连接数', 'DDoS 丢弃包'])
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent?.trim())).toEqual(['排行', '节点', '连接数', 'DDoS 丢弃包', '站点丢弃包'])
     expect(rows()[0]).toHaveTextContent(`${node.name} (${node.display_id})`)
 
     await user.click(screen.getByText('负载', { exact: true }))

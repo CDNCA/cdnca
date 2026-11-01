@@ -24,7 +24,9 @@ it('does not double the modal padding, so the five tabs fit like the reference',
 // 节点设置顶部蓝色提示框字号过大（antd 带 description 时标题 16px），
 // 弹窗内提示框统一用共享紧凑样式，字号与同页说明文字一致（12px / 18px），标题不加粗不放大。
 it('keeps every edit-node alert compact, matching the dialog help text', function editAlertsCompact() {
-  const source = tsx.slice(tsx.indexOf('function NodeEditModal('), tsx.indexOf('function NodeFormModal('))
+  // 节点设置的能力提示拆成 NodeStorageCapability（在表单外），一并检查。
+  const source = tsx.slice(tsx.indexOf('function NodeStorageCapability('), tsx.indexOf('type NodeIPLocationResolution')) +
+    tsx.slice(tsx.indexOf('function NodeEditModal('), tsx.indexOf('function NodeFormModal('))
   const alerts = source.match(/<Alert\b[^>]*?(?:\/>|>)/gs) ?? []
   expect(alerts.length).toBeGreaterThanOrEqual(4)
   for (const alert of alerts) expect(alert).toMatch(/className="node-modal-alert cdnca-alert-compact"/)

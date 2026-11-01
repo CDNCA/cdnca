@@ -18,7 +18,7 @@ import {
   Tag,
   type TableColumnsType,
 } from 'antd'
-import { useFeedback, useFeedbackMessage, useFormSubmitError, FeedbackWhen, OutcomeUnknown, TimeRangeFilter, type TimeRangeValue } from '@cdnca/ui'
+import { useFeedback, useFeedbackMessage, useFormSubmitError, FeedbackWhen, OutcomeUnknown, TimeRangeFilter, type TimeRangeValue, PageSection } from '@cdnca/ui'
 import { Check, ChevronLeft, ChevronRight, Clipboard, Eye, Play, Plus, RefreshCw, RotateCw, Send, ShieldOff } from 'lucide-react'
 import dayjs from 'dayjs'
 import type { TFunction } from 'i18next'
@@ -733,7 +733,7 @@ function PluginWebhooksPageContent({ accessToken, principal, ownerKey }: {
   const unknownAttempt = currentCreateAttempt ?? currentAttempt
   const displayedActionError = actionError?.ownerKey === ownerKey && actionError.scopeID === scopeID ? actionError.text : null
 
-  return <div className="plugin-webhooks-page">
+  return <PageSection className="plugin-webhooks-page">
     {messageContext}
     <div className="plugin-webhooks-heading">
       <div>
@@ -870,5 +870,5 @@ function PluginWebhooksPageContent({ accessToken, principal, ownerKey }: {
       </> : null}
     </Drawer>
     </>}</>}
-  </div>
+  </PageSection>
 }

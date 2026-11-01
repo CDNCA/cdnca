@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ConfigProvider, message, type AppProps, type ConfigProviderProps, type ThemeConfig } from 'antd'
 
 import { CdncaApp } from './app'
+import { darkThemeConfig, useColorMode, type CdncaDarkSeeds } from './dark'
 import { FeedbackProvider } from './feedback'
 import tokens from './tokens.json'
 
@@ -217,6 +218,7 @@ export * from './PromoPlanFields'
 export * from './liveFilter'
 export * from './IdOrNameInput'
 export { useApp } from './app'
+export * from './dark'
 
 export type CdncaProviderProps = Omit<ConfigProviderProps, 'theme'> & {
   children: ReactNode
@@ -224,6 +226,8 @@ export type CdncaProviderProps = Omit<ConfigProviderProps, 'theme'> & {
   tokens?: CdncaAntdTokens | null
   /** "console" for the licensing ends; with it, also import @cdnca/ui/console.css. */
   look?: CdncaVariant
+  /** Dark-mode seeds of the active theme (web theme package); missing: the defaults. */
+  darkSeeds?: CdncaDarkSeeds | null
 }
 
 /**
@@ -233,11 +237,14 @@ export type CdncaProviderProps = Omit<ConfigProviderProps, 'theme'> & {
  * first modal.* call (./app.tsx). Errors and warnings go through useFeedback() (dialogs); success
  * hints through App.useApp().message. Never antd's static API.
  */
-export function CdncaProvider({ children, tokens: overrides, look = 'classic', ...config }: CdncaProviderProps) {
+export function CdncaProvider({ children, tokens: overrides, look = 'classic', darkSeeds, ...config }: CdncaProviderProps) {
   const reducedMotion = useReducedMotion()
-  const theme = useMemo(() => cdncaTheme(
-    overrides ?? (look === 'console' ? consoleAntdTokens : defaultAntdTokens), reducedMotion, look,
-  ), [overrides, reducedMotion, look])
+  // <html data-theme="dark"> switches antd to its dark algorithm with the shared dark palette.
+  const colorMode = useColorMode()
+  const theme = useMemo(() => {
+    const light = cdncaTheme(overrides ?? (look === 'console' ? consoleAntdTokens : defaultAntdTokens), reducedMotion, look)
+    return colorMode === 'dark' ? darkThemeConfig(light, darkSeeds ?? undefined) : light
+  }, [overrides, reducedMotion, look, colorMode, darkSeeds])
   // rc-dialog hard-codes aria-label="Close" on the Modal ×; antd only replaces it
   // with aria props from the closable config, so hand it the locale's own word
   // (Drawer already reads locale.global.close). Modals with closable={false} stay closed off.

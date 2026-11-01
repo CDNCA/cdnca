@@ -50,6 +50,43 @@ const (
 
 var ErrActivationInvalid = errors.New("plugin installation activation response invalid")
 
+// Stable reasons a signed license response was refused; they are safe to log (no key, token or payload).
+const (
+	ActivationInvalidIssuedInFuture   = "issued_in_future"
+	ActivationInvalidExpiredAtReceive = "expired_at_receive"
+	ActivationInvalidSignature        = "signature_invalid"
+	ActivationInvalidBinding          = "binding_mismatch"
+)
+
+type activationInvalidError struct{ reason string }
+
+func (err activationInvalidError) Error() string {
+	return ErrActivationInvalid.Error() + ": " + err.reason
+}
+func (activationInvalidError) Unwrap() error { return ErrActivationInvalid }
+
+// ActivationInvalidReason returns the stable refusal reason of a signed response, or "" when err carries none.
+func ActivationInvalidReason(err error) string {
+	var invalid activationInvalidError
+	if errors.As(err, &invalid) {
+		return invalid.reason
+	}
+	return ""
+}
+
+// signedWindow checks a signed answer's one-minute validity at the moment it was received.
+func signedWindow(issuedAt, expiresAt, receivedAt time.Time) error {
+	switch {
+	case !canonicalSecond(issuedAt) || !expiresAt.Equal(issuedAt.Add(time.Minute)):
+		return activationInvalidError{ActivationInvalidBinding}
+	case issuedAt.After(receivedAt):
+		return activationInvalidError{ActivationInvalidIssuedInFuture}
+	case !receivedAt.Before(expiresAt):
+		return activationInvalidError{ActivationInvalidExpiredAtReceive}
+	}
+	return nil
+}
+
 type activationHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -119,15 +156,15 @@ func (client *ActivationClient) Resolve(ctx context.Context, input ActivationRes
 		!validScopes(input.RequestedScopes) || len(input.RequestedScopes) == 0 {
 		return ActivationResult{}, ErrInvalidInput
 	}
-	now := client.now().UTC().Truncate(time.Second)
-	if now.IsZero() {
+	requestedAt := client.now().UTC().Truncate(time.Second)
+	if requestedAt.IsZero() {
 		return ActivationResult{}, ErrInvalidInput
 	}
 	payload := activationRequestPayload{Schema: activationRequestSchema, RequestID: input.RequestID,
 		IdempotencyKey: input.IdempotencyKey, InstallationID: client.installationID,
 		VerificationID: input.VerificationID, Action: input.Action,
 		KnownLifecycleRevision: input.KnownLifecycleRevision,
-		RequestedScopes:        append([]string{}, input.RequestedScopes...), RequestedAt: now}
+		RequestedScopes:        append([]string{}, input.RequestedScopes...), RequestedAt: requestedAt}
 	canonical, err := json.Marshal(payload)
 	if err != nil {
 		return ActivationResult{}, ErrInvalidInput
@@ -157,6 +194,9 @@ func (client *ActivationClient) Resolve(ctx context.Context, input ActivationRes
 	if err != nil || len(responseBody) > 1<<20 {
 		return ActivationResult{}, ErrActivationInvalid
 	}
+	// The signed answer is judged at the moment it was fully received, not when the request left: a legitimate
+	// response may be issued in a later second, and one that expired in flight must be refused.
+	verifiedAt := client.now().UTC().Truncate(time.Second)
 	if response.StatusCode != http.StatusOK {
 		return ActivationResult{}, activationHTTPError(response.StatusCode, responseBody)
 	}
@@ -176,7 +216,7 @@ func (client *ActivationClient) Resolve(ctx context.Context, input ActivationRes
 	// The license service binds its answer to the framed canonical request plus proof (the same idempotency digest
 	// as candidate sync and lifecycle receipts), not to the transport bytes.
 	digest := sha256.Sum256(framed(activationIdempotencyDomain, append(canonical, proof...)))
-	return client.verifyResponse(digest, payload, signed, now)
+	return client.verifyResponse(digest, payload, signed, verifiedAt)
 }
 
 func (client *ActivationClient) Discover(ctx context.Context, input CandidateDiscoveryRequest) (Page, error) {
@@ -205,13 +245,13 @@ func (client *ActivationClient) sync(ctx context.Context, schema string, input C
 		}
 		cursor = parsed
 	}
-	now := client.now().UTC().Truncate(time.Second)
+	requestedAt := client.now().UTC().Truncate(time.Second)
 	var wireCursor *uuid.UUID
 	if cursor != uuid.Nil {
 		wireCursor = &cursor
 	}
 	payload := candidateSyncRequestPayload{Schema: schema, RequestID: input.RequestID,
-		InstallationID: client.installationID, Limit: input.Limit, Cursor: wireCursor, RequestedAt: now}
+		InstallationID: client.installationID, Limit: input.Limit, Cursor: wireCursor, RequestedAt: requestedAt}
 	canonical, err := json.Marshal(payload)
 	if err != nil {
 		return Page{}, ErrInvalidInput
@@ -227,6 +267,8 @@ func (client *ActivationClient) sync(ctx context.Context, schema string, input C
 	if err != nil {
 		return Page{}, err
 	}
+	// Same receive-time rule as Resolve and ReportLifecycle: post has read the whole body.
+	now := client.now().UTC().Truncate(time.Second)
 	var batch candidateSyncBatchWire
 	if strictJSON(responseBody, &batch) != nil {
 		return Page{}, ErrActivationInvalid
@@ -240,10 +282,11 @@ func (client *ActivationClient) sync(ctx context.Context, schema string, input C
 	if batch.Schema != candidateSyncBatchSchema || batch.RequestID != input.RequestID ||
 		batch.RequestDigest != hex.EncodeToString(digest[:]) || batch.CustomerID == uuid.Nil ||
 		batch.InstallationID != client.installationID || len(batch.Candidates) > input.Limit ||
-		!canonicalSecond(batch.IssuedAt) || batch.IssuedAt.After(now) ||
-		!batch.ExpiresAt.Equal(batch.IssuedAt.Add(time.Minute)) || !now.Before(batch.ExpiresAt) ||
 		batch.Algorithm != "Ed25519" || batch.KeyID == "" || len(batch.KeyID) > 128 {
-		return Page{}, ErrActivationInvalid
+		return Page{}, activationInvalidError{ActivationInvalidBinding}
+	}
+	if err := signedWindow(batch.IssuedAt, batch.ExpiresAt, now); err != nil {
+		return Page{}, err
 	}
 	unsigned := batch
 	unsigned.Signature = ""
@@ -251,7 +294,7 @@ func (client *ActivationClient) sync(ctx context.Context, schema string, input C
 	signature, decodeErr := decodeSignature(batch.Signature)
 	if err != nil || decodeErr != nil || client.trust.VerifyDetached(batch.KeyID,
 		framed(candidateSyncBatchDomain, unsignedPayload), signature, batch.IssuedAt, now) != nil {
-		return Page{}, ErrActivationInvalid
+		return Page{}, activationInvalidError{ActivationInvalidSignature}
 	}
 	page := Page{Items: make([]InstallationView, 0, len(batch.Candidates))}
 	for _, candidate := range batch.Candidates {
@@ -456,21 +499,22 @@ func (client *ActivationClient) verifyResponse(digest [sha256.Size]byte, request
 		signed.Action != request.Action || !slices.Equal(signed.RequestedScopes, request.RequestedScopes) ||
 		signed.SourceReceiptID == uuid.Nil || signed.Decision != "allow" || signed.StableReasonCode == "" ||
 		signed.Algorithm != "Ed25519" || signed.KeyID == "" || len(signed.KeyID) > 128 ||
-		!canonicalSecond(signed.IssuedAt) || signed.IssuedAt.After(now) ||
-		!signed.ExpiresAt.Equal(signed.IssuedAt.Add(time.Minute)) || !now.Before(signed.ExpiresAt) ||
 		signed.LifecycleRevision == 0 || !validScopes(signed.ApprovedScopes) ||
 		!validScopes(signed.ManifestScopes) || !validScopes(signed.RequestedScopes) || !validScopes(signed.SensitiveScopes) ||
 		!validScopes(signed.NewScopes) || !subset(signed.RequestedScopes, signed.ApprovedScopes) ||
 		!subset(signed.ApprovedScopes, signed.ManifestScopes) || !subset(signed.SensitiveScopes, signed.ManifestScopes) ||
 		!subset(signed.NewScopes, signed.ManifestScopes) ||
 		len(signed.Facts) != len(signed.RequestedScopes) {
-		return ActivationResult{}, ErrActivationInvalid
+		return ActivationResult{}, activationInvalidError{ActivationInvalidBinding}
+	}
+	if err := signedWindow(signed.IssuedAt, signed.ExpiresAt, now); err != nil {
+		return ActivationResult{}, err
 	}
 	unsignedFacts := make([]activationFactUnsigned, len(signed.Facts))
 	for index, fact := range signed.Facts {
 		if fact.Schema != activationFactSchema || fact.Scope != signed.RequestedScopes[index] ||
 			fact.Decision != "allow" || fact.StableReasonCode == "" {
-			return ActivationResult{}, ErrActivationInvalid
+			return ActivationResult{}, activationInvalidError{ActivationInvalidBinding}
 		}
 		unsignedFacts[index] = activationFactUnsigned{Schema: fact.Schema, Scope: fact.Scope,
 			Decision: fact.Decision, StableReasonCode: fact.StableReasonCode}
@@ -479,7 +523,7 @@ func (client *ActivationClient) verifyResponse(digest [sha256.Size]byte, request
 	batchSignature, decodeErr := decodeSignature(signed.Signature)
 	if err != nil || decodeErr != nil || client.trust.VerifyDetached(signed.KeyID,
 		framed(activationBatchDomain, batchPayload), batchSignature, signed.IssuedAt, now) != nil {
-		return ActivationResult{}, ErrActivationInvalid
+		return ActivationResult{}, activationInvalidError{ActivationInvalidSignature}
 	}
 	for _, fact := range signed.Facts {
 		factPayload, err := json.Marshal(activationFactPayload{activationShared: signed.activationShared,
@@ -488,7 +532,7 @@ func (client *ActivationClient) verifyResponse(digest [sha256.Size]byte, request
 		factSignature, decodeErr := decodeSignature(fact.Signature)
 		if err != nil || decodeErr != nil || client.trust.VerifyDetached(signed.KeyID,
 			framed(activationFactDomain, factPayload), factSignature, signed.IssuedAt, now) != nil {
-			return ActivationResult{}, ErrActivationInvalid
+			return ActivationResult{}, activationInvalidError{ActivationInvalidSignature}
 		}
 	}
 	candidate := Candidate{TenantID: signed.CustomerID, InstallationID: signed.InstallationID,

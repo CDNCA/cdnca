@@ -21,6 +21,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// l403Identity is the release identity session_track records for the l403
+// fixture (NR-M01): tenant|site|config version|revision|package ("" = none).
+const l403Identity = `"11111111-1111-4111-8111-111111111111|33333333-3333-4333-8333-333333333333|l403-revision-7|7|"`
+
 // L4-USAGE-01：没开会话日志的 TCP 转发也登记活会话（供 agent 每 60 秒写用量
 // 检查点），日志行带 $pid（结束行对上登记的 worker:连接）；UDP 不登记。
 func TestEveryTCPSocketTracksLiveSessionsForUsageCheckpoints(t *testing.T) {
@@ -33,7 +37,7 @@ func TestEveryTCPSocketTracksLiveSessionsForUsageCheckpoints(t *testing.T) {
 	for _, want := range []string{
 		"    lua_shared_dict l4_v2_live 64m;\n",
 		`set $cdnca_l4_live_key "";`,
-		`geo.session_track("` + l403Stream + `", "` + l403Stream + `", client, false); }`,
+		`geo.session_track("` + l403Stream + `", "` + l403Stream + `", client, false, ` + l403Identity + `); }`,
 		`log_by_lua_block { require("cdnca_l4_geo").session_end() }`,
 		"listen unix:" + L4ControlSocketPath + ";",
 		`"connection":"$connection","pid":"$pid","protocol":"$protocol"`,

@@ -5,7 +5,6 @@ import {
   Button,
   Descriptions,
   Drawer,
-  Input,
   Popconfirm,
   Progress,
   Result,
@@ -15,7 +14,7 @@ import {
   Tag,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedbackMessage, FeedbackWhen, IdOrNameInput, OutcomeUnknown, useLiveApply } from '@cdnca/ui'
 import {
   Ban,
   ChevronLeft,
@@ -59,6 +58,7 @@ import SiteCacheTabs from '../components/SiteCacheTabs'
 import TenantScopeSelect, { canonicalScopeUUIDPattern } from '../components/TenantScopeSelect'
 import '../i18n/cacheOperations'
 import { formatDateTime, formatNumber } from '../i18n/formatters'
+import { siteSearch } from './idNameSources'
 import './CacheOperationsPage.css'
 import { cacheWriteIdentity, cacheWriteOwner, pendingCacheWriteKey, rememberCacheWrite, sendCacheWrite, settleCacheWrite } from './cacheWriteJournal'
 
@@ -789,6 +789,17 @@ function CacheOperationsPageSession({
     }
   }, [ownerKey, queryClient])
 
+  // 站点/任务类型/状态边改边生效（400ms 防抖）；站点也可输入域名从联想中选中
+  // （接口只认站点 UUID，未选中的域名只联想不过滤）。管理员切换目标租户仍点查询（切换会清空本租户状态）。
+  // 须在下方 403 提前 return 之前调用 hook；回调经 ref 取当次渲染的 applyFilters。
+  const liveFilters = { ...filters, site_id: filters.site_id?.trim().toLowerCase() || undefined }
+  const liveScopeSettled = !isAdmin || (adminScopeID !== null && adminScopeID === scopeDraft.trim().toLowerCase())
+  const applyLiveRef = useRef<() => void>(() => undefined)
+  useLiveApply(liveFilters, appliedFilters, () => applyLiveRef.current(), {
+    valid: liveScopeSettled && (!liveFilters.site_id || uuidPattern.test(liveFilters.site_id)),
+  })
+  const siteOptions = useMemo(() => siteSearch(accessToken, 'id'), [accessToken])
+
   const listForbidden = listScopeDenied ||
     (listQuery.error instanceof ApiError && listQuery.error.status === 403)
   if (!isAdmin && listForbidden) {
@@ -841,6 +852,7 @@ function CacheOperationsPageSession({
     setAppliedFilters(next)
     resetPages()
   }
+  applyLiveRef.current = applyFilters
   const refresh = () => {
     if (currentListScopeCanRead()) void listQuery.refetch()
   }
@@ -1471,11 +1483,13 @@ function CacheOperationsPageSession({
             onChange={setScopeDraft}
           />
         ) : null}
-        <Input
+        <IdOrNameInput
           aria-label={t('filters.site')}
           placeholder={t('filters.sitePlaceholder')}
-          value={filters.site_id}
-          onChange={(event) => setFilters((current) => ({ ...current, site_id: event.target.value }))}
+          value={filters.site_id ?? ''}
+          isId={(text) => uuidPattern.test(text.toLowerCase())}
+          search={siteOptions}
+          onChange={(site) => setFilters((current) => ({ ...current, site_id: site || undefined }))}
           onPressEnter={applyFilters}
         />
         <Select<CacheOperationAction>

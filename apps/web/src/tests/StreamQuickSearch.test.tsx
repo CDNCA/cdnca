@@ -25,13 +25,13 @@ async function setupQuickSearch() {
   return { list, user, chooseField }
 }
 
-// fix-livefilter：转发ID/用户ID 快捷框是可按名称联想的 IdOrNameInput（role=combobox），其余字段仍是 textbox。
-const quickInput = (label: string) => screen.getByRole(label === '转发ID' || label === '用户ID' ? 'combobox' : 'textbox', { name: '搜索转发' })
-
-// fix-advfilter2：高级筛选展开状态记在 localStorage，各用例从收起开始。
+// 高级筛选展开状态记在 localStorage，各用例从收起开始。
 beforeEach(() => { localStorage.removeItem('cdnca.advancedFilters.stream-list') })
 
 describe('stream quick search', () => {
+  // 高级筛选展开状态记在 localStorage（AdvancedFilters storageKey），每个用例从收起开始。
+  beforeEach(() => window.localStorage.clear())
+
   it('waits for an explicit query before submitting a protocol choice', async () => {
     const { list, user, chooseField } = await setupQuickSearch()
     await chooseField('监听协议')
@@ -78,12 +78,14 @@ describe('stream quick search', () => {
   ] as const)('submits only the canonical %s field and clears it on an empty query', async (label, value, field, expected) => {
     const { list, user, chooseField } = await setupQuickSearch()
     await chooseField(label)
-    fireEvent.change(quickInput(label), { target: { value } })
+    // 转发ID/用户ID 是「ID 或名称」联想框（combobox）。
+    const box = () => screen.getByRole(label === '转发ID' || label === '用户ID' ? 'combobox' : 'textbox', { name: '搜索转发' })
+    fireEvent.change(box(), { target: { value } })
     expect(list).toHaveBeenCalledTimes(1)
     await user.keyboard('{Enter}')
     await user.click(screen.getByRole('button', { name: '查询' }))
     await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toEqual({ page: 1, limit: 10, [field]: expected }))
-    await user.clear(quickInput(label))
+    await user.clear(box())
     await user.keyboard('{Enter}')
     await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toEqual({ page: 1, limit: 10 }))
   })
@@ -95,10 +97,23 @@ describe('stream quick search', () => {
   ])('rejects invalid quick %s without a list request', async (label, value) => {
     const { list, user, chooseField } = await setupQuickSearch()
     await chooseField(label)
-    fireEvent.change(quickInput(label), { target: { value } })
+    // 转发ID/用户ID 是「ID 或名称」联想框（combobox）。
+    const box = () => screen.getByRole(label === '转发ID' || label === '用户ID' ? 'combobox' : 'textbox', { name: '搜索转发' })
+    fireEvent.change(box(), { target: { value } })
     await user.click(screen.getByRole('button', { name: '查询' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(/端口|编号|源站/)
     expect(list).toHaveBeenCalledTimes(1)
+  })
+
+  // 转发ID/用户ID 输入名称即按名称参数过滤（forward/owner），数字按编号。
+  it.each([
+    ['转发ID', 'web 入口', 'forward'],
+    ['用户ID', 'bob', 'owner'],
+  ] as const)('filters %s by a typed name', async (label, value, field) => {
+    const { list, chooseField } = await setupQuickSearch()
+    await chooseField(label)
+    fireEvent.change(screen.getByRole('combobox', { name: '搜索转发' }), { target: { value } })
+    await waitFor(() => expect(list.mock.calls.at(-1)?.[1]).toEqual({ page: 1, limit: 10, [field]: value }), { timeout: 2000 })
   })
 
   it('submits false explicitly and clears the enabled filter without changing drafts early', async () => {
@@ -133,7 +148,7 @@ describe('stream quick search', () => {
     const groupID = '88888888-8888-4888-8888-888888888888'
     vi.spyOn(streamGroupsApi, 'listGroups').mockResolvedValue({ items: [{ id: groupID, name: '真实转发分组', scope_id: stream.scope_id } as StreamGroup], page: 1, limit: 100, total: 1 })
     const { list, user, chooseField } = await setupQuickSearch()
-    await user.click(screen.getByRole('button', { name: /^高级筛选/ }))
+    await user.click(screen.getByRole('button', { name: '高级筛选' }))
     const panel = within(screen.getByRole('group', { name: '高级筛选' }))
     await user.click(panel.getByRole('combobox', { name: '转发分组' }))
     await user.click(await screen.findByText('真实转发分组', { selector: '.ant-select-item-option-content' }))
@@ -165,7 +180,7 @@ describe('stream quick search', () => {
     const { list, user } = await setupQuickSearch()
     await user.type(screen.getByRole('textbox', { name: '搜索转发' }), '18100')
     await user.click(screen.getByRole('button', { name: '查询' }))
-    await user.click(screen.getByRole('button', { name: /^高级筛选/ }))
+    await user.click(screen.getByRole('button', { name: '高级筛选' }))
     const panel = within(screen.getByRole('group', { name: '高级筛选' }))
     await user.type(panel.getByRole('textbox', { name: '监听端口' }), '18101')
     let calls = list.mock.calls.length
@@ -199,11 +214,12 @@ describe('stream quick search', () => {
     expect(list).toHaveBeenCalledTimes(1)
     fireEvent.change(screen.getByRole('textbox', { name: copy.filters.searchLabel }), { target: { value: '18100' } })
     await user.click(screen.getByRole('button', { name: copy.actions.search }))
-    await user.click(screen.getByRole('button', { name: /^高级筛选/ }))
-    const panel = within(screen.getByRole('group', { name: '高级筛选' }))
+    // 高级筛选的开关/应用按钮由 @cdnca/ui AdvancedFilters 按 antd locale 出文案（伪本地化不覆盖）。
+    await user.click(screen.getByRole('button', { name: /高级筛选|Advanced filters/ }))
+    const panel = within(screen.getByRole('group', { name: /高级筛选|Advanced filters/ }))
     await user.type(panel.getByRole('textbox', { name: copy.filters.listenPortLabel }), '18101')
     const calls = list.mock.calls.length
-    await user.click(panel.getByRole('button', { name: '应用' }))
+    await user.click(panel.getByRole('button', { name: /应用|Apply/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent(copy.filters.quickConflict)
     expect(copy.filters.quickConflict.length).toBeGreaterThan(zhCN.streams.filters.quickConflict.length)
     expect(list).toHaveBeenCalledTimes(calls)

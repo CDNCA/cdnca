@@ -124,8 +124,23 @@ func (c ca) leaf(name string) tls.Certificate {
 }
 
 func serve(c ca, p provider) *bucket {
+	return serveCert(c.leaf(p.endpoint), p)
+}
+
+// selfSigned is a self-signed origin certificate for name (its own issuer,
+// in no CA bundle).
+func selfSigned(name string) tls.Certificate {
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	template := &x509.Certificate{SerialNumber: big.NewInt(3), Subject: pkix.Name{CommonName: name}, DNSNames: []string{name},
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}, KeyUsage: x509.KeyUsageDigitalSignature,
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour)}
+	der, _ := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}
+}
+
+func serveCert(certificate tls.Certificate, p provider) *bucket {
 	b := &bucket{}
-	listener, err := tls.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p.port), &tls.Config{Certificates: []tls.Certificate{c.leaf(p.endpoint)}})
+	listener, err := tls.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p.port), &tls.Config{Certificates: []tls.Certificate{certificate}})
 	if err != nil {
 		panic(err)
 	}
@@ -301,6 +316,32 @@ func main() {
 	got, _ := buckets[s3.name].last()
 	check("UNBOUND-POOL-UNSIGNED", status == 200 && got.auth == "" && buckets[s3.name].count() == before+1, "未绑定的池不签名：%d auth=%q", status, got.auth)
 
+	// Self-signed origin (capability 77 ORIGIN_TLS_NO_VERIFY, native patch 29):
+	// trust anchor "none" accepts its certificate and turns the host name check
+	// off (the SNI is not its name); the system CA bundle rejects it.
+	// A runtime without the patch (an older image) fails "none" closed: 502,
+	// nothing reaches the origin; every other attempt keeps working (no 500).
+	patched := hostCheckPatched()
+	fmt.Printf("INFO native patch 29 (%s) present=%v\n", hostCheckSymbol, patched)
+	self := serveCert(selfSigned("self-signed.origin.test"), provider{name: "self", port: 19504})
+	status, body := get("pool=selfnone", nil, "")
+	got, _ = self.last()
+	if patched {
+		check("SELF-SIGNED-NONE-200", status == 200 && self.count() == 1 && got.sni == "other-name.origin.test",
+			"自签源站、不校验源站证书（none）：%d body=%q 源站收到 %d SNI=%q", status, body, self.count(), got.sni)
+	} else {
+		check("SELF-SIGNED-NONE-NO-PATCH-502", status == 502 && self.count() == 0,
+			"缺补丁 29 时 none 失败关闭：%d，源站收到 %d", status, self.count())
+	}
+	selfBefore := self.count()
+	status, _ = get("pool=selfsystem", nil, "")
+	check("SELF-SIGNED-SYSTEM-CA-502", status == 502 && self.count() == selfBefore,
+		"自签源站、系统 CA 校验：%d，源站收到 %d（握手即拒，不发请求）", status, self.count()-selfBefore)
+	before = buckets[s3.name].count()
+	status, _ = get("pool=wrongname", nil, "")
+	check("HOST-CHECK-RESTORED", status == 502 && buckets[s3.name].count() == before,
+		"none 之后的尝试主机名校验恢复：CA 集可信但 SNI 不是证书名 -> %d，源站收到 %d", status, buckets[s3.name].count()-before)
+
 	// Credential rotation: a new publication revision is a new object and a
 	// new site object revision (here: the stand-in's pool "s3r2"); no reload.
 	rotated := secretObject(s3, 2, "AKIA-S3-2", now)
@@ -330,6 +371,21 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+const hostCheckSymbol = "ngx_http_cdnca_upstream_set_ssl_host_check"
+
+// hostCheckPatched: the OpenResty binary exports native patch 29's symbol.
+func hostCheckPatched() bool {
+	path, err := exec.LookPath("openresty")
+	if err != nil {
+		return false
+	}
+	if resolved, rerr := filepath.EvalSymlinks(path); rerr == nil {
+		path = resolved
+	}
+	raw, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(raw), hostCheckSymbol)
 }
 
 func writeObject(content []byte) string {

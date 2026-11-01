@@ -84,6 +84,9 @@ type dynamicRoutingScope struct {
 	// (DYNROUTE-SCOPE-SAVE-LOSS-01): when the journal after activation cannot
 	// be written, the next load settles it against what the runtime serves.
 	Pending *dynamicRoutingPending `json:"pending,omitempty"`
+	// ReferencesOwed: a rollback ran but the object store references of
+	// Current were not committed; the next write of the scope commits them.
+	ReferencesOwed bool `json:"references_owed,omitempty"`
 }
 
 type dynamicRoutingAccepted struct {
@@ -92,8 +95,12 @@ type dynamicRoutingAccepted struct {
 }
 
 type dynamicRoutingPending struct {
-	DeploymentID string                 `json:"deployment_id"`
-	Release      *dynamicRoutingRelease `json:"release"`
+	DeploymentID string `json:"deployment_id"`
+	// Action: "" or apply; rollback = an explicit rollback to Release (the
+	// scope's previous one): settling it swaps current and previous and
+	// keeps the mark.
+	Action  deployment.Action      `json:"action,omitempty"`
+	Release *dynamicRoutingRelease `json:"release"`
 	// Result is the deployment's result as if activated; recorded when the
 	// runtime turns out to serve Release.
 	Result deployment.Result `json:"result"`
@@ -173,6 +180,14 @@ func (m *dynamicRoutingManager) scopePath(scopeID string) string {
 }
 
 func (m *dynamicRoutingManager) load(scopeID string) (dynamicRoutingScope, error) {
+	scope, err := m.read(scopeID)
+	if err == nil {
+		m.settle(scopeID, &scope, false)
+	}
+	return scope, err
+}
+
+func (m *dynamicRoutingManager) read(scopeID string) (dynamicRoutingScope, error) {
 	var scope dynamicRoutingScope
 	content, err := os.ReadFile(m.scopePath(scopeID))
 	if errors.Is(err, os.ErrNotExist) {
@@ -188,43 +203,75 @@ func (m *dynamicRoutingManager) load(scopeID string) (dynamicRoutingScope, error
 		// journal from before the high-water mark: its current release
 		scope.Accepted = &dynamicRoutingAccepted{SourceRevision: scope.Current.SourceRevision, RootSHA256: scope.Current.RootSHA256}
 	}
-	m.settle(scopeID, &scope, false)
 	return scope, nil
 }
 
 // settle resolves a pending activation: when the runtime serves its release
 // it becomes current with its result (pointers and lookups see what runs;
 // nothing runs again). With drop (an apply or rollback holding m.mu, nothing
-// in flight) an intent the runtime does not serve never activated and goes,
-// and the settled journal is written back; reads only settle in memory.
-func (m *dynamicRoutingManager) settle(scopeID string, scope *dynamicRoutingScope, drop bool) {
+// in flight) an intent the runtime does not serve never activated and goes.
+// It reports whether the scope changed.
+func (m *dynamicRoutingManager) settle(scopeID string, scope *dynamicRoutingScope, drop bool) bool {
 	pending := scope.Pending
 	if pending == nil || m.activeVersion == nil {
-		return
+		return false
 	}
 	serves := m.activeVersion(scopeID) == pending.Release.ConfigVersionID
 	if !serves && !drop {
-		return
+		return false
 	}
 	scope.Pending = nil
 	if serves {
-		m.accept(scope, pending.Release)
+		if pending.Action == deployment.ActionRollback {
+			m.rolledBack(scope)
+		} else {
+			m.accept(scope, pending.Release)
+		}
 		if _, found := scope.result(pending.DeploymentID, pending.Result.Attempt); !found {
 			scope.record(pending.DeploymentID, pending.Result)
 		}
 	}
-	if drop {
-		_ = m.save(scopeID, *scope)
-	}
+	return true
 }
 
-// loadForWrite is load for an apply or rollback (m.mu held).
-func (m *dynamicRoutingManager) loadForWrite(scopeID string) (dynamicRoutingScope, error) {
-	scope, err := m.load(scopeID)
-	if err == nil {
-		m.settle(scopeID, &scope, true)
+// rolledBack makes the previous release current after an explicit rollback
+// activated it. The mark stays (a rollback runs older content); a late apply
+// of the release rolled away from is refused until a newer revision arrives.
+// The object store references are owed until committed.
+func (m *dynamicRoutingManager) rolledBack(scope *dynamicRoutingScope) {
+	scope.Current, scope.Previous = scope.Previous, scope.Current
+	scope.RolledBack = scope.Previous.RootSHA256
+	scope.ReferencesOwed = true
+}
+
+// commitReferences makes Current the object store owner's current
+// generation (it keeps an owner's current and previous: the next apply then
+// keeps the restored release); clears ReferencesOwed on success.
+func (m *dynamicRoutingManager) commitReferences(scopeID string, scope *dynamicRoutingScope) error {
+	if err := m.objects.Commit("site-"+scopeID, scope.Current.digests()); err != nil {
+		return err
 	}
-	return scope, err
+	scope.ReferencesOwed = false
+	return nil
+}
+
+// loadForWrite is load for an apply or rollback (m.mu held): it also drops
+// an intent that never activated, commits references a rollback owes, and
+// writes the settled journal back (best effort: a journal that cannot be
+// written settles again on the next load).
+func (m *dynamicRoutingManager) loadForWrite(scopeID string) (dynamicRoutingScope, error) {
+	scope, err := m.read(scopeID)
+	if err != nil {
+		return scope, err
+	}
+	changed := m.settle(scopeID, &scope, true)
+	if scope.ReferencesOwed && scope.Current != nil && m.commitReferences(scopeID, &scope) == nil {
+		changed = true
+	}
+	if changed {
+		_ = m.save(scopeID, scope)
+	}
+	return scope, nil
 }
 
 // accept makes release (activated by an apply) current and raises the mark.
@@ -236,6 +283,9 @@ func (m *dynamicRoutingManager) accept(scope *dynamicRoutingScope, release *dyna
 		scope.RolledBack = ""
 	}
 	scope.Accepted = &dynamicRoutingAccepted{SourceRevision: release.SourceRevision, RootSHA256: release.RootSHA256}
+	// references a rollback owed were for the release replaced here (the
+	// client commits an apply's own)
+	scope.ReferencesOwed = false
 }
 
 // refusal is why an apply of release must not activate, or "".
@@ -605,30 +655,56 @@ func (m *dynamicRoutingManager) Process(ctx context.Context, command deployment.
 	if found, ok := scope.result(command.DeploymentID, command.Attempt); ok {
 		return found, nil
 	}
-	var rollbackErr error
+	refuse := func(rollbackErr error) (deployment.Result, error) {
+		result := gatewayclient.DynamicRoutingResult(command.DeploymentID, command.Attempt, deployment.ActionRollback,
+			command.ConfigVersionID, started, m.now(), rollbackErr)
+		scope.record(command.DeploymentID, result)
+		if err := m.save(command.ScopeID, scope); err != nil {
+			return deployment.Result{}, err
+		}
+		return result, nil
+	}
 	switch {
 	case scope.Current == nil || scope.Previous == nil:
-		rollbackErr = errors.New("no previous release to roll back to")
+		return refuse(errors.New("no previous release to roll back to"))
 	case scope.Previous.ConfigVersionID != command.ConfigVersionID:
-		rollbackErr = fmt.Errorf("previous release is %s, not %s", scope.Previous.ConfigVersionID, command.ConfigVersionID)
-	default:
-		_, rollbackErr = m.applyAll(ctx, map[string]*dynamicRoutingRelease{command.ScopeID: scope.Previous},
-			gatewayclient.DynamicRoutingRelease{})
+		return refuse(fmt.Errorf("previous release is %s, not %s", scope.Previous.ConfigVersionID, command.ConfigVersionID))
+	}
+	// The intent is on disk before anything switches (DYNROUTE-SCOPE-SAVE-
+	// LOSS-01): a journal that cannot be written stops here with the running
+	// configuration unchanged; once written, a journal lost after activation
+	// is settled from what the runtime serves, without switching again.
+	pending := scope
+	pending.Pending = &dynamicRoutingPending{DeploymentID: command.DeploymentID, Action: deployment.ActionRollback, Release: scope.Previous,
+		Result: gatewayclient.DynamicRoutingResult(command.DeploymentID, command.Attempt, deployment.ActionRollback, command.ConfigVersionID,
+			started, started, &scopeJournalError{errors.New("scope journal not saved after the rollback; settled from the runtime state")})}
+	if err := m.save(command.ScopeID, pending); err != nil {
+		return deployment.Result{}, err
+	}
+	_, rollbackErr := m.applyAll(ctx, map[string]*dynamicRoutingRelease{command.ScopeID: scope.Previous},
+		gatewayclient.DynamicRoutingRelease{})
+	activated := rollbackErr == nil || gatewayclient.DynamicRoutingActivated(rollbackErr)
+	if activated {
+		m.rolledBack(&scope)
+		if err := m.commitReferences(command.ScopeID, &scope); err != nil && rollbackErr == nil {
+			// the rollback runs; its references stay owed (ReferencesOwed)
+			rollbackErr = &scopeJournalError{fmt.Errorf("commit object references: %w", err)}
+		}
 	}
 	result := gatewayclient.DynamicRoutingResult(command.DeploymentID, command.Attempt, deployment.ActionRollback,
 		command.ConfigVersionID, started, m.now(), rollbackErr)
-	if rollbackErr == nil || gatewayclient.DynamicRoutingActivated(rollbackErr) {
-		scope.Current, scope.Previous = scope.Previous, scope.Current
-		// The mark stays; a late apply of the release rolled away from is
-		// refused until a newer revision arrives.
-		scope.RolledBack = scope.Previous.RootSHA256
-		// The object store keeps an owner's current and previous generation:
-		// make the restored release current so the next apply keeps it.
-		_ = m.objects.Commit("site-"+command.ScopeID, scope.Current.digests())
-	}
 	scope.record(command.DeploymentID, result)
 	if err := m.save(command.ScopeID, scope); err != nil {
-		return deployment.Result{}, err
+		if !activated {
+			// Not activated: the intent is dropped on the next write (the
+			// runtime does not serve it); the result stays unchanged.
+			return result, nil
+		}
+		// Activated, journal not saved: the node runs the previous release,
+		// so the result says so (reverted with a failed maintenance check,
+		// never "unchanged"); the intent on disk settles it on the next load.
+		return gatewayclient.DynamicRoutingResult(command.DeploymentID, command.Attempt, deployment.ActionRollback,
+			command.ConfigVersionID, started, m.now(), &scopeJournalError{err}), nil
 	}
 	return result, nil
 }

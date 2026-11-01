@@ -368,7 +368,22 @@ func (service *Service) Get(ctx context.Context, actor Actor, staff bool, rawID 
 		detail.Events, err = loadEvents(ctx, tx, id, staff)
 		return err
 	})
-	return detail, err
+	return withCreator(detail), err
+}
+
+// withCreator names who filed the ticket: the author of the first public
+// message (Create / StaffCreate always write one, in the same transaction as
+// the ticket). Staff opening a ticket for a customer is the creator; the
+// customer stays the owner.
+func withCreator(detail Detail) Detail {
+	for _, message := range detail.Messages {
+		if message.Internal {
+			continue
+		}
+		detail.Ticket.CreatorKind, detail.Ticket.CreatorName = message.AuthorKind, message.AuthorName
+		break
+	}
+	return detail
 }
 
 // loadEvents is the ticket's change timeline (migration 543). Customers do

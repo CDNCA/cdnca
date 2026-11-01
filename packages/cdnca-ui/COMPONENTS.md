@@ -16,7 +16,7 @@
 ```
 
 - `PageHeader`：`title` 必填，`description`、`extra` 可选。标题是 h1，18px/600，颜色 `--cdnca-color-title`；描述 13px；`extra` 和标题在同一行、靠右。每个页面都要有。
-- `PageSection`：4px 圆角卡片（圆角走 `--cdnca-border-radius`），次级边框、阴影、16px 内边距，相邻区块间距 16px。可选 `title` / `extra` 做区块头。替代 `.identity-page` 和各页自定义的根容器。
+- `PageSection`：4px 圆角卡片（圆角走 `--cdnca-border-radius`），次级边框、阴影、16px 内边距，相邻区块间距 16px。可选 `title` / `extra` 做区块头。替代 `.identity-page` 和各页自定义的根容器。页面根必须是白底容器（fix-whitecard 守卫 apps/web/src/tests/PageSurfaceGuard.test.ts），新页面用它；页面自己的 h1 有 id 时传 `aria-labelledby`。
 - `TableToolbar`：`actions` 放左边（主操作、批量操作），`filters` 放右边（筛选、搜索）。直接子元素里的搜索框宽 240px、下拉框宽 150px（常量 `TOOLBAR_SEARCH_WIDTH` / `TOOLBAR_SELECT_WIDTH`），不要再写内联宽度。
 - `DataTable`：antd Table，默认 `size="small"`、横向滚动、每页 20 条、分页靠右并显示「共 N 条」。传 `pagination` 就用你传的值；用游标分页时传 `pagination={false}`，再配合 `CursorPager`。
 - `CursorPager`：`hasPrev`、`hasNext`、`onPrev`、`onNext` 必填，`total` 有值时显示「共 N 条」，`loading` 时两个按钮都禁用。替代各页自己画的上一页/下一页。
@@ -97,11 +97,15 @@ const [notice, setNotice] = useState<string>()
 - 每个 `Modal` / `Drawer` 都要有关闭途径：页脚取消/知道了、×、Esc、点遮罩至少一种。`footer={null}` 和 `closable={false}` 不能同时出现，除非正文里自带关闭按钮（守卫测试 `packages/cdnca-ui/src/modal-closable.guard.test.ts` 会扫源码）。
 - 不该被打断的步骤（正在提交）可以临时不让关，但完成或失败后必须恢复可关闭。
 
-### 弹窗滚动区不显示滚动条
+### 滚动条一律隐藏
 
-- `.ant-modal-body` / `.ant-drawer-body` 已在 `styles.css` 统一隐藏滚动条，仍可滚轮、触控板、触摸、键盘滚动；下方还有内容时底部 24px 渐隐，滚到底消失，Tab 聚焦会自动滚到可见。页面不用再写 `scrollbar-width`。
+- 五个前端所有可滚区域（页面、侧栏菜单、表格、标签页、下拉面板、弹窗）都不显示滚动条，仍可滚轮、触控板、触摸、键盘滚动。规则只在 `styles.css` 一处（`* { scrollbar-width: none !important }` + `::-webkit-scrollbar`），页面不要再写 `scrollbar-width` / `scrollbar-color` / `::-webkit-scrollbar` 尺寸，写了也无效；不得用 `!important` 把滚动条加回来。守卫：`scrollbar-hidden.guard.test.ts`。
+- 可发现性：表格超宽时，还能滚过去的那一侧边缘有阴影（antd ping-left/right，按主题侧栏色推导）；侧栏菜单下方还有内容时底部渐隐；键盘聚焦的表格滚动区显示焦点环。
+
+### 弹窗滚动区底部渐隐
+
+- `.ant-modal-body` / `.ant-drawer-body` 下方还有内容时底部 24px 渐隐，滚到底消失，Tab 聚焦会自动滚到可见。
 - 弹窗里自己设了 `max-height` + `overflow: auto` 的盒子（列表、长文本 `pre`、协议正文），加类 `cdnca-dialog-scroll`。守卫测试 `packages/cdnca-ui/src/dialog-scroll.guard.test.ts` 会扫源码。
-- 表格横向滚动不在此列，滚动条保留，方便发现。
 
 ## 其他
 

@@ -121,14 +121,19 @@ type Ticket struct {
 	LastMessageAt  time.Time `json:"last_message_at"`
 	// LastReplyAuthor / LastReplyAuthorKind: display name and kind (customer
 	// / staff) of the newest message the viewer can see; list only.
-	LastReplyAuthor     string     `json:"last_reply_author,omitempty"`
-	LastReplyAuthorKind string     `json:"last_reply_author_kind,omitempty"`
-	FirstResponseAt     *time.Time `json:"first_response_at,omitempty"`
-	ResolvedAt          *time.Time `json:"resolved_at,omitempty"`
-	ClosedAt            *time.Time `json:"closed_at,omitempty"`
-	ReopenableUntil     *time.Time `json:"reopenable_until,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	LastReplyAuthor     string `json:"last_reply_author,omitempty"`
+	LastReplyAuthorKind string `json:"last_reply_author_kind,omitempty"`
+	// CreatorKind / CreatorName: who filed the ticket (customer, or staff
+	// opening it for the customer), from the first public message; detail
+	// only. The owner stays UserID / Username.
+	CreatorKind     string     `json:"creator_kind,omitempty"`
+	CreatorName     string     `json:"creator_name,omitempty"`
+	FirstResponseAt *time.Time `json:"first_response_at,omitempty"`
+	ResolvedAt      *time.Time `json:"resolved_at,omitempty"`
+	ClosedAt        *time.Time `json:"closed_at,omitempty"`
+	ReopenableUntil *time.Time `json:"reopenable_until,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 type Message struct {

@@ -296,7 +296,9 @@ func productionCandidateScan(productionQuery string) (string, error) {
 		return "", errors.New("production query has no candidate_event_ids CTE")
 	}
 	start += len(startMarker)
-	end := strings.Index(productionQuery[start:], "\n),\nselected_rows AS")
+	// The CTE ends at its own "),"; host_event_ids (9508ebc68) and
+	// selected_rows follow it.
+	end := strings.Index(productionQuery[start:], "\n),\n")
 	if end < 0 {
 		return "", errors.New("production query candidate_event_ids CTE is not extractable")
 	}

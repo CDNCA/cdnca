@@ -497,6 +497,8 @@ components:
         sms_supported: { type: boolean, description: 'Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered.' }
         email_supported: { type: boolean, description: 'Channel transport configured and platform switch on (subscription); transport configured (channel settings). False: the channel is not offered.' }
         inbox_enabled: { type: boolean, description: 'Ticket events only (546): the in-app message-center copy (default true). Absent for every other event.' }
+        email_bound: { type: boolean, description: 'Account subscriptions only: the caller''s own email is a deliverable mailbox; false means email notices end as recipient_unavailable. Read from the current profile, never the address. Absent on channel settings.' }
+        phone_bound: { type: boolean, description: 'Account subscriptions only: the caller''s own phone number is deliverable for SMS; false means SMS notices end as recipient_unavailable. Read from the current profile, never the number.' }
         revision: { type: integer, format: int64, minimum: 0 }
         changed: { type: boolean }
     DeliveryState:

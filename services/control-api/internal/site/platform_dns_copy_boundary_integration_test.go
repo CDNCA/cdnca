@@ -73,19 +73,32 @@ func TestPlatformDNSCopyServesOnlyThePlatform(t *testing.T) {
 	copyID := dnsacme.PlatformProviderCopyID(tenant.scopeID)
 	owner := dnsacme.Actor{UserID: tenant.userID, ScopeID: tenant.scopeID, ScopeKind: "tenant"}
 
-	// 1. 同步出的副本持久标为 platform，并在租户列表里如实显示。
-	providers, err := dns.ListProviders(t.Context(), owner)
+	// 1. 同步出的副本持久标为 platform：平台视图可见，租户列表不返回。
+	platformProviders, err := dns.ListProviders(t.Context(), platform)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var copyRow dnsacme.Provider
-	for _, provider := range providers {
+	for _, provider := range platformProviders {
 		if provider.ID == copyID {
 			copyRow = provider
 		}
 	}
 	if copyRow.ManagedBy != dnsacme.ProviderManagedByPlatform || copyRow.Status != dnsacme.ProviderStatusVerified {
 		t.Fatalf("platform copy row = %+v", copyRow)
+	}
+	tenantProviders, err := dns.ListProviders(t.Context(), owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, provider := range tenantProviders {
+		if provider.ID == copyID || provider.ManagedBy == dnsacme.ProviderManagedByPlatform {
+			t.Fatalf("tenant list returned the platform copy: %+v", provider)
+		}
+	}
+	tenantPage, err := dns.ListProviderPage(t.Context(), owner, dnsacme.ProviderPageRequest{Limit: 10})
+	if err != nil || len(tenantPage.Items) != 0 {
+		t.Fatalf("tenant provider page = %+v err=%v", tenantPage, err)
 	}
 
 	// 2. 租户越界用途在调用服务商/写库前拒绝。
@@ -102,14 +115,29 @@ func TestPlatformDNSCopyServesOnlyThePlatform(t *testing.T) {
 		Domains: []string{"admin.platform-audit.test"}, ChallengeType: "dns-01",
 		IdempotencyKey: "copy-order", RequestID: "copy-order"})
 	refused("dns-01 order", err)
+	// 租户对副本的改/删/验证与不存在一致（404，不泄露存在）；平台侧仍是 dns_provider_platform_managed。
+	hidden := func(name string, err error) {
+		t.Helper()
+		if !errors.Is(err, dnsacme.ErrNotFound) {
+			t.Fatalf("%s: error = %v, want ErrNotFound", name, err)
+		}
+	}
 	_, err = dns.UpdateProvider(t.Context(), owner, dnsacme.UpdateProviderRequest{ID: copyID, ExpectedRevision: copyRow.Revision,
 		Name: "renamed", Status: dnsacme.ProviderStatusDisabled, IdempotencyKey: "copy-update", RequestID: "copy-update"})
-	refused("update", err)
+	hidden("update", err)
 	_, err = dns.VerifyProvider(t.Context(), owner, dnsacme.VerifyProviderRequest{ID: copyID, ExpectedRevision: copyRow.Revision,
 		IdempotencyKey: "copy-verify", RequestID: "copy-verify"})
-	refused("verify", err)
-	refused("delete", dns.DeleteProvider(t.Context(), owner, dnsacme.DeleteRequest{ID: copyID, ExpectedRevision: copyRow.Revision,
+	hidden("verify", err)
+	hidden("delete", dns.DeleteProvider(t.Context(), owner, dnsacme.DeleteRequest{ID: copyID, ExpectedRevision: copyRow.Revision,
 		IdempotencyKey: "copy-delete", RequestID: "copy-delete"}))
+	_, err = dns.UpdateProvider(t.Context(), platform, dnsacme.UpdateProviderRequest{ID: copyID, ExpectedRevision: copyRow.Revision,
+		Name: "renamed", Status: dnsacme.ProviderStatusDisabled, IdempotencyKey: "copy-update-admin", RequestID: "copy-update-admin"})
+	refused("platform update", err)
+	var copyStill bool
+	if err := pool.QueryRow(t.Context(), `SELECT EXISTS(SELECT 1 FROM dns_providers WHERE id=$1 AND managed_by='platform' AND name<>'renamed')`,
+		copyID).Scan(&copyStill); err != nil || !copyStill {
+		t.Fatalf("platform copy changed by refused writes: still=%v err=%v", copyStill, err)
+	}
 	var zones, orders int
 	if err := pool.QueryRow(t.Context(), `SELECT
 		(SELECT count(*) FROM dns_zones WHERE scope_id=$1 AND name='platform-audit.test'),
@@ -160,11 +188,22 @@ func TestPlatformDNSCopyServesOnlyThePlatform(t *testing.T) {
 func insertPlatformCopySite(t *testing.T, pool *pgxpool.Pool, scopeID, userID uuid.UUID, domain string) uuid.UUID {
 	t.Helper()
 	siteID := uuid.New()
-	if _, err := pool.Exec(t.Context(), `INSERT INTO sites(
-			id,scope_id,owner_user_id,domain,origins,origin_hosts,created_by_user_id,updated_by_user_id,display_id
-		) VALUES($1,$2,$3,$4,ARRAY['origin.example.test:80'],ARRAY['origin.example.test'],$3,$3,
-			(SELECT COALESCE(max(display_id),0)+1 FROM sites WHERE scope_id=$2))`,
-		siteID, scopeID, userID, domain); err != nil {
+	// 站点须同事务带回源池与回源（延迟约束：site origin pool is required）。
+	if err := pgx.BeginFunc(t.Context(), pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(t.Context(), `INSERT INTO sites(
+				id,scope_id,owner_user_id,domain,origins,origin_hosts,created_by_user_id,updated_by_user_id,display_id
+			) VALUES($1,$2,$3,$4,ARRAY['origin.example.test:80'],ARRAY['origin.example.test'],$3,$3,
+				(SELECT COALESCE(max(display_id),0)+1 FROM sites WHERE scope_id=$2))`,
+			siteID, scopeID, userID, domain); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(t.Context(), `INSERT INTO site_origin_pools(site_id) VALUES($1)`, siteID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(t.Context(), `INSERT INTO site_origins(site_id,position,host,port,weight,enabled)
+			VALUES($1,1,'origin.example.test',80,1,true)`, siteID)
+		return err
+	}); err != nil {
 		t.Fatal(err)
 	}
 	return siteID

@@ -11,6 +11,8 @@ export interface APIKeyRecord {
   user_id: string
   name: string
   scopes: string[]
+  /** 列表/详情读取时：scopes 中持有人已不再拥有、调用时不生效的部分（AA-KEY-01）。 */
+  unavailable_scopes?: string[]
   ip_allowlist: string[]
   status: APIKeyStatus
   pending_expires_at?: string
@@ -50,6 +52,8 @@ export interface APIKeyListInput {
   cursor?: string
   /** Page-number access (0–10000); cannot be combined with cursor. */
   offset?: number
+  /** AA-UI02：只要服务端快照时刻仍可调用的密钥（active 且未到期）。 */
+  usable?: boolean
 }
 
 export interface APIKeyListPage {
@@ -58,6 +62,8 @@ export interface APIKeyListPage {
   has_more: boolean
   /** Filtered total; only on the first page and offset pages. */
   total?: number
+  /** Server clock (response Date header, ms) when the page was read; expiry is judged against it (AA-UI02). */
+  server_time?: number
 }
 
 export type APIKeyIPAllowlistErrorCode =
@@ -76,7 +82,12 @@ interface ParsedNetwork {
 
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
-async function request(accessToken: string, path: string, init: RequestInit = {}): Promise<unknown> {
+async function request(
+  accessToken: string,
+  path: string,
+  init: RequestInit = {},
+  onResponse?: (response: Response) => void,
+): Promise<unknown> {
   let response: Response
   try {
     response = await fetch(`${apiRoot}${path}`, {
@@ -92,13 +103,30 @@ async function request(accessToken: string, path: string, init: RequestInit = {}
     throw networkApiError()
   }
   if (!response.ok) {
-    throw await responseApiError(response)
+    throw await apiKeyResponseError(response)
   }
+  onResponse?.(response)
   try {
     return await response.json()
   } catch {
     throw invalidResponse()
   }
+}
+
+/** AA-KEY-01：403 permission_denied 且 details.reason=scopes_revoked 时，列出已被收回的权限。 */
+export type APIKeyError = ApiError & { revokedScopes?: string[] }
+
+async function apiKeyResponseError(response: Response): Promise<APIKeyError> {
+  const body = await response.clone().json().catch(() => null) as { error?: { details?: unknown } } | null
+  const error: APIKeyError = await responseApiError(response)
+  const details = body?.error?.details as { reason?: unknown; scopes?: unknown } | undefined
+  const scopePattern = /^[a-z][a-z0-9_.-]{0,127}$/
+  if (error.status === 403 && error.code === 'permission_denied' && details?.reason === 'scopes_revoked' &&
+    Array.isArray(details.scopes) && details.scopes.length > 0 && details.scopes.length <= 128 &&
+    details.scopes.every((scope) => typeof scope === 'string' && scopePattern.test(scope))) {
+    error.revokedScopes = details.scopes as string[]
+  }
+  return error
 }
 
 function invalidResponse(): ApiError {
@@ -189,7 +217,7 @@ export function validateAPIKeyIPAllowlist(values: readonly string[]): APIKeyIPAl
 function parseAPIKeyRecord(value: unknown): APIKeyRecord {
   const allowedKeys = new Set([
     'id', 'key_id', 'key_prefix', 'scope_id', 'tenant_id', 'user_id', 'name', 'scopes', 'status',
-    'ip_allowlist',
+    'ip_allowlist', 'unavailable_scopes',
     'pending_expires_at', 'expires_at', 'last_used_at', 'activated_at', 'revoked_at',
     'revision', 'created_at', 'updated_at',
     'plugin_installation_authorization_id', 'plugin_installation_id', 'plugin_id',
@@ -207,6 +235,8 @@ function parseAPIKeyRecord(value: unknown): APIKeyRecord {
     !Array.isArray(value.scopes) || value.scopes.length < 1 || value.scopes.length > 128 ||
     value.scopes.some((scope) => typeof scope !== 'string' || !scopePattern.test(scope)) ||
     new Set(value.scopes).size !== value.scopes.length ||
+    value.unavailable_scopes !== undefined && (!Array.isArray(value.unavailable_scopes) ||
+      value.unavailable_scopes.some((scope) => typeof scope !== 'string' || !(value.scopes as string[]).includes(scope))) ||
     !Array.isArray(value.ip_allowlist) || validateAPIKeyIPAllowlist(value.ip_allowlist) !== null ||
     !['pending_activation', 'active', 'revoked'].includes(String(value.status)) ||
     !Number.isInteger(value.revision) || Number(value.revision) < 1 ||
@@ -256,7 +286,12 @@ async function list(
   if (input.key_id) query.set('key_id', input.key_id)
   if (input.cursor) query.set('cursor', input.cursor)
   if (input.offset) query.set('offset', String(input.offset))
-  const value = await request(accessToken, `/v1/account/api-keys?${query}`, { signal })
+  if (input.usable) query.set('usable', 'true')
+  let serverTime: number | undefined
+  const value = await request(accessToken, `/v1/account/api-keys?${query}`, { signal }, (response) => {
+    const parsed = Date.parse(response.headers.get('Date') ?? '')
+    if (!Number.isNaN(parsed)) serverTime = parsed
+  })
   if (!isRecord(value) ||
     Object.keys(value).some((key) => !['items', 'next_cursor', 'has_more', 'total'].includes(key)) ||
     !Array.isArray(value.items) || typeof value.next_cursor !== 'string' || value.next_cursor.length > 4096 ||
@@ -268,6 +303,7 @@ async function list(
     items: value.items.map(parseAPIKeyRecord),
     next_cursor: value.next_cursor,
     has_more: value.has_more,
+    ...(serverTime === undefined ? {} : { server_time: serverTime }),
     ...(value.total === undefined ? {} : { total: Number(value.total) }),
   }
 }
@@ -317,6 +353,11 @@ async function action(
     }),
   })
   return operation === 'revoke' ? parseAPIKeyRecord(value) : parseIssuedAPIKey(value)
+}
+
+/** AA-UI02：按服务端时间判断 active 密钥是否已到期（到期时刻本身即不可用，与服务端鉴权一致）。 */
+export function apiKeyExpired(record: Pick<APIKeyRecord, 'status' | 'expires_at'>, now: number): boolean {
+  return record.status === 'active' && record.expires_at !== undefined && Date.parse(record.expires_at) <= now
 }
 
 export const apiKeysApi = { action, create, get, list, update }

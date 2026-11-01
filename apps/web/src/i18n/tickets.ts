@@ -35,7 +35,8 @@ const zhCN = {
   },
   // redesign-a：聊天气泡详情、侧栏和列表摘要。
   chat: {
-    timeline: '对话', info: '工单信息', summary: '工单概况', filed: '{{name}} 提交了工单', resolved: '工单已解决', closed: '工单已关闭',
+    timeline: '对话', info: '工单信息', summary: '工单概况', filed: '{{name}} 提交了工单', filedForCustomer: '客服 {{name}} 为 {{customer}} 创建了工单', filedByStaff: '客服 {{name}} 创建了工单',
+    resolved: '工单已解决', closed: '工单已关闭',
     statusChanged: '{{name}} 将状态从「{{from}}」改为「{{to}}」', priorityChanged: '{{name}} 将优先级从「{{from}}」改为「{{to}}」',
     assigneeChanged: '{{name}} 将处理人改为「{{to}}」', assigneeCleared: '{{name}} 取消了处理人', closedBy: '{{name}} 关闭了工单',
     reopenedBy: '{{name}} 重新打开了工单',
@@ -149,7 +150,8 @@ const enUS: Messages = {
     checkResult: 'Check result / retry',
   },
   chat: {
-    timeline: 'Conversation', info: 'Ticket details', summary: 'Ticket overview', filed: '{{name}} filed the ticket', resolved: 'Ticket resolved',
+    timeline: 'Conversation', info: 'Ticket details', summary: 'Ticket overview', filed: '{{name}} filed the ticket', filedForCustomer: 'Support {{name}} opened the ticket for {{customer}}', filedByStaff: 'Support {{name}} opened the ticket',
+    resolved: 'Ticket resolved',
     closed: 'Ticket closed',
     statusChanged: '{{name}} changed the status from "{{from}}" to "{{to}}"', priorityChanged: '{{name}} changed the priority from "{{from}}" to "{{to}}"',
     assigneeChanged: '{{name}} assigned the ticket to "{{to}}"', assigneeCleared: '{{name}} unassigned the ticket', closedBy: '{{name}} closed the ticket',

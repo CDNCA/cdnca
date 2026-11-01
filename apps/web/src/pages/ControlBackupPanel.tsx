@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { App as AntApp, Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Radio, Space, Switch, Table, Tag, TimePicker, Typography, type TableColumnsType } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
@@ -434,12 +434,21 @@ function MigrationWizard({ accessToken, canManage, ready, bt, failed, onQueued }
   const auth = Form.useWatch('auth', form) ?? 'password'
   const host = Form.useWatch('host', form) ?? ''
   const env: ControlMigrationEnv = Form.useWatch('env', form) ?? 'auto'
+  // OPB-01: the answer belongs to the host/port it was read for; a later
+  // request, an edited host/port or a typed fingerprint makes it stale.
+  const keyRequest = useRef({ request: 0, endpoint: 0, pin: 0 })
+  const mounted = useRef(true)
+  // Set on every mount: StrictMode mounts, unmounts and mounts again.
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const fetchKey = async () => {
+    const sent = { ...keyRequest.current, request: ++keyRequest.current.request }
     try {
       const values = form.getFieldsValue()
       const result = await controlBackupApi.hostKey(accessToken, values.host, values.port)
+      const now = keyRequest.current
+      if (!mounted.current || now.request !== sent.request || now.endpoint !== sent.endpoint || now.pin !== sent.pin) return
       form.setFieldValue('host_key_sha256', result.host_key_sha256)
-    } catch (error) { failed(error) }
+    } catch (error) { if (mounted.current && keyRequest.current.request === sent.request) failed(error) }
   }
   const migrate = useMutation({
     mutationFn: (values: MigrationValues) => controlBackupApi.migrate(accessToken, {
@@ -455,7 +464,11 @@ function MigrationWizard({ accessToken, canManage, ready, bt, failed, onQueued }
     <Alert type="warning" showIcon message={bt('migrationNotice')} />
     <p><Typography.Text code>{bt('migrationCli')}</Typography.Text></p>
     {!ready && <Alert type="info" showIcon message={bt('migrationNotReady')} />}
-    <Form form={form} layout="vertical" disabled={!canManage || !ready} initialValues={{ port: 22, user: 'root', auth: 'password', env: 'auto' }} onFinish={(values) => migrate.mutate(values)}>
+    <Form form={form} layout="vertical" disabled={!canManage || !ready} initialValues={{ port: 22, user: 'root', auth: 'password', env: 'auto' }} onFinish={(values) => migrate.mutate(values)}
+      onValuesChange={(changed: Partial<MigrationValues>) => {
+        if ('host' in changed || 'port' in changed) keyRequest.current.endpoint++
+        if ('host_key_sha256' in changed) keyRequest.current.pin++
+      }}>
       <Space wrap align="end">
         <Form.Item name="host" label={bt('newMasterHost')} rules={[{ required: true, message: bt('required') }]}><Input /></Form.Item>
         <Form.Item name="port" label={bt('sshPort')}><InputNumber min={1} max={65535} precision={0} /></Form.Item>

@@ -3,31 +3,27 @@ package site
 import (
 	"context"
 	"crypto/sha256"
-	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/services/control-api/internal/audit"
-	"github.com/cdnca/cdnca/services/control-api/internal/database"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/domainownership"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type trustActor struct {
-	scopeID, userID uuid.UUID
-	kind            string
+	scopeID, userID, sessionID uuid.UUID
+	kind                       string
 }
 
 func (a trustActor) ownership() domainownership.Actor {
 	return domainownership.Actor{UserID: a.userID, ScopeID: a.scopeID, ScopeKind: a.kind}
 }
 func (a trustActor) siteActor() Actor {
-	return Actor{UserID: a.userID, ScopeID: a.scopeID, ScopeKind: a.kind}
+	return Actor{UserID: a.userID, ScopeID: a.scopeID, SessionID: a.sessionID, ScopeKind: a.kind}
 }
 
 // trustVerifier answers TXT/HTTP checks from in-memory records keyed by name.
@@ -79,39 +75,7 @@ type trustFixture struct {
 
 func trustMigratedPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	if pool := databasetest.ClonedMigratedPool(t, nil); pool != nil {
-		return pool
-	}
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("TEST_DATABASE_URL required")
-	}
-	admin, err := pgxpool.New(t.Context(), dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(admin.Close)
-	schema := "domain_trust_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:16]
-	if _, err := admin.Exec(t.Context(), "CREATE SCHEMA "+pgx.Identifier{schema}.Sanitize()); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_, _ = admin.Exec(context.Background(), "DROP SCHEMA "+pgx.Identifier{schema}.Sanitize()+" CASCADE")
-	})
-	config, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.ConnConfig.RuntimeParams["search_path"] = schema
-	pool, err := pgxpool.NewWithConfig(t.Context(), config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(pool.Close)
-	if err := database.Migrate(t.Context(), pool, "up"); err != nil {
-		t.Fatal(err)
-	}
-	return pool
+	return databasetest.MigratedPool(t, nil)
 }
 
 func newTrustFixture(t *testing.T) *trustFixture {
@@ -167,10 +131,11 @@ func (f *trustFixture) insertActor(kind, username, role string, permissions ...s
 	}
 	f.exec(`INSERT INTO role_assignments(scope_id,user_id,role_id) VALUES($1,$2,$3)`, scopeID, userID, roleID)
 	digest := sha256.Sum256(userID[:])
+	sessionID := uuid.New()
 	f.exec(`INSERT INTO auth_sessions(id,family_id,user_id,scope_id,refresh_token_hash,created_at,expires_at)
-		VALUES($1,$2,$3,$4,$5,$6,$7)`, uuid.New(), uuid.New(), userID, scopeID, digest[:],
+		VALUES($1,$2,$3,$4,$5,$6,$7)`, sessionID, uuid.New(), userID, scopeID, digest[:],
 		time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2035, 1, 1, 0, 0, 0, 0, time.UTC))
-	return trustActor{scopeID: scopeID, userID: userID, kind: kind}
+	return trustActor{scopeID: scopeID, userID: userID, sessionID: sessionID, kind: kind}
 }
 
 func (f *trustFixture) setPolicy(policy string) {

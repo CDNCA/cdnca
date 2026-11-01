@@ -430,54 +430,47 @@
 }
 
 /* 监控指标 / 节点流量筛选条在桌面一行放下。
-   组按内容取宽，标签收紧到文字宽，「自定义」只弹出日期面板不撑行，排除网卡收进行尾「高级筛选」。 */
-.node-realtime-advanced-item {
-  flex: 0 0 auto;
-  align-items: center;
-  height: 34px;
+   组按内容取宽，标签收紧到文字宽，「自定义」只弹出日期面板不撑行。
+   节点流量的排除网卡走共享 AdvancedFilters（查询按钮即「刷新」），组件外框沿用筛选条，去掉组件自带的下边距。 */
+.node-realtime-traffic-filters.cdnca-adv-filters {
+  margin-bottom: 0;
 }
 
-.node-realtime-advanced-toggle.ant-btn {
-  display: inline-flex;
-  height: 32px;
-  align-items: center;
-  gap: 4px;
-  margin-top: 1.3828px;
-  padding-inline: 12px;
-  font-size: 14px;
+/* 出口网卡开关紧跟刷新 / 高级筛选，不推到行尾。 */
+.node-realtime-traffic-filters .cdnca-adv-filters-extra {
+  margin-left: 0;
 }
 
-.node-realtime-advanced-toggle--active.ant-btn {
-  color: var(--cdnca-color-primary);
-  border-color: var(--cdnca-color-primary);
+/* 1440 宽（含「高级筛选 · 1」）一行放下：类型、时间、节点、刷新、高级筛选、出口网卡开关合计原需 1102px，可用 1068px。
+   控件组取 32px 高（不再撑到 34px），刷新 / 高级筛选与控件底边一致；窄屏时间快捷项会换行，不定高。 */
+@media (min-width: 768px) {
+  .node-realtime-traffic-filters.cdnca-adv-filters .node-realtime-control-group {
+    min-height: 32px;
+    height: 32px;
+    align-items: center;
+  }
+
+  .node-realtime-traffic-filters .cdnca-adv-filters-bar {
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .node-realtime-traffic-filters.cdnca-adv-filters .node-realtime-control-label {
+    padding-right: 6px;
+  }
+
+  .node-realtime-traffic-filters.cdnca-adv-filters .ant-radio-button-wrapper {
+    padding-inline: 10px;
+  }
+
+  .node-realtime-traffic-filters.cdnca-adv-filters .node-realtime-control-group--node > .ant-select {
+    width: 120px;
+  }
 }
 
-.node-realtime-advanced-chevron {
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.node-realtime-advanced-toggle[aria-expanded="true"] .node-realtime-advanced-chevron {
-  transform: rotate(180deg);
-}
-
-.node-realtime-advanced-panel {
-  width: 300px;
-  max-width: calc(100vw - 48px);
-}
-
-.node-realtime-advanced-field {
-  display: grid;
-  gap: 6px;
-}
-
-.node-realtime-advanced-label {
-  color: var(--cdnca-color-text);
-  font-size: 14px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .node-realtime-advanced-chevron {
-    transition: none;
+@media (min-width: 768px) and (max-width: 1279px) {
+  .node-realtime-traffic-filters .cdnca-adv-filters-bar {
+    flex-wrap: wrap;
   }
 }
 
@@ -520,14 +513,6 @@
   .node-realtime-controls--inline .node-realtime-control-group--node > .ant-select {
     width: 140px;
     margin-top: 0;
-  }
-
-  .node-realtime-controls--inline .node-realtime-advanced-toggle.ant-btn {
-    margin-top: 0;
-  }
-
-  .node-realtime-controls--inline .node-realtime-advanced-item {
-    margin-left: auto;
   }
 }
 

@@ -143,6 +143,7 @@ const typeTranslationKeys: Record<string, string> = {
   'node.install_trust.failed': 'nodeInstallTrustFailed',
   'node.certificate.recovered': 'nodeCertificateRecovered',
   'aggregated_edge.schedule.alert': 'aggregatedEdgeScheduleAlert',
+  'aggregated_edge.tenant.switch': 'aggregatedEdgeTenantSwitch',
   'probe.dnspup.degraded': 'dnspupProbeDegraded',
   'market.limit.warn80': 'marketLimitWarn80',
   'market.limit.warn95': 'marketLimitWarn95',

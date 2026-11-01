@@ -117,6 +117,13 @@ export function useEventSubscriptionRows(): EventSubscriptionRows {
   // 一行写入同步到组内每个事件（逐个现有接口，与读取共用最多 4 个并发）：只改被切换的渠道、只写还没到目标的事件，
   // 所以重试只补失败的那几个。任何一个失败，该行显示失败与重试；失败事件重新读取拿到最新版本。
   const writeGroup = async (group: typeof tenantGroups[number], target: GroupTarget) => {
+    // 写入固定发起时的身份；排队到发送前身份已变（代登录退出/到期）就不再发出。
+    const ownerEpoch = epoch
+    const ownerUser = principal?.user_id
+    const stillOwner = () => {
+      const session = useSessionStore.getState()
+      return session.sessionEpoch === ownerEpoch && session.principal?.user_id === ownerUser
+    }
     setGroupWrites((current) => ({ ...current, [group.key]: { target, pending: true } }))
     const pendingEvents = group.events.flatMap((event) => {
       const current = client.getQueryData<NotificationSubscription>(key(event))
@@ -128,7 +135,9 @@ export function useEventSubscriptionRows(): EventSubscriptionRows {
         ...(current.inbox_enabled === undefined ? {} : { inbox_enabled: current.inbox_enabled }) }
       return [{ current, change }]
     })
-    const results = await Promise.allSettled(pendingEvents.map((item) => limitedRead(() => save.mutateAsync(item))))
+    const results = await Promise.allSettled(pendingEvents.map((item) => limitedRead(() =>
+      stillOwner() ? save.mutateAsync(item) : Promise.reject(new Error('identity_changed')))))
+    if (!stillOwner()) return
     const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected')
     setGroupWrites((current) => ({ ...current, [group.key]: failure
       ? { target, pending: false, failed: failure.reason instanceof ApiError ? failure.reason.code : 'request_failed' }
@@ -179,6 +188,9 @@ export function useEventSubscriptionRows(): EventSubscriptionRows {
       sms_enabled: smsValues.length > 0 && smsValues.every((item) => item.sms_enabled),
       email_enabled: emailValues.length > 0 && emailValues.every((item) => item.email_enabled),
       inbox_enabled: undefined,
+      // 绑定状态是本人资料，组内各事件相同；任一读到未绑定即提示。
+      email_bound: values.some((item) => item.email_bound === false) ? false : values[0].email_bound,
+      phone_bound: values.some((item) => item.phone_bound === false) ? false : values[0].phone_bound,
     }
     const write = groupWrites[group.key]
     return {

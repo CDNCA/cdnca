@@ -442,6 +442,23 @@
   border-radius: 0 4px 4px 0;
 }
 
+/* 节点ID 是「ID 或名称」联想框（AutoComplete 内带清除的 affix 输入框），撑满并与前缀同高。 */
+.node-monitor-switch-log-control .cdnca-id-or-name {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+.node-monitor-switch-log-control .cdnca-id-or-name .ant-input-affix-wrapper {
+  height: 32px;
+  padding-block: 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.node-monitor-switch-log-control .cdnca-id-or-name .ant-input-affix-wrapper .ant-input {
+  padding-inline: 0;
+  border-radius: 0;
+}
+
 .node-monitor-switch-log-control .ant-input::placeholder {
   color: var(--cdnca-color-placeholder);
   opacity: 1;

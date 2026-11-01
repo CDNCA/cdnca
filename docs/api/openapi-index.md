@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 1173 个 operation，并包含
-1148 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 1175 个 operation，并包含
+1150 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -999,7 +999,7 @@
 
 ## license.yaml
 
-源文件：[`license.yaml`](../../api/openapi/v1/license.yaml)，208 个 operation。
+源文件：[`license.yaml`](../../api/openapi/v1/license.yaml)，210 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -1141,6 +1141,8 @@
 | `license.yaml` | `GET` | `/operator/v1/rbac/operators` | `listRBACOperators` |
 | `license.yaml` | `POST` | `/operator/v1/rbac/operators/{operator_id}/login-lock/unlock` | `unlockOperatorLogin` |
 | `license.yaml` | `PUT` | `/operator/v1/rbac/operators/{operator_id}/roles` | `assignOperatorRoles` |
+| `license.yaml` | `POST` | `/operator/v1/rbac/operators/{operator_id}/sessions/revoke` | `revokeOperatorSessions` |
+| `license.yaml` | `PUT` | `/operator/v1/rbac/operators/{operator_id}/status` | `setOperatorStatus` |
 | `license.yaml` | `GET` | `/operator/v1/rbac/permissions` | `listOperatorPermissions` |
 | `license.yaml` | `GET` | `/operator/v1/rbac/roles` | `listOperatorRoles` |
 | `license.yaml` | `POST` | `/operator/v1/rbac/roles` | `createOperatorRole` |

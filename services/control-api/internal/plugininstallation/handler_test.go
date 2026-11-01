@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -276,4 +279,66 @@ func (domain *handlerTestDomain) Mutate(_ context.Context, actor Actor, request 
 	domain.lastActor = actor
 	domain.lastMutation = request
 	return domain.mutationResult, domain.err
+}
+
+// PLUG-CLIENT-CLOCK-01：授权响应校验失败与本地内部故障分开，稳定错误码 + 只含白名单字段的诊断日志。
+func TestHandlerMapsActivationResponseInvalidAndLogsSafeReason(t *testing.T) {
+	tenantID, authorizationID := uuid.New(), uuid.New()
+	domain := &handlerTestDomain{err: fmt.Errorf("resume preflight: %w",
+		activationInvalidError{ActivationInvalidIssuedInFuture})}
+	handler := newHandlerForTest(t, tenantID, domain)
+	var logs bytes.Buffer
+	handler.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+	path := "/v1/tenant-scopes/" + tenantID.String() + "/plugin-installations/" + authorizationID.String()
+
+	resume := authenticatedHandlerRequest(http.MethodPost, path+"/resume", bytes.NewBufferString(`{}`))
+	resume.Header.Set("Content-Type", "application/json")
+	resume.Header.Set("If-Match", `"7"`)
+	// 前端写操作的 X-Request-ID 就是 Idempotency-Key：日志只能出现其摘要。
+	resume.Header.Set("Idempotency-Key", "plugin-installation-request-1")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, resume)
+	assertHandlerError(t, response, http.StatusBadGateway, "plugin_installation_activation_response_invalid")
+	var envelope struct {
+		Error struct {
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil ||
+		envelope.Error.RequestID != requestReference("plugin-installation-request-1") {
+		t.Fatalf("error envelope must carry the logged reference: %s", response.Body.String())
+	}
+
+	var entry map[string]any
+	if err := json.Unmarshal(logs.Bytes(), &entry); err != nil {
+		t.Fatalf("log=%s err=%v", logs.String(), err)
+	}
+	if entry["request_ref"] != requestReference("plugin-installation-request-1") || entry["operation"] != "resume" ||
+		entry["authorization_id"] != authorizationID.String() || entry["code"] != "plugin_installation_activation_response_invalid" ||
+		entry["activation_reason"] != ActivationInvalidIssuedInFuture {
+		t.Fatalf("log entry=%v", entry)
+	}
+	if strings.Contains(logs.String(), "plugin-installation-request-1") || strings.Contains(logs.String(), "customer-session") {
+		t.Fatalf("log leaked idempotency key or session: %s", logs.String())
+	}
+
+	logs.Reset()
+	domain.err = activationInvalidError{ActivationInvalidSignature}
+	list := authenticatedHandlerRequest(http.MethodGet, "/v1/tenant-scopes/"+tenantID.String()+"/plugin-installations", nil)
+	listResponse := httptest.NewRecorder()
+	handler.ServeHTTP(listResponse, list)
+	assertHandlerError(t, listResponse, http.StatusBadGateway, "plugin_installation_activation_response_invalid")
+	if !strings.Contains(logs.String(), `"activation_reason":"signature_invalid"`) {
+		t.Fatalf("list log=%s", logs.String())
+	}
+
+	logs.Reset()
+	domain.err = ErrRevisionConflict
+	conflictResponse := httptest.NewRecorder()
+	handler.ServeHTTP(conflictResponse, authenticatedHandlerRequest(http.MethodGet,
+		"/v1/tenant-scopes/"+tenantID.String()+"/plugin-installations", nil))
+	assertHandlerError(t, conflictResponse, http.StatusConflict, "plugin_installation_revision_conflict")
+	if logs.Len() != 0 {
+		t.Fatalf("client-side conflict must not be logged as a server failure: %s", logs.String())
+	}
 }

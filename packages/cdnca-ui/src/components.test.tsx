@@ -63,6 +63,11 @@ describe('PageSection', () => {
     expect(sections[1]).toHaveClass('extra')
     expect(sections[1].querySelector('.cdnca-page-section-head')).toBeNull()
   })
+
+  it('stays a region named by the page heading', () => {
+    render(<PageSection aria-labelledby="page-title"><h1 id="page-title">IP 名单</h1></PageSection>)
+    expect(screen.getByRole('region', { name: 'IP 名单' })).toHaveClass('cdnca-page-section')
+  })
 })
 
 describe('TableToolbar', () => {

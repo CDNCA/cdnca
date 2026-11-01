@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -755,6 +756,23 @@ type telemetryPipeline struct {
 	// every minute (L4-USAGE-01); nil off Linux.
 	l4Usage     *l4usage.Ledger
 	l4UsageSink eventspool.BatchSink
+	// l4UsageCode is the L4 usage ledger's alert of its last round
+	// (NR-M01/NR-M02): the node is degraded until a round clears it.
+	l4UsageCode atomic.Value
+}
+
+// l4UsageErrorCode maps a checkpoint round's error to the node's code.
+func l4UsageErrorCode(err error) string {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, l4usage.ErrLedgerFull):
+		return "L4_USAGE_LEDGER_FULL"
+	case errors.Is(err, l4usage.ErrIdentityMissing):
+		return "L4_USAGE_ATTRIBUTION_PENDING"
+	default:
+		return "L4_USAGE_CHECKPOINT_FAILED"
+	}
 }
 
 func (p *telemetryPipeline) Run(ctx context.Context) error {
@@ -776,6 +794,7 @@ func (p *telemetryPipeline) Run(ctx context.Context) error {
 	if p.l4Usage != nil {
 		go func() {
 			completed <- p.l4Usage.Run(child, p.l4UsageSink, func(err error) {
+				p.l4UsageCode.Store(l4UsageErrorCode(err))
 				if err != nil {
 					// the next round retries (pending checkpoints first)
 					slog.Warn("L4 usage checkpoint failed", "error", err)
@@ -812,6 +831,10 @@ func (p *telemetryPipeline) Snapshot() telemetryclient.WorkerSnapshot {
 			snapshot.Degraded = true
 			snapshot.LastErrorCode = connections.LastErrorCode
 		}
+	}
+	if code, _ := p.l4UsageCode.Load().(string); code != "" {
+		snapshot.Degraded = true
+		snapshot.LastErrorCode = code
 	}
 	if code := p.sources.ErrorCode(); code != "" {
 		snapshot.Degraded = true

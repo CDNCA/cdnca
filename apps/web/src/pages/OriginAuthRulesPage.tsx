@@ -4,7 +4,7 @@ import {
   Button, Checkbox, Descriptions, Drawer, Form, Input, InputNumber, Modal, Popconfirm,
   Result, Select, Space, Table, Tag, Tooltip, Typography,
 } from 'antd'
-import { useFeedbackMessage } from '@cdnca/ui'
+import { IdOrNameInput, useFeedbackMessage, useLiveApply } from '@cdnca/ui'
 import type { TableColumnsType } from 'antd'
 import { ChevronLeft, ChevronRight, Eye, Pencil, Plus, RefreshCw, RotateCw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -21,6 +21,7 @@ import { useSessionStore } from '../auth/session'
 import { DataState } from '../components/DataState'
 import { isFeatureDisabled } from '../i18n/apiError'
 import '../i18n/originAuthRules'
+import { siteSearch } from './idNameSources'
 
 type Owner = readonly ['tenant', string, string, number]
 
@@ -254,17 +255,27 @@ export function OriginAuthRulesContent({ owner, ownerKey, manageable }: {
     },
   }), [ownerKey])
 
-  const applyFilters = () => {
-    const value = siteDraft.trim()
-    if (value && !uuidPattern.test(value)) {
-      setWriteError('validation.site')
-      return
-    }
+  const applySite = (value: string) => {
     setWriteError(undefined)
     setSiteFilter(value || undefined)
     setCursors([])
     setSelectedID(undefined)
   }
+  // 站点 ID 边输入边生效；也可输入域名从联想中选中（接口只认站点 UUID，
+  // 未选中的域名只联想不过滤）。查询按钮：无未生效改动时刷新。
+  const siteValue = siteDraft.trim().toLowerCase()
+  const siteValid = !siteValue || uuidPattern.test(siteValue)
+  useLiveApply(siteValue, siteFilter ?? '', applySite, { valid: siteValid })
+  const applyFilters = () => {
+    if (!siteValid) {
+      setWriteError('validation.site')
+      return
+    }
+    if (siteValue !== (siteFilter ?? '')) applySite(siteValue)
+    else void listQuery.refetch()
+  }
+  const sitesToken = useSessionStore((state) => state.accessToken)
+  const siteOptions = useMemo(() => siteSearch(sitesToken ?? '', 'id'), [sitesToken])
 
   const openCreate = () => {
     setDraft(defaultDraft)
@@ -366,7 +377,8 @@ export function OriginAuthRulesContent({ owner, ownerKey, manageable }: {
     </header>
 
     <Space wrap className="identity-toolbar">
-      <Input aria-label={t('filters.site')} value={siteDraft} onChange={(event) => setSiteDraft(event.target.value)} onPressEnter={applyFilters} />
+      <IdOrNameInput aria-label={t('filters.site')} value={siteDraft} placeholder={t('filters.sitePlaceholder')} style={{ width: 300 }}
+        isId={(text) => uuidPattern.test(text.toLowerCase())} search={siteOptions} onChange={setSiteDraft} onPressEnter={applyFilters} />
       <Select aria-label={t('filters.provider')} allowClear value={provider} placeholder={t('filters.all')} style={{ width: 170 }} onChange={setProvider} options={(['s3', 'oss', 'cos'] as const).map((value) => ({ value, label: t(`providers.${value}`) }))} />
       <Select aria-label={t('filters.enabled')} allowClear value={enabled} placeholder={t('filters.all')} style={{ width: 150 }} onChange={setEnabled} options={[{ value: true, label: t('states.enabled') }, { value: false, label: t('states.disabled') }]} />
       <Button type="primary" onClick={applyFilters}>{t('filters.query')}</Button>

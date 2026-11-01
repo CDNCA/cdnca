@@ -41,6 +41,9 @@ func init() {
 		e("plugin.theme.upload", CategoryPlugin, "上传主题包 {resource}", "uploaded theme package {resource}"),
 		e("plugin.theme.activate", CategoryPlugin, "启用主题 {resource}{changes}", "activated theme {resource}{changes}"),
 		e("plugin.theme.remove", CategoryPlugin, "移除主题包 {resource}", "removed theme package {resource}"),
+		// the user console follows the admin console theme live, or has its own.
+		e("plugin.theme.user_follow", CategoryPlugin, "用户端改为跟随管理端主题（当前「{theme_id}」）{changes}", "the user console now follows the admin console theme (now {theme_id}){changes}").f("theme_id"),
+		e("plugin.theme.user_unfollow", CategoryPlugin, "用户端单独选用主题「{theme_id}」，不再跟随管理端{changes}", "the user console now uses its own theme {theme_id} instead of following the admin console{changes}").f("theme_id"),
 		// PA-26 white-label themes: a tenant (agent/reseller) theme.
 		e("theme.tenant.activate", CategoryPlugin, "把租户 {resource} 的主题切换为「{theme_id}」{changes}", "switched tenant {resource} to theme {theme_id}{changes}").f("theme_id", "assigned_by"),
 		e("theme.tenant.selection_update", CategoryPlugin, "修改租户 {resource} 的自选主题权限{changes}", "changed whether tenant {resource} may choose its theme{changes}").f("theme_id"),

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/netip"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -75,6 +76,7 @@ type apiKeyPageStoreRequest struct {
 	Status         string
 	Name           string
 	KeyID          string
+	Usable         bool
 }
 
 type apiKeyListCursor struct {
@@ -91,6 +93,7 @@ type apiKeyListCursor struct {
 	Status         string    `json:"status"`
 	Name           string    `json:"name"`
 	KeyID          string    `json:"key_id"`
+	Usable         bool      `json:"usable,omitempty"`
 }
 
 type apiKeyListCursorV1 struct {
@@ -159,7 +162,9 @@ func (s *Service) ListSelf(ctx context.Context, principal identity.Principal) ([
 	if !sameTenantPrincipal(principal, target) {
 		return nil, ErrPermissionDenied
 	}
-	return s.listAllPages(ctx, "self", target.ScopeID, target.UserID)
+	items, err := s.listAllPages(ctx, "self", target.ScopeID, target.UserID)
+	annotateUnavailable(items, target.Permissions)
+	return items, err
 }
 
 func (s *Service) ListSelfPage(
@@ -181,7 +186,9 @@ func (s *Service) ListSelfPage(
 	if !sameTenantPrincipal(principal, target) {
 		return APIKeyListPage{}, ErrPermissionDenied
 	}
-	return s.listPage(ctx, "self", target.ScopeID, target.UserID, normalized)
+	page, err := s.listPage(ctx, "self", target.ScopeID, target.UserID, normalized)
+	annotateUnavailable(page.Items, target.Permissions)
+	return page, err
 }
 
 func (s *Service) GetSelf(ctx context.Context, principal identity.Principal, id uuid.UUID) (Key, error) {
@@ -191,7 +198,16 @@ func (s *Service) GetSelf(ctx context.Context, principal identity.Principal, id 
 	if id == uuid.Nil {
 		return Key{}, ErrInvalidInput
 	}
-	return s.get(ctx, principal.ScopeID, principal.UserID, id)
+	item, err := s.get(ctx, principal.ScopeID, principal.UserID, id)
+	if err != nil {
+		return Key{}, err
+	}
+	target, err := s.resolvePageTarget(ctx, principal.ScopeID, principal.UserID)
+	if err != nil {
+		return Key{}, err
+	}
+	item.UnavailableScopes = unavailableScopes(item.Scopes, target.Permissions)
+	return item, nil
 }
 
 func (s *Service) CreateSelf(ctx context.Context, principal identity.Principal, input CreateInput) (IssuedKey, error) {
@@ -258,6 +274,13 @@ func (s *Service) UpdateSelf(ctx context.Context, principal identity.Principal, 
 		if replay != nil {
 			return json.Unmarshal(replay, &result)
 		}
+		live, err := lockedSelfAuthority(ctx, tx, principal.ScopeID, principal.UserID)
+		if err != nil {
+			return err
+		}
+		if err := recheckScopes(input.Scopes, live); err != nil {
+			return err
+		}
 		err = scanKey(tx.QueryRow(ctx, `
 			UPDATE api_keys
 			SET name=$5, scopes=$6, ip_allowlist=$7, expires_at=$8, revision=revision+1, updated_at=$9
@@ -312,7 +335,9 @@ func (s *Service) AdminList(
 	if target.ScopeID != targetScopeID {
 		return nil, ErrPermissionDenied
 	}
-	return s.listAllPages(ctx, "admin", target.ScopeID, target.UserID)
+	items, err := s.listAllPages(ctx, "admin", target.ScopeID, target.UserID)
+	annotateUnavailable(items, target.Permissions)
+	return items, err
 }
 
 func (s *Service) AdminListPage(
@@ -335,7 +360,9 @@ func (s *Service) AdminListPage(
 	if target.ScopeID != targetScopeID {
 		return APIKeyListPage{}, ErrPermissionDenied
 	}
-	return s.listPage(ctx, "admin", target.ScopeID, target.UserID, normalized)
+	page, err := s.listPage(ctx, "admin", target.ScopeID, target.UserID, normalized)
+	annotateUnavailable(page.Items, target.Permissions)
+	return page, err
 }
 
 func (s *Service) AdminCreatePending(ctx context.Context, principal identity.Principal, input AdminCreateInput) (Key, error) {
@@ -394,6 +421,14 @@ func (s *Service) AdminCreatePending(ctx context.Context, principal identity.Pri
 			return json.Unmarshal(replay, &result)
 		}
 		if err := requireAPIKeyEnabled(ctx, tx); err != nil {
+			return err
+		}
+		// 目标用户的权限在锁前加载；锁内按实时权限重核，排队期间被撤的权限不再预置进待激活密钥。
+		live, err := lockedAuthority(ctx, tx, target.ScopeID, target.UserID)
+		if err != nil {
+			return err
+		}
+		if err := recheckScopes(input.Scopes, live); err != nil {
 			return err
 		}
 		id, err := uuid.NewV7()
@@ -651,6 +686,13 @@ func (s *Service) createActive(
 		if err := requireAPIKeyEnabled(ctx, tx); err != nil {
 			return err
 		}
+		live, err := lockedSelfAuthority(ctx, tx, targetScopeID, targetUserID)
+		if err != nil {
+			return err
+		}
+		if err := recheckScopes(input.Scopes, live); err != nil {
+			return err
+		}
 		id, err := uuid.NewV7()
 		if err != nil {
 			return err
@@ -778,10 +820,20 @@ func (s *Service) issueForSelf(
 			return ErrInvalidTransition
 		}
 		previousScopes := current.Scopes
-		if refreshedScopes == nil {
-			if err := validateScopes(current.Scopes, principal.Permissions); err != nil {
-				return ErrPermissionDenied
+		live, err := lockedSelfAuthority(ctx, tx, principal.ScopeID, principal.UserID)
+		if err != nil {
+			return err
+		}
+		if refreshedScopes != nil {
+			// 简单版"重置密钥"：全部可授予权限按锁内实时权限重算，不带回已收回的权限。
+			if refreshedScopes, err = issuanceScopes(operation, true, live); err != nil {
+				return err
 			}
+		} else if err := recheckScopes(current.Scopes, live); err != nil {
+			if errors.As(err, new(*ScopesUnavailableError)) {
+				return err
+			}
+			return ErrPermissionDenied
 		}
 		if !equalStrings(current.IPAllowlist, input.IPAllowlist) {
 			return ErrRevisionConflict
@@ -921,13 +973,14 @@ func (s *Service) listPage(
 	now := s.now().UTC()
 	request := apiKeyPageStoreRequest{
 		ScopeID: scopeID, UserID: userID, SnapshotAt: now, Limit: input.Limit + 1, Offset: input.Offset,
-		Status: input.Status, Name: input.Name, KeyID: input.KeyID,
+		Status: input.Status, Name: input.Name, KeyID: input.KeyID, Usable: input.Usable,
 	}
 	issuedAt, expiresAt := now, now.Add(listCursorTTL)
 	if input.Cursor != "" {
 		cursor, err := s.decodeListCursor(input.Cursor, now)
 		if err != nil || cursor.Audience != audience || cursor.ScopeID != scopeID || cursor.UserID != userID ||
-			cursor.Limit != input.Limit || cursor.Status != input.Status || cursor.Name != input.Name || cursor.KeyID != input.KeyID {
+			cursor.Limit != input.Limit || cursor.Status != input.Status || cursor.Name != input.Name || cursor.KeyID != input.KeyID ||
+			cursor.Usable != input.Usable {
 			return APIKeyListPage{}, ErrInvalidInput
 		}
 		issuedAt, expiresAt = cursor.IssuedAt, cursor.ExpiresAt
@@ -966,8 +1019,8 @@ func (s *Service) listPage(
 	page.NextCursor, err = s.encodeListCursor(apiKeyListCursor{
 		Version: 2, Audience: audience, ScopeID: scopeID, UserID: userID,
 		IssuedAt: issuedAt, ExpiresAt: expiresAt,
-		SnapshotAt: request.SnapshotAt, AfterCreatedAt: last.CreatedAt, AfterID: last.ID,
-		Limit: input.Limit, Status: input.Status, Name: input.Name, KeyID: input.KeyID,
+		SnapshotAt: request.SnapshotAt, AfterCreatedAt: last.CreatedAt.UTC(), AfterID: last.ID, // pgx 按 time.Local 扫描
+		Limit: input.Limit, Status: input.Status, Name: input.Name, KeyID: input.KeyID, Usable: input.Usable,
 	})
 	if err != nil {
 		return APIKeyListPage{}, err
@@ -982,10 +1035,11 @@ func (s *Service) readPage(ctx context.Context, request apiKeyPageStoreRequest) 
 		  AND ($7 = '' OR status=$7)
 		  AND ($8 = '' OR lower(name)=$8)
 		  AND ($9 = '' OR key_id=$9)
+		  AND (NOT $12 OR (status='active' AND (expires_at IS NULL OR expires_at > $3)))
 		ORDER BY created_at DESC, id DESC LIMIT $10 OFFSET $11`,
 		request.ScopeID, request.UserID, request.SnapshotAt,
 		request.HasAfter, request.AfterCreatedAt, request.AfterID,
-		request.Status, request.Name, request.KeyID, request.Limit, request.Offset)
+		request.Status, request.Name, request.KeyID, request.Limit, request.Offset, request.Usable)
 	if err != nil {
 		return nil, err
 	}
@@ -1007,9 +1061,10 @@ func (s *Service) countPage(ctx context.Context, request apiKeyPageStoreRequest)
 		WHERE scope_id=$1 AND user_id=$2 AND created_at <= $3
 		  AND ($4 = '' OR status=$4)
 		  AND ($5 = '' OR lower(name)=$5)
-		  AND ($6 = '' OR key_id=$6)`,
+		  AND ($6 = '' OR key_id=$6)
+		  AND (NOT $7 OR (status='active' AND (expires_at IS NULL OR expires_at > $3)))`,
 		request.ScopeID, request.UserID, request.SnapshotAt,
-		request.Status, request.Name, request.KeyID).Scan(&total)
+		request.Status, request.Name, request.KeyID, request.Usable).Scan(&total)
 	return total, err
 }
 
@@ -1037,6 +1092,9 @@ func normalizeAPIKeyListInput(input APIKeyListInput) (APIKeyListInput, error) {
 	if input.Status != "" && input.Status != StatusPendingActivation && input.Status != StatusActive && input.Status != StatusRevoked {
 		return APIKeyListInput{}, ErrInvalidInput
 	}
+	if input.Usable && input.Status != "" && input.Status != StatusActive {
+		return APIKeyListInput{}, ErrInvalidInput
+	}
 	rawName := input.Name
 	input.Name = strings.ToLower(strings.TrimSpace(input.Name))
 	if rawName != "" && input.Name == "" || !utf8.ValidString(input.Name) || utf8.RuneCountInString(input.Name) > 128 {
@@ -1058,7 +1116,8 @@ func validPageRows(request apiKeyPageStoreRequest, items []Key) bool {
 		if item.ScopeID != request.ScopeID || item.UserID != request.UserID || item.CreatedAt.After(request.SnapshotAt) ||
 			request.Status != "" && item.Status != request.Status ||
 			request.Name != "" && strings.ToLower(item.Name) != request.Name ||
-			request.KeyID != "" && item.KeyID != request.KeyID {
+			request.KeyID != "" && item.KeyID != request.KeyID ||
+			request.Usable && (item.Status != StatusActive || item.ExpiresAt != nil && !request.SnapshotAt.Before(*item.ExpiresAt)) {
 			return false
 		}
 		if request.HasAfter && (item.CreatedAt.After(request.AfterCreatedAt) ||
@@ -1177,6 +1236,65 @@ func (s *Service) get(ctx context.Context, scopeID, userID, id uuid.UUID) (Key, 
 		return Key{}, ErrNotFound
 	}
 	return item, err
+}
+
+// lockedAuthority 在已取得授权锁（BeginAuthorityMutation，与角色/成员变更同一全局排他锁）的事务内读取持有人
+// 此刻的实时权限（AA-KEY-01）：锁前的会话权限可能已被先提交的撤权改变。用户、成员关系或租户不再有效时拒绝。
+func lockedAuthority(ctx context.Context, tx pgx.Tx, scopeID, userID uuid.UUID) ([]string, error) {
+	var permissions []string
+	err := tx.QueryRow(ctx, `
+		SELECT COALESCE(array_agg(DISTINCT rp.permission_name) FILTER (WHERE rp.permission_name IS NOT NULL), '{}'::text[])
+		FROM users u
+		JOIN memberships m ON m.user_id=u.id AND m.scope_id=$2 AND m.status='active'
+		JOIN access_scopes scope ON scope.id=m.scope_id AND scope.kind='tenant'
+		JOIN tenants tenant ON tenant.id=scope.tenant_id AND tenant.status='active'
+		LEFT JOIN role_assignments ra ON ra.scope_id=m.scope_id AND ra.user_id=u.id
+		LEFT JOIN role_permissions rp ON rp.role_id=ra.role_id
+		WHERE u.id=$1 AND u.status='active'
+		GROUP BY u.id`, userID, scopeID).Scan(&permissions)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrPermissionDenied
+	}
+	return permissions, err
+}
+
+// lockedSelfAuthority 同 lockedAuthority，另要求持有人此刻仍有 api_keys.self.manage。
+func lockedSelfAuthority(ctx context.Context, tx pgx.Tx, scopeID, userID uuid.UUID) ([]string, error) {
+	permissions, err := lockedAuthority(ctx, tx, scopeID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.Contains(permissions, "api_keys.self.manage") {
+		return nil, ErrPermissionDenied
+	}
+	return permissions, nil
+}
+
+// recheckScopes 按实时权限重核：已被收回的权限报 ScopesUnavailableError（列出是哪些），其余沿用 validateScopes。
+func recheckScopes(requested, live []string) error {
+	if missing := unavailableScopes(requested, live); len(missing) > 0 {
+		return &ScopesUnavailableError{Scopes: missing}
+	}
+	return validateScopes(requested, live)
+}
+
+// unavailableScopes 返回 scopes 中不在 permissions 里的部分（排序）；全部可用时为 nil。
+func unavailableScopes(scopes, permissions []string) []string {
+	var missing []string
+	for _, scope := range scopes {
+		if !slices.Contains(permissions, scope) {
+			missing = append(missing, scope)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+// annotateUnavailable 给读取结果标出已被收回、调用时不再生效的权限（展示用，不改库）。
+func annotateUnavailable(items []Key, permissions []string) {
+	for index := range items {
+		items[index].UnavailableScopes = unavailableScopes(items[index].Scopes, permissions)
+	}
 }
 
 func (s *Service) targetPrincipal(ctx context.Context, scopeID, userID uuid.UUID) (identity.Principal, error) {

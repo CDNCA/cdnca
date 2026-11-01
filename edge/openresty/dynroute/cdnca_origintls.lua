@@ -55,6 +55,13 @@ require "resty.openssl.include.ssl"
 -- native patch 29 (ngx_http_upstream.c); a runtime without it has no such
 -- symbol and never gets an endpoint with anchor "none" (ORIGIN_TLS_NO_VERIFY)
 pcall(ffi.cdef, "int ngx_http_cdnca_upstream_set_ssl_host_check(void *r, int enable);")
+-- Indexing ffi.C raises "Symbol not found" on such a runtime, so it is
+-- resolved once here under pcall (nil without the patch).
+local set_ssl_host_check
+do
+    local ok, fn = pcall(function() return ffi.C.ngx_http_cdnca_upstream_set_ssl_host_check end)
+    set_ssl_host_check = ok and fn or nil
+end
 local base = require "resty.core.base"
 
 local type, tostring, find, sub = type, tostring, string.find, string.sub
@@ -230,15 +237,21 @@ function _M.name(endpoint)
 end
 
 -- set_host_check(enable): native patch 29 for the request's current upstream
--- attempt. Without the patch only enable = true succeeds (the stock check).
+-- attempt. Without the patch (no symbol) or when the call fails:
+--   enable = true  succeeds, nginx's stock host name check stays on (there
+--                  is nothing to turn back on);
+--   enable = false fails, nil, err (an anchor "none" attempt cannot turn the
+--                  check off; peer() fails the attempt, 502).
 function _M.set_host_check(enable)
     local r = base.get_request()
     if not r then
         return nil, "no request"
     end
-    local ok, rc = pcall(ffi.C.ngx_http_cdnca_upstream_set_ssl_host_check, r, enable and 1 or 0)
-    if ok and rc == 0 then
-        return true
+    if set_ssl_host_check then
+        local ok, rc = pcall(set_ssl_host_check, r, enable and 1 or 0)
+        if ok and rc == 0 then
+            return true
+        end
     end
     if enable then
         return true

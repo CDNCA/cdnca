@@ -979,7 +979,7 @@ function NodeMonitorSettingsContent({ owner, ownerKey, canManage, canManageDNSPu
                             />
                           </Form.Item>
                           <Alert className="node-monitor-notification-scope" type="info" showIcon
-                            message={t('notifications.unwiredEvents')} />
+                            message={<span>{t('notifications.unwiredEvents')} <Link to="/sys/setting?tab=notification">{t('notifications.openEvents')}</Link></span>} />
                           <Form.Item label={t('notifications.recipients')}>
                             <span className="node-monitor-setting-section-desc">
                               {t('notifications.recipientsDescription')} <Link to="/sys/user">{t('notifications.openMembers')}</Link>

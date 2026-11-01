@@ -66,4 +66,19 @@ describe('SiteDnsCheckPanel detailed check', () => {
       expect.objectContaining({ page: 2, limit: 10, domain: 'example' })))
     expect(screen.getByRole('textbox', { name: '域名' })).toHaveValue('example')
   })
+
+  // 域名/网站ID 边输入边生效；网站ID 非 UUID 文本按 site（域名子串/展示 ID）查询。
+  it('applies domain and site ID as typed, a non-UUID site ID by name', async () => {
+    const list = vi.spyOn(sitesApi, 'list').mockResolvedValue({ items: [site], total: 1, page: 1, limit: 10 })
+    const user = userEvent.setup()
+    renderWithProviders(<SiteDnsCheckPanel onConfigureDnsApi={() => undefined} />, ['/site/list'])
+    await screen.findAllByText('b.example.com')
+    await user.type(screen.getByRole('textbox', { name: '域名' }), 'example')
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ domain: 'example', page: 1 })))
+    await user.type(screen.getByRole('combobox', { name: '网站ID' }), 'a.exam')
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ domain: 'example', site: 'a.exam', site_ids: undefined })))
+    await user.clear(screen.getByRole('combobox', { name: '网站ID' }))
+    await user.type(screen.getByRole('combobox', { name: '网站ID' }), site.id)
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ site_ids: site.id, site: undefined })))
+  })
 })

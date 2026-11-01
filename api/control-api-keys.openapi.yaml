@@ -541,6 +541,14 @@ components:
           maxItems: 128
           uniqueItems: true
           items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
+        unavailable_scopes:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          description: >-
+            Read responses only (list/detail). Scopes of this key that the owner no longer holds; they are
+            not effective when the key is used (AA-KEY-01). Omitted when every scope is still granted.
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
         ip_allowlist: {$ref: '#/components/schemas/IPAllowlist'}
         status: {$ref: '#/components/schemas/APIKeyStatus'}
         pending_expires_at: {type: string, format: date-time}
@@ -615,6 +623,22 @@ components:
         overlaps: {type: integer, minimum: 0, maximum: 31}
         maximum: {type: integer, const: 32}
         actual: {type: integer, minimum: 33}
+    APIKeyScopesRevokedDetails:
+      type: object
+      additionalProperties: false
+      description: >-
+        Only on 403 permission_denied when a create, update, activate or rotate is re-checked inside the
+        authority lock and the owner no longer holds these scopes (revoked concurrently, AA-KEY-01).
+        Nothing was written; re-select scopes and submit again.
+      required: [reason, scopes]
+      properties:
+        reason: {type: string, const: scopes_revoked}
+        scopes:
+          type: array
+          minItems: 1
+          maxItems: 128
+          uniqueItems: true
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
     ErrorEnvelope:
       type: object
       additionalProperties: false
@@ -629,3 +653,4 @@ components:
             message: {type: string, minLength: 1, maxLength: 256}
             request_id: {$ref: '#/components/schemas/MetadataID'}
             params: {$ref: '#/components/schemas/ErrorParams'}
+            details: {$ref: '#/components/schemas/APIKeyScopesRevokedDetails'}

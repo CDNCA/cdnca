@@ -26,7 +26,7 @@ import { DataState } from '../components/DataState'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/originAuthPublications'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, PageSection } from '@cdnca/ui'
 
 type Owner = readonly [Principal['scope_kind'], string, string | null, string, number]
 interface PublishAttempt {
@@ -631,7 +631,7 @@ export default function OriginAuthPublicationsPage() {
   const edgeManage = isPlatform && hasPermission(principal, 'edge_publications.manage')
 
   return (
-    <>
+    <PageSection className="origin-auth-publications-root">
       {isPlatform ? (
         <>
           <Space wrap className="identity-toolbar">
@@ -664,6 +664,6 @@ export default function OriginAuthPublicationsPage() {
           edgeManage={edgeManage}
         />
       ) : null}
-    </>
+    </PageSection>
   )
 }

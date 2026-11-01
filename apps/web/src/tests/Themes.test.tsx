@@ -10,6 +10,7 @@ import { LoginPage } from '../pages/LoginPage'
 import { PublicBrandAssetImage, PublicBrandFavicon, publicBrandAssetUpdatedEvent } from '../components/PublicBrandAssetImage'
 import { authResponse, principal } from '../test/fixtures'
 import { renderWithProviders } from '../test/render'
+import shellCSS from '../components/AppShell.css?raw'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { antdThemeConfig, brandCandidates, defaultAntdTokens, defaultThemeLayout, ThemeRuntimeContext, themeChangedEvent } from '../theme/runtime'
 
@@ -164,6 +165,45 @@ describe('themed shell and login page', () => {
     expect(within(links).getByRole('link', { name: '帮助中心' })).toHaveAttribute('href', 'https://docs.example.test/')
     expect(within(links).getByRole('link', { name: '帮助中心' })).toHaveAttribute('rel', 'noopener noreferrer')
     expect(screen.getByText('© 示例平台').tagName).toBe('FOOTER')
+    // No header slot: the top bar stays light.
+    expect(view.container.querySelector('.app-shell')).not.toHaveClass('is-header-dark')
+  })
+
+  // layout_slots.header = dark joins the top bar to the dark
+  // sidebar; the page's own dark mode keeps its own chrome.
+  it('paints the top bar dark only with header = dark and a light page', () => {
+    const actor = principal({ scope_kind: 'platform', tenant_id: null, roles: ['platform_admin'], permissions: ['platform.admin'] })
+    session.useSessionStore.getState().setSession(authResponse(actor), actor)
+    const shell = (mode: 'light' | 'dark') => {
+      window.localStorage.setItem('cdnca.ui.theme', mode)
+      const view = renderWithProviders(
+        <ThemeRuntimeContext.Provider value={{ document: slateDocument({ header: 'dark' }), layout: slateDocument({ header: 'dark' }).layout }}>
+          <Routes><Route element={<AppShell />}><Route path="*" element={<div />} /></Route></Routes>
+        </ThemeRuntimeContext.Provider>,
+        ['/admin-home'],
+      )
+      const classes = view.container.querySelector('.app-shell')!.className
+      view.unmount()
+      return classes
+    }
+    expect(shell('light')).toContain('is-header-dark')
+    expect(shell('dark')).not.toContain('is-header-dark')
+    window.localStorage.removeItem('cdnca.ui.theme')
+  })
+
+  // the dark sidebar's selected item is inverse text (the
+  // light-sidebar themed rule used to win: primary on the dark fill), dark
+  // mode's submenu is dark, and the dark top bar uses the sidebar color.
+  it('keeps the dark chrome readable', () => {
+    const css = shellCSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    const rule = (selector: string) => {
+      const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      return css.match(new RegExp(`${escaped}[^{]*\\{([^}]*)\\}`))?.[1] ?? ''
+    }
+    expect(rule(':root[data-cdnca-theme] .app-shell.is-sidebar-dark:not(.is-dark) .shell-menu .ant-menu-submenu .ant-menu-item-selected'))
+      .toMatch(/color:\s*var\(--cdnca-color-text-inverse\);/)
+    expect(rule('.app-shell.is-dark .shell-menu .ant-menu-sub')).toMatch(/background:\s*var\(--cdnca-color-chrome-dark, #111827\) !important;/)
+    expect(rule('.app-shell.is-header-dark:not(.is-dark) .app-header')).toMatch(/background:\s*var\(--cdnca-color-sidebar-dark\);/)
   })
 
   // fix-e1 #6: the product name comes from the theme (PA-26 white label), "cdnca" without one.

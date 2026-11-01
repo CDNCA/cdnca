@@ -15,7 +15,7 @@ import { factRegion } from './logGeo'
 import SystemBackupLogPanel from './SystemBackupLogPanel'
 import SystemSentLogPanel from './SystemSentLogPanel'
 import { useFilterUrl } from './filterUrl'
-import { AdvancedFilters, TimeRangeFilter, resolveTimeRangePreset, useFeedback, useLiveApply, type TimeRangeValue } from '@cdnca/ui'
+import { AdvancedFilters, PageSection, TimeRangeFilter, resolveTimeRangePreset, useFeedback, useLiveApply, type TimeRangeValue } from '@cdnca/ui'
 import './LogCenterPage.css'
 
 // The attack and access logs are shown here, not linked out —
@@ -166,7 +166,7 @@ export default function LogCenterPage() {
   const loadError = page.isError ? localizedUnknownApiError(page.error, t(errorKey(page.error))) : null
   const tabs = tabOrder.map((key) => ({ key, label: key === 'auth' ? t('categories.auth') : t(`tabs.${key}`) }))
 
-  return <div data-testid="log-center" className="log-center-v2">
+  return <PageSection data-testid="log-center" className="log-center-v2">
     <Typography.Title level={4}>{t('title')}</Typography.Title>
     <Typography.Paragraph type="secondary">{t('subtitle')}</Typography.Paragraph>
     <Tabs activeKey={tab} items={tabs}
@@ -226,7 +226,7 @@ export default function LogCenterPage() {
     <Drawer open={Boolean(selected)} width={640} title={t('detail.title')} onClose={() => setSelected(undefined)}>
       {selected ? <LogDetail item={selected} /> : null}
     </Drawer>
-  </div>
+  </PageSection>
 }
 
 // 比较用：去掉首尾空格与空值（空格不算改动）。

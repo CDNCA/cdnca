@@ -591,7 +591,11 @@ describe('NodeMonitorSettingsPage', () => {
     for (const name of ['带宽超限', '备用IP切换', '备用默认解析切换', '备用线路组切换']) {
       expect(screen.queryByRole('checkbox', { name })).not.toBeInTheDocument()
     }
-    expect(screen.getByText(/暂无通知事件，因此不提供订阅/)).toBeInTheDocument()
+    // 带宽超限、备用 IP 切换已有通知事件，不能再说未接入；只有备用默认解析、备用线路组切换暂无。
+    expect(screen.getByText(/带宽超限（摘除\/恢复）、备用 IP 启用\/恢复主 IP 已发送通知/)).toBeInTheDocument()
+    expect(screen.getByText(/备用默认解析、备用线路组切换暂无通知事件/)).toBeInTheDocument()
+    expect(screen.queryByText(/带宽超限、备用 IP、备用默认解析、备用线路组切换暂无通知事件/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '在通知设置中管理这些事件' })).toHaveAttribute('href', '/sys/setting?tab=notification')
     expect(screen.queryByPlaceholderText('输入邮箱地址')).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('输入手机号码')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: '前往用户管理' })).toHaveAttribute('href', '/sys/user')
@@ -1226,5 +1230,33 @@ describe('A10/N06 switch log reads real serving events', () => {
     list.mockImplementation(async (_token, query) => ({ schema_version: 1, from: query.from, to: query.to, page: 1, limit: 10, total: 0, items: [] }))
     await user.click(screen.getByRole('button', { name: '重试' }))
     expect(await screen.findByText('最近 31 天没有切换记录')).toBeInTheDocument()
+  })
+})
+
+// 切换日志边输入边生效；节点ID 也可输入节点名称/IP，从联想中选中按节点 UUID 过滤。
+describe('switch log live filters', () => {
+  const nodeID = '018f0000-0000-7000-8000-0000000000a1'
+  const reader = () => admin({ permissions: ['system_configuration.read', 'nodes.read'] })
+
+  it('applies typed IP without the query button and filters by a picked node name', async () => {
+    authenticate(reader())
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(configDocument())
+    const list = vi.spyOn(nodeMonitoringApi, 'listScopeServingEvents').mockImplementation(async (_token, query) => ({
+      schema_version: 1, from: query.from, to: query.to, page: query.page, limit: query.limit, total: 0, items: [],
+    }))
+    const nodes = vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [{ id: nodeID, display_id: '7', name: 'edge-sh-1', ipv4: '192.0.2.10' } as unknown as NodeInventoryItem] })
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('tab', { name: '切换日志' }))
+    await screen.findByText('最近 31 天没有切换记录')
+
+    await user.type(screen.getByRole('textbox', { name: '节点IP' }), '192.0.2.10')
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ ip: '192.0.2.10', page: 1 }), expect.anything()))
+
+    await user.type(screen.getByRole('combobox', { name: '节点ID' }), 'edge')
+    expect(await screen.findByText('edge-sh-1（7）')).toBeInTheDocument()
+    expect(nodes).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ search: 'edge' }))
+    await user.click(screen.getByText('edge-sh-1（7）'))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ nodeID, ip: '192.0.2.10' }), expect.anything()))
   })
 })

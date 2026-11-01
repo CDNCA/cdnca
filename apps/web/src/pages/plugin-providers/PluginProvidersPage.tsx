@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Checkbox, Drawer, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Typography,
   type TableColumnsType } from 'antd'
-import { useFeedbackMessage, useFeedback, FeedbackWhen } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, FeedbackWhen, PageSection } from '@cdnca/ui'
 import { Play, Power, PowerOff, RefreshCw, ShieldAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -162,7 +162,7 @@ export default function PluginProvidersPage() {
     } },
   ]
 
-  return <div className="page-shell">
+  return <PageSection>
     {messageContext}
     <Typography.Title level={4}>{t('title')}</Typography.Title>
     <Alert className="identity-alert density-note" type="info" showIcon message={t('intro')} />
@@ -185,5 +185,5 @@ export default function PluginProvidersPage() {
           { title: t('detail.code'), dataIndex: 'code' },
         ]} />
     </Drawer>
-  </div>
+  </PageSection>
 }

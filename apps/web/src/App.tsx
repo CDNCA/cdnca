@@ -34,6 +34,7 @@ import {
   adminObservedUserBlockedPaths,
   controlUpgradesReadPermission,
   firewallReadPermission,
+  openrestySecurityReadPermission,
   jobsReadPermission,
   nodeSchedulingReadPermission,
   observedRouteAliases,
@@ -1323,7 +1324,7 @@ const appRouteTree = (
             path="/config/waf"
             element={
               <RoleRoute role="admin" mismatch="not-found">
-                <PermissionRoute permission={firewallReadPermission} platformAdminFallback>
+                <PermissionRoute permission={openrestySecurityReadPermission} platformAdminFallback>
                   <Suspense fallback={<RouteFallback />}>
                     <FirewallPoliciesPage />
                   </Suspense>

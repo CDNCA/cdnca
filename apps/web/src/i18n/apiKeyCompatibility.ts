@@ -39,6 +39,20 @@ const zhCN = {
   advancedDescription: '管理多个密钥、最小权限、有效期、轮换和撤销。',
   disableConfirm: '确认关闭 API？',
   disableDescription: '当前有效密钥将立即撤销，外部程序无法继续调用。',
+  impersonationReadOnly: '代登录期间仅可查看密钥，创建、修改、轮换或撤销请由用户本人登录后操作。',
+  expired: '已到期',
+  allowlistSaving: '正在保存…',
+  allowlistSaved: '已保存',
+  allowlistUnsaved: '有未保存的修改，失焦或回车保存。',
+  allowlistConflict: '白名单已被其他操作修改，你的修改尚未保存。',
+  allowlistServerValue: '当前已保存',
+  allowlistDraftValue: '你的修改',
+  allowlistUseServer: '采用新版',
+  allowlistKeepDraft: '继续编辑',
+  allowlistOrphaned: '你正在编辑的密钥已被撤销、到期或替换，未保存的白名单修改没有提交。',
+  allowlistDismiss: '知道了',
+  expiredHelp: '密钥已于 {{time}} 到期，外部程序已无法调用。开启 API 会生成一把新的默认密钥；旧密钥可在高级密钥管理中查看或撤销。',
+  expiringSoon: '密钥将于 {{time}} 到期，到期后外部程序无法调用。如需继续使用，请在高级密钥管理中调整到期时间或创建新密钥。',
 } as const
 
 const enUS = {
@@ -80,6 +94,20 @@ const enUS = {
   advancedDescription: 'Manage multiple keys, least-privilege scopes, expiry, rotation, and revocation.',
   disableConfirm: 'Disable API access?',
   disableDescription: 'The active key is revoked immediately and external API calls stop.',
+  impersonationReadOnly: 'While signed in on behalf of this user you can only view keys. The user must create, change, rotate or revoke keys from their own account.',
+  expired: 'Expired',
+  allowlistSaving: 'Saving…',
+  allowlistSaved: 'Saved',
+  allowlistUnsaved: 'Unsaved changes. Leave the field or press Enter to save.',
+  allowlistConflict: 'The allowlist was changed by another operation. Your edit has not been saved.',
+  allowlistServerValue: 'Currently saved',
+  allowlistDraftValue: 'Your edit',
+  allowlistUseServer: 'Use the new version',
+  allowlistKeepDraft: 'Keep editing',
+  allowlistOrphaned: 'The key you were editing was revoked, expired or replaced. Your unsaved allowlist edit was not submitted.',
+  allowlistDismiss: 'Dismiss',
+  expiredHelp: 'The key expired at {{time}} and external programs can no longer call the API. Turning API access on generates a new default key; the old key stays in advanced key management to view or revoke.',
+  expiringSoon: 'The key expires at {{time}}. After that external programs cannot call the API. To keep using it, change its expiry or create a new key in advanced key management.',
 } as const
 
 type MessageTree = { [key: string]: string | MessageTree }

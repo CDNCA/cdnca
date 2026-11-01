@@ -128,9 +128,10 @@ func (repository *resumeRepository) Apply(_ context.Context, _ Actor, command Co
 }
 
 type resumeResolver struct {
-	remote   []InstallationView
-	fail     bool
-	reported []Receipt
+	remote    []InstallationView
+	fail      bool
+	reported  []Receipt
+	reportErr error
 }
 
 func (resolver *resumeResolver) Resolve(context.Context, ActivationResolveRequest) (ActivationResult, error) {
@@ -146,7 +147,7 @@ func (resolver *resumeResolver) Discover(context.Context, CandidateDiscoveryRequ
 
 func (resolver *resumeResolver) ReportLifecycle(_ context.Context, request LifecycleReportRequest) (LifecycleReportResult, error) {
 	resolver.reported = append(resolver.reported, request.Receipt)
-	return LifecycleReportResult{}, nil
+	return LifecycleReportResult{}, resolver.reportErr
 }
 
 func productionResumeFixture(remoteStatus, pausedBy string) (*ProductionDomain, *resumeRepository, *resumeResolver, Actor) {

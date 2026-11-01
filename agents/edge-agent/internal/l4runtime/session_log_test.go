@@ -55,21 +55,21 @@ func TestSessionLogRendersTrackingAndTheV2Format(t *testing.T) {
 	}
 	nginx := string(mustCompileV2(t, config).NginxConfig)
 	for marker, want := range map[string]int{
-		"lua_shared_dict l4_v2_live 64m;":                                                                1,
-		"log_format l4_session_v2 escape=json":                                                           1,
-		"listen unix:" + L4ControlSocketPath + ";":                                                       1,
-		`content_by_lua_block { require("cdnca_l4_geo").control() }`:                                     1,
-		`set $cdnca_l4_client "";`:                                                                       2,
-		`set $cdnca_l4_end_reason "";`:                                                                   2,
-		`set $cdnca_l4_live_key "";`:                                                                     2,
-		`log_by_lua_block { require("cdnca_l4_geo").session_end() }`:                                     2,
-		`l4_session_v2;`:                                                                                 2,
-		`"client":"$cdnca_l4_client","remote_addr":"$remote_addr"`:                                       1,
-		`"end_reason":"$cdnca_l4_end_reason"`:                                                            1,
-		`geo.enforce("` + l403Stream + `", true)`:                                                        2,
-		`geo.limit_new_connections("` + l403Stream + `", client, 20, 5, 0, true) then return end`:        2,
-		`geo.session_track("` + l403Stream + `", "` + l403Stream + `", client, false)`:                   1,
-		`geo.session_track("` + l403Stream + `", "44444444-4444-4444-8444-444444444444", client, false)`: 1,
+		"lua_shared_dict l4_v2_live 64m;":                                                         1,
+		"log_format l4_session_v2 escape=json":                                                    1,
+		"listen unix:" + L4ControlSocketPath + ";":                                                1,
+		`content_by_lua_block { require("cdnca_l4_geo").control() }`:                              1,
+		`set $cdnca_l4_client "";`:                                                                2,
+		`set $cdnca_l4_end_reason "";`:                                                            2,
+		`set $cdnca_l4_live_key "";`:                                                              2,
+		`log_by_lua_block { require("cdnca_l4_geo").session_end() }`:                              2,
+		`l4_session_v2;`:                                                                          2,
+		`"client":"$cdnca_l4_client","remote_addr":"$remote_addr"`:                                1,
+		`"end_reason":"$cdnca_l4_end_reason"`:                                                     1,
+		`geo.enforce("` + l403Stream + `", true)`:                                                 2,
+		`geo.limit_new_connections("` + l403Stream + `", client, 20, 5, 0, true) then return end`: 2,
+		`geo.session_track("` + l403Stream + `", "` + l403Stream + `", client, false, ` + l403Identity + `)`:                   1,
+		`geo.session_track("` + l403Stream + `", "44444444-4444-4444-8444-444444444444", client, false, ` + l403Identity + `)`: 1,
 	} {
 		if got := strings.Count(nginx, marker); got != want {
 			t.Fatalf("%q rendered %d times, want %d:\n%s", marker, got, want, nginx)
@@ -119,7 +119,7 @@ func TestSessionLogBehindADispatcher(t *testing.T) {
 	}
 	nginx := string(mustCompileV2(t, config).NginxConfig)
 	for _, present := range []string{"log_format l4_session_dispatched_v2 escape=json", `"server_port":"$proxy_protocol_server_port"`,
-		"l4_session_dispatched_v2;", `geo.session_track("` + l403Stream + `", "` + l403Stream + `", client, true)`} {
+		"l4_session_dispatched_v2;", `geo.session_track("` + l403Stream + `", "` + l403Stream + `", client, true, ` + l403Identity + `)`} {
 		if !strings.Contains(nginx, present) {
 			t.Fatalf("dispatched session log missing %q:\n%s", present, nginx)
 		}

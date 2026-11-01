@@ -180,7 +180,7 @@ func (s *Service) UpdateProvider(ctx context.Context, actor Actor, request Updat
 	}
 	// The platform DNS copy is kept by the platform sync (节点管理 > DNS配置).
 	if IsPlatformManagedProvider(target.ManagedBy, target.ScopeID, target.ID) {
-		return Provider{}, ErrPlatformManagedProvider
+		return Provider{}, platformManagedRefusal(actor)
 	}
 	if target.ProviderType == "dnsdun" &&
 		(request.Status != ProviderStatusDisabled || request.Credentials != nil) {
@@ -427,7 +427,7 @@ func (s *Service) DeleteProvider(ctx context.Context, actor Actor, request Delet
 	}
 	if target, err := s.store.providerForUpdate(ctx, actor, request.ID); err == nil &&
 		IsPlatformManagedProvider(target.ManagedBy, target.ScopeID, target.ID) {
-		return ErrPlatformManagedProvider
+		return platformManagedRefusal(actor)
 	} else if err != nil && !errors.Is(err, ErrNotFound) {
 		return err
 	}

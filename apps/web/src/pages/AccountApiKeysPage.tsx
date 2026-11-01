@@ -28,13 +28,15 @@ import { ApiError } from '../api/auth'
 import { formatDateTime } from '../i18n/formatters'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import {
+  apiKeyExpired,
   apiKeysApi,
   validateAPIKeyIPAllowlist,
+  type APIKeyError,
   type APIKeyFields,
   type APIKeyRecord,
   type IssuedAPIKey,
 } from '../api/apiKeys'
-import { useSessionStore } from '../auth/session'
+import { refreshSession, useSessionStore } from '../auth/session'
 import '../i18n/apiKeyAllowlist'
 import '../i18n/apiKeyCompatibility'
 import { permissionName } from '../i18n/permissionNames'
@@ -48,12 +50,14 @@ interface APIKeyFormValues {
 }
 
 const API_KEY_PAGE_SIZE = 10
+// AA-UI02：距到期不足 7 天时在简单区提示。
+const EXPIRING_SOON_MS = 7 * 24 * 60 * 60 * 1000
 const apiKeyIDPattern = /^cfk_[A-Za-z0-9_-]{22}$/
 
 // simple：来自简单版卡片（开关开启 / 重置密钥），一次性密钥用分栏弹窗显示 api_key 与 api_secret。
 type WriteAttempt =
   | { kind: 'create'; input: APIKeyFields; key: string; simple?: boolean }
-  | { kind: 'update'; id: string; revision: number; input: APIKeyFields; key: string }
+  | { kind: 'update'; id: string; revision: number; input: APIKeyFields; key: string; simple?: boolean }
   | { kind: 'activate' | 'rotate' | 'revoke'; id: string; revision: number; ipAllowlist: string[]; key: string; simple?: boolean }
 
 function writeKey(kind: WriteAttempt['kind']): string {
@@ -74,6 +78,8 @@ function writeOutcomeUnknown(error: unknown): boolean {
 
 function errorMessage(error: unknown, t: TFunction<'apiKeys'>, tAllowlist?: TFunction<'apiKeyAllowlist'>): string {
   if (!(error instanceof ApiError)) return t('errors.request_failed')
+  const revokedScopes = (error as APIKeyError).revokedScopes
+  if (revokedScopes) return t('errors.scopes_revoked', { scopes: revokedScopes.map(permissionName).join('、') })
   switch (error.code) {
     case 'validation_error':
     case 'permission_denied':
@@ -88,6 +94,8 @@ function errorMessage(error: unknown, t: TFunction<'apiKeys'>, tAllowlist?: TFun
     case 'request_failed':
     case 'invalid_response':
       return t(`errors.${error.code}`)
+    case 'impersonation_sensitive_action_denied':
+      return localizedUnknownApiError(error, t('errors.request_failed'))
     case 'api_key_ip_allowlist_invalid_cidr':
     case 'api_key_ip_allowlist_unsupported_prefix':
     case 'api_key_ip_allowlist_duplicate':
@@ -181,6 +189,7 @@ export default function AccountApiKeysPage() {
       ownerID={principal.user_id}
       sessionEpoch={sessionEpoch}
       permissions={principal.permissions}
+      impersonating={Boolean(principal.impersonation)}
     />
   )
 }
@@ -192,11 +201,14 @@ function AccountApiKeysContent({
   permissions,
   advancedOpen,
   onAdvancedOpenChange,
+  impersonating,
 }: {
   accessToken: string
   ownerID: string
   sessionEpoch: number
   permissions: string[]
+  // ID-06：代登录只读——服务端拒绝创建、修改、轮换、激活与撤销（impersonation_sensitive_action_denied）。
+  impersonating: boolean
   advancedOpen: boolean
   onAdvancedOpenChange: (open: boolean) => void
 }) {
@@ -212,8 +224,14 @@ function AccountApiKeysContent({
   const [editor, setEditor] = useState<{ mode: 'create' | 'edit'; item?: APIKeyRecord } | null>(null)
   const [issued, setIssued] = useState<IssuedAPIKey | null>(null)
   const [simpleIssued, setSimpleIssued] = useState<IssuedAPIKey | null>(null)
-  const [allowlistDraft, setAllowlistDraft] = useState<{ keyRevision: string; value: string } | null>(null)
+  // AA-UI01：简单区白名单草稿绑定所编辑的密钥与开始编辑时的版本和服务端值；后台刷新到新版本时
+  // 不覆盖草稿，改为提示冲突，由用户选择采用新版或基于新版继续保存自己的修改。
+  const [allowlistDraft, setAllowlistDraft] = useState<
+    { keyID: string; initialRevision: number; value: string; baseText: string } | null
+  >(null)
   const [allowlistError, setAllowlistError] = useState<string | null>(null)
+  const [allowlistSaved, setAllowlistSaved] = useState(false)
+  const submittingRef = useRef(false)
   const [attempt, setAttempt] = useState<WriteAttempt | null>(null)
   const [writeError, setWriteError] = useState<ApiError | null>(null)
   const [search, setSearch] = useState('')
@@ -245,24 +263,61 @@ function AccountApiKeysContent({
     queryClient.removeQueries({ queryKey: compatibilityRoot })
   }, [compatibilityRoot, detailRoot, listRoot, queryClient])
 
+  // AA-UI02：简单区只看服务端快照时刻实际可用（active 且未到期）的密钥；已到期的 active
+  // 生命周期密钥仍在高级区历史里。到期判断用服务端时间（响应 Date 头与本机时钟的差）。
+  const serverOffsetRef = useRef(0)
   const compatibilityQuery = useQuery({
-    queryKey: [...compatibilityRoot, 2, 'active'],
-    queryFn: ({ signal }) => apiKeysApi.list(accessTokenRef.current, {
-      limit: 2,
-      status: 'active',
-    }, signal),
+    queryKey: [...compatibilityRoot, 2, 'usable'],
+    queryFn: async ({ signal }) => {
+      const result = await apiKeysApi.list(accessTokenRef.current, {
+        limit: 2,
+        status: 'active',
+        usable: true,
+      }, signal)
+      if (result.server_time !== undefined) serverOffsetRef.current = result.server_time - Date.now()
+      return result
+    },
   })
 
   const query = useQuery({
     queryKey: [...listRoot, API_KEY_PAGE_SIZE, statusFilter, name, keyID, offset],
-    queryFn: ({ signal }) => apiKeysApi.list(accessTokenRef.current, {
-      limit: API_KEY_PAGE_SIZE,
-      ...(statusFilter ? { status: statusFilter } : {}),
-      ...(name ? { name } : {}),
-      ...(keyID ? { key_id: keyID } : {}),
-      ...(offset ? { offset } : {}),
-    }, signal),
+    queryFn: async ({ signal }) => {
+      const result = await apiKeysApi.list(accessTokenRef.current, {
+        limit: API_KEY_PAGE_SIZE,
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(name ? { name } : {}),
+        ...(keyID ? { key_id: keyID } : {}),
+        ...(offset ? { offset } : {}),
+      }, signal)
+      if (result.server_time !== undefined) serverOffsetRef.current = result.server_time - Date.now()
+      return result
+    },
   })
+  // 页面静置跨过到期点时重新渲染状态并刷新简单区（服务端会把该密钥移出可用列表）。
+  const [, setClockTick] = useState(0)
+  const serverNow = () => Date.now() + serverOffsetRef.current
+  // 简单区没有可用密钥时，再查一条 active 生命周期记录：有就说明密钥已到期，而不是从未开启。
+  const usableEmpty = compatibilityQuery.data !== undefined && compatibilityQuery.data.items.length === 0
+  const expiredQuery = useQuery({
+    queryKey: [...compatibilityRoot, 2, 'active-lifecycle'],
+    queryFn: ({ signal }) => apiKeysApi.list(accessTokenRef.current, { limit: 2, status: 'active' }, signal),
+    enabled: usableEmpty,
+  })
+  const expiredKey = usableEmpty ? expiredQuery.data?.items[0] : undefined
+  const nextExpiry = [...(compatibilityQuery.data?.items ?? []), ...(query.data?.items ?? [])]
+    .filter((item) => item.status === 'active' && item.expires_at)
+    .map((item) => Date.parse(item.expires_at!))
+    .filter((value) => value > Date.now() + serverOffsetRef.current)
+    .sort((left, right) => left - right)[0]
+  useEffect(() => {
+    if (nextExpiry === undefined) return
+    const delay = Math.min(nextExpiry - (Date.now() + serverOffsetRef.current) + 50, 2_147_483_647)
+    const timer = window.setTimeout(() => {
+      setClockTick((tick) => tick + 1)
+      void queryClient.invalidateQueries({ queryKey: compatibilityRoot })
+    }, Math.max(delay, 0))
+    return () => window.clearTimeout(timer)
+  }, [compatibilityRoot, nextExpiry, queryClient])
 
   // Keep the last known total while the next page loads so the pager does not jump.
   const totalRef = useRef(0)
@@ -305,9 +360,10 @@ function AccountApiKeysContent({
         else setIssued(result)
       }
       if (completed.kind === 'update') setAllowlistDraft(null)
+      if (completed.kind === 'update' && completed.simple) setAllowlistSaved(true)
       resetList()
       // 简单版签发由一次性密钥弹窗本身确认结果，不再弹提示条压住"只显示一次"的警告。
-      if (!simple) messageApi.success(t(`notices.${completed.kind}`))
+      if (!simple && !(completed.kind === 'update' && completed.simple)) messageApi.success(t(`notices.${completed.kind}`))
     },
     onError: (error, failed) => {
       const apiError = error instanceof ApiError ? error : new ApiError('request failed')
@@ -317,10 +373,36 @@ function AccountApiKeysContent({
         return
       }
       setAttempt(null)
+      if (failed.kind === 'update' && failed.simple) {
+        // 简单区白名单：错误就地显示在输入框下；版本冲突保留草稿，刷新后由冲突提示条处理。
+        setWriteError(null)
+        if (apiError.code === 'version_conflict') {
+          resetList()
+          return
+        }
+        setAllowlistError(errorMessage(apiError, t, tAllowlist))
+        return
+      }
       // fix-feedbackui2: a refused allowlist is said under its field, not in a dialog.
       if (apiError.code.startsWith('api_key_ip_allowlist_') && applyFormSubmitError(form,
         { code: 'validation_error', field: 'ip_allowlist' }, { message: () => errorMessage(apiError, t, tAllowlist) })) {
         setWriteError(null)
+        return
+      }
+      const revokedScopes = (apiError as APIKeyError).revokedScopes
+      if (revokedScopes) {
+        // AA-KEY-01：服务端锁内重核发现这些权限已被收回，什么都没写。保留编辑器草稿，去掉已收回的权限让用户确认后重提；
+        // 刷新会话让可选权限与服务端一致（简单版开关/重置下次也按新权限）。
+        void refreshSession().catch(() => undefined)
+        resetList()
+        if ((failed.kind === 'create' || failed.kind === 'update') && !('simple' in failed && failed.simple)) {
+          // 编辑器里就地说明（与白名单错误同一做法），不另弹框。
+          const kept = (form.getFieldValue('scopes') as string[] | undefined ?? []).filter((scope) => !revokedScopes.includes(scope))
+          form.setFields([{ name: 'scopes', value: kept, errors: [t('editor.validation.scopesRevoked', {
+            scopes: revokedScopes.map(permissionName).join('、'),
+          })] }])
+          setWriteError(null)
+        }
         return
       }
       if (apiError.code === 'version_conflict') {
@@ -355,11 +437,13 @@ function AccountApiKeysContent({
   }
 
   const uncertain = Boolean(attempt && writeError && writeOutcomeUnknown(writeError))
-  const writesLocked = mutation.isPending || uncertain || Boolean(issued) || Boolean(simpleIssued)
+  const writesLocked = impersonating || mutation.isPending || uncertain || Boolean(issued) || Boolean(simpleIssued)
   const activeKeys = (compatibilityQuery.data?.items ?? []).filter((item) => item.status === 'active')
   const multipleActiveKeys = Boolean(activeKeys.length > 1 || activeKeys.length > 0 && compatibilityQuery.data?.has_more)
   const primaryKey = !multipleActiveKeys && activeKeys.length === 1 ? activeKeys[0] : null
   const compatibilityEnabled = activeKeys.length > 0
+  const primaryExpiresAt = primaryKey?.expires_at ? Date.parse(primaryKey.expires_at) : null
+  const primaryExpiringSoon = primaryExpiresAt !== null && primaryExpiresAt - serverNow() <= EXPIRING_SOON_MS
   const activeCountLabel = t(
     compatibilityQuery.data?.has_more ? 'compatibility.activeCountMore' : 'compatibility.activeCount',
     { count: activeKeys.length },
@@ -367,10 +451,14 @@ function AccountApiKeysContent({
 
   // "全部权限"= 会话权限里允许授予 API 密钥的全部（与高级创建的可选范围一致），名称默认"默认密钥"、不过期。
   const allScopes = scopeOptions.map((option) => option.value)
-  const primaryRevision = primaryKey ? `${primaryKey.id}:${primaryKey.revision}` : ''
-  const allowlistValue = allowlistDraft && allowlistDraft.keyRevision === primaryRevision
-    ? allowlistDraft.value
-    : (primaryKey?.ip_allowlist ?? []).join(' | ')
+  const serverAllowlistText = (primaryKey?.ip_allowlist ?? []).join(' | ')
+  const draftEdited = Boolean(allowlistDraft && allowlistDraft.value !== allowlistDraft.baseText)
+  const draftForPrimary = draftEdited && primaryKey !== null && allowlistDraft?.keyID === primaryKey.id
+  const allowlistValue = draftForPrimary ? allowlistDraft!.value : serverAllowlistText
+  const allowlistConflict = draftForPrimary && primaryKey!.revision !== allowlistDraft!.initialRevision
+  // 草稿所属的密钥已被撤销、到期或出现多把密钥：旧草稿不再提交，并说明原因。
+  const allowlistOrphaned = draftEdited && !compatibilityQuery.isPending && !compatibilityQuery.isError &&
+    (primaryKey === null || allowlistDraft?.keyID !== primaryKey.id)
 
   const copyText = (value: string) => {
     void navigator.clipboard.writeText(value)
@@ -379,10 +467,12 @@ function AccountApiKeysContent({
   }
 
   const submit = (next: WriteAttempt) => {
-    if (writesLocked) return
+    // 回车与失焦可能在同一次渲染前先后触发，用 ref 防止重复提交。
+    if (writesLocked || submittingRef.current) return
+    submittingRef.current = true
     setAttempt(next)
     setWriteError(null)
-    mutation.mutate(next)
+    mutation.mutate(next, { onSettled: () => { submittingRef.current = false } })
   }
 
   const openCreate = () => {
@@ -427,8 +517,9 @@ function AccountApiKeysContent({
   }
 
   const saveAllowlist = () => {
-    if (!primaryKey || writesLocked) return
-    const entries = simpleAllowlistEntries(allowlistValue)
+    // 冲突未处理时不提交：草稿基于旧版本，服务端只会拒绝。
+    if (!primaryKey || writesLocked || !draftForPrimary || allowlistConflict || !allowlistDraft) return
+    const entries = simpleAllowlistEntries(allowlistDraft.value)
     const invalid = validateAPIKeyIPAllowlist(entries)
     if (invalid) {
       setAllowlistError(tAllowlist(`validation.${invalid}`))
@@ -441,8 +532,9 @@ function AccountApiKeysContent({
     }
     submit({
       kind: 'update',
-      id: primaryKey.id,
-      revision: primaryKey.revision,
+      id: allowlistDraft.keyID,
+      // 请求钉住开始编辑时的版本：期间若被其他操作修改，服务端返回 version_conflict。
+      revision: allowlistDraft.initialRevision,
       input: {
         name: primaryKey.name,
         scopes: primaryKey.scopes,
@@ -450,8 +542,19 @@ function AccountApiKeysContent({
         ...(primaryKey.expires_at ? { expires_at: primaryKey.expires_at } : {}),
       },
       key: writeKey('update'),
+      simple: true,
     })
   }
+
+  const allowlistSaving = mutation.isPending && attempt?.kind === 'update' && Boolean(attempt.simple)
+  const allowlistHint = allowlistError
+    ?? (allowlistSaving
+      ? t('compatibility.allowlistSaving')
+      : draftForPrimary
+        ? t('compatibility.allowlistUnsaved')
+        : allowlistSaved
+          ? t('compatibility.allowlistSaved')
+          : t('compatibility.allowlistSaveHint'))
 
   const writeErrorAlert = writeError ? (
     (uncertain ? <OutcomeUnknown type="error" title={t('uncertainty.title')} detail={t('uncertainty.description')} action={(
@@ -474,9 +577,17 @@ function AccountApiKeysContent({
     },
     {
       title: t('columns.scopes'), dataIndex: 'scopes', minWidth: 260,
-      render: (values: string[]) => (
-        <Space size={[4, 4]} wrap>{values.map((value) => <Tag key={value} title={value}>{permissionName(value)}</Tag>)}</Space>
-      ),
+      render: (values: string[], item: APIKeyRecord) => {
+        const unavailable = item.unavailable_scopes ?? []
+        return (
+          <Space size={[4, 4]} wrap>
+            {values.map((value) => unavailable.includes(value)
+              ? <Tag key={value} className="account-api-key-scope-revoked" title={`${value} ${t('values.scopeRevoked')}`}>{permissionName(value)}</Tag>
+              : <Tag key={value} title={value}>{permissionName(value)}</Tag>)}
+            {unavailable.length > 0 ? <span className="account-api-key-scope-revoked-note">{t('values.scopesRevokedNote')}</span> : null}
+          </Space>
+        )
+      },
     },
     {
       title: tAllowlist('label'), dataIndex: 'ip_allowlist', minWidth: 260,
@@ -484,11 +595,13 @@ function AccountApiKeysContent({
     },
     {
       title: t('columns.status'), dataIndex: 'status', width: 130,
-      render: (status: APIKeyRecord['status']) => (
-        <Tag color={status === 'active' ? 'success' : status === 'revoked' ? 'default' : 'processing'}>
-          {t(`statuses.${status}`)}
-        </Tag>
-      ),
+      render: (status: APIKeyRecord['status'], item) => apiKeyExpired(item, serverNow())
+        ? <Tag color="warning">{t('statuses.expired')}</Tag>
+        : (
+          <Tag color={status === 'active' ? 'success' : status === 'revoked' ? 'default' : 'processing'}>
+            {t(`statuses.${status}`)}
+          </Tag>
+        ),
     },
     {
       title: t('columns.expiresAt'), dataIndex: 'expires_at', width: 180,
@@ -525,6 +638,7 @@ function AccountApiKeysContent({
           ) : null}
           {item.status === 'pending_activation' ? (
             <Popconfirm
+              disabled={writesLocked}
               title={t('confirm.activate')}
               okText={t('actions.activate')}
               cancelText={t('actions.cancel')}
@@ -535,8 +649,9 @@ function AccountApiKeysContent({
               </Tooltip>
             </Popconfirm>
           ) : null}
-          {item.status === 'active' ? (
+          {item.status === 'active' && !apiKeyExpired(item, serverNow()) ? (
             <Popconfirm
+              disabled={writesLocked}
               title={t('confirm.rotate')}
               description={t('confirm.rotateDescription')}
               okText={t('actions.rotate')}
@@ -550,6 +665,7 @@ function AccountApiKeysContent({
           ) : null}
           {item.status !== 'revoked' ? (
             <Popconfirm
+              disabled={writesLocked}
               title={t('confirm.revoke')}
               description={t('confirm.revokeDescription')}
               okText={t('actions.revoke')}
@@ -583,9 +699,15 @@ function AccountApiKeysContent({
                 ? t('compatibility.unknown')
                 : compatibilityEnabled
                   ? t('compatibility.enabled')
-                  : t('compatibility.disabled')}
+                  : expiredKey
+                    ? t('compatibility.expired')
+                    : t('compatibility.disabled')}
           </Tag>
         </header>
+
+        {impersonating ? (
+          <Alert className="identity-alert" type="info" showIcon message={t('compatibility.impersonationReadOnly')} />
+        ) : null}
 
         {compatibilityQuery.isError ? (
           <FeedbackWhen title={t('errors.loadFailed')} detail={errorMessage(compatibilityQuery.error, t, tAllowlist)} action={<Button size="small" onClick={() => void compatibilityQuery.refetch()}>{t('actions.retry')}</Button>} />
@@ -596,10 +718,21 @@ function AccountApiKeysContent({
             <div className="account-api-key-compatibility-copy">
               <h2>{t('compatibility.status')}</h2>
               <p>{primaryKey ? t('compatibility.statusHelp') : t('compatibility.enableHint')}</p>
+              {expiredKey?.expires_at ? (
+                <p className="account-api-key-compatibility-note account-api-key-expiry-note" role="status">
+                  {t('compatibility.expiredHelp', { time: dateTime(expiredKey.expires_at, locale, '') })}
+                </p>
+              ) : null}
+              {primaryKey?.expires_at && primaryExpiringSoon ? (
+                <p className="account-api-key-compatibility-note account-api-key-expiry-note" role="status">
+                  {t('compatibility.expiringSoon', { time: dateTime(primaryKey.expires_at, locale, '') })}
+                </p>
+              ) : null}
             </div>
             <div className="account-api-key-compatibility-control">
               {primaryKey ? (
                 <Popconfirm
+                  disabled={writesLocked}
                   title={t('compatibility.disableConfirm')}
                   description={t('compatibility.disableDescription')}
                   okText={t('actions.revoke')}
@@ -649,17 +782,60 @@ function AccountApiKeysContent({
                     aria-describedby="api-key-simple-allowlist-hint"
                     disabled={writesLocked}
                     onChange={(event) => {
+                      const value = event.target.value
                       setAllowlistError(null)
-                      setAllowlistDraft({ keyRevision: primaryRevision, value: event.target.value })
+                      setAllowlistSaved(false)
+                      setAllowlistDraft((previous) => previous && previous.keyID === primaryKey.id &&
+                        previous.value !== previous.baseText
+                        ? { ...previous, value }
+                        : { keyID: primaryKey.id, initialRevision: primaryKey.revision, value, baseText: serverAllowlistText })
                     }}
                     onBlur={saveAllowlist}
                     onPressEnter={saveAllowlist}
                   />
-                  <span id="api-key-simple-allowlist-hint" role={allowlistError ? 'alert' : undefined}
+                  <span id="api-key-simple-allowlist-hint" role={allowlistError ? 'alert' : 'status'}
                     className={allowlistError ? 'account-api-key-allowlist-error' : undefined}>
-                    {allowlistError ?? t('compatibility.allowlistSaveHint')}
+                    {allowlistHint}
                   </span>
+                  {allowlistConflict ? (
+                    <Alert
+                      className="account-api-key-allowlist-conflict"
+                      type="warning"
+                      showIcon
+                      role="alert"
+                      message={t('compatibility.allowlistConflict')}
+                      description={(
+                        <>
+                          <dl className="account-api-key-allowlist-diff">
+                            <div><dt>{t('compatibility.allowlistServerValue')}</dt><dd>{serverAllowlistText || tAllowlist('unrestricted')}</dd></div>
+                            <div><dt>{t('compatibility.allowlistDraftValue')}</dt><dd>{allowlistDraft!.value || tAllowlist('unrestricted')}</dd></div>
+                          </dl>
+                          {/* 按钮放在说明下方并可换行：放在 Alert action 里 390 宽会压住正文。 */}
+                          <Space className="account-api-key-allowlist-conflict-actions" size={8} wrap>
+                            <Button size="small" onClick={() => { setAllowlistDraft(null); setAllowlistError(null) }}>
+                              {t('compatibility.allowlistUseServer')}
+                            </Button>
+                            <Button size="small" type="primary" onClick={() => setAllowlistDraft({
+                              keyID: primaryKey.id, initialRevision: primaryKey.revision,
+                              value: allowlistDraft!.value, baseText: serverAllowlistText,
+                            })}>
+                              {t('compatibility.allowlistKeepDraft')}
+                            </Button>
+                          </Space>
+                        </>
+                      )}
+                    />
+                  ) : null}
                 </div>
+              ) : null}
+              {allowlistOrphaned ? (
+                <Alert
+                  type="info"
+                  showIcon
+                  role="alert"
+                  message={t('compatibility.allowlistOrphaned')}
+                  action={<Button size="small" onClick={() => setAllowlistDraft(null)}>{t('compatibility.allowlistDismiss')}</Button>}
+                />
               ) : null}
               {!compatibilityQuery.isPending && multipleActiveKeys ? <span>{t('compatibility.multipleHint')}</span> : null}
               {!compatibilityQuery.isPending && !compatibilityEnabled && !compatibilityQuery.isError
@@ -694,6 +870,7 @@ function AccountApiKeysContent({
                     </div>
                   </dl>
                   <Popconfirm
+                    disabled={writesLocked}
                     title={t('compatibility.resetConfirm')}
                     description={t('compatibility.resetDescription')}
                     okText={t('compatibility.reset')}
@@ -809,9 +986,12 @@ function AccountApiKeysContent({
           <Descriptions column={1} size="small" bordered items={[
             { key: 'name', label: t('columns.name'), children: detailQuery.data.name },
             { key: 'prefix', label: t('columns.prefix'), children: <code>{detailQuery.data.key_prefix}********</code> },
-            { key: 'scopes', label: t('columns.scopes'), children: detailQuery.data.scopes.map(permissionName).join('、') },
+            { key: 'scopes', label: t('columns.scopes'), children: detailQuery.data.scopes.map((scope) =>
+              detailQuery.data.unavailable_scopes?.includes(scope)
+                ? t('values.scopeRevokedNamed', { name: permissionName(scope) })
+                : permissionName(scope)).join('、') },
             { key: 'allowlist', label: tAllowlist('label'), children: allowlistTags(detailQuery.data.ip_allowlist, tAllowlist('unrestricted')) },
-            { key: 'status', label: t('columns.status'), children: t(`statuses.${detailQuery.data.status}`) },
+            { key: 'status', label: t('columns.status'), children: apiKeyExpired(detailQuery.data, serverNow()) ? t('statuses.expired') : t(`statuses.${detailQuery.data.status}`) },
             { key: 'expires', label: t('columns.expiresAt'), children: dateTime(detailQuery.data.expires_at, locale, t('values.never')) },
             { key: 'used', label: t('columns.lastUsedAt'), children: dateTime(detailQuery.data.last_used_at, locale, t('values.neverUsed')) },
           ]} />
@@ -838,7 +1018,7 @@ function AccountApiKeysContent({
           layout="vertical"
           disabled={mutation.isPending || uncertain}
           onFinish={(values) => {
-            if (!editor) return
+            if (!editor || writesLocked) return
             const input: APIKeyFields = {
               name: values.name.trim(),
               scopes: values.scopes,

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -191,5 +191,48 @@ describe('FrozenConsolePage', () => {
     await user.click(screen.getByRole('button', { name: /登\s*录/ }))
     await waitFor(() => expect(screen.getByRole('button', { name: /登\s*录/ })).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: '回退到本机' })).not.toBeInTheDocument()
+  })
+})
+
+// OPB-01 (同形): the migration wizard's host key answer belongs to the host it was read for.
+describe('ControlMigrationWizard host key', () => {
+  const keyA = 'SHA256:' + 'A'.repeat(43)
+  const keyB = 'SHA256:' + 'B'.repeat(43)
+  async function openWizard() {
+    await i18n.changeLanguage('zh-CN')
+    const pending: Array<(response: Response) => void> = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith('/host-key')) return new Promise((resolve) => { pending.push(resolve) })
+      if (url.endsWith('/v1/admin/control-backup')) return Promise.resolve(json({ data: status(migrationRun({ state: 'succeeded', phase: 'done' }), false) }))
+      return Promise.resolve(json({ error: { code: 'not_found' } }, 404))
+    })
+    renderWithProviders(<ControlBackupPanel accessToken="token" canManage />)
+    const host = await screen.findByLabelText('新主控 IP 或域名')
+    const wizard = host.closest('.control-backup-migration') as HTMLElement
+    fireEvent.change(host, { target: { value: '203.0.113.10' } })
+    return { pending, wizard, host, pin: within(wizard).getByLabelText('主机指纹') }
+  }
+
+  it('writes the fingerprint when the host did not change', async () => {
+    const { pending, wizard, pin } = await openWizard()
+    await userEvent.click(within(wizard).getByRole('button', { name: '获取指纹' }))
+    await waitFor(() => expect(pending).toHaveLength(1))
+    await act(async () => { pending[0](json({ data: { host_key_sha256: keyA } })) })
+    await waitFor(() => expect(pin).toHaveValue(keyA))
+  })
+
+  it('drops a late answer for the previous host and keeps a typed fingerprint', async () => {
+    const { pending, wizard, host, pin } = await openWizard()
+    await userEvent.click(within(wizard).getByRole('button', { name: '获取指纹' }))
+    await waitFor(() => expect(pending).toHaveLength(1))
+    fireEvent.change(host, { target: { value: '203.0.113.11' } })
+    await act(async () => { pending[0](json({ data: { host_key_sha256: keyA } })) })
+    expect(pin).toHaveValue('')
+    await userEvent.click(within(wizard).getByRole('button', { name: '获取指纹' }))
+    await waitFor(() => expect(pending).toHaveLength(2))
+    fireEvent.change(pin, { target: { value: keyB } })
+    await act(async () => { pending[1](json({ data: { host_key_sha256: keyA } })) })
+    expect(pin).toHaveValue(keyB)
   })
 })

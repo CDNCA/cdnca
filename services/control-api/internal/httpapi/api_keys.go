@@ -46,6 +46,12 @@ type apiKeyFieldError struct {
 	Params map[string]any
 }
 
+// apiKeyScopesUnavailableDetails：permission_denied 因权限已被收回时的 details（AA-KEY-01）。
+type apiKeyScopesUnavailableDetails struct {
+	Reason string   `json:"reason"`
+	Scopes []string `json:"scopes"`
+}
+
 type apiKeyFieldErrorEnvelope struct {
 	Error struct {
 		Code      string         `json:"code"`
@@ -443,6 +449,11 @@ func parseAPIKeyListRawQuery(raw string) (apikey.APIKeyListInput, error) {
 			input.Name = value
 		case "key_id":
 			input.KeyID = value
+		case "usable":
+			if value != "true" {
+				return apikey.APIKeyListInput{}, apikey.ErrInvalidInput
+			}
+			input.Usable = true
 		case "cursor":
 			if len(value) > 4096 {
 				return apikey.APIKeyListInput{}, apikey.ErrInvalidInput

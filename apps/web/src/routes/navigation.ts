@@ -32,6 +32,7 @@ import {
   firewallReadPermission,
   jobsReadPermission,
   nodeSchedulingReadPermission,
+  openrestySecurityReadPermission,
 } from './routePolicy'
 
 export type NavIcon =
@@ -206,7 +207,7 @@ const adminNavigation: NavigationDefinition[] = [
         key: '/config/waf',
         labelKey: 'navigation:firewallConfiguration',
         implemented: true,
-        requiredPermission: firewallReadPermission,
+        requiredPermission: openrestySecurityReadPermission,
         platformAdminFallback: true,
       },
       {
@@ -344,6 +345,8 @@ const directRouteDefinitions: DirectRouteDefinition[] = [
   { path: '/sys/probe-dnspup', labelKey: 'probeDNSPup:title', parentKey: 'system', roles: ['admin'], implemented: true, requiredPermission: 'system.probe_dnspup.manage', requiredModule: 'module.probe.dnspup', platformAdminFallback: true, selectionKey: '/sys/setting' },
   { path: '/sys/inbox', labelKey: 'adminInbox:title', parentKey: 'system', roles: ['admin'], implemented: true, selectionKey: '/sys/setting' },
   { path: '/account/inbox', labelKey: 'adminInbox:title', parentKey: 'account', roles: ['user'], implemented: true, selectionKey: '/account/message' },
+  // AA-NAV01：菜单项 /account/api 经别名跳到真实页面 /account/api-key；页面与 App.tsx 一致只对租户开放（RoleRoute user）。
+  { path: '/account/api-key', labelKey: 'navigation:apiKeys', parentKey: 'account', roles: ['user'], implemented: true, selectionKey: '/account/api' },
   { path: '/sys/admin-access', labelKey: 'adminAccess:title', parentKey: 'system', roles: ['admin'], implemented: true, requiredPermission: 'system_configuration.read', platformAdminFallback: false, selectionKey: '/sys/setting' },
   { path: '/sys/plugin-webhooks', labelKey: 'navigation:pluginWebhooks', parentKey: 'system', roles: ['admin'], implemented: true, requiredPermission: 'plugin_webhooks.read', requiredRuntime: 'plugin_webhooks', selectionKey: '/sys/setting' },
   { path: '/sys/plugin-webhooks', labelKey: 'navigation:pluginWebhooks', parentKey: 'system', roles: ['user'], implemented: true, requiredPermission: 'plugin_webhooks.read', requiredRuntime: 'plugin_webhooks' },

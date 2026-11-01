@@ -56,6 +56,15 @@ type Presence struct {
 	NativeRuntimeRelease         *string `json:"native_runtime_release,omitempty"`
 	NativeRuntimePreviousRelease *string `json:"native_runtime_previous_release,omitempty"`
 	NativeRuntimeErrorCode       *string `json:"native_runtime_error_code,omitempty"`
+	// Telemetry* are the telemetry pipeline degradation of the latest
+	// heartbeat (EdgeRuntimeStatus.telemetry, migration 592): the error code
+	// (L4_USAGE_LEDGER_FULL, L4_USAGE_ATTRIBUTION_PENDING, TELEMETRY_*, ...),
+	// when the Agent first and last saw it and in how many heartbeats.
+	// Omitted while the pipeline is healthy or the node did not report it.
+	TelemetryErrorCode   *string    `json:"telemetry_error_code,omitempty"`
+	TelemetryFirstSeenAt *time.Time `json:"telemetry_first_seen_at,omitempty"`
+	TelemetryLastSeenAt  *time.Time `json:"telemetry_last_seen_at,omitempty"`
+	TelemetryCount       *int64     `json:"telemetry_count,omitempty"`
 }
 
 type InventoryItem struct {
@@ -163,6 +172,8 @@ func (i *Inventory) List(ctx context.Context, request InventoryListRequest) (Inv
 		       node_presence.market_probe_role,
 		       node_presence.native_runtime_state, node_presence.native_runtime_release,
 		       node_presence.native_runtime_previous_release, node_presence.native_runtime_error_code,
+		       node_presence.telemetry_error_code, node_presence.telemetry_first_seen_at,
+		       node_presence.telemetry_last_seen_at, node_presence.telemetry_count,
 		       session.capabilities_snapshot, session.capabilities_sha256,
 		       CASE WHEN network.ipv4_state='verified' AND host(nodes.ipv4) IS DISTINCT FROM network.ipv4_address THEN 'address_conflict' ELSE network.ipv4_state END,
 		       CASE WHEN network.ipv6_state='verified' AND host(nodes.ipv6) IS DISTINCT FROM network.ipv6_address THEN 'address_conflict' ELSE network.ipv6_state END,
@@ -238,6 +249,8 @@ func (i *Inventory) Get(ctx context.Context, scopeID, nodeID uuid.UUID) (Invento
 		       node_presence.market_probe_role,
 		       node_presence.native_runtime_state, node_presence.native_runtime_release,
 		       node_presence.native_runtime_previous_release, node_presence.native_runtime_error_code,
+		       node_presence.telemetry_error_code, node_presence.telemetry_first_seen_at,
+		       node_presence.telemetry_last_seen_at, node_presence.telemetry_count,
 		       session.capabilities_snapshot, session.capabilities_sha256,
 		       CASE WHEN network.ipv4_state='verified' AND host(nodes.ipv4) IS DISTINCT FROM network.ipv4_address THEN 'address_conflict' ELSE network.ipv4_state END,
 		       CASE WHEN network.ipv6_state='verified' AND host(nodes.ipv6) IS DISTINCT FROM network.ipv6_address THEN 'address_conflict' ELSE network.ipv6_state END,
@@ -277,6 +290,8 @@ func scanInventoryItem(row rowScanner, cutoff time.Time) (InventoryItem, error) 
 		&item.Presence.SessionEpoch, &item.Presence.HeartbeatSequence, &item.Presence.MarketProbeRole,
 		&item.Presence.NativeRuntimeState, &item.Presence.NativeRuntimeRelease,
 		&item.Presence.NativeRuntimePreviousRelease, &item.Presence.NativeRuntimeErrorCode,
+		&item.Presence.TelemetryErrorCode, &item.Presence.TelemetryFirstSeenAt,
+		&item.Presence.TelemetryLastSeenAt, &item.Presence.TelemetryCount,
 		&capabilitiesSnapshot, &capabilitiesDigest,
 		&ipv4State, &ipv6State, &item.NetworkInventory.ReceivedAt,
 	); err != nil {
@@ -298,6 +313,8 @@ func scanInventoryItem(row rowScanner, cutoff time.Time) (InventoryItem, error) 
 		item.Presence.MarketProbeRole = nil
 		item.Presence.NativeRuntimeState, item.Presence.NativeRuntimeRelease = nil, nil
 		item.Presence.NativeRuntimePreviousRelease, item.Presence.NativeRuntimeErrorCode = nil, nil
+		item.Presence.TelemetryErrorCode, item.Presence.TelemetryFirstSeenAt = nil, nil
+		item.Presence.TelemetryLastSeenAt, item.Presence.TelemetryCount = nil, nil
 		return item, nil
 	}
 	item.Presence.OpenRestyVersion = sessionOpenRestyVersion(capabilitiesSnapshot, capabilitiesDigest)

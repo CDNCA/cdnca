@@ -258,6 +258,11 @@
 
 .l4-session-panel { display: flex; flex-direction: column; gap: 12px; }
 .l4-session-muted { color: var(--ant-color-text-secondary, var(--cdnca-color-neutral62, #8c8c8c)); font-size: 12px; margin: 0; }
+/* a visible, compact page name and a folded help block (390px stays readable). */
+.l4-session-heading { margin: 0 0 12px; color: var(--cdnca-color-text); font-size: 16px; font-weight: 600; line-height: 24px; }
+.l4-session-help > summary { width: fit-content; color: var(--cdnca-color-primary); font-size: 12px; cursor: pointer; }
+.l4-session-help > summary:focus-visible { outline: 2px solid var(--cdnca-color-primary); outline-offset: 2px; }
+.l4-session-help > p { margin-top: 6px; line-height: 1.6; }
 .l4-session-pager { display: flex; gap: 8px; justify-content: flex-end; }
 .l4-session-actions { display: inline-flex; gap: 6px; }
 .l4-session-problems { margin: 0; padding-left: 18px; }

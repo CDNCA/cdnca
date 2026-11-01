@@ -46,14 +46,17 @@ export function PageHeader({ title, description, extra, className }: {
 }
 
 /** A 4px card (secondary border, shadow, 16px padding); consecutive sections sit 16px apart. */
-export function PageSection({ title, extra, className, children }: {
+export function PageSection({ title, extra, className, children, 'aria-labelledby': labelledBy, 'data-testid': testId }: {
   title?: ReactNode
   extra?: ReactNode
   className?: string
   children: ReactNode
+  /** The page's own heading id, so the section stays a named region. */
+  'aria-labelledby'?: string
+  'data-testid'?: string
 }) {
   return (
-    <section className={cx('cdnca-page-section', className)}>
+    <section className={cx('cdnca-page-section', className)} aria-labelledby={labelledBy} data-testid={testId}>
       {title || extra ? (
         <div className="cdnca-page-section-head">
           {title ? <h2 className="cdnca-page-section-title">{title}</h2> : <span />}

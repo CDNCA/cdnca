@@ -4,6 +4,7 @@ import { Alert, App, Button, Descriptions, Drawer, Input, Select, Space, Table, 
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
+import { PageSection } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
 import {
@@ -46,7 +47,7 @@ export default function ApprovalCenterPage() {
   ]
 
   return (
-    <div data-testid="approval-center-page" style={{ minWidth: 0 }}>
+    <PageSection>
       <Typography.Title level={4}>{t('title')}</Typography.Title>
       <Space style={{ marginBottom: 12 }}>
         <Select aria-label={t('columns.state')} style={{ width: 180 }} value={state ?? 'all'} onChange={(value) => setState(value === 'all' ? undefined : value as ApprovalState)}
@@ -56,7 +57,7 @@ export default function ApprovalCenterPage() {
       {list.error ? <Alert type="error" showIcon message={errorText(t, list.error)} /> : null}
       <Table rowKey="id" size="small" loading={list.isPending} columns={columns} dataSource={list.data ?? []} pagination={false} locale={{ emptyText: t('empty') }} />
       {openID ? <ApprovalDrawer id={openID} token={token} canApprove={canApprove} onClose={() => setOpenID(null)} /> : null}
-    </div>
+    </PageSection>
   )
 }
 

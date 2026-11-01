@@ -9,7 +9,7 @@ import { domainOwnershipApi, type ClaimSuspension, type DomainOwnership, type Ow
 import { useSessionStore } from '../../auth/session'
 import '../../i18n/domainTrust'
 import { DomainOwnershipPanel } from './DomainOwnershipPanel'
-import { useFeedback, FeedbackWhen } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, PageSection } from '@cdnca/ui'
 
 function codeOf(error: unknown): string {
   return error instanceof ApiError ? error.code : 'request_failed'
@@ -53,7 +53,7 @@ export default function AccountDomainsPage() {
   })
   const disabled = list.error instanceof ApiError && list.error.code === 'domain_ownership_disabled'
   return (
-    <div className="page">
+    <PageSection>
       <Typography.Title level={4}>{t('user.title')}</Typography.Title>
       <Typography.Paragraph type="secondary">{t('user.subtitle')}</Typography.Paragraph>
       {disabled ? <Alert type="info" showIcon message={t('errors.domain_ownership_disabled')} />
@@ -98,6 +98,6 @@ export default function AccountDomainsPage() {
           onChange={(event) => setDomain(event.target.value.trim())} />
         {domain.includes('.') ? <DomainOwnershipPanel key={domain} domain={domain} /> : null}
       </Modal>
-    </div>
+    </PageSection>
   )
 }

@@ -206,3 +206,16 @@
     flex: 1 1 auto;
   }
 }
+
+/* 已勾选但未绑定联系方式时，勾选框下方就地提示与绑定入口。 */
+.account-subscription-unbound {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.account-subscription-unbound .account-subscription-item-hint {
+  text-align: center;
+  overflow-wrap: anywhere;
+}

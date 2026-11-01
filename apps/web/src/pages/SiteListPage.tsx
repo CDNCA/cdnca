@@ -27,7 +27,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { ApiError, type Principal } from '../api/auth'
 import { usersApi, type ManagedUser } from '../api/users'
 import { siteGroupsApi } from '../api/siteGroups'
-import { dnsApi } from '../api/dns'
+import { dnsApi, ownDNSProviders } from '../api/dns'
 import {
   canonicalSiteDomains,
   sitesApi,
@@ -774,7 +774,7 @@ function SiteCreateModal({
       return dnsApi.list(token)
     },
   })
-  const verifiedDNSProviders = (dnsProviders.data?.items ?? []).filter((item) => item.status === 'verified' && item.managed_by !== 'platform')
+  const verifiedDNSProviders = ownDNSProviders(dnsProviders.data?.items ?? []).filter((item) => item.status === 'verified')
   const users = useInfiniteQuery({
     queryKey: ['site-create-users', owner, userSearch],
     enabled: platform && canReadUsers,

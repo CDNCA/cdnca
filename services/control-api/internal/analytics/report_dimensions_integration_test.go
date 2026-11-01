@@ -84,7 +84,7 @@ func TestReportDimensionsClickHouseIntegration(t *testing.T) {
 		RankByRegion:   {"CN", "__unknown__"},
 		RankByCarrier:  {"carrier:cn-telecom", "__unknown__", "carrier:cn-unicom"},
 		RankByDomain:   {"report.example.test"},
-		RankByIP:       {"::ffff:192.0.2.1", "::ffff:192.0.2.2", "::ffff:198.51.100.9"},
+		RankByIP:       {"192.0.2.1", "192.0.2.2", "198.51.100.9"},
 	} {
 		page, rankErr := client.Rank(t.Context(), scope, filter, dimension, 10, "")
 		if rankErr != nil {

@@ -94,6 +94,8 @@ export function AppShell() {
   // PA-17 layout slots: sidebar variant, header links, footer text.
   const { layout } = useThemeRuntime()
   const darkSidebar = layout.sidebar === 'dark' && themeMode !== 'dark'
+  // layout_slots.header = dark: the top bar takes the dark sidebar's color (one frame).
+  const darkHeader = darkSidebar && layout.header === 'dark'
   // Dark mode paints the sidebar and header dark too: both want the dark-background logo.
   const brandSlot = darkSidebar || themeMode === 'dark' ? 'logo_dark' : 'logo'
   const feedback = useFeedback()
@@ -244,7 +246,7 @@ export function AppShell() {
   }
 
   return (
-    <div className={`app-shell${role === 'admin' ? ' is-admin' : ''}${collapsed ? ' is-collapsed' : ''}${themeMode === 'dark' ? ' is-dark' : ''}${darkSidebar ? ' is-sidebar-dark' : ''}`}>
+    <div className={`app-shell${role === 'admin' ? ' is-admin' : ''}${collapsed ? ' is-collapsed' : ''}${themeMode === 'dark' ? ' is-dark' : ''}${darkSidebar ? ' is-sidebar-dark' : ''}${darkHeader ? ' is-header-dark' : ''}`}>
       <PublicBrandFavicon />
       <aside className={`app-sidebar${mobileOpen ? ' is-mobile-open' : ''}`}>
         <button

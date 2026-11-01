@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -25,7 +25,7 @@ import {
 import { AdvancedFilters, useFeedbackMessage, useFeedback, FeedbackWhen, OutcomeUnknown, submitErrorFields, useFormSubmitError, IdOrNameInput, useLiveApply } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from './filterUrl'
 import { userSearch } from './idNameSources'
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, FlaskConical, GripVertical, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, FlaskConical, GripVertical, MoreHorizontal, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
@@ -78,7 +78,6 @@ import { useWAFLibraries, WAFSubscriptionActions, WAFSubscriptionTag } from './s
 import type { WAFRuleLibrary } from '../api/wafRuleSubscriptions'
 import WAFRuleSubscriptionsPanel from './security/WAFRuleSubscriptionsPanel'
 import TenantScopeSelect from '../components/TenantScopeSelect'
-import { themeColor } from '../theme/themeColor'
 import './SecurityPoliciesPage.css'
 
 interface ConditionForm extends Omit<SecurityPolicyCondition, 'values'> { values: string }
@@ -617,6 +616,7 @@ function ACLPolicyEditor({
 }) {
   const { t } = useTranslation('securityPolicies')
   const [form] = Form.useForm<PolicyForm>()
+  const sectionID = useId()
   useSubmitFieldError(form, submitError, onFieldMarked)
   const targetScope = Form.useWatch('target_scope_id', form)
   const ownerKey = catalogKey
@@ -679,17 +679,22 @@ function ACLPolicyEditor({
             <Input placeholder={t('acl.editor.ownerPlaceholder')} />
           </Form.Item>
         </> : null}
-        <div className="acl-editor-basic-grid">
-          <Form.Item name="name" label={t('acl.editor.name')} rules={[{ required: true, whitespace: true, max: 128 }]}>
-            <Input />
-          </Form.Item>
-          <Form.Item name="description" label={t('acl.editor.description')} rules={[{ max: 1000 }]}>
-            <Input />
-          </Form.Item>
-        </div>
-        <Form.Item name="default_action" label={t('acl.editor.defaultAction')} rules={[{ required: true }]}>
-          <Radio.Group options={[{ value: 'allow', label: t('acl.editor.allow') }, { value: 'block', label: t('acl.editor.block') }]} />
-        </Form.Item>
+        {/* name, note, default action and switch on one row (same layering as WAF/CC). */}
+        <section className="sp-editor-section" aria-labelledby={`${sectionID}-basic`}>
+          <h3 className="sp-editor-section-title" id={`${sectionID}-basic`}>{t('editor.basicInfo')}</h3>
+          <div className="acl-editor-basic-grid sp-editor-acl-basic">
+            <Form.Item name="name" label={t('acl.editor.name')} rules={[{ required: true, whitespace: true, max: 128 }]}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="description" label={t('acl.editor.description')} rules={[{ max: 1000 }]}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="default_action" label={t('acl.editor.defaultAction')} rules={[{ required: true }]}>
+              <Radio.Group options={[{ value: 'allow', label: t('acl.editor.allow') }, { value: 'block', label: t('acl.editor.block') }]} />
+            </Form.Item>
+            <Form.Item name="enabled" label={t('acl.editor.enabled')} valuePropName="checked"><Switch /></Form.Item>
+          </div>
+        </section>
         <div className="acl-editor-rules-head">
           <strong>{t('acl.editor.rules')}</strong>
           <Button size="small" icon={<Plus size={14} />} onClick={() => {
@@ -724,9 +729,6 @@ function ACLPolicyEditor({
               </div>
             ))}
           </Form.List>
-        </div>
-        <div className="acl-editor-enabled-row">
-          <Form.Item name="enabled" label={t('acl.editor.enabled')} valuePropName="checked"><Switch /></Form.Item>
         </div>
         {isAdmin ? <details className="acl-editor-advanced">
           <summary>{t('acl.editor.advanced')}</summary>
@@ -771,6 +773,7 @@ function RulePolicyEditor({
 }: PolicyEditorProps) {
   const { t } = useTranslation('securityPolicies')
   const [form] = Form.useForm<PolicyForm>()
+  const sectionID = useId()
   useSubmitFieldError(form, submitError, onFieldMarked)
   // managed_waf (OWASP CRS rule sets) exists only in WAF policies.
   const ruleActions = kind === 'waf' ? [...actions, 'ban' as const, 'managed_waf' as const] : actions
@@ -841,10 +844,10 @@ function RulePolicyEditor({
 
   return (
     <Modal
-      className="security-policy-modal"
+      className="security-policy-modal sp-editor-modal"
       title={item ? t('editor.editTitle') : t('editor.createTitle')}
       open={open}
-      width={920}
+      width={980}
       confirmLoading={pending}
       okText={t('actions.save')}
       cancelText={t('actions.cancel')}
@@ -853,114 +856,139 @@ function RulePolicyEditor({
       styles={{ body: { maxHeight: '68vh', overflowY: 'auto' } }}
       destroyOnHidden
     >
-      <Form form={form} layout="vertical" requiredMark={false}>
-        {isAdmin && !item ? (
-          <Space size={12} wrap style={{ width: '100%' }}>
-            <Form.Item name="target_scope_id" label={t('editor.targetScope')} rules={[{ required: true }]}>
-              <Input placeholder={t('editor.targetScopePlaceholder')} style={{ width: 320 }} />
+      <Form form={form} layout="vertical" requiredMark={false} className="sp-editor">
+        {/* three layers — basic info, policy settings, rules. */}
+        <section className="sp-editor-section" aria-labelledby={`${sectionID}-basic`}>
+          <h3 className="sp-editor-section-title" id={`${sectionID}-basic`}>{t('editor.basicInfo')}</h3>
+          {isAdmin && !item ? (
+            <div className="sp-editor-target-grid">
+              <Form.Item name="target_scope_id" label={t('editor.targetScope')} rules={[{ required: true }]}>
+                <Input placeholder={t('editor.targetScopePlaceholder')} />
+              </Form.Item>
+              <Form.Item name="owner_id" label={t('editor.owner')} rules={[{ required: true }]}>
+                <Input placeholder={t('editor.ownerPlaceholder')} />
+              </Form.Item>
+            </div>
+          ) : null}
+          <Form.Item name="kind" hidden><Input /></Form.Item>
+          <div className="sp-editor-basic-grid">
+            <div className="sp-editor-kind-cell">
+              <span className="sp-editor-kind-label">{t('editor.kind')}</span>
+              <span className="sp-editor-kind">{t(`kinds.${kind}`)}</span>
+            </div>
+            <Form.Item name="name" label={t('editor.name')} rules={[{ required: true, whitespace: true, max: 128 }]}>
+              <Input />
             </Form.Item>
-            <Form.Item name="owner_id" label={t('editor.owner')} rules={[{ required: true }]}>
-              <Input placeholder={t('editor.ownerPlaceholder')} style={{ width: 320 }} />
+            {/* One line by default; grows with the text (up to 4 lines). */}
+            <Form.Item name="description" label={t('editor.description')} rules={[{ max: 1000 }]}>
+              <Input.TextArea rows={1} autoSize={{ minRows: 1, maxRows: 4 }} />
             </Form.Item>
-          </Space>
-        ) : null}
-        <Space size={12} wrap style={{ width: '100%' }}>
-          <Form.Item name="kind" label={t('editor.kind')} rules={[{ required: true }]}>
-            <Select disabled options={[{ value: kind, label: t(`kinds.${kind}`) }]} style={{ width: 140 }} />
-          </Form.Item>
-          <Form.Item name="name" label={t('editor.name')} rules={[{ required: true, whitespace: true, max: 128 }]}>
-            <Input style={{ width: 260 }} />
-          </Form.Item>
-          <Form.Item name="default_action" label={t('editor.defaultAction')} rules={[{ required: true }]}>
-            <Select style={{ width: 150 }} options={['allow', 'block'].map((value) => ({ value, label: t(`actionsMap.${value}`) }))} />
-          </Form.Item>
-          <Form.Item name="enabled" label={t('editor.enabled')} valuePropName="checked">
-            <Switch />
-          </Form.Item>
-        </Space>
-        <Form.Item name="description" label={t('editor.description')} rules={[{ max: 1000 }]}>
-          <Input.TextArea rows={2} />
-        </Form.Item>
+            <Form.Item name="default_action" label={t('editor.defaultAction')} rules={[{ required: true }]}>
+              <Select options={['allow', 'block'].map((value) => ({ value, label: t(`actionsMap.${value}`) }))} />
+            </Form.Item>
+            <Form.Item name="enabled" label={t('editor.enabled')} valuePropName="checked">
+              <Switch />
+            </Form.Item>
+          </div>
+        </section>
         {kind === 'waf' ? (
-          <fieldset className="security-policy-waf-settings">
-            <legend>{t('editor.wafSettings')}</legend>
-            <Space size={12} wrap align="start">
+          <section className="sp-editor-card" aria-labelledby={`${sectionID}-settings`}>
+            <h3 className="sp-editor-section-title" id={`${sectionID}-settings`}>{t('editor.wafSettings')}</h3>
+            <div className="sp-editor-settings-grid">
               <Form.Item name={['waf_settings', 'mode']} label={t('editor.wafMode')}>
-                <Select style={{ width: 220 }} options={[{ value: '', label: t('editor.wafModes.defend') }, { value: 'observe', label: t('editor.wafModes.observe') }]} />
+                <Select options={[{ value: '', label: t('editor.wafModes.defend') }, { value: 'observe', label: t('editor.wafModes.observe') }]} />
               </Form.Item>
-              <Form.Item name="waf_auto_block" label={t('editor.autoBlock')} valuePropName="checked">
-                <Switch />
-              </Form.Item>
-              <Form.Item noStyle shouldUpdate={(previous, current) => previous.waf_auto_block !== current.waf_auto_block}>
-                {({ getFieldValue }) => getFieldValue('waf_auto_block') ? (
-                  <Space size={12} wrap>
-                    <Form.Item name={['waf_settings', 'auto_block', 'window_seconds']} label={t('editor.autoBlockWindow')} rules={[{ required: true, type: 'number', min: 1, max: 86_400 }]}>
-                      <InputNumber min={1} max={86_400} precision={0} />
-                    </Form.Item>
-                    <Form.Item name={['waf_settings', 'auto_block', 'hit_threshold']} label={t('editor.autoBlockHits')} rules={[{ required: true, type: 'number', min: 1, max: 1_000_000 }]}>
-                      <InputNumber min={1} max={1_000_000} precision={0} />
-                    </Form.Item>
-                    <Form.Item name={['waf_settings', 'auto_block', 'block_seconds']} label={t('editor.autoBlockSeconds')} rules={[{ required: true, type: 'number', min: 1, max: 604_800 }]}>
-                      <InputNumber min={1} max={604_800} precision={0} />
-                    </Form.Item>
-                  </Space>
-                ) : null}
-              </Form.Item>
-            </Space>
-            <div className="security-policy-condition-hint">{t('editor.autoBlockHint')}</div>
-          </fieldset>
+              <div className="sp-editor-setting">
+                <Form.Item name="waf_auto_block" valuePropName="checked" noStyle>
+                  <Switch aria-label={t('editor.autoBlock')} />
+                </Form.Item>
+                <div className="sp-editor-setting-text">
+                  <span className="sp-editor-setting-title">{t('editor.autoBlock')}</span>
+                  <span className="sp-editor-setting-help">{t('editor.autoBlockHelp')}</span>
+                </div>
+              </div>
+            </div>
+            <Form.Item noStyle shouldUpdate={(previous, current) => previous.waf_auto_block !== current.waf_auto_block}>
+              {({ getFieldValue }) => getFieldValue('waf_auto_block') ? (
+                <div className="sp-editor-autoblock-grid">
+                  <Form.Item name={['waf_settings', 'auto_block', 'window_seconds']} label={t('editor.autoBlockWindow')} rules={[{ required: true, type: 'number', min: 1, max: 86_400 }]}>
+                    <InputNumber min={1} max={86_400} precision={0} />
+                  </Form.Item>
+                  <Form.Item name={['waf_settings', 'auto_block', 'hit_threshold']} label={t('editor.autoBlockHits')} rules={[{ required: true, type: 'number', min: 1, max: 1_000_000 }]}>
+                    <InputNumber min={1} max={1_000_000} precision={0} />
+                  </Form.Item>
+                  <Form.Item name={['waf_settings', 'auto_block', 'block_seconds']} label={t('editor.autoBlockSeconds')} rules={[{ required: true, type: 'number', min: 1, max: 604_800 }]}>
+                    <InputNumber min={1} max={604_800} precision={0} />
+                  </Form.Item>
+                </div>
+              ) : null}
+            </Form.Item>
+            <p className="sp-editor-hint">{t('editor.wafV2Hint')}</p>
+          </section>
         ) : null}
         {item?.rules.some((rule) => isQuickBlockRuleID(rule.id)) ? (
           <Alert className="identity-alert" type="info" showIcon role="status" message={t('quickBlock.editorNotice')} />
         ) : null}
         <Form.List name="rules">
           {(ruleFields, { add, remove }) => (
-            <>
-              <div className="identity-toolbar">
-                <strong>{t('editor.rules')}</strong>
-                <Space size={8} wrap>
+            <section className="sp-editor-section sp-editor-rules" aria-labelledby={`${sectionID}-rules`}>
+              <div className="sp-editor-rules-head">
+                <div className="sp-editor-section-title">
+                  <h3 className="sp-editor-section-heading" id={`${sectionID}-rules`}>{t('editor.rules')}</h3>
+                  <span className="sp-editor-count" aria-hidden>{ruleFields.length}</span>
+                </div>
+                <div className="sp-editor-rules-tools">
                   {accessToken ? <CatalogImport kind={kind} catalog={catalog.data ?? []} onImport={importRules} /> : null}
                   {accessToken && kind === 'waf' && !item ? (
-                    <Button size="small" onClick={() => void applySystemDefault()}>{t('editor.useSystemDefault')}</Button>
+                    <Button onClick={() => void applySystemDefault()}>{t('editor.useSystemDefault')}</Button>
                   ) : null}
-                  <Button size="small" icon={<Plus size={14} />} onClick={() => add(emptyRule())}>{t('actions.addRule')}</Button>
-                </Space>
+                  <Button icon={<Plus size={14} />} onClick={() => add(emptyRule())}>{t('actions.addRule')}</Button>
+                </div>
               </div>
               {defaultMessage ? <Alert className="identity-alert" type="info" showIcon role="status" message={defaultMessage} /> : null}
               {appendAllowRule ? <Alert className="identity-alert" type="info" showIcon role="status" message={t('editor.allowFirstHint')} /> : null}
               {ruleFields.map((ruleField, ruleIndex) => (
-                <div key={ruleField.key} data-testid={`rule-${ruleIndex}`} style={{ borderTop: `1px solid ${themeColor('--cdnca-color-border-light', '#f0f0f0')}`, paddingTop: 12, marginTop: 8 }}
+                <div key={ruleField.key} data-testid={`rule-${ruleIndex}`} className={`sp-editor-rule${dragging === ruleIndex ? ' sp-editor-rule--dragging' : ''}`}
                   onDragOver={(event) => { if (dragging !== null) event.preventDefault() }}
                   onDrop={(event) => { event.preventDefault(); if (dragging !== null) moveRule(dragging, ruleIndex); setDragging(null) }}>
-                  <Space size={10} wrap align="start">
-                    <Space size={2} style={{ paddingTop: 30 }}>
-                      <span draggable role="button" tabIndex={-1} aria-label={t('ruleOrder.drag')} title={t('ruleOrder.drag')} style={{ cursor: 'grab' }}
-                        onDragStart={(event) => { setDragging(ruleIndex); event.dataTransfer?.setData('text/plain', String(ruleIndex)) }}
-                        onDragEnd={() => setDragging(null)}><GripVertical size={15} /></span>
-                      <Button size="small" type="text" icon={<ArrowUp size={14} />} aria-label={t('ruleOrder.moveUp', { index: ruleIndex + 1 })}
-                        disabled={ruleIndex === 0} onClick={() => moveRule(ruleIndex, ruleIndex - 1)} />
-                      <Button size="small" type="text" icon={<ArrowDown size={14} />} aria-label={t('ruleOrder.moveDown', { index: ruleIndex + 1 })}
-                        disabled={ruleIndex === ruleFields.length - 1} onClick={() => moveRule(ruleIndex, ruleIndex + 1)} />
-                    </Space>
+                  <div className="sp-editor-rule-head">
+                    <span className="sp-editor-rule-grip" draggable role="button" tabIndex={-1} aria-label={t('ruleOrder.drag')} title={t('ruleOrder.drag')}
+                      onDragStart={(event) => { setDragging(ruleIndex); event.dataTransfer?.setData('text/plain', String(ruleIndex)) }}
+                      onDragEnd={() => setDragging(null)}><GripVertical size={15} aria-hidden /></span>
+                    <span className="sp-editor-rule-index" aria-hidden>{ruleIndex + 1}</span>
                     <Form.Item name={[ruleField.name, 'name']} label={t('editor.ruleName')} rules={[{ required: true, whitespace: true, max: 128 }]}>
-                      <Input style={{ width: 190 }} />
+                      <Input />
                     </Form.Item>
                     <Form.Item name={[ruleField.name, 'priority']} label={t('editor.priority')} rules={[{ required: true, type: 'number', min: 1, max: 1_000_000 }]}>
-                      <InputNumber min={1} max={1_000_000} precision={0} style={{ width: 110 }} />
+                      <InputNumber min={1} max={1_000_000} precision={0} />
                     </Form.Item>
                     <Form.Item name={[ruleField.name, 'action']} label={t('editor.action')} rules={[{ required: true }]}>
-                      <Select style={{ width: 140 }} options={ruleActions.map((value) => ({ value, label: t(`actionsMap.${value}`) }))} />
+                      <Select options={ruleActions.map((value) => ({ value, label: t(`actionsMap.${value}`) }))} />
                     </Form.Item>
                     <Form.Item name={[ruleField.name, 'flow']} label={t('editor.flow')} rules={[{ required: true }]}>
-                      <Select style={{ width: 120 }} options={['continue', 'stop'].map((value) => ({ value, label: t(`flows.${value}`) }))} />
+                      <Select options={['continue', 'stop'].map((value) => ({ value, label: t(`flows.${value}`) }))} />
                     </Form.Item>
                     <Form.Item name={[ruleField.name, 'enabled']} label={t('editor.enabled')} valuePropName="checked">
                       <Switch />
                     </Form.Item>
-                    <Tooltip title={t('actions.deleteRule')}>
-                      <Button danger type="text" aria-label={t('actions.deleteRuleNamed', { index: ruleIndex + 1 })} icon={<Trash2 size={15} />} disabled={ruleFields.length === 1} onClick={() => remove(ruleField.name)} />
-                    </Tooltip>
-                  </Space>
+                    <Dropdown trigger={['click']} menu={{
+                      items: [
+                        { key: 'up', icon: <ArrowUp size={14} aria-hidden />, label: t('ruleOrder.moveUp', { index: ruleIndex + 1 }), disabled: ruleIndex === 0 },
+                        { key: 'down', icon: <ArrowDown size={14} aria-hidden />, label: t('ruleOrder.moveDown', { index: ruleIndex + 1 }), disabled: ruleIndex === ruleFields.length - 1 },
+                        { type: 'divider' },
+                        { key: 'delete', icon: <Trash2 size={14} aria-hidden />, label: t('actions.deleteRule'), danger: true, disabled: ruleFields.length === 1 },
+                      ],
+                      onClick: ({ key }) => {
+                        if (key === 'up') moveRule(ruleIndex, ruleIndex - 1)
+                        if (key === 'down') moveRule(ruleIndex, ruleIndex + 1)
+                        if (key === 'delete') remove(ruleField.name)
+                      },
+                    }}>
+                      <Button className="sp-editor-rule-more" type="text" icon={<MoreHorizontal size={16} aria-hidden />}
+                        aria-label={t('editor.ruleMore', { index: ruleIndex + 1 })} />
+                    </Dropdown>
+                  </div>
+                  <div className="sp-editor-rule-body">
                   <Form.Item noStyle shouldUpdate={(previous, current) => previous.rules?.[ruleField.name]?.action !== current.rules?.[ruleField.name]?.action}>
                     {({ getFieldValue }) => {
                       const action = getFieldValue(['rules', ruleField.name, 'action']) as SecurityPolicyAction
@@ -1016,13 +1044,21 @@ function RulePolicyEditor({
                     kind === 'cc' && getFieldValue(['rules', ruleField.name, 'match_all']) ? null : (
                   <Form.List name={[ruleField.name, 'conditions']}>
                     {(conditionFields, conditionOperations) => (
-                      <>
-                        {conditionFields.map((conditionField, conditionIndex) => (
-                          <Space key={conditionField.key} size={8} wrap align="start">
-                            <Form.Item name={[conditionField.name, 'field']} label={conditionIndex === 0 ? t('editor.field') : undefined} rules={[{ required: true }]}>
+                      <div className="sp-editor-conds">
+                        {/* Column titles once; every row has the same grid (field / operator / value / remove). */}
+                        <div className="sp-editor-cond-header" aria-hidden>
+                          <span>{t('editor.field')}</span><span>{t('editor.operator')}</span><span>{t('editor.values')}</span><span />
+                        </div>
+                        {conditionFields.map((conditionField, conditionIndex) => {
+                          // Row 1 keeps the plain column name; later rows add their number so every control has a unique name.
+                          const cellLabel = (label: string) => conditionIndex === 0 ? label : t('editor.conditionCell', { label, index: conditionIndex + 1 })
+                          return (
+                          <div key={conditionField.key} className="sp-editor-cond-row">
+                            <Form.Item name={[conditionField.name, 'field']} rules={[{ required: true }]}>
                               <Select
+                                aria-label={cellLabel(t('editor.field'))}
                                 virtual={false}
-                                style={{ width: 160 }}
+                                popupMatchSelectWidth={false}
                                 options={groupedFieldOptions(t, availableConditionFields)}
                                 onChange={(value) => {
                                   form.setFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'operator'], conditionOperators(kind, value, true)[0])
@@ -1034,36 +1070,38 @@ function RulePolicyEditor({
                                 const field = getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'field']) as string
                                 const available = conditionOperators(kind, field, true)
                                 return (
-                                  <Form.Item name={[conditionField.name, 'operator']} label={conditionIndex === 0 ? t('editor.operator') : undefined} rules={[{ required: true }]}>
-                                    <Select style={{ width: 155 }} options={available.map((value) => ({ value, label: t(`operatorsMap.${value}`) }))} />
+                                  <Form.Item name={[conditionField.name, 'operator']} rules={[{ required: true }]}>
+                                    <Select aria-label={cellLabel(t('editor.operator'))} popupMatchSelectWidth={false} options={available.map((value) => ({ value, label: t(`operatorsMap.${value}`) }))} />
                                   </Form.Item>
                                 )
                               }}
                             </Form.Item>
+                            <div className="sp-editor-cond-value">
                             <Form.Item noStyle shouldUpdate>
                               {({ getFieldValue }) => {
                                 const field = getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'field']) as string
+                                // The key (header name / WAF field name) leads the value cell, so the columns stay aligned.
                                 if (field === 'header') return (
-                                  <Form.Item name={[conditionField.name, 'key']} label={conditionIndex === 0 ? t('editor.headerName') : undefined} rules={[{ required: true }]}>
-                                    <Input style={{ width: 150 }} />
+                                  <Form.Item className="sp-editor-cond-key" name={[conditionField.name, 'key']} rules={[{ required: true }]}>
+                                    <Input aria-label={t('editor.headerName')} placeholder={t('editor.headerName')} />
                                   </Form.Item>
                                 )
                                 if (kind !== 'waf' || !wafKeyedFields.includes(field)) return null
                                 return (
-                                  <Form.Item name={[conditionField.name, 'key']} label={conditionIndex === 0 ? t('editor.wafKey') : undefined} tooltip={t('editor.wafKeyHint')}>
-                                    <Input aria-label={t('editor.wafKey')} style={{ width: 150 }} />
+                                  <Form.Item className="sp-editor-cond-key" name={[conditionField.name, 'key']}>
+                                    <Input aria-label={t('editor.wafKey')} placeholder={t('editor.wafKey')} title={t('editor.wafKeyHint')} />
                                   </Form.Item>
                                 )
                               }}
                             </Form.Item>
                             <Form.Item noStyle shouldUpdate>
                               {({ getFieldValue }) => getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'field']) === 'ip_list' ? (
-                                <Form.Item name={[conditionField.name, 'values']} label={conditionIndex === 0 ? t('editor.values') : undefined} rules={[{ required: true, whitespace: true }]}>
-                                  <Select aria-label={t('editor.ipList')} style={{ width: 250 }} showSearch optionFilterProp="label" loading={ipLists.isLoading}
+                                <Form.Item className="sp-editor-cond-input" name={[conditionField.name, 'values']} rules={[{ required: true, whitespace: true }]}>
+                                  <Select aria-label={t('editor.ipList')} showSearch optionFilterProp="label" loading={ipLists.isLoading}
                                     options={(ipLists.data ?? []).map((list) => ({ value: list.id, label: `${list.name} (${list.entries.length})` }))} />
                                 </Form.Item>
                               ) : (
-                                <Form.Item name={[conditionField.name, 'values']} label={conditionIndex === 0 ? t('editor.values') : undefined} rules={[{ required: true, whitespace: true },
+                                <Form.Item className="sp-editor-cond-input" name={[conditionField.name, 'values']} rules={[{ required: true, whitespace: true },
                                   { validator: async (_, value?: string) => {
                                     const condition = getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name]) as { field?: string; operator?: string }
                                     if (kind === 'waf' && wafSetFields.includes(condition.field ?? '') && (condition.operator === 'equals' || condition.operator === 'not_equals') &&
@@ -1072,7 +1110,7 @@ function RulePolicyEditor({
                                     const invalid = invalidJA4Values(conditionValues(value ?? ''))
                                     if (invalid.length) throw new Error(t('conditionFields.ja4Invalid', { values: invalid.slice(0, 3).join('、') }))
                                   } }]}>
-                                  <Input.TextArea autoSize={{ minRows: 1, maxRows: 6 }} style={{ width: 250 }}
+                                  <Input.TextArea aria-label={cellLabel(t('editor.values'))} autoSize={{ minRows: 1, maxRows: 6 }}
                                     placeholder={conditionValuePlaceholder(t, getFieldValue(['rules', ruleField.name, 'conditions', conditionField.name, 'field']) as string)} />
                                 </Form.Item>
                               )}
@@ -1084,40 +1122,50 @@ function RulePolicyEditor({
                                   return (
                                     <>
                                       {field === 'path' || field === 'header' || wafContentFields.includes(field) ? (
-                                        <Form.Item name={[conditionField.name, 'filters']} label={conditionIndex === 0 ? t('editor.filters') : undefined}>
-                                          <Select mode="multiple" allowClear aria-label={t('editor.filters')} style={{ width: 190 }} options={wafFilterNames.map((value) => ({ value, label: value }))} />
+                                        <Form.Item className="sp-editor-cond-extra" name={[conditionField.name, 'filters']}>
+                                          <Select mode="multiple" allowClear maxTagCount="responsive" aria-label={t('editor.filters')} placeholder={t('editor.filters')}
+                                            options={wafFilterNames.map((value) => ({ value, label: value }))} />
                                         </Form.Item>
                                       ) : null}
                                       {wafBodyFields.includes(field) ? (
-                                        <Form.Item name={[conditionField.name, 'body_overflow']} label={conditionIndex === 0 ? t('editor.bodyOverflow') : undefined}
-                                          getValueProps={(value) => ({ checked: value === 'match' })} getValueFromEvent={(checked: boolean) => checked ? 'match' : undefined}>
-                                          <Switch aria-label={t('editor.bodyOverflow')} />
-                                        </Form.Item>
+                                        <label className="sp-editor-cond-switch">
+                                          <Form.Item name={[conditionField.name, 'body_overflow']} noStyle
+                                            getValueProps={(value) => ({ checked: value === 'match' })} getValueFromEvent={(checked: boolean) => checked ? 'match' : undefined}>
+                                            <Switch size="small" aria-label={t('editor.bodyOverflow')} />
+                                          </Form.Item>
+                                          <span>{t('editor.bodyOverflow')}</span>
+                                        </label>
                                       ) : null}
                                     </>
                                   )
                                 }}
                               </Form.Item>
                             ) : null}
+                            </div>
                             <Tooltip title={t('actions.deleteCondition')}>
-                              <Button danger type="text" aria-label={t('actions.deleteCondition')} icon={<Trash2 size={14} />} disabled={conditionFields.length === 1} onClick={() => conditionOperations.remove(conditionField.name)} />
+                              <Button className="sp-editor-cond-remove" type="text" aria-label={t('actions.deleteCondition')} icon={<Trash2 size={14} aria-hidden />} disabled={conditionFields.length === 1} onClick={() => conditionOperations.remove(conditionField.name)} />
                             </Tooltip>
-                          </Space>
-                        ))}
-                        <Button size="small" type="dashed" icon={<Plus size={13} />} onClick={() => conditionOperations.add({ field: 'path', operator: 'prefix', values: '' })}>
+                          </div>
+                          )
+                        })}
+                        <Button className="sp-editor-cond-add" size="small" type="link" icon={<Plus size={13} aria-hidden />} onClick={() => conditionOperations.add({ field: 'path', operator: 'prefix', values: '' })}>
                           {t('actions.addCondition')}
                         </Button>
-                        {kind === 'cc' ? <div className="security-policy-condition-hint">{t('editor.ccConditionHint')}</div> : null}
-                        {kind === 'waf' ? <div className="security-policy-condition-hint">{t('editor.ipListHint')}</div> : null}
-                        {kind === 'waf' ? <div className="security-policy-condition-hint">{t('conditionFields.nodeHint')}</div> : null}
-                      </>
+                      </div>
                     )}
-											</Form.List>
+                  </Form.List>
                   )}
                   </Form.Item>
+                  </div>
                 </div>
               ))}
-            </>
+              {/* Node-version and syntax notes once for the whole list, not under every rule. */}
+              <div className="sp-editor-footnotes">
+                {kind === 'cc' ? <p className="sp-editor-hint">{t('editor.ccConditionHint')}</p> : null}
+                {kind === 'waf' ? <p className="sp-editor-hint">{t('editor.ipListHint')}</p> : null}
+                {kind === 'waf' ? <p className="sp-editor-hint">{t('conditionFields.nodeHint')}</p> : null}
+              </div>
+            </section>
           )}
         </Form.List>
       </Form>

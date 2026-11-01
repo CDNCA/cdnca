@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Checkbox, Drawer, Form, Input, InputNumber, Modal, Radio, Result, Space, Spin, Table, Tag, Typography, type TableColumnsType } from 'antd'
 import { ChevronDown, ChevronLeft, ChevronRight, ListChecks, Plus, RefreshCw, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { ApiError, type Principal } from '../api/auth'
 import {
@@ -20,6 +21,7 @@ import {
 import { useSessionStore } from '../auth/session'
 import { notificationTemplateName, notificationVariableName } from '../i18n/notificationTemplateNames'
 import NotificationDeliveryPolicyPanel from './NotificationDeliveryPolicyPanel'
+import '../i18n/tickets'
 import type { EventSubscriptionRow } from './tickets/useEventSubscriptionRows'
 import { FeedbackWhen, OutcomeUnknown, fieldReasonText, useFormSubmitError, type FormErrorMap, type SubmitFieldError } from '@cdnca/ui'
 
@@ -33,6 +35,14 @@ type PendingAdminWrite = ChannelAttempt | TemplateAttempt
 type WriteKind = 'account' | 'channels' | 'template'
 type TemplateCreationResult = Promise<{ error?: unknown }>
 
+// 已知投递失败原因码 → 下一步（contact 补联系方式、channel 查发信配置、wait 自动重试、check 核对供应商记录）。
+// 中文解释在 deliveries.reasons；不在表里的码按“未识别的失败原因”显示原码。
+const deliveryReasonNext: Record<string, 'contact' | 'channel' | 'wait' | 'check' | 'none'> = {
+  recipient_unavailable: 'contact', recipient_invalid: 'contact', recipient_rejected: 'contact', contact_lookup_unavailable: 'wait',
+  provider_unavailable: 'wait', smtp_unavailable: 'channel', smtp_temporary_failure: 'wait', provider_rate_limited: 'wait',
+  provider_rejected: 'channel', provider_token_invalid: 'channel', provider_outcome_unknown: 'check', dispatch_unavailable: 'wait',
+  worker_lease_expired: 'wait', source_superseded: 'none',
+}
 const utf8Encoder = new TextEncoder()
 // A refused template field lands on its box; variables[n]
 // (server limit 32) all go to the one comma-separated variables box.
@@ -323,7 +333,7 @@ function NotificationSettingsPageContent({ accessToken, principal, scopeID, sess
   )
 }
 
-type AccountRow = { key: string; label: string; hint?: string; value: SwitchWrite & { sms_supported: boolean; email_supported: boolean; inbox_enabled?: boolean }; disabled: boolean; onChange: (value: SubscriptionWrite) => void; notice?: string; retry?: { label: string; run: () => void } }
+type AccountRow = { key: string; label: string; hint?: string; value: SwitchWrite & { sms_supported: boolean; email_supported: boolean; inbox_enabled?: boolean; email_bound?: boolean; phone_bound?: boolean }; disabled: boolean; onChange: (value: SubscriptionWrite) => void; notice?: string; retry?: { label: string; run: () => void } }
 
 // tp-b7：消息订阅是一张表——每行一个提醒项，列是手机提醒 / 邮件提醒两个开关，切换即自动保存。
 // 租户（grouped）主表只有 6 个主消息类型；公告与我方另有的类型放在表下方
@@ -348,14 +358,21 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
   const emailColumn = rows.some((row) => row.value.email_supported)
   // 工单事件多一个站内信开关；其它事件这一格为空。写入总是带上当前站内信值，不会被短信/邮件切换覆盖。
   const inboxColumn = (list: AccountRow[]) => list.some((row) => row.value.inbox_enabled !== undefined)
+  // 邮件短信未开通只隐藏这两列；站内信可用时表与"更多消息类型"照常可达。
+  // 主表与更多区各自判断有没有可操作的渠道。
+  const external = smsColumn || emailColumn
+  const mainVisible = external || inboxColumn(mainRows)
+  const moreVisible = moreRows.length > 0 && (external || inboxColumn(moreRows))
   const channelSwitch = (channel: 'sms' | 'email' | 'inbox') => (_: unknown, row: AccountRow) => {
     const supported = channel === 'sms' ? row.value.sms_supported : channel === 'email' ? row.value.email_supported
       : row.value.inbox_enabled !== undefined
     if (!supported) return null
     const checked = channel === 'sms' ? row.value.sms_enabled : channel === 'email' ? row.value.email_enabled
       : row.value.inbox_enabled === true
+    // 已勾选但本人未绑定联系方式时就地说明收不到，并给绑定入口。
+    const unbound = checked && (channel === 'sms' ? row.value.phone_bound === false : channel === 'email' ? row.value.email_bound === false : false)
     // 用勾选框；读屏名称仍为"类型 + 渠道"。
-    return <Checkbox
+    const box = <Checkbox
       aria-label={`${row.label} ${t(`columns.${channel}`)}`}
       checked={checked}
       disabled={row.disabled}
@@ -365,6 +382,13 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
         ...(row.value.inbox_enabled === undefined ? {} : { inbox_enabled: channel === 'inbox' ? next : row.value.inbox_enabled }),
       })}
     />
+    if (!unbound) return box
+    return <div className="account-subscription-unbound">
+      {box}
+      <span className="account-subscription-item-hint" role="note">
+        {t(channel === 'sms' ? 'values.phoneUnbound' : 'values.emailUnbound')} <Link to="/account/user">{t('values.bind')}</Link>
+      </span>
+    </div>
   }
   const columnsFor = (list: AccountRow[]): TableColumnsType<AccountRow> => {
     const columns: TableColumnsType<AccountRow> = [
@@ -413,12 +437,13 @@ function AccountSettings({ value, eventRows, extraEventRows, grouped, eventError
         </div> : null}
       </header>
       {eventError ? <FeedbackWhen title={t('errors.eventsFailed', { code: eventError instanceof ApiError ? eventError.code : 'request_failed' })} /> : null}
-      {!smsColumn && !emailColumn ? (
+      {!mainVisible && !moreVisible ? (
         <Typography.Text type="secondary">{t('values.noChannel')}</Typography.Text>
       ) : (
         <>
-          {table(mainRows)}
-          {moreRows.length ? <div className="account-subscriptions-more">
+          {external ? null : <Typography.Text type="secondary" className="account-subscriptions-channel-note">{t('values.inboxOnly')}</Typography.Text>}
+          {mainVisible ? table(mainRows) : null}
+          {moreVisible ? <div className="account-subscriptions-more">
             <Button
               type="link"
               className="account-subscriptions-more-toggle"
@@ -659,11 +684,34 @@ function DeliveryLogsDrawer({ accessToken, ownerKey, open, onClose, t }: {
   const formatTime = (value?: string) => value
     ? new Intl.DateTimeFormat(i18n.language, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(value))
     : t('deliveries.values.empty')
+  // 一行说清事件、渠道、状态、中文原因、下一步与记录号；原因码只在未识别时原样露出。
+  const reasonText = (code?: string, state?: string) => {
+    if (!code) return state === 'accepted' ? t('deliveries.reasons.accepted') : t('deliveries.values.empty')
+    return deliveryReasonNext[code] ? t(`deliveries.reasons.${code}`) : t('deliveries.reasons.unknown', { code })
+  }
+  const nextStep = (item: NotificationDeliveryLog) => {
+    const next = item.failure_code ? deliveryReasonNext[item.failure_code] ?? 'check'
+      : item.state === 'accepted' || item.state === 'unknown' ? 'check' : 'none'
+    if (next === 'contact') return <Link to="/sys/user">{t('deliveries.next.contact')}</Link>
+    if (next === 'channel') return <Link to="/sys/setting?tab=mail">{t('deliveries.next.channel')}</Link>
+    return t(`deliveries.next.${next}`)
+  }
   const deliveryColumns: TableColumnsType<NotificationDeliveryLog> = [
-    { title: t('deliveries.columns.channel'), dataIndex: 'channel', width: 90, render: (value: string) => t(`deliveries.channels.${value}`) },
+    // 记录号放在事件下面一行（可复制），窄屏也不被固定的操作列遮住。
+    { title: t('deliveries.columns.event'), dataIndex: 'event_type', width: 220, render: (value: string, item) => (
+      <Space direction="vertical" size={2} style={{ minWidth: 0 }}>
+        <span>{notificationTemplateName(item.template_id) ?? notificationTemplateName(value)
+          ?? i18n.t(`tickets:subscriptions.events.${value.replace(/\./g, '_')}`, { defaultValue: value })}</span>
+        <Typography.Text type="secondary" copyable={{ text: item.outbox_id }} style={{ wordBreak: 'break-all', fontSize: 12 }}>
+          {t('deliveries.columns.record')} {item.outbox_id}
+        </Typography.Text>
+      </Space>
+    ) },
+    { title: t('deliveries.columns.channel'), dataIndex: 'channel', width: 80, render: (value: string) => t(`deliveries.channels.${value}`) },
     { title: t('deliveries.columns.state'), dataIndex: 'state', width: 120, render: (value: string) => <Tag>{t(`deliveries.states.${value}`)}</Tag> },
     { title: t('deliveries.columns.attempts'), dataIndex: 'attempt_count', width: 90 },
-    { title: t('deliveries.columns.failure'), dataIndex: 'failure_code', width: 180, render: (value?: string) => value || t('deliveries.values.empty') },
+    { title: t('deliveries.columns.failure'), dataIndex: 'failure_code', width: 220, render: (value: string | undefined, item) => reasonText(value, item.state) },
+    { title: t('deliveries.columns.next'), key: 'next', width: 170, render: (_, item) => nextStep(item) },
     { title: t('deliveries.columns.createdAt'), dataIndex: 'created_at', width: 190, render: formatTime },
     { title: t('deliveries.columns.actions'), key: 'actions', fixed: 'right', width: 130, render: (_, item) => (
       <Button size="small" icon={<ListChecks size={14} />} onClick={() => setSelectedOutboxID(item.outbox_id)}>
@@ -674,12 +722,12 @@ function DeliveryLogsDrawer({ accessToken, ownerKey, open, onClose, t }: {
   const attemptColumns: TableColumnsType<NotificationDeliveryAttempt> = [
     { title: t('deliveries.attempts.number'), dataIndex: 'attempt_number', width: 100, render: (value: number) => t('deliveries.attempts.numberValue', { number: value }) },
     { title: t('deliveries.attempts.outcome'), dataIndex: 'outcome', width: 150, render: (value: string) => t(`deliveries.outcomes.${value}`) },
-    { title: t('deliveries.columns.failure'), dataIndex: 'failure_code', width: 180, render: (value?: string) => value || t('deliveries.values.empty') },
+    { title: t('deliveries.columns.failure'), dataIndex: 'failure_code', width: 220, render: (value?: string) => reasonText(value) },
     { title: t('deliveries.attempts.claimedAt'), dataIndex: 'claimed_at', width: 190, render: formatTime },
     { title: t('deliveries.attempts.completedAt'), dataIndex: 'completed_at', width: 190, render: formatTime },
   ]
   return (
-    <Drawer open={open} width={960} title={t('deliveries.title')} onClose={onClose} destroyOnHidden>
+    <Drawer open={open} width="min(1260px, 100vw)" title={t('deliveries.title')} onClose={onClose} destroyOnHidden>
       <Space direction="vertical" size={16} style={{ width: '100%', minWidth: 0 }}>
         {deliveryQuery.error ? (
           <Alert type="error" showIcon message={t('errors.loadFailed')} action={(
@@ -694,7 +742,7 @@ function DeliveryLogsDrawer({ accessToken, ownerKey, open, onClose, t }: {
               columns={deliveryColumns}
               dataSource={deliveryQuery.data?.items ?? []}
               pagination={false}
-              scroll={{ x: 900 }}
+              scroll={{ x: 1220 }}
               locale={{ emptyText: deliveryQuery.isPending ? ' ' : t('deliveries.empty') }}
             />
             <Space>

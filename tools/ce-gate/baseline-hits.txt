@@ -53,6 +53,7 @@
         return "https|" .. (_M.name(endpoint) or "") .. "|" .. endpoint.trust_anchor .. "|" .. identity
         sni = tls and tls_name(pool, endpoint) or nil, trust_anchor = endpoint.trust }
         trust_anchor = pool.endpoints[last.index].trust, auth = ctx.plan.auth[pool.id],
+      sni = scheme ~= "http" and sni or nil, trust_anchor = scheme ~= "http" and (anchor or ANCHOR) or nil } } }
       sni = scheme ~= "http" and sni or nil, trust_anchor = scheme ~= "http" and ANCHOR or nil } } }
     endpoints = { { id = "e", scheme = "https", host = "127.0.0.1", port = port, weight = 1, sni = sni, trust_anchor = anchor } } }
     ngx.var.cdnca_origin_sni, ngx.var.cdnca_origin_trust = endpoint.sni, endpoint.trust_anchor

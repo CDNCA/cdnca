@@ -432,6 +432,25 @@ func seedTelemetryDeploymentFact(
 	occurredAt time.Time,
 ) uuid.UUID {
 	t.Helper()
+	var previous *uuid.UUID
+	if action == "rollback" {
+		previous = &previousConfigVersionID
+	}
+	return seedTelemetryDeploymentFactWithPrevious(t, pool, fixture, configVersionID, previous, action, state, eventState, occurredAt)
+}
+
+// seedTelemetryDeploymentFactWithPrevious records a deployment of
+// configVersionID that replaced previous on the node (nil: none).
+func seedTelemetryDeploymentFactWithPrevious(
+	t *testing.T,
+	pool *pgxpool.Pool,
+	fixture identityFixture,
+	configVersionID uuid.UUID,
+	previous *uuid.UUID,
+	action, state, eventState string,
+	occurredAt time.Time,
+) uuid.UUID {
+	t.Helper()
 	rolloutID, deploymentID := uuid.New(), uuid.New()
 	requestDigest := sha256.Sum256([]byte("telemetry-rollout-" + rolloutID.String()))
 	command := []byte("telemetry-command-" + deploymentID.String())
@@ -445,10 +464,6 @@ func seedTelemetryDeploymentFact(
 		rolloutID, fixture.scopeID, configVersionID, action, "telemetry-"+rolloutID.String(), requestDigest[:],
 		uuid.New(), uuid.New(), deadline, createdAt); err != nil {
 		t.Fatal(err)
-	}
-	var previous *uuid.UUID
-	if action == "rollback" {
-		previous = &previousConfigVersionID
 	}
 	if _, err := pool.Exec(context.Background(), `INSERT INTO node_deployments (
 		id,rollout_id,node_id,attempt,config_version_id,previous_config_version_id,action,state,

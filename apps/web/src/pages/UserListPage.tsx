@@ -1450,8 +1450,15 @@ function UserListContent({
         title: t('columns.userInfo'),
         key: 'user_info',
         width: 240,
+        // 用户信息整格可点开编辑，与操作列"编辑"同一入口、同样受 writesLocked 约束。
         render: (_, user) => (
-          <div className="user-list-cell-stack">
+          <button
+            type="button"
+            className="user-list-cell-stack user-list-cell-edit"
+            aria-label={t('actions.editUser', { name: user.display_name || user.username })}
+            disabled={writesLocked}
+            onClick={() => void openEditor(user)}
+          >
             <span className="visually-hidden">{user.display_name}</span>
             <span className="user-list-cell-primary" title={user.email ?? undefined}>{user.email || t('values.emailMissing')}</span>
             <span className="user-list-cell-secondary">
@@ -1459,7 +1466,7 @@ function UserListContent({
               <span title={user.username}>{user.username}</span>
               {user.id === selfID ? <Tag className="user-list-self-tag">{t('values.self')}</Tag> : null}
             </span>
-          </div>
+          </button>
         ),
       },
       {

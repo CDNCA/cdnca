@@ -535,7 +535,7 @@ func parseStreamListFilter(r *http.Request) (l4forward.ListFilter, error) {
 	allowed := map[string]bool{
 		"page": true, "limit": true, "search": true, "protocol": true, "enabled": true,
 		"listen_port": true, "upstream": true, "display_id": true, "group_id": true, "package_product_id": true,
-		"owner_display_id": true, "publication_state": true, "cname_domain": true, "cname_hostname": true,
+		"owner_display_id": true, "forward": true, "owner": true, "publication_state": true, "cname_domain": true, "cname_hostname": true,
 		"region_id": true, "node_group_id": true, "sync_state": true, "admin_status": true,
 	}
 	for key, values := range query {
@@ -570,6 +570,10 @@ func parseStreamListFilter(r *http.Request) (l4forward.ListFilter, error) {
 		Upstream: query.Get("upstream"), PublicationState: query.Get("publication_state"),
 		CNAMEDomain: query.Get("cname_domain"), CNAMEHostname: query.Get("cname_hostname"),
 		SyncState: query.Get("sync_state"), AdminStatus: query.Get("admin_status"),
+		Forward: query.Get("forward"), Owner: query.Get("owner"),
+	}
+	if (query.Has("forward") && strings.TrimSpace(filter.Forward) == "") || (query.Has("owner") && strings.TrimSpace(filter.Owner) == "") {
+		return l4forward.ListFilter{}, l4forward.ErrInvalidInput
 	}
 	if query.Has("upstream") && strings.TrimSpace(filter.Upstream) == "" {
 		return l4forward.ListFilter{}, l4forward.ErrInvalidInput

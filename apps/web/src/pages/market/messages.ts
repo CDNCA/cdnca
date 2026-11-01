@@ -14,9 +14,9 @@ const zhCN = {
   },
   state: {
     purchase: '购买', get: '获取', distributing: '使用权已取得，正在同步', enable: '去启用', enabled: '已启用', activating: '授权生效中',
+    installed: '已安装，可使用', goManage: '去管理',
     revoked: '授权失效', revokedHint: '这个插件的授权已结束或已改绑到其他主控，本主控不能再启用它。续费或在授权端改绑回来后恢复。',
     activatingHint: '已购买。授权端正在为本主控重签授权，通常一分钟内生效。',
-    installed: '已安装，可使用', goManage: '去管理',
     enableHint: '已到达本主控。到对应页面启用：', enableTenant: '已到达本主控。由租户管理员在“插件市场”确认权限后启用。',
     pendingConfirm: '已购买，待你确认',
     distributingHint: '平台正在验证并分发到本主控；需要确认权限时，由对应管理员确认后才会出现在本机。到达后这里会显示“去启用”。',
@@ -81,9 +81,9 @@ const enUS: Messages = {
   },
   state: {
     purchase: 'Buy', get: 'Get', distributing: 'Licence held, syncing', enable: 'Enable', enabled: 'Enabled', activating: 'Activating',
+    installed: 'Installed, ready to use', goManage: 'Manage',
     revoked: 'License lost', revokedHint: 'The license ended or was moved to another controller, so this controller can no longer enable it. Renew or move it back in the license portal to restore it.',
     activatingHint: 'Purchased. The license service is re-signing this controller\'s license; it usually takes under a minute.',
-    installed: 'Installed, ready to use', goManage: 'Manage',
     enableHint: 'On this controller. Enable it on:', enableTenant: 'On this controller. A tenant administrator approves its permissions in Plugin marketplace to enable it.',
     pendingConfirm: 'Purchased, awaiting your confirmation',
     distributingHint: 'The platform is verifying it and delivering it to this controller; where permissions need approval, it appears here once the right administrator approves them. Enable shows up here when it arrives.',

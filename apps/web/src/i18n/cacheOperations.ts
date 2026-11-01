@@ -67,7 +67,7 @@ const zhCN = {
   },
   filters: {
     scope: '目标租户', scopePlaceholder: '搜索用户名、邮箱、用户ID或粘贴作用域 UUID', scopeEmpty: '没有匹配的用户', site: '站点 ID',
-    sitePlaceholder: '输入站点 UUID（可选）', action: '任务类型', allActions: '全部任务类型',
+    sitePlaceholder: '站点 UUID，或输入域名选择（可选）', action: '任务类型', allActions: '全部任务类型',
     targetType: '目标范围', allTargetTypes: '全部目标范围', state: '任务状态', allStates: '全部状态',
   },
   columns: {
@@ -251,7 +251,7 @@ const enUS = {
   },
   filters: {
     scope: 'Target tenant', scopePlaceholder: 'Search username, email, user ID or paste a scope UUID', scopeEmpty: 'No matching users', site: 'Site ID',
-    sitePlaceholder: 'Enter site UUID (optional)', action: 'Task type', allActions: 'All task types',
+    sitePlaceholder: 'Site UUID, or type a domain to pick (optional)', action: 'Task type', allActions: 'All task types',
     targetType: 'Target scope', allTargetTypes: 'All target scopes', state: 'Task state', allStates: 'All states',
   },
   columns: {

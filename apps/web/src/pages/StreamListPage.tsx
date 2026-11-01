@@ -468,16 +468,25 @@ function StreamListContent({
     const ownerDisplayID = draft.owner_display_id?.trim() ?? ''
     const upstream = draft.upstream?.trim() ?? ''
     if (port && (!/^[1-9][0-9]{0,4}$/.test(port) || Number(port) > 65535)) return 'filters.invalidPort'
-    if (displayID && (!/^[1-9][0-9]{0,18}$/.test(displayID) || BigInt(displayID) > 9223372036854775807n)) return 'filters.invalidDisplayID'
-    if (ownerDisplayID && (!/^[1-9][0-9]{0,18}$/.test(ownerDisplayID) || BigInt(ownerDisplayID) > 9223372036854775807n)) return 'filters.invalidOwnerDisplayID'
+    // 转发ID/用户ID 不是数字时按名称过滤（forward：名称/备注；
+    // owner：用户名/显示名，仅管理员——租户只看得到自己的转发）。
+    // 纯数字一律当编号校验（0、前导零、越界报错）；其它文本按名称（≤128 字符、无控制字符）。
+    const number = (value: string) => /^[1-9][0-9]{0,18}$/.test(value) && BigInt(value) <= 9223372036854775807n
+    const name = (value: string) => !/^[0-9]+$/.test(value) && [...value].length <= 128 && !/\p{Cc}/u.test(value)
+    if (displayID && !number(displayID) && !name(displayID)) return 'filters.invalidDisplayID'
+    if (ownerDisplayID && !number(ownerDisplayID) && (!isAdmin || !name(ownerDisplayID))) return 'filters.invalidOwnerDisplayID'
     if (upstream && ([...upstream].length > 253 || /\p{Cc}/u.test(upstream))) return 'filters.invalidUpstream'
     return Object.fromEntries(Object.entries({
       ...draft, listen_port: port ? Number(port) : undefined, upstream: upstream || undefined,
-      display_id: displayID || undefined, owner_display_id: ownerDisplayID || undefined,
+      display_id: displayID && number(displayID) ? displayID : undefined, forward: displayID && !number(displayID) ? displayID : undefined,
+      owner_display_id: ownerDisplayID && number(ownerDisplayID) ? ownerDisplayID : undefined, owner: ownerDisplayID && !number(ownerDisplayID) ? ownerDisplayID : undefined,
       cname_domain: draft.cname_domain?.trim() || undefined, cname_hostname: draft.cname_hostname?.trim() || undefined,
     }).filter(([, value]) => value !== undefined && value !== '')) as StreamListFilters
   }
+  // 手动「查询/应用」也记下已生效的草稿：否则 400ms 防抖稍后再生效一次，会把刚翻到的页码打回第 1 页。
+  const [appliedDraftKey, setAppliedDraftKey] = useState(() => JSON.stringify([quickDraft, filterDraft]))
   const applyFilters = (advancedDraft: StreamFilterDraft = filterDraft) => {
+    setAppliedDraftKey(JSON.stringify([quickDraft, advancedDraft]))
     setFilterDraft(advancedDraft)
     const quick = normalizeFilters(quickDraft)
     const advanced = normalizeFilters(advancedDraft)
@@ -497,8 +506,7 @@ function StreamListContent({
   // 快捷查询与高级条件边输入边生效（400ms 防抖，下拉即查）；
   // 校验不过/同字段冲突时就地报错不发请求（applyFilters 内）。比较的是草稿本身，已报错的同一草稿不反复校验。
   const draftKey = JSON.stringify([quickDraft, filterDraft])
-  const [appliedDraftKey, setAppliedDraftKey] = useState(draftKey)
-  useLiveApply(draftKey, appliedDraftKey, () => { setAppliedDraftKey(draftKey); applyFilters() })
+  useLiveApply(draftKey, appliedDraftKey, () => applyFilters())
   const resetFilters = () => { setAppliedDraftKey(JSON.stringify([{}, {}])); setQuickField('listen_port'); setQuickDraft({}); setQuickFilters({}); setFilterDraft({}); setFilters({}); setFilterError(''); setPage(1) }
   const effectiveFilters = { ...filters, ...quickFilters }
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -545,7 +553,7 @@ function StreamListContent({
   const idSearches = useMemo(() => ({ display_id: streamSearch(idSearchToken), owner_display_id: userSearch(idSearchToken, 'display_id') }), [idSearchToken])
   const idField = (key: string, value: string, onChange: (next: string) => void, placeholder: string, ariaLabel: string, onPressEnter?: () => void) =>
     key === 'display_id' || key === 'owner_display_id'
-      ? <IdOrNameInput key={key} aria-label={ariaLabel} value={value} placeholder={placeholder} isId={(text) => /^\d+$/.test(text)}
+      ? <IdOrNameInput key={key} aria-label={ariaLabel} value={value} placeholder={placeholder} isId={(text) => /^\d+$/.test(text)} freeText={key === 'display_id' || isAdmin}
         search={idSearches[key]} onChange={onChange} onPressEnter={onPressEnter} />
       : null
   const textItem = (key: 'listen_port' | 'upstream' | 'display_id' | 'owner_display_id' | 'cname_domain' | 'cname_hostname', label: string, placeholder: string, ariaLabel = label): AdvancedFilterItem => ({

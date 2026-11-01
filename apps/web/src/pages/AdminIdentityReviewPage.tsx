@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Descriptions, Drawer, Result, Select, Space, Table, Tabs, Tag, Typography, type TableColumnsType } from 'antd'
-import { useFeedbackMessage } from '@cdnca/ui'
+import { useFeedbackMessage, PageSection } from '@cdnca/ui'
 import { RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -75,7 +75,7 @@ function AdminIdentityReviewContent() {
     },
   ]
   return (
-    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+    <PageSection><Space direction="vertical" size={16} style={{ width: '100%' }}>
       <div>
         <Typography.Title level={4}>{t('title')}</Typography.Title>
         <Typography.Text type="secondary">{t('description')}</Typography.Text>
@@ -90,7 +90,7 @@ function AdminIdentityReviewContent() {
         <Button loading={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>{t('actions.more')}</Button>
       )}
       <ReviewDrawer row={selected} onClose={() => setSelected(null)} />
-    </Space>
+    </Space></PageSection>
   )
 }
 

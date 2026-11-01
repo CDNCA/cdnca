@@ -950,11 +950,11 @@ describe('NodeListPage', () => {
     expect(within(dialog).getByLabelText('缓存上限')).toBeInTheDocument()
     expect(within(dialog).getAllByText('GB')).toHaveLength(2)
     expect(within(dialog).getByLabelText('日志目录')).toBeInTheDocument()
-    // A node whose agent does not declare NODE_STORAGE
-    // (here its latest metrics cannot be read) stays read-only with the reason.
-    expect(await within(dialog).findByText('该节点版本不支持在这里修改缓存目录、缓存上限和日志目录')).toBeInTheDocument()
+    // when the node's latest metrics cannot be read the tab
+    // stays read-only; that is a read failure, not "unsupported".
+    expect(await within(dialog).findByText('读取节点能力失败')).toBeInTheDocument()
+    expect(within(dialog).queryByText('该节点版本不支持在这里修改缓存目录、缓存上限和日志目录')).not.toBeInTheDocument()
     // #62: the reason is in user terms, without implementation details.
-    expect(within(dialog).getByText(/请先把节点升级到 1.0.35 或更新版本/)).toBeInTheDocument()
     expect(within(dialog).queryByText(/ProtectSystem|systemd|NODE_STORAGE/)).not.toBeInTheDocument()
     expect(within(dialog).getByLabelText('缓存上限')).toBeDisabled()
     expect(within(dialog).getByLabelText('缓存目录')).toBeDisabled()
@@ -1843,7 +1843,7 @@ describe('node storage tab', () => {
   })
 
   async function openStorageTab(metrics: unknown, settings: Partial<NodeInventoryItem['management_settings']> = {}) {
-    authenticate()
+    authenticate(['nodes.read', 'nodes.manage', 'regions.read', 'regions.manage', 'control.upgrades.read'])
     const writes: Array<Record<string, unknown>> = []
     let current = { ...node, management_settings: { ...node.management_settings, ...settings } }
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
@@ -1986,9 +1986,71 @@ describe('node storage tab', () => {
   it('keeps the tab read-only on a node that does not declare NODE_STORAGE', async () => {
     const { dialog } = await openStorageTab(latest(false))
     expect(await within(dialog).findByText('该节点版本不支持在这里修改缓存目录、缓存上限和日志目录')).toBeInTheDocument()
+    expect(within(dialog).getByText(/升级到包含该能力的节点构建/)).toBeInTheDocument()
     expect(within(dialog).getByLabelText('缓存目录')).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: '确定' })).toBeDisabled()
     expect(within(dialog).getByText(/节点尚未上报/)).toBeInTheDocument()
+  })
+
+  // 能力提示同时给出当前构建、缺失能力、最近连接与升级入口；读取失败 / 未上报 / 明确不支持分开显示。
+  it('names the running build, the missing capability, the last connection and the upgrade entry when NODE_STORAGE is not declared', async () => {
+    const { dialog } = await openStorageTab(latest(false))
+    const notice = await within(dialog).findByTestId('node-storage-capability')
+    expect(notice).toHaveTextContent('该节点版本不支持在这里修改缓存目录、缓存上限和日志目录')
+    expect(notice).toHaveTextContent('当前构建：Agent 2.4.1')
+    expect(notice).toHaveTextContent('缺少能力：节点存储设置')
+    expect(notice).toHaveTextContent(/最近连接：.*2026/)
+    expect(notice).not.toHaveTextContent('升级到 1.0.35')
+    expect(within(notice).getByRole('link', { name: '去升级节点' })).toHaveAttribute('href', '/sys/op')
+    expect(within(dialog).getByLabelText('缓存目录')).toBeDisabled()
+  })
+
+  it('says the node has not reported yet (not "unsupported") when its metrics are missing', async () => {
+    authenticate()
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === `/v1/nodes/${node.id}/metrics/latest`) return Promise.resolve(json({ error: { code: 'not_found', message: 'x', request_id: 'req-404' } }, 404))
+      return Promise.resolve(json(url === `/v1/nodes/${node.id}` ? node : { items: [node] }))
+    })
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+    await user.click(await screen.findByRole('button', { name: node.name }))
+    const dialog = await screen.findByRole('dialog', { name: '编辑节点' })
+    await user.click(within(dialog).getByRole('tab', { name: '节点设置' }))
+    const notice = await within(dialog).findByTestId('node-storage-capability')
+    expect(notice).toHaveTextContent('节点还没有上报能力信息')
+    expect(notice).not.toHaveTextContent('该节点版本不支持')
+    expect(notice).toHaveTextContent('当前构建：Agent 2.4.1')
+    expect(within(dialog).getByLabelText('缓存目录')).toBeDisabled()
+  })
+
+  it('shows a read failure with its reason, issue ID and retry, then recovers to editable', async () => {
+    authenticate()
+    let reads = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === `/v1/nodes/${node.id}/metrics/latest`) {
+        reads += 1
+        return Promise.resolve(reads === 1
+          ? json({ error: { code: 'node_metrics_unavailable', message: 'raw nats detail', request_id: 'req-cap-1' } }, 503)
+          : json(latest(true)))
+      }
+      return Promise.resolve(json(url === `/v1/nodes/${node.id}` ? node : { items: [node] }))
+    })
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<NodeListPage />, ['/node/list'])
+    await user.click(await screen.findByRole('button', { name: node.name }))
+    const dialog = await screen.findByRole('dialog', { name: '编辑节点' })
+    await user.click(within(dialog).getByRole('tab', { name: '节点设置' }))
+    const notice = await within(dialog).findByTestId('node-storage-capability')
+    await waitFor(() => expect(notice).toHaveTextContent('读取节点能力失败'))
+    expect(notice).toHaveTextContent('问题编号：req-cap-1')
+    expect(notice).not.toHaveTextContent('该节点版本不支持')
+    expect(notice).not.toHaveTextContent('raw nats detail')
+    expect(within(dialog).getByLabelText('缓存目录')).toBeDisabled()
+    await user.click(within(notice).getByRole('button', { name: '重试' }))
+    await waitFor(() => expect(within(dialog).getByLabelText('缓存目录')).toBeEnabled())
+    expect(reads).toBe(2)
   })
 })
 

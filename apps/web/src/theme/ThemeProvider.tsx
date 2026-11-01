@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { CdncaProvider, type CdncaProviderProps } from '@cdnca/ui'
+import { CdncaProvider, darkSeedsFromCSSVariables, type CdncaProviderProps } from '@cdnca/ui'
 
 import { themeApi, themeStylesheetPath, type ThemeBrandAssets, type ThemeDocument, type ThemeScope } from '../api/theme'
 import { publicBrandAssetUpdatedEvent } from '../components/PublicBrandAssetImage'
@@ -26,11 +26,17 @@ export function ThemeProvider({ children, ...config }: Omit<CdncaProviderProps, 
 
   useEffect(() => {
     let cancelled = false
+    // Each load takes a generation; only the newest one may apply. A theme change event starts a new read while an
+    // older one may still be in flight, and the older answer must not overwrite the newer theme.
+    let generation = 0
     const load = async () => {
+      const mine = ++generation
+      const stale = () => cancelled || mine !== generation
       try {
         const current = await themeApi.current(useSessionStore.getState().accessToken)
+        if (stale()) return
         const loaded = await themeApi.document(current)
-        if (cancelled) return
+        if (stale()) return
         applyStylesheet(themeStylesheetPath(current), loaded.package_sha256)
         setDocument(loaded)
         setScope(current.scope)
@@ -61,6 +67,8 @@ export function ThemeProvider({ children, ...config }: Omit<CdncaProviderProps, 
     const overrides = role === 'public' ? undefined : document.antd_tokens_by_role?.[role]
     return overrides ? { ...document.antd_tokens, ...overrides } : document.antd_tokens
   }, [document, role])
+  // The theme's *-dark tokens drive antd's dark palette (CSS reads the same variables).
+  const darkSeeds = useMemo(() => document ? darkSeedsFromCSSVariables(document.css_variables) : undefined, [document])
 
   useEffect(() => {
     const root = window.document.documentElement.dataset
@@ -78,7 +86,7 @@ export function ThemeProvider({ children, ...config }: Omit<CdncaProviderProps, 
 
   return (
     <ThemeRuntimeContext.Provider value={runtime}>
-      <CdncaProvider {...config} tokens={tokens} look={look === 'tech' ? 'console' : 'classic'}>
+      <CdncaProvider {...config} tokens={tokens} darkSeeds={darkSeeds} look={look === 'tech' ? 'console' : 'classic'}>
         {children}
       </CdncaProvider>
     </ThemeRuntimeContext.Provider>

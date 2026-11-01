@@ -45,7 +45,9 @@ func openNodeServingWorker(pool *pgxpool.Pool) (*nodeserving.Worker, error) {
 		// Republishes what a frozen node refused once it serves again.
 		nodeserving.NewFrozenRedeliveryEvaluator(store, edgeautopublish.FrozenRepublisher{}),
 		// Backup IP state last: it reads the holds the sources above just wrote.
-		nodeserving.NewLineBackupEvaluator(store))
+		nodeserving.NewLineBackupEvaluator(store),
+		// Then the alerts whose enqueue failed in a transition (migration 593).
+		nodeserving.NewAlertIntentEvaluator(store))
 }
 
 // nodeExternalProbeInterval is one external probe round (controller + peer

@@ -143,6 +143,13 @@ func (receiver *autoDefenseReceiver) deliveryFailed() {
 	}
 }
 
+// AutoDefenseSessionStarted implements gatewayclient.AutoDefenseSessionNotifier (passed to the local runtime).
+func (receiver *autoDefenseReceiver) AutoDefenseSessionStarted() {
+	if notifier, ok := receiver.runtime.(gatewayclient.AutoDefenseSessionNotifier); ok {
+		notifier.AutoDefenseSessionStarted()
+	}
+}
+
 // Reports implements gatewayclient.AutoDefenseRuntime.
 func (receiver *autoDefenseReceiver) Reports() <-chan []byte {
 	receiver.reportsOnce.Do(func() {

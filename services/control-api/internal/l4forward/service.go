@@ -130,18 +130,22 @@ func (s *Service) List(ctx context.Context, actor Actor, filter ListFilter) (Lis
 		(filter.Upstream != "" && !validDisplayText(filter.Upstream, 253, false)) ||
 		(filter.CNAMEDomain != "" && !validDisplayText(filter.CNAMEDomain, 253, false)) ||
 		(filter.CNAMEHostname != "" && !validDisplayText(filter.CNAMEHostname, 253, false)) ||
+		(filter.Forward != "" && !validDisplayText(filter.Forward, 128, false)) ||
+		(filter.Owner != "" && !validDisplayText(filter.Owner, 128, false)) ||
 		(filter.RegionID != nil && *filter.RegionID == uuid.Nil) || (filter.NodeGroupID != nil && *filter.NodeGroupID == uuid.Nil) ||
 		(filter.SyncState != "" && filter.SyncState != SyncStateDone && filter.SyncState != SyncStatePending && filter.SyncState != SyncStateFailed) ||
 		(filter.AdminStatus != "" && !ValidAdminStatus(filter.AdminStatus)) {
 		return ListResult{}, ErrInvalidInput
 	}
 	// 区域 / 线路分组 are the platform's (shown to the admin only).
-	if actor.ScopeKind == "tenant" && (filter.RegionID != nil || filter.NodeGroupID != nil) {
+	if actor.ScopeKind == "tenant" && (filter.RegionID != nil || filter.NodeGroupID != nil || filter.Owner != "") {
 		return ListResult{}, ErrPermissionDenied
 	}
 	filter.Upstream = strings.ToLower(strings.TrimSpace(filter.Upstream))
 	filter.CNAMEDomain = strings.ToLower(strings.TrimSpace(filter.CNAMEDomain))
 	filter.CNAMEHostname = strings.ToLower(strings.TrimSpace(filter.CNAMEHostname))
+	filter.Forward = strings.ToLower(strings.TrimSpace(filter.Forward))
+	filter.Owner = strings.ToLower(strings.TrimSpace(filter.Owner))
 	result, err := s.store.List(ctx, actor, filter)
 	if actor.ScopeKind == "tenant" {
 		for index := range result.Items {

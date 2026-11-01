@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -288,88 +287,41 @@ func (store *Store) ApplyLineBackup(ctx context.Context, key LineBackupKey, expe
 		}
 		changed = true
 		if decision.EventType != "" {
-			store.enqueueLineBackupAlert(ctx, tx, key, decision, observed.Backups, now)
+			store.raiseAlert(ctx, tx, func(tx pgx.Tx) (alertIntent, bool, error) {
+				return lineBackupAlertIntent(ctx, tx, key, decision, observed.Backups, now)
+			})
 		}
 		return nil
 	})
 	return changed, err
 }
 
-// enqueueLineBackupAlert runs under a savepoint: a notification failure is
-// logged and never blocks the state.
-func (store *Store) enqueueLineBackupAlert(ctx context.Context, tx pgx.Tx, key LineBackupKey, decision LineBackupDecision,
-	backups []string, now time.Time) {
-	if store.alerts == nil {
-		return
-	}
-	err := func() error {
-		savepoint, err := tx.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = savepoint.Rollback(context.Background()) }()
-		if err := store.enqueueLineBackupAlertTx(ctx, savepoint, key, decision, backups, now); err != nil {
-			return err
-		}
-		return savepoint.Commit(ctx)
-	}()
-	if err != nil {
-		slog.Warn("line group backup IP alert not enqueued", "line_group_id", key.GroupID, "address_family", key.Family,
-			"event_type", decision.EventType, "error", err)
-	}
-}
-
-func (store *Store) enqueueLineBackupAlertTx(ctx context.Context, tx pgx.Tx, key LineBackupKey, decision LineBackupDecision,
-	backups []string, now time.Time) error {
+// lineBackupAlertIntent captures the backup IP alert of one transition;
+// tenant line groups are not alerted yet, like tenant-owned nodes.
+func lineBackupAlertIntent(ctx context.Context, tx pgx.Tx, key LineBackupKey, decision LineBackupDecision,
+	backups []string, now time.Time) (alertIntent, bool, error) {
 	var name string
 	var platform bool
 	if err := tx.QueryRow(ctx, `SELECT line_group.name,scope.kind='platform' AND scope.tenant_id IS NULL
 		FROM node_line_groups line_group JOIN access_scopes scope ON scope.id=line_group.tenant_scope_id
 		WHERE line_group.tenant_scope_id=$1 AND line_group.id=$2`, key.ScopeID, key.GroupID).Scan(&name, &platform); err != nil {
-		return fmt.Errorf("read alerted line group: %w", err)
+		return alertIntent{}, false, fmt.Errorf("read alerted line group: %w", err)
 	}
 	if !platform {
-		// Tenant line groups are not alerted yet, like tenant-owned nodes.
-		return nil
+		return alertIntent{}, false, nil
 	}
-	rows, err := tx.Query(ctx, `SELECT DISTINCT membership.user_id
-		FROM memberships membership
-		JOIN users member ON member.id=membership.user_id AND member.status='active'
-		JOIN role_assignments assignment ON assignment.scope_id=membership.scope_id AND assignment.user_id=membership.user_id
-		JOIN role_permissions grant_row ON grant_row.role_id=assignment.role_id AND grant_row.permission_name=$2
-		WHERE membership.scope_id=$1 AND membership.status='active'
-		ORDER BY membership.user_id`, key.ScopeID, alertRecipientPermission)
-	if err != nil {
-		return fmt.Errorf("read line group alert recipients: %w", err)
-	}
-	recipients, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
-	if err != nil {
-		return fmt.Errorf("read line group alert recipients: %w", err)
-	}
-	sourceEventID := lineBackupSourceEventID(decision.EventType, key.GroupID, key.Family, decision.Sequence)
-	templates := map[notification.Channel]notification.TemplateRef{
-		notification.ChannelSMS:   {ID: decision.EventType + ".zh-cn", Version: alertTemplateVersion, Channel: notification.ChannelSMS},
-		notification.ChannelEmail: {ID: decision.EventType + ".zh-cn", Version: alertTemplateVersion, Channel: notification.ChannelEmail},
-	}
-	values := notification.TemplateContext{
-		"line_group_name": notification.PublicValue(name),
-		"address_family":  notification.PublicValue(lineBackupFamilyText(key.Family)),
-		"occurred_at":     notification.PublicValue(now.UTC().Format(time.RFC3339)),
+	params := map[string]string{
+		"line_group_name": name,
+		"address_family":  lineBackupFamilyText(key.Family),
+		"occurred_at":     now.UTC().Format(time.RFC3339),
 	}
 	if decision.EventType == EventTypeLineBackupActivated {
-		values["backup_addresses"] = notification.PublicValue(lineBackupAddressText(backups))
+		params["backup_addresses"] = lineBackupAddressText(backups)
 	}
-	for _, recipient := range recipients {
-		if _, err := store.alerts.EnqueueTx(ctx, tx, notification.EnqueueRequest{
-			ScopeID: key.ScopeID, RecipientID: recipient, SourceEventID: sourceEventID, EventType: decision.EventType,
-			Policy: notification.DeliverySystemRequired, Templates: templates,
-			Contexts:       map[notification.Channel]notification.TemplateContext{notification.ChannelSMS: values, notification.ChannelEmail: values},
-			AuditRequestID: sourceEventID,
-		}); err != nil {
-			return fmt.Errorf("enqueue %s: %w", decision.EventType, err)
-		}
-	}
-	return nil
+	return alertIntent{
+		scopeID: key.ScopeID, eventType: decision.EventType, occurredAt: now, params: params,
+		sourceEventID: lineBackupSourceEventID(decision.EventType, key.GroupID, key.Family, decision.Sequence),
+	}, true, nil
 }
 
 // LineBackupReplayGuard keeps a scheduled repeat only while the state

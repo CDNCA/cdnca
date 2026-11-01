@@ -76,8 +76,8 @@ type journalLease struct {
 }
 
 type Client struct {
-	config          Config
-	dialer          Dialer
+	config Config
+	dialer Dialer
 	// learnEndpoints receives the GatewayHello endpoint list (GW-07).
 	learnEndpoints func([]*agentv1.GatewayEndpointV1, string)
 	// learnNodeOwner receives GatewayHello node_owner_scope_id before any
@@ -170,6 +170,9 @@ type RuntimeStatusProbe struct {
 	// NativeRuntime, when set (native nodes), is the outcome of the last
 	// native runtime switch (EdgeRuntimeStatus.native_runtime); nil: absent.
 	NativeRuntime func() *agentv1.NativeRuntimeStatus
+	// Telemetry, when set, is the telemetry pipeline's current degradation
+	// (EdgeRuntimeStatus.telemetry); nil result: healthy.
+	Telemetry func() *agentv1.TelemetryHealth
 }
 
 type CertificateRenewer interface {
@@ -3025,6 +3028,9 @@ func (c *Client) runtimeStatus(ctx context.Context, loadedConfigVersionID *strin
 	}
 	if c.runtimeProbe.NativeRuntime != nil {
 		status.NativeRuntime = c.runtimeProbe.NativeRuntime()
+	}
+	if c.runtimeProbe.Telemetry != nil {
+		status.Telemetry = c.runtimeProbe.Telemetry()
 	}
 	return status
 }

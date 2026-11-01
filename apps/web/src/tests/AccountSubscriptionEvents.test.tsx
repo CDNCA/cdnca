@@ -202,6 +202,78 @@ describe('AccountSubscriptionsPage event rows', () => {
     expect(fetchMock.mock.calls.filter(([path]) => String(path).endsWith('/ticket.replied'))).toHaveLength(1)
   })
 
+  // 平台未开通邮件短信时，站内信仍可用，消息订阅表与
+  // "更多消息类型"必须照常可达；只隐藏邮件/短信列。工单通知抽屉改的是同一份值。
+  it('keeps the in-app subscriptions reachable when the platform has no email or SMS channel', async () => {
+    const user = principal({})
+    useSessionStore.getState().setSession({ ...authResponse(user), access_token: 'sub-token' }, user)
+    const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
+      const event = decodeURIComponent(path.split('/').pop()!)
+      const base = { ...subscription(event, 0, { sms: false, email: false }), ...(event.startsWith('ticket.') ? { inbox_enabled: true } : {}) }
+      if (init?.method === 'PUT') return json({ ...base, ...JSON.parse(init.body as string), revision: 1, changed: true })
+      return json(base)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    renderWithProviders(<AccountSubscriptionsPage />, ['/account/subscribe'])
+    const more = await openMore()
+    const inbox = await within(more).findByRole('checkbox', { name: '客服回复 站内信' })
+    expect(inbox).toBeChecked()
+    expect(within(more).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['提醒类型', '站内信'])
+    expect(screen.queryByRole('checkbox', { name: /邮件提醒|手机提醒/ })).not.toBeInTheDocument()
+    // 邮件短信未开通的说明留在页面上，不再把站内信判成"没有提醒方式"。
+    expect(screen.getByText('平台暂未开通邮件和短信提醒，站内信仍可设置')).toBeInTheDocument()
+    expect(screen.queryByText('平台暂未开通提醒方式')).not.toBeInTheDocument()
+    fireEvent.click(inbox)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/v1/account/notification-subscriptions/ticket.replied', expect.objectContaining({ method: 'PUT' })))
+    const [, put] = fetchMock.mock.calls.find(([, i]) => i?.method === 'PUT')!
+    expect(JSON.parse(put!.body as string)).toEqual({ sms_enabled: false, email_enabled: false, inbox_enabled: false })
+    await waitFor(() => expect(inbox).not.toBeChecked())
+  })
+
+  // 已勾选但本人未绑定邮箱/手机号的渠道旁提示收不到，并链到个人资料绑定。
+  it('warns next to a subscribed channel whose own contact is not bound', async () => {
+    const user = principal({})
+    useSessionStore.getState().setSession({ ...authResponse(user), access_token: 'sub-token' }, user)
+    vi.stubGlobal('fetch', vi.fn(async (path: string) => {
+      const event = decodeURIComponent(path.split('/').pop()!)
+      return json({ ...subscription(event), email_enabled: true, sms_enabled: event.startsWith('certificate.'),
+        email_bound: false, phone_bound: true })
+    }))
+    renderWithProviders(<AccountSubscriptionsPage />, ['/account/subscribe'])
+    await screen.findByRole('checkbox', { name: '证书到期 邮件提醒' })
+    const traffic = screen.getByText('流量超限').closest('tr')!
+    expect(within(traffic).getByText('未绑定邮箱，收不到')).toBeInTheDocument()
+    expect(within(traffic).getByRole('link', { name: '去绑定' })).toHaveAttribute('href', '/account/user')
+    // 手机号已绑定：短信列不提示；未勾选的渠道也不提示。
+    expect(within(screen.getByText('证书到期').closest('tr')!).queryByText(/未绑定手机号/)).not.toBeInTheDocument()
+    expect(within(traffic).queryByText(/未绑定手机号/)).not.toBeInTheDocument()
+  })
+
+  it('warns about an unbound phone only where SMS is subscribed', async () => {
+    const user = principal({})
+    useSessionStore.getState().setSession({ ...authResponse(user), access_token: 'sub-token' }, user)
+    vi.stubGlobal('fetch', vi.fn(async (path: string) => {
+      const event = decodeURIComponent(path.split('/').pop()!)
+      return json({ ...subscription(event), sms_enabled: event.startsWith('certificate.'), email_bound: true, phone_bound: false })
+    }))
+    renderWithProviders(<AccountSubscriptionsPage />, ['/account/subscribe'])
+    await screen.findByRole('checkbox', { name: '证书到期 手机提醒' })
+    expect(within(screen.getByText('证书到期').closest('tr')!).getByText('未绑定手机号，收不到')).toBeInTheDocument()
+    expect(within(screen.getByText('流量超限').closest('tr')!).queryByText(/未绑定/)).not.toBeInTheDocument()
+  })
+
+  // 没有任何可用渠道（站内信也没有）时才显示"暂未开通提醒方式"。
+  it('says no channel is available only when neither in-app nor external channels exist', async () => {
+    const user = principal({})
+    useSessionStore.getState().setSession({ ...authResponse(user), access_token: 'sub-token' }, user)
+    vi.stubGlobal('fetch', vi.fn(async (path: string) =>
+      json(subscription(decodeURIComponent(path.split('/').pop()!), 0, { sms: false, email: false }))))
+    renderWithProviders(<AccountSubscriptionsPage />, ['/account/subscribe'])
+    expect(await screen.findByText('平台暂未开通提醒方式')).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
   // 原请求暂时 500、自动重试成功：不用点击就恢复显示，也不留错误。
   it('recovers a row on its own after a transient failure', async () => {
     const user = principal({})

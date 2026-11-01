@@ -22,6 +22,7 @@ import { useSessionStore } from "../../auth/session";
 import { DataState } from "../../components/DataState";
 import "./i18n";
 import { FeedbackWhen } from "@cdnca/ui";
+import { PageSection } from '@cdnca/ui'
 
 // 网站协议批量设置：直接批量写所选网站自己的
 // http2_enabled / http3_enabled / tls_prefer_server_ciphers，经
@@ -205,7 +206,7 @@ export default function SiteProtocolBatchPage({
   const failed = rows?.filter((row) => row.result.status === "failed").length ?? 0;
 
   return (
-    <section aria-labelledby="site-protocol-title">
+    <PageSection aria-labelledby="site-protocol-title">
       <Typography.Title id="site-protocol-title" level={4}>
         {t("title")}
       </Typography.Title>
@@ -288,6 +289,6 @@ export default function SiteProtocolBatchPage({
           </>
         ) : null}
       </Space>
-    </section>
+    </PageSection>
   );
 }

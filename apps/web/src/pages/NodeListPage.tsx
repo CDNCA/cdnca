@@ -17,6 +17,7 @@ import {
   Tag,
   Tabs,
   Tooltip,
+  Typography,
   type MenuProps,
   type TableColumnsType,
 } from 'antd'
@@ -55,6 +56,7 @@ import { nodeMonitoringApi, type NodeMonitoringLatest, type NodeMonitoringLatest
 import { nodeInstallationTicketsApi } from '../api/nodeInstallationTickets'
 import { NodeFrozenTag } from '../components/NodeFrozenTag'
 import { useSessionStore } from '../auth/session'
+import { controlUpgradesReadPermission } from '../routes/routePolicy'
 import { ResourceID } from '../components/ResourceID'
 import { formatBandwidth, formatBytes, formatDateTime, formatNumber } from '../i18n/formatters'
 import i18n from '../i18n'
@@ -345,6 +347,43 @@ function NodeStorageEffective({ storage }: { storage: NodeStorageStatus | undefi
   )
 }
 
+// why the storage settings are read-only, in one place. A read
+// failure, a node that never reported and a node whose agent does not declare
+// NODE_STORAGE are different answers; each shows the running build and the last
+// connection, and "unsupported" names the missing capability and the upgrade entry
+// (a same-number build can lack the capability, so never just "upgrade to 1.0.35").
+function NodeStorageCapability({ presence, state, error, retrying, onRetry }: {
+  presence: NodePresence
+  state: 'loading' | 'failed' | 'not_reported' | 'unsupported'
+  error: unknown
+  retrying: boolean
+  onRetry: () => void
+}) {
+  const { t } = useTranslation('nodes')
+  const principal = useSessionStore((current) => current.principal)
+  const canUpgrade = Boolean(principal?.permissions.some((permission) => permission === controlUpgradesReadPermission || permission === 'platform.admin'))
+  if (state === 'loading') {
+    return <Alert className="node-modal-alert cdnca-alert-compact" type="info" showIcon message={t('editModal.storage.unknown')} data-testid="node-storage-capability" />
+  }
+  const requestID = state === 'failed' && error instanceof ApiError ? error.requestId : undefined
+  const facts = <ul className="node-list-storage-facts">
+    <li>{t('editModal.storage.build', { version: presence.agent_version || t('empty.notReported') })}</li>
+    {state === 'unsupported' ? <li>{t('editModal.storage.missing')}</li> : null}
+    <li>{t('editModal.storage.lastSeen', { time: presence.last_heartbeat_at ? formatDateTime(presence.last_heartbeat_at) : t('empty.notReported') })}</li>
+    {requestID ? <li><Typography.Text type="secondary" copyable={{ text: requestID }}>{t('editModal.storage.requestID', { id: requestID })}</Typography.Text></li> : null}
+  </ul>
+  return (
+    <Alert className="node-modal-alert cdnca-alert-compact" type={state === 'failed' ? 'warning' : 'info'} showIcon data-testid="node-storage-capability"
+      message={t(`editModal.storage.${state === 'unsupported' ? 'unsupportedTitle' : state === 'failed' ? 'readFailedTitle' : 'notReportedTitle'}`)}
+      description={<>
+        <p>{t(`editModal.storage.${state === 'unsupported' ? 'unsupported' : state === 'failed' ? 'readFailed' : 'notReportedHelp'}`)}</p>
+        {facts}
+        {state === 'failed' ? <Button size="small" icon={<RefreshCw size={14} aria-hidden="true" />} loading={retrying} onClick={onRetry}>{t('editModal.storage.retry')}</Button> : null}
+        {state === 'unsupported' && canUpgrade ? <Link to="/sys/op">{t('editModal.storage.upgradeLink')}</Link> : null}
+      </>} />
+  )
+}
+
 type NodeIPLocationResolution = NonNullable<Awaited<ReturnType<typeof nodesApi.getIPLocation>>['resolution']>
 
 /** IP 归属: the latest automatic resolution (time, IP library) or why none. */
@@ -548,6 +587,9 @@ function NodeEditModal({
   }
   const storageSupport = storageQuery.isPending ? undefined : storageQuery.data?.storage_supported === true
   const storageLocked = storageSupport !== true
+  const storageCapability = storageQuery.isPending ? 'loading' as const
+    : storageQuery.isError ? 'failed' as const
+      : storageQuery.data === null ? 'not_reported' as const : 'unsupported' as const
   const storageStatus = storageQuery.data?.telemetry?.storage
   // What an empty field runs: the node's report of that field when it runs
   // its default there (state default, or applied with the field unset: the
@@ -681,6 +723,10 @@ function NodeEditModal({
   )
 
   const nodeForm = (
+    <>
+    {/* Outside the Form: its disabled state must not disable the retry button. */}
+    {storageLocked ? <NodeStorageCapability presence={item.presence} state={storageCapability} error={storageQuery.error}
+      retrying={storageQuery.isFetching} onRetry={() => void storageQuery.refetch()} /> : null}
     <Form
       form={nodeFormInstance}
       className="node-list-edit-form"
@@ -701,11 +747,7 @@ function NodeEditModal({
         },
       })}
     >
-      {storageLocked
-        ? <Alert className="node-modal-alert cdnca-alert-compact" type="info" showIcon
-          message={storageSupport === undefined ? t('editModal.storage.unknown') : t('editModal.storage.unsupportedTitle')}
-          description={storageSupport === undefined ? undefined : t('editModal.storage.unsupported')} />
-        : <Alert className="node-modal-alert cdnca-alert-compact" type="info" showIcon message={t('editModal.storage.help')}
+      {storageLocked ? null : <Alert className="node-modal-alert cdnca-alert-compact" type="info" showIcon message={t('editModal.storage.help')}
           description={t('editModal.storage.oldDirectoryKept')} />}
       <NodeStorageEffective storage={storageStatus} />
       <Form.Item name="proxy_cache_dir" label={t('editModal.fields.cacheDirectory')} dependencies={['logs_dir']}
@@ -733,8 +775,9 @@ function NodeEditModal({
         </Button>
         <span className="node-list-item-help">{t('editModal.storage.restoreDefaultsHelp')}</span>
       </div>
-      {formActions(storageLocked ? t('editModal.storage.unsupportedTitle') : undefined)}
+      {formActions(storageLocked ? t(`editModal.storage.${({ loading: 'unknown', failed: 'readFailedTitle', not_reported: 'notReportedTitle', unsupported: 'unsupportedTitle' } as const)[storageCapability]}`) : undefined)}
     </Form>
+    </>
   )
 
   const ipLocationForm = (

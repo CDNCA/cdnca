@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Checkbox, Form, Input, InputNumber, Result, Select, Space, Spin, Switch, Table, Tag, Typography } from 'antd'
-import { useFeedbackMessage, FeedbackWhen } from '@cdnca/ui'
+import { useFeedbackMessage, FeedbackWhen, PageSection } from '@cdnca/ui'
 import { Check, CheckCircle, RefreshCw, Rocket, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -327,7 +327,7 @@ function DDoSProtectionSettingsContent({ canManage, canReadNodes }: { canManage:
     </Form.Item>
   )
   return (
-    <div className="ddos-protection-settings ddos-v2">
+    <PageSection className="ddos-protection-settings ddos-v2">
       {messageContext}
       <div className="ddos-v2-head">
         <div>
@@ -471,7 +471,7 @@ function DDoSProtectionSettingsContent({ canManage, canReadNodes }: { canManage:
         </Form>
       </section>
       {canReadNodes ? <NodeReceipts /> : null}
-    </div>
+    </PageSection>
   )
 }
 

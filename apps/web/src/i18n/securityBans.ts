@@ -4,7 +4,7 @@ import i18n from './index'
 const zhCN = {
   title: '封禁名单',
   description: '手工封禁和节点上的 WAF/CC 自动封禁都在这里，解封后该网站的所有节点立即放行。',
-  filters: { site: '网站 ID', ip: '客户端 IP', state: '状态', all: '全部', search: '查询', reset: '重置' },
+  filters: { site: '网站 ID', sitePlaceholder: '网站 UUID，或输入域名选择', ip: '客户端 IP', state: '状态', all: '全部', search: '查询', reset: '重置' },
   columns: {
     site: '网站', ip: '客户端 IP', source: '来源', rule: '规则', reason: '原因', bannedAt: '封禁时间',
     bannedUntil: '封禁到期', state: '状态', releasedAt: '解封时间', actions: '操作',
@@ -41,7 +41,7 @@ const zhCN = {
 const enUS: typeof zhCN = {
   title: 'Ban list',
   description: 'Manual bans and the nodes\' automatic WAF / CC bans. A release lets the IP through on every node of the site at once.',
-  filters: { site: 'Site ID', ip: 'Client IP', state: 'State', all: 'All', search: 'Search', reset: 'Reset' },
+  filters: { site: 'Site ID', sitePlaceholder: 'Site UUID, or type a domain to pick', ip: 'Client IP', state: 'State', all: 'All', search: 'Search', reset: 'Reset' },
   columns: {
     site: 'Site', ip: 'Client IP', source: 'Source', rule: 'Rule', reason: 'Reason', bannedAt: 'Banned at',
     bannedUntil: 'Banned until', state: 'State', releasedAt: 'Released at', actions: 'Actions',

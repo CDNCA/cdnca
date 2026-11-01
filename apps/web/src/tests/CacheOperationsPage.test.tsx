@@ -754,7 +754,7 @@ describe('CacheOperationsPage', () => {
     const toolbar = document.querySelector<HTMLElement>('.cache-operations-toolbar')!
 
     await screen.findByTitle(siteAID)
-    const siteFilter = within(toolbar).getByLabelText('站点 ID')
+    const siteFilter = within(toolbar).getByRole('combobox', { name: '站点 ID' })
     await user.type(siteFilter, siteAID)
     await selectOption(user, '任务类型', '预热')
     await selectOption(user, '任务状态', '失败')
@@ -1213,7 +1213,7 @@ describe('CacheOperationsPage', () => {
     const user = userEvent.setup({ delay: null })
     renderPageWithQueryClient('/site/cache-clean?tab=history')
     const toolbar = document.querySelector<HTMLElement>('.cache-operations-toolbar')!
-    const siteFilter = within(toolbar).getByLabelText('站点 ID')
+    const siteFilter = within(toolbar).getByRole('combobox', { name: '站点 ID' })
 
     await pickScope(user, targetA)
     await user.type(siteFilter, siteAID)
@@ -1763,5 +1763,26 @@ describe('CacheOperationsPage', () => {
     expect(await screen.findByRole('heading', { level: 1, name: /^［.+］$/ })).toBeInTheDocument()
     expect(i18n.exists('cacheOperations:states.partial_failed')).toBe(true)
     expect(i18n.exists('cacheOperations:failures.node_offline')).toBe(true)
+  })
+})
+
+// 站点/任务类型边改边生效，站点可输入域名从联想中选中按站点 UUID 过滤。
+describe('cache operation live filters', () => {
+  it('applies a picked site domain and a chosen action without the query button', async () => {
+    const list = vi.spyOn(cacheOperationsApi, 'list').mockResolvedValue({ items: [] })
+    const sites = vi.spyOn(sitesApi, 'list').mockResolvedValue({
+      items: [{ id: siteAID, domain: 'www.example.com', display_id: '3' } as SiteListItem], total: 1, page: 1, limit: 10,
+    })
+    setCacheSession({ accessToken: 'cache-live-token' })
+    const user = userEvent.setup({ delay: null, pointerEventsCheck: 0 })
+    renderPageWithQueryClient()
+    const toolbar = document.querySelector<HTMLElement>('.cache-operations-toolbar')!
+    await waitFor(() => expect(list).toHaveBeenCalled())
+    await user.type(within(toolbar).getByRole('combobox', { name: '站点 ID' }), 'www')
+    await waitFor(() => expect(sites).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ domain: 'www' })))
+    await user.click(await screen.findByText('www.example.com（3）'))
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith('cache-live-token', { kind: 'tenant' }, expect.objectContaining({ site_id: siteAID })))
+    await selectOption(user, '任务类型', '预热')
+    await waitFor(() => expect(list).toHaveBeenLastCalledWith('cache-live-token', { kind: 'tenant' }, expect.objectContaining({ site_id: siteAID, action: 'prewarm' })))
   })
 })

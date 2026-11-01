@@ -12,7 +12,7 @@ import {
 import { sitesApi } from '../../api/sites'
 import { useSessionStore } from '../../auth/session'
 import '../../i18n/domainTrust'
-import { useFeedback, FeedbackWhen } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, PageSection } from '@cdnca/ui'
 
 function codeOf(error: unknown): string {
   return error instanceof ApiError ? error.code : 'request_failed'
@@ -266,7 +266,7 @@ export default function DomainSecurityPage() {
     principal.permissions.includes('platform.admin'))
   if (!allowed) return <Result status="error" icon={<ShieldOff size={72} aria-hidden="true" />} title={t('errors.forbidden')} />
   return (
-    <div className="page">
+    <PageSection>
       <Typography.Title level={4}>{t('admin.title')}</Typography.Title>
       <Typography.Paragraph type="secondary">{t('admin.subtitle')}</Typography.Paragraph>
       <Tabs destroyOnHidden items={[
@@ -275,6 +275,6 @@ export default function DomainSecurityPage() {
         { key: 'ownerships', label: t('admin.tabs.ownerships'), children: <OwnershipsTab /> },
         { key: 'suspensions', label: t('admin.tabs.suspensions'), children: <SuspensionsTab /> },
       ]} />
-    </div>
+    </PageSection>
   )
 }

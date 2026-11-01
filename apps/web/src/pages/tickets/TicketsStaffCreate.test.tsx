@@ -127,4 +127,42 @@ describe('fix-ticket2 staff create and ticket notifications', () => {
     expect(within(drawer).queryByText('客服回复')).not.toBeInTheDocument()
     expect(await within(drawer).findByRole('checkbox', { name: '工单超时未响应 邮件' })).toBeChecked()
   })
+
+  // 代建归因：管理员视图把客服写成创建者、客户写成归属，
+  // 与用户视图和审计一致；客户自建时仍显示客户提交。
+  it('names the staff member who opened the ticket for the customer, in both views', async () => {
+    const staffMade = { ...created, ticket: { ...created.ticket, username: 'jason', creator_kind: 'staff', creator_name: 'admin' },
+      messages: [{ id: 'm1', author_kind: 'staff', author_name: 'admin', body: '本月账单有一笔调整', attachments: [],
+        created_at: '2026-10-27T01:00:00Z' }] }
+    signIn({ scope_kind: 'platform', tenant_id: null, roles: ['custom'], permissions: ['tickets.read', 'tickets.manage'] })
+    vi.stubGlobal('fetch', vi.fn<Fetch>(async (path) => {
+      if (path === `/v1/admin/tickets/${created.ticket.id}`) return json(staffMade)
+      if (path === '/v1/admin/tickets/assignees') return json({ items: [] })
+      return json({ unread: 0, items: [], total: 0 })
+    }))
+    const { unmount } = renderWithProviders(<TicketsPage mode="admin" />, [`/sys/tickets?id=${created.ticket.id}`])
+    expect(await screen.findByText(/客服 admin 为 jason 创建了工单/)).toBeInTheDocument()
+    expect(screen.queryByText(/jason 提交了工单/)).not.toBeInTheDocument()
+    unmount()
+
+    // 用户视图：后端已带「客服」前缀，没有 username。
+    signIn({})
+    const customerView = { ...staffMade, ticket: { ...staffMade.ticket, username: undefined, creator_name: '客服 admin' },
+      messages: [{ ...staffMade.messages[0], author_name: '客服 admin' }] }
+    vi.stubGlobal('fetch', vi.fn<Fetch>(async (path) => path === `/v1/tickets/${created.ticket.id}`
+      ? json(customerView) : json({ unread: 0, items: [], total: 0 })))
+    const user = renderWithProviders(<TicketsPage mode="user" />, [`/account/tickets?id=${created.ticket.id}`])
+    expect(await screen.findByText(/客服 admin 创建了工单/)).toBeInTheDocument()
+    expect(screen.queryByText(/客服 客服/)).not.toBeInTheDocument()
+    user.unmount()
+
+    // 客户自建：管理员视图仍是客户提交。
+    signIn({ scope_kind: 'platform', tenant_id: null, roles: ['custom'], permissions: ['tickets.read', 'tickets.manage'] })
+    const own = { ...staffMade, ticket: { ...staffMade.ticket, creator_kind: 'customer', creator_name: 'jason' },
+      messages: [{ ...staffMade.messages[0], author_kind: 'customer', author_name: 'jason' }] }
+    vi.stubGlobal('fetch', vi.fn<Fetch>(async (path) => path === `/v1/admin/tickets/${created.ticket.id}`
+      ? json(own) : json({ unread: 0, items: [], total: 0 })))
+    renderWithProviders(<TicketsPage mode="admin" />, [`/sys/tickets?id=${created.ticket.id}`])
+    expect(await screen.findByText(/jason 提交了工单/)).toBeInTheDocument()
+  })
 })

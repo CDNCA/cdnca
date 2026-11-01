@@ -22,6 +22,18 @@ var (
 	ErrPluginInstallationUnavailable = errors.New("API key plugin installation is not enabled in this tenant")
 )
 
+// ScopesUnavailableError：授权锁内按实时权限重核时，请求（或密钥原有）的这些权限已被收回（AA-KEY-01）。
+// errors.Is(err, ErrPermissionDenied) 仍成立，HTTP 仍是 403 permission_denied，另带 details 说明哪些权限。
+type ScopesUnavailableError struct {
+	Scopes []string
+}
+
+func (e *ScopesUnavailableError) Error() string {
+	return fmt.Sprintf("API key scopes no longer granted: %d", len(e.Scopes))
+}
+
+func (e *ScopesUnavailableError) Unwrap() error { return ErrPermissionDenied }
+
 const (
 	StatusPendingActivation = "pending_activation"
 	StatusActive            = "active"
@@ -77,6 +89,11 @@ type APIKeyListInput struct {
 	// Offset pages by position (tp-b7b 页码分页); it cannot be combined with
 	// Cursor and is capped at MaxListOffset.
 	Offset int
+	// Usable keeps only keys that can authenticate at the page snapshot:
+	// status active and expires_at absent or later than the snapshot (AA-UI02).
+	// An expired key keeps its active lifecycle status as history, so the
+	// status filter alone cannot answer "is API access usable".
+	Usable bool
 }
 
 // MaxListOffset bounds page-number access to one user's API keys.

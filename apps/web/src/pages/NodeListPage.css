@@ -1178,6 +1178,17 @@
   margin: 0;
 }
 
+/* the facts behind a read-only storage tab (build, missing capability, last connection). */
+.node-list-storage-facts {
+  margin: 4px 0 8px;
+  padding-left: 18px;
+  color: var(--cdnca-color-text-secondary);
+}
+
+.node-list-storage-facts li {
+  overflow-wrap: anywhere;
+}
+
 .node-ip-location-status {
   margin: 0 0 16px;
   color: var(--cdnca-color-text-secondary);

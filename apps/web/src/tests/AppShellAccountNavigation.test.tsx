@@ -10,7 +10,7 @@ function LocationProbe() {
   return <output data-testid="shell-location">{useLocation().pathname}</output>
 }
 
-function renderTenant(permissions: string[]) {
+function renderTenant(permissions: string[], path = '/account/user') {
   const actor = principal({ scope_kind: 'tenant', roles: ['tenant_owner'], permissions })
   session.useSessionStore.getState().setSession(authResponse(actor), actor)
   return renderWithProviders(
@@ -19,7 +19,7 @@ function renderTenant(permissions: string[]) {
         <Route path="*" element={<LocationProbe />} />
       </Route>
     </Routes>,
-    ['/account/user'],
+    [path],
   )
 }
 
@@ -49,5 +49,16 @@ describe('account center sidebar entries', () => {
     expect(await screen.findByRole('menuitem', { name: '个人资料' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: '账户充值' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: '消息查询' })).not.toBeInTheDocument()
+  })
+})
+
+// AA-NAV01：从菜单「API密钥」进入后落在 /account/api-key，标题、面包屑与高亮要跟着这一项。
+describe('API key page shell metadata', () => {
+  it('titles the page API密钥 and highlights its account-centre entry', async () => {
+    const { container } = renderTenant([], '/account/api-key')
+    const entry = await screen.findByRole('menuitem', { name: 'API密钥' })
+    expect(entry.closest('li')).toHaveClass('ant-menu-item-selected')
+    expect(container.querySelector('.shell-breadcrumb-current')).toHaveTextContent('API密钥')
+    expect(container.querySelector('.shell-breadcrumb-a11y')).toHaveTextContent('首页/账户中心/API密钥')
   })
 })

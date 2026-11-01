@@ -658,6 +658,24 @@ message EdgeRuntimeStatus {
   // Agent ran at its last start (/opt/cdnca-node, node-runtime-upgrade).
   // Absent on nodes that are not native.
   NativeRuntimeStatus native_runtime = 7;
+  // telemetry is the node telemetry pipeline's current degradation:
+  // absent while the pipeline is healthy or disabled.
+  TelemetryHealth telemetry = 8;
+}
+
+// TelemetryHealth is the error code the node telemetry pipeline (the upload
+// workers, the log sources and the L4 usage ledger) currently reports, e.g.
+// L4_USAGE_LEDGER_FULL, L4_USAGE_ATTRIBUTION_PENDING or TELEMETRY_*.
+message TelemetryHealth {
+  // error_code matches ^[A-Z][A-Z0-9_]{0,63}$.
+  string error_code = 1;
+  // first_seen_time is when the Agent first saw this code without a healthy
+  // or different code in between; last_seen_time is the latest heartbeat
+  // that saw it (both Agent clock, first <= last).
+  google.protobuf.Timestamp first_seen_time = 2;
+  google.protobuf.Timestamp last_seen_time = 3;
+  // count is the number of heartbeats that saw this code since first_seen_time (>= 1).
+  uint64 count = 4;
 }
 
 // NativeRuntimeStatus: whether the native node runs the OpenResty/Lua

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { App as AntApp, ConfigProvider } from 'antd'
 
 import { ApiError, type Principal } from '../api/auth'
+import { sitesApi, type SiteListResponse } from '../api/sites'
 import {
   originAuthRulesApi,
   type OriginAuthRule,
@@ -140,7 +141,7 @@ describe('OriginAuthRulesPage', () => {
     const { queryClient } = renderPage()
 
     expect(await screen.findByText(rule.endpoint)).toBeInTheDocument()
-    await user.type(screen.getByRole('textbox', { name: '站点 ID' }), siteID)
+    await user.type(screen.getByRole('combobox', { name: '站点 ID' }), siteID)
     await chooseOption(user, '存储提供商', 'S3')
     await user.click(screen.getByRole('button', { name: '查询' }))
     await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith('old-origin-token', scopeID, {
@@ -241,5 +242,29 @@ describe('OriginAuthRulesPage', () => {
     expect(await screen.findByText('写入结果未知')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '放弃重试' }))
     await waitFor(() => expect(screen.queryByText('写入结果未知')).not.toBeInTheDocument())
+  })
+
+  // 站点 ID 边输入边生效，也可输入域名从联想中选中。
+  it('applies a typed site UUID without the query button and filters by a picked domain', async () => {
+    authenticate()
+    const listSpy = vi.spyOn(originAuthRulesApi, 'list').mockResolvedValue({ items: [rule] })
+    const sitesSpy = vi.spyOn(sitesApi, 'list').mockResolvedValue({
+      items: [{ id: siteID, domain: 'img.example.com', display_id: '9' }], page: 1, limit: 10, total: 1,
+    } as unknown as SiteListResponse)
+    const user = userEvent.setup({ pointerEventsCheck: 0 }) // 未关动效，下拉弹出中 pointer-events: none
+    renderPage()
+    expect(await screen.findByText(rule.endpoint)).toBeInTheDocument()
+
+    await user.type(screen.getByRole('combobox', { name: '站点 ID' }), siteID)
+    await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith('origin-token', scopeID, {
+      siteID, enabled: undefined, limit: 20, cursor: undefined,
+    }))
+    await user.clear(screen.getByRole('combobox', { name: '站点 ID' }))
+    await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith('origin-token', scopeID, expect.objectContaining({ siteID: undefined })))
+    await user.type(screen.getByRole('combobox', { name: '站点 ID' }), 'img')
+    await waitFor(() => expect(sitesSpy).toHaveBeenLastCalledWith(expect.any(String), expect.objectContaining({ domain: 'img' })))
+    await user.click(await screen.findByText('img.example.com（9）'))
+    await waitFor(() => expect(listSpy).toHaveBeenLastCalledWith('origin-token', scopeID, expect.objectContaining({ siteID })))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

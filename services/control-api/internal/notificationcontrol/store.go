@@ -631,6 +631,9 @@ func (s *Store) GetSubscription(ctx context.Context, actor Actor, eventType stri
 		if err := readSubscription(ctx, tx, actor, eventType, false, &result); err != nil {
 			return err
 		}
+		if err := readContactBinding(ctx, tx, actor, &result); err != nil {
+			return err
+		}
 		return s.subscriptionSupport(ctx, tx, &result)
 	})
 	if err != nil {
@@ -691,6 +694,9 @@ func (s *Store) UpdateSubscription(ctx context.Context, actor Actor, eventType s
 				result.Revision != request.ExpectedRevision+boolInt64(result.Changed) {
 				return errInvalidNotificationWriteReceipt
 			}
+			if err := readContactBinding(ctx, tx, actor, &result); err != nil {
+				return err
+			}
 			return s.subscriptionSupport(ctx, tx, &result)
 		}
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended(
@@ -718,8 +724,13 @@ func (s *Store) UpdateSubscription(ctx context.Context, actor Actor, eventType s
 		if request.InboxEnabled != nil {
 			nextInbox = *request.InboxEnabled
 		}
+		// Contact binding is the current account fact, not part of the receipt:
+		// it is read after the receipt is written, also on replay.
 		if result.SMSEnabled == request.SMSEnabled && result.EmailEnabled == request.EmailEnabled && inbox == nextInbox {
-			return completeNotificationWriteReceipt(ctx, tx, receiptID, digest, result, s.now())
+			if err := completeNotificationWriteReceipt(ctx, tx, receiptID, digest, result, s.now()); err != nil {
+				return err
+			}
+			return readContactBinding(ctx, tx, actor, &result)
 		}
 		now := storeTime(s.now())
 		if result.Revision == 0 {
@@ -742,6 +753,9 @@ func (s *Store) UpdateSubscription(ctx context.Context, actor Actor, eventType s
 			result.InboxEnabled = &nextInbox
 		}
 		if err := completeNotificationWriteReceipt(ctx, tx, receiptID, digest, result, s.now()); err != nil {
+			return err
+		}
+		if err := readContactBinding(ctx, tx, actor, &result); err != nil {
 			return err
 		}
 		return s.auditor.Append(ctx, tx, audit.Event{

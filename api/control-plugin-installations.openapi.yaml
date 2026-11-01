@@ -33,6 +33,7 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}:
     get:
       operationId: getPluginInstallation
@@ -46,6 +47,7 @@ paths:
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/confirm:
     post:
       operationId: confirmPluginInstallation
@@ -65,6 +67,7 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/upgrade:
     post:
@@ -85,6 +88,7 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/disable:
     post:
@@ -104,6 +108,7 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/resume:
     post:
@@ -131,6 +136,7 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall:
     post:
@@ -150,6 +156,7 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/platform/plugin-installations:
     get:
@@ -178,6 +185,7 @@ paths:
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
   /v1/platform/plugin-installations/{authorization_id}:
     get:
       operationId: getPlatformPluginInstallation
@@ -190,6 +198,7 @@ paths:
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
   /v1/platform/plugin-installations/{authorization_id}/confirm:
     post:
       operationId: confirmPlatformPluginInstallation
@@ -208,6 +217,7 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/platform/plugin-installations/{authorization_id}/upgrade:
     post:
@@ -227,6 +237,7 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
         '422': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/platform/plugin-installations/{authorization_id}/disable:
     post:
@@ -245,6 +256,7 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
   /v1/platform/plugin-installations/{authorization_id}/uninstall:
     post:
@@ -263,6 +275,7 @@ paths:
         '403': {$ref: '#/components/responses/Error'}
         '404': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
+        '502': {$ref: '#/components/responses/Error'}
         '503': {$ref: '#/components/responses/Error'}
 components:
   securitySchemes:
@@ -490,6 +503,10 @@ components:
           additionalProperties: false
           required: [code]
           properties:
+            request_id:
+              description: Server-side failures only. Non-reversible reference of the request, logged with the failure; quote it to the platform.
+              type: string
+              pattern: '^[0-9a-f]{16}$'
             code:
               type: string
               enum:
@@ -504,4 +521,5 @@ components:
                 - plugin_installation_license_unavailable
                 - plugin_installation_state_conflict
                 - plugin_installation_result_unknown
+                - plugin_installation_activation_response_invalid
                 - internal_error

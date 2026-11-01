@@ -108,6 +108,11 @@ func TestTicketLifecycle(t *testing.T) {
 	f.subscribe(t, f.customer, EventCreated, EventReplied, EventStatusChanged)
 	created := f.create(t, f.customer, "life-1", CreateInput{Priority: "high"})
 	id := created.Ticket.ID
+	// 代建归因：客户自建时创建者是客户本人（客服视图同样如此）。
+	if staffView, err := f.service.Get(ctx, f.manager, true, id); err != nil || staffView.Ticket.CreatorKind != AuthorCustomer ||
+		staffView.Ticket.CreatorName != created.Messages[0].AuthorName {
+		t.Fatalf("customer-filed creator = %+v, %v", staffView.Ticket, err)
+	}
 	if events, deliveries := f.outbox(t, f.customer, EventCreated); events != 1 || deliveries != 1 {
 		t.Fatalf("created notification events=%d deliveries=%d", events, deliveries)
 	}

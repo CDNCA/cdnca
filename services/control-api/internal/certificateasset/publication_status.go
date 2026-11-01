@@ -405,8 +405,9 @@ func publicationStatusPage(
 	}
 	if len(items) > limit {
 		last := visible[len(visible)-1]
+		// pgx 按 time.Local 扫描 timestamptz：游标编码只接受 UTC。
 		page.NextCursor = &PublicationStatusCursor{
-			SnapshotAt: snapshotAt, LastOccurredAt: last.OccurredAt,
+			SnapshotAt: snapshotAt.UTC(), LastOccurredAt: last.OccurredAt.UTC(),
 			LastSiteID: last.SiteID, LastBindingRevision: last.BindingRevision,
 		}
 	}

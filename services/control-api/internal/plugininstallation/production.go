@@ -361,7 +361,7 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 	case ActionResume:
 		current, err := domain.repository.Get(ctx, actor, request.AuthorizationID)
 		if err != nil {
-			return InstallationView{}, err
+			return InstallationView{}, StageError("resume.read_head", err)
 		}
 		// An exact retry of a resume that already committed (its lifecycle report succeeded or its outcome is
 		// unknown) finds the local head enabled. Its persisted receipt decides: Apply replays it when the request
@@ -369,7 +369,7 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 		// then the report below is delivered again. Only a new request goes through the pause checks.
 		replay, err := domain.repository.HasReceipt(ctx, actor, request.AuthorizationID, request.IdempotencyKey)
 		if err != nil {
-			return InstallationView{}, err
+			return InstallationView{}, StageError("resume.receipt_lookup", err)
 		}
 		if replay {
 			err = domain.requireResumeReplayable(ctx, actor, current.Installation, request.ExpectedRevision)
@@ -377,7 +377,7 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 			err = domain.requireOwnPause(ctx, actor, current.Installation)
 		}
 		if err != nil {
-			return InstallationView{}, err
+			return InstallationView{}, StageError("resume.license_snapshot", err)
 		}
 		command.InstallationID = current.Installation.InstallationID
 		command.Candidate = candidateFromInstallation(current.Installation)
@@ -386,12 +386,40 @@ func (domain *ProductionDomain) Mutate(ctx context.Context, actor Actor,
 	}
 	result, err := domain.repository.Apply(ctx, actor, command, verifier)
 	if err != nil {
-		return InstallationView{}, err
+		return InstallationView{}, StageError(request.Action+".apply", err)
 	}
 	if _, err := domain.activation.ReportLifecycle(ctx, LifecycleReportRequest{Receipt: result.Receipt}); err != nil {
-		return InstallationView{}, fmt.Errorf("%w: report license lifecycle: %v", ErrResultUnknown, err)
+		return InstallationView{}, StageError(request.Action+".report",
+			fmt.Errorf("%w: report license lifecycle: %v", ErrResultUnknown, err))
 	}
 	return installationView(result.Installation), nil
+}
+
+// stageError names the step of a mutation that failed (for example resume.apply, resume.report) so a server
+// failure can be located in the log; it changes nothing about how the error is classified.
+type stageError struct {
+	stage string
+	err   error
+}
+
+func (err stageError) Error() string { return err.stage + ": " + err.err.Error() }
+func (err stageError) Unwrap() error { return err.err }
+
+// StageError tags err with the mutation step that produced it.
+func StageError(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return stageError{stage: stage, err: err}
+}
+
+// StageOf returns the innermost mutation step recorded on err, or "".
+func StageOf(err error) string {
+	var tagged stageError
+	if errors.As(err, &tagged) {
+		return tagged.stage
+	}
+	return ""
 }
 
 // requireOwnPause checks the signed license snapshot before a resume: the authorization is still the one this

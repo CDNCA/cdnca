@@ -964,13 +964,17 @@ end
 -- Keys are the kernel socket tuple "<local addr>|<local port>|<peer addr>|
 -- <peer port>" of the connection the node accepted (behind a dispatcher: the
 -- public one the PROXY header names). Values: "<stream>|<listener>|<client>|
--- <client port>|<started>|<token>|<killed 0/1>"; the token (worker pid and
--- $connection) keeps a session from removing a later one on the same tuple.
--- The dictionary is an LRU: entries a crashed worker leaves are evicted.
+-- <client port>|<started>|[<identity>|]<token>|<killed 0/1>"; the token
+-- (worker pid and $connection) keeps a session from removing a later one on
+-- the same tuple. identity is the release's "<tenant>|<site>|<config version>|
+-- <config revision>|<package subscription>" the worker was rendered with
+-- (NR-M01): usage checkpoints bill the session under it for its whole life,
+-- across later releases. The dictionary is an LRU: entries a crashed worker
+-- leaves are evicted.
 local LIVE_DICT = "l4_v2_live"
 local MAX_CONTROL_KEYS = 20000
 
-function _M.session_track(stream_id, listener_id, client, dispatched)
+function _M.session_track(stream_id, listener_id, client, dispatched, identity)
     local dict = ngx.shared[LIVE_DICT]
     if not dict then return end
     local var = ngx.var
@@ -981,8 +985,10 @@ function _M.session_track(stream_id, listener_id, client, dispatched)
     local client_port = var.remote_port
     if client ~= peer then client_port = var.proxy_protocol_port or "" end
     local token = ngx.worker.pid() .. ":" .. var.connection
+    local fixed = ""
+    if identity then fixed = identity .. "|" end
     local ok = dict:set(key, stream_id .. "|" .. listener_id .. "|" .. client .. "|" .. client_port .. "|" ..
-        string.format("%.3f", ngx.now()) .. "|" .. token .. "|0")
+        string.format("%.3f", ngx.now()) .. "|" .. fixed .. token .. "|0")
     if not ok then
         dict:incr("untracked", 1, 0)
         return

@@ -13,7 +13,7 @@ import { useSessionStore } from '../../auth/session'
 import { PurchaseModuleLink } from '../../components/PurchaseModuleLink'
 import '../../i18n/probeDNSPup'
 import { NodeProbeCard } from './NodeProbeCard'
-import { useFeedback, FeedbackWhen, useFormSubmitError } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, PageSection, useFormSubmitError } from '@cdnca/ui'
 
 interface FormValues {
   enabled: boolean
@@ -85,7 +85,7 @@ export default function ProbeDNSPupPage() {
   const licensed = Boolean(data?.licensed)
   const sourceOptions = (values: string[]) => values.map((value) => ({ value, label: t(`sources.${value}`) }))
 
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
+  return <PageSection><Space direction="vertical" size="large" style={{ width: '100%' }}>
     <Typography.Title level={3}>{t('title')}</Typography.Title>
     <Typography.Paragraph type="secondary" className="density-note">{t('intro')}</Typography.Paragraph>
     {data && !licensed ? <Alert type="warning" showIcon message={t('notLicensed')} action={<PurchaseModuleLink size="small" featureCode={probeDNSPupModule} />} /> : null}
@@ -143,5 +143,5 @@ export default function ProbeDNSPupPage() {
       </Descriptions>
     </Card> : null}
     {data ? <NodeProbeCard token={token} /> : null}
-  </Space>
+  </Space></PageSection>
 }

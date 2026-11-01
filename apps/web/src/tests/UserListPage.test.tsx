@@ -201,6 +201,31 @@ describe('UserListPage', () => {
     expect(await screen.findByText('用户更新成功')).toBeInTheDocument()
   })
 
+  it('点击或回车用户信息单元格打开该用户编辑抽屉，写入锁定时禁用', async () => {
+    authenticateAdmin()
+    vi.spyOn(usersApi, 'list').mockResolvedValue(listData([managedUser]))
+    vi.spyOn(usersApi, 'listGroups').mockResolvedValue({ items: [], page: 1, limit: 100, total: 0 })
+    const pendingSecurity = deferred<Awaited<ReturnType<typeof usersApi.getLoginSecurity>>>()
+    vi.mocked(usersApi.getLoginSecurity).mockReturnValueOnce(pendingSecurity.promise)
+    const user = userEvent.setup({ delay: null })
+    renderWithProviders(<UserListPage />)
+    const cell = await screen.findByRole('button', { name: '编辑用户 Alice' })
+    expect(cell).toHaveTextContent('alice@example.com')
+    await user.click(cell)
+    // 加载中（writesLocked）与操作列"编辑"一样禁用
+    await waitFor(() => expect(cell).toBeDisabled())
+    expect(screen.getByRole('button', { name: '编辑' })).toBeDisabled()
+    pendingSecurity.resolve({ user_id: managedUser.id, tenant_scope_id: managedUser.scope_id, revision: 0, login_verification: 'none', login_allowlist: [] })
+    const dialog = await screen.findByRole('dialog', { name: '编辑用户' })
+    expect(within(dialog).getByDisplayValue('alice@example.com')).toBeInTheDocument()
+    await user.click(within(dialog).getAllByRole('button', { name: '关闭' }).at(-1)!)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑用户' })).not.toBeInTheDocument())
+    const again = screen.getByRole('button', { name: '编辑用户 Alice' })
+    again.focus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByRole('dialog', { name: '编辑用户' })).toBeInTheDocument()
+  })
+
   it('rejects lock-sites without a deadline before saving secondary verification', async () => {
     authenticateAdmin()
     const account = { ...managedUser, metadata: { remark: null, qq: null } }

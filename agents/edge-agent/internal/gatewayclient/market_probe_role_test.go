@@ -26,3 +26,22 @@ func TestRuntimeStatusReportsMarketProbeRole(t *testing.T) {
 		}
 	}
 }
+
+// EdgeRuntimeStatus.telemetry comes from the Telemetry probe.
+func TestRuntimeStatusReportsTelemetryHealth(t *testing.T) {
+	client := &Client{}
+	if err := WithRuntimeStatusProbe(RuntimeStatusProbe{
+		OpenResty: func(context.Context, string) error { return nil },
+		Telemetry: func() *agentv1.TelemetryHealth {
+			return &agentv1.TelemetryHealth{ErrorCode: "L4_USAGE_LEDGER_FULL", Count: 1}
+		},
+	})(client); err != nil {
+		t.Fatal(err)
+	}
+	if got := client.runtimeStatus(context.Background(), nil).GetTelemetry().GetErrorCode(); got != "L4_USAGE_LEDGER_FULL" {
+		t.Fatalf("heartbeat telemetry = %q", got)
+	}
+	if (&Client{}).runtimeStatus(context.Background(), nil).GetTelemetry() != nil {
+		t.Fatal("no probe must leave telemetry absent")
+	}
+}

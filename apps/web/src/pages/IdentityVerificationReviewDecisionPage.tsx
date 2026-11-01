@@ -18,7 +18,7 @@ import { useSessionStore } from '../auth/session'
 import { DataState } from '../components/DataState'
 import { localizedUnknownApiError } from '../i18n/apiError'
 import '../i18n/identityVerificationReviewDecision'
-import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { FeedbackWhen, OutcomeUnknown, PageSection } from '@cdnca/ui'
 
 type Owner = readonly ['tenant', string, string, string, number]
 type WriteAttempt = {
@@ -156,7 +156,7 @@ function ReviewDecisionContent({ owner, caseID }: { owner: Owner; caseID: string
 
   const locale = i18n.resolvedLanguage ?? 'zh-CN'
   return (
-    <section className="identity-review-page" aria-labelledby="identity-review-decision-title">
+    <PageSection className="identity-review-page" aria-labelledby="identity-review-decision-title">
       <h1 id="identity-review-decision-title">{t('title')}</h1>
       <Alert type="info" showIcon message={t('introduction')} />
       <Space className="identity-toolbar">
@@ -245,7 +245,7 @@ function ReviewDecisionContent({ owner, caseID }: { owner: Owner; caseID: string
           </>
         ) : <DataState status="empty" />}
       </div>
-    </section>
+    </PageSection>
   )
 }
 

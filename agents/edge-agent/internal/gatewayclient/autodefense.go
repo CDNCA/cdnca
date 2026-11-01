@@ -94,10 +94,21 @@ func (client *Client) autoDefenseReceipt(command *agentv1.AutoDefenseCommand, no
 	}, nil
 }
 
-// autoDefenseReports is the runtime's report channel while the session negotiated AUTO_DEFENSE, else nil.
+// AutoDefenseSessionNotifier is optional on an AutoDefenseRuntime: it is told when a session negotiated
+// AUTO_DEFENSE, so answers the previous session may not have delivered (single release acks) go again
+// (SEC-CONTROL-RECOVERY-01/R2: the report path has no end to end acknowledgement).
+type AutoDefenseSessionNotifier interface {
+	AutoDefenseSessionStarted()
+}
+
+// autoDefenseReports is the runtime's report channel while the session negotiated AUTO_DEFENSE, else nil; a
+// negotiated session tells the runtime it started.
 func (client *Client) autoDefenseReports(enabled bool) <-chan []byte {
 	if !enabled || client.autoDefense == nil {
 		return nil
+	}
+	if notifier, ok := client.autoDefense.(AutoDefenseSessionNotifier); ok {
+		notifier.AutoDefenseSessionStarted()
 	}
 	return client.autoDefense.Reports()
 }

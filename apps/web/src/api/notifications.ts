@@ -51,6 +51,9 @@ export interface NotificationSubscription {
   email_supported: boolean
   // fix-ticket2（迁移 546）：只有工单事件带站内信开关。
   inbox_enabled?: boolean
+  // 本人邮箱/手机号能否接收（只读，取当前资料；不含地址本身）。
+  email_bound?: boolean
+  phone_bound?: boolean
   revision: number
   changed: boolean
 }
@@ -359,8 +362,10 @@ function isNotificationTemplatePage(value: unknown): value is NotificationTempla
 function isNotificationSubscription(value: unknown): value is NotificationSubscription {
   return isRecord(value) && hasAllowedKeys(value, [
     'event_type', 'sms_enabled', 'email_enabled', 'sms_supported', 'email_supported', 'revision', 'changed',
-  ], ['inbox_enabled']) && accountNotificationEventTypes.includes(value.event_type as AccountNotificationEventType) &&
+  ], ['inbox_enabled', 'email_bound', 'phone_bound']) && accountNotificationEventTypes.includes(value.event_type as AccountNotificationEventType) &&
     (value.inbox_enabled === undefined || typeof value.inbox_enabled === 'boolean') &&
+    (value.email_bound === undefined || typeof value.email_bound === 'boolean') &&
+    (value.phone_bound === undefined || typeof value.phone_bound === 'boolean') &&
     typeof value.sms_enabled === 'boolean' && typeof value.email_enabled === 'boolean' &&
     typeof value.sms_supported === 'boolean' && typeof value.email_supported === 'boolean' &&
     (!value.sms_enabled || value.sms_supported) && (!value.email_enabled || value.email_supported) && hasRevision(value) &&

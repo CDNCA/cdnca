@@ -4,7 +4,6 @@ import {
   Button,
   Checkbox,
   Input,
-  Popover,
   Result,
   Select,
   Radio,
@@ -15,7 +14,7 @@ import {
   type TableColumnsType,
 } from 'antd'
 import dayjs from 'dayjs'
-import { ChevronDown, CircleHelp, RefreshCw } from 'lucide-react'
+import { CircleHelp, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError, type Principal } from '../api/auth'
@@ -35,7 +34,7 @@ import { businessTimeZone, formatBandwidth, formatBytes, formatDateTime } from '
 import '../i18n/nodeRealtime'
 import { themeColor, themeColorAlpha, useThemeRevision } from '../theme/themeColor'
 import './NodeRealtimePage.css'
-import { TimeRangeFilter, type TimeRange, type TimeRangePreset } from '@cdnca/ui'
+import { AdvancedFilters, TimeRangeFilter, type TimeRange, type TimeRangePreset } from '@cdnca/ui'
 
 type Owner = readonly ['platform', string, string, number]
 
@@ -356,8 +355,6 @@ function NodeRealtimeContent({ owner, ownerKey }: { owner: Owner; ownerKey: stri
   const [analyticsNodeID, setAnalyticsNodeID] = useState('')
   const [trafficDirections, setTrafficDirections] = useState<string[]>(['outbound'])
   const [excludedNIC, setExcludedNIC] = useState('')
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const advancedButtonRef = useRef<HTMLButtonElement>(null)
   const [externalOnly, setExternalOnly] = useState(true)
   // fz-x11: the disk ranking's "显示全部挂载" detail (NodeTelemetry.mounts, NODE_TELEMETRY_DETAIL v1).
   const [allMounts, setAllMounts] = useState(false)
@@ -448,7 +445,7 @@ function NodeRealtimeContent({ owner, ownerKey }: { owner: Owner; ownerKey: stri
   // Quick ranges count back from the moment the range was picked (windowAnchor).
   const rangePreset = (key: string, label?: string): TimeRangePreset => ({ key, label, range: (now) => [now.subtract(durations[key], 'millisecond'), now] })
   const monitorPresets = [rangePreset('1h', t('filters.monitorRanges.oneHour')), rangePreset('6h', t('filters.monitorRanges.sixHours')), rangePreset('12h', t('filters.monitorRanges.twelveHours'))]
-  // Traffic uses the shared quick ranges (today / last 7 days / last 30 days / custom); the monitor
+  // Traffic uses the shared quick ranges (user 10-28: today / last 7 days / last 30 days / custom); the monitor
   // charts keep hour windows because they plot the latest 2000 raw samples (about 5.5 hours at 10s probes).
   const trafficPresets: TimeRangePreset[] = [{ key: 'today', range: (now) => [now.startOf('day'), now] }, rangePreset('last7d'), rangePreset('last30d')]
   const metricsWindow = useMemo(() => {
@@ -705,6 +702,20 @@ function NodeRealtimeContent({ owner, ownerKey }: { owner: Owner; ownerKey: stri
             </span>
           )
         }),
+        sortable(t('columns.siteDrops'), 'site-drops', (row) => {
+          const telemetry = telemetryFor(row)
+          return telemetry === undefined ? null : telemetry.site_drop?.packets ?? 0
+        }, (row) => {
+          const telemetry = telemetryFor(row)
+          if (!telemetry) return t('telemetry.notReported')
+          const drop = telemetry.site_drop
+          if (!drop) return t('siteDrops.none')
+          return (
+            <span title={t('siteDrops.hint')}>
+              {t('siteDrops.value', { packets: drop.packets, sites: drop.site_ids.length })}
+            </span>
+          )
+        }),
       ]
       : rankingMetric === 'load'
         ? [
@@ -934,50 +945,6 @@ function NodeRealtimeContent({ owner, ownerKey }: { owner: Owner; ownerKey: stri
       </Tooltip>
     </div>
   ) : null
-  // 节点流量的次要条件（排除网卡）收进行尾「高级筛选」下拉，筛选条在桌面保持一行。
-  const advancedCount = excludedNIC.trim() ? 1 : 0
-  const closeAdvanced = () => { setAdvancedOpen(false); advancedButtonRef.current?.focus() }
-  const advancedFilters = (
-    <div className="node-realtime-control-group node-realtime-advanced-item">
-      <Popover
-        trigger="click"
-        placement="bottomRight"
-        arrow={false}
-        open={advancedOpen}
-        onOpenChange={setAdvancedOpen}
-        forceRender
-        classNames={{ root: 'node-realtime-advanced-popover' }}
-        content={(
-          <div id="node-realtime-advanced-panel" className="node-realtime-advanced-panel" role="group" aria-label={t('filters.advanced')}
-            onKeyDown={(event) => { if (event.key === 'Escape' || event.key === 'Enter') closeAdvanced() }}>
-            <label className="node-realtime-advanced-field" htmlFor="node-realtime-excluded-nic">
-              <span className="node-realtime-advanced-label">{t('filters.excludeNICLabel')}</span>
-              <Input
-                id="node-realtime-excluded-nic"
-                name="node-realtime-excluded-nic"
-                aria-label={t('filters.excludeNICLabel')}
-                placeholder={t('filters.excludeNICPlaceholder')}
-                allowClear
-                value={excludedNIC}
-                onChange={(event) => setExcludedNIC(event.target.value)}
-              />
-            </label>
-          </div>
-        )}
-      >
-        <Button
-          ref={advancedButtonRef}
-          className={`node-realtime-advanced-toggle${advancedCount ? ' node-realtime-advanced-toggle--active' : ''}`}
-          aria-expanded={advancedOpen}
-          aria-controls="node-realtime-advanced-panel"
-          aria-label={advancedCount ? t('filters.advancedActive', { count: advancedCount }) : t('filters.advanced')}
-        >
-          <span>{advancedCount ? `${t('filters.advanced')} · ${advancedCount}` : t('filters.advanced')}</span>
-          <ChevronDown size={14} aria-hidden className="node-realtime-advanced-chevron" />
-        </Button>
-      </Popover>
-    </div>
-  )
   const egressUnavailable = showEgress && externalOnly && items.some((item) => {
     if (activeView !== 'ranking' && item.id !== historyNodeID) return false
     const result = rankingMetrics.get(item.id)
@@ -1095,50 +1062,73 @@ function NodeRealtimeContent({ owner, ownerKey }: { owner: Owner; ownerKey: stri
         </div>
       ) : (
         <div className="node-realtime-controls node-realtime-controls--traffic node-realtime-controls--inline" aria-label={t('filters.controls')}>
-          <div className="node-realtime-control-group node-realtime-control-group--traffic-types">
-            <span className="node-realtime-control-label">{t('filters.typeLabel')}</span>
-            <Checkbox.Group
-              name="node-realtime-traffic-direction"
-              aria-label={t('filters.typeLabel')}
-              className="node-realtime-traffic-types"
-              value={trafficDirections}
-              options={[
-                { value: 'outbound', label: t('filters.trafficTypes.outbound') },
-                { value: 'inbound', label: t('filters.trafficTypes.inbound') },
-              ]}
-              onChange={(values) => setTrafficDirections(values.map(String))}
-            />
-          </div>
-          <div className={`node-realtime-control-group node-realtime-control-group--traffic-range${trafficRange === 'custom' ? ' node-realtime-control-group--custom-range' : ''}`}>
-            <span className="node-realtime-control-label">{t('filters.rangeLabel')}</span>
-            <div className="node-realtime-range-control">
-              <TimeRangeFilter id="node-realtime-traffic-range" label={t('filters.rangeLabel')} presets={trafficPresets} compact
-                value={{ preset: trafficRange, range: trafficCustomRange }}
-                onChange={({ preset, range }) => { setWindowAnchor(Date.now()); setTrafficRange(preset); setTrafficCustomRange(range) }} />
-            </div>
-          </div>
-          <div className="node-realtime-control-group node-realtime-control-group--node">
-            <span className="node-realtime-control-label">{t('filters.nodeLabel')}</span>
-            <Select
-              id="node-realtime-traffic-node"
-              aria-label={t('filters.nodeLabel')}
-              loading={query.isPending}
-              options={nodeOptions}
-              placeholder={t('filters.nodePlaceholder')}
-              showSearch
-              optionFilterProp="label"
-              value={analyticsNodeValue}
-              onChange={setAnalyticsNodeID}
-            />
-          </div>
-          <div className="node-realtime-control-group node-realtime-refresh-item">
-            <span className="node-realtime-control-label" aria-hidden="true" />
-            <Button type="primary" className="node-realtime-refresh" icon={<RefreshCw size={14} />} loading={query.isFetching || metricsRefreshing} onClick={refresh}>
-              {t('actions.refresh')}
-            </Button>
-          </div>
-          {egressControl}
-          {advancedFilters}
+          {/* 节点流量筛选条改用共享 AdvancedFilters：组件的查询按钮即「刷新」，排除网卡是唯一高级条件
+              （输入即生效；启用后按钮带条件数、行下出标签，× 清除），出口网卡开关放在按钮组之后。 */}
+          <AdvancedFilters
+            className="node-realtime-traffic-filters"
+            storageKey="node-realtime-traffic"
+            primary={<>
+              <div className="node-realtime-control-group node-realtime-control-group--traffic-types">
+                <span className="node-realtime-control-label">{t('filters.typeLabel')}</span>
+                <Checkbox.Group
+                  name="node-realtime-traffic-direction"
+                  aria-label={t('filters.typeLabel')}
+                  className="node-realtime-traffic-types"
+                  value={trafficDirections}
+                  options={[
+                    { value: 'outbound', label: t('filters.trafficTypes.outbound') },
+                    { value: 'inbound', label: t('filters.trafficTypes.inbound') },
+                  ]}
+                  onChange={(values) => setTrafficDirections(values.map(String))}
+                />
+              </div>
+              <div className={`node-realtime-control-group node-realtime-control-group--traffic-range${trafficRange === 'custom' ? ' node-realtime-control-group--custom-range' : ''}`}>
+                <span className="node-realtime-control-label">{t('filters.rangeLabel')}</span>
+                <div className="node-realtime-range-control">
+                  <TimeRangeFilter id="node-realtime-traffic-range" label={t('filters.rangeLabel')} presets={trafficPresets} compact
+                    value={{ preset: trafficRange, range: trafficCustomRange }}
+                    onChange={({ preset, range }) => { setWindowAnchor(Date.now()); setTrafficRange(preset); setTrafficCustomRange(range) }} />
+                </div>
+              </div>
+              <div className="node-realtime-control-group node-realtime-control-group--node">
+                <span className="node-realtime-control-label">{t('filters.nodeLabel')}</span>
+                <Select
+                  id="node-realtime-traffic-node"
+                  aria-label={t('filters.nodeLabel')}
+                  loading={query.isPending}
+                  options={nodeOptions}
+                  placeholder={t('filters.nodePlaceholder')}
+                  showSearch
+                  optionFilterProp="label"
+                  value={analyticsNodeValue}
+                  onChange={setAnalyticsNodeID}
+                />
+              </div>
+            </>}
+            items={[{
+              key: 'excludedNIC',
+              label: t('filters.excludeNICLabel'),
+              applied: excludedNIC.trim(),
+              field: (
+                <Input
+                  id="node-realtime-excluded-nic"
+                  name="node-realtime-excluded-nic"
+                  aria-label={t('filters.excludeNICLabel')}
+                  placeholder={t('filters.excludeNICPlaceholder')}
+                  allowClear
+                  value={excludedNIC}
+                  onChange={(event) => setExcludedNIC(event.target.value)}
+                />
+              ),
+            }]}
+            queryText={t('actions.refresh')}
+            queryIcon={<RefreshCw size={14} />}
+            queryLoading={query.isFetching || metricsRefreshing}
+            onQuery={refresh}
+            onClearAdvanced={() => setExcludedNIC('')}
+            onRemove={() => setExcludedNIC('')}
+            extra={egressControl}
+          />
         </div>
       )}
 

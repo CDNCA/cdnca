@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Form, Input, Modal, Popconfirm, Result, Space, Table, Tag, Typography } from 'antd'
-import { useFeedbackMessage, FeedbackWhen } from '@cdnca/ui'
+import { useFeedbackMessage, FeedbackWhen, PageSection } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError, type Principal } from '../api/auth'
@@ -34,10 +34,10 @@ export default function GatewayManagementPage() {
   if (principal.scope_kind !== 'platform' || !hasPermission(principal, gatewayManagePermission)) {
     return <Result status="403" title="403" subTitle={t('errors.forbidden')} />
   }
-  return <Space direction="vertical" size={16} style={{ width: '100%' }}>
+  return <PageSection><Space direction="vertical" size={16} style={{ width: '100%' }}>
     <GatewayManagementContent />
     <GatewaySettingsCard />
-  </Space>
+  </Space></PageSection>
 }
 
 function errorText(t: (key: string) => string, error: unknown): string {

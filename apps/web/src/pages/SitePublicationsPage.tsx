@@ -14,7 +14,7 @@ import {
   Tooltip,
   type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { useFeedbackMessage, FeedbackWhen, OutcomeUnknown, PageSection } from '@cdnca/ui'
 import {
   Ban,
   ChevronLeft,
@@ -750,7 +750,7 @@ export default function SitePublicationsPage() {
   )
 
   return (
-    <section className="site-publications-page" aria-labelledby="site-publications-title">
+    <PageSection className="site-publications-page" aria-labelledby="site-publications-title">
       {messageContext}
       <div className="site-publications-heading">
         <div>
@@ -967,6 +967,6 @@ export default function SitePublicationsPage() {
           t={t}
         />
       </Drawer> : null}
-    </section>
+    </PageSection>
   )
 }

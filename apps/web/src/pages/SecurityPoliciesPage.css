@@ -1683,3 +1683,418 @@
 .security-policy-match-all {
   margin-top: 12px;
 }
+
+/* 规则集编辑弹窗按任务分层——基本信息 / 策略设置卡片 / 规则卡片。
+   只用共享 --cdnca-* 变量；弹窗正文是唯一滚动区，底部操作条在滚动区外。 */
+.sp-editor-section + .sp-editor-section,
+.sp-editor-section + .sp-editor-card,
+.sp-editor-card + .sp-editor-section {
+  margin-top: 16px;
+}
+
+.sp-editor-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: var(--cdnca-color-title);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.sp-editor-count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--cdnca-color-primary-bg);
+  color: var(--cdnca-color-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: center;
+}
+
+.sp-editor-target-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+
+/* 类型 | 名称 | 说明 | 未命中动作 | 启用：一行，说明占剩余宽度。 */
+.sp-editor-basic-grid {
+  display: grid;
+  grid-template-columns: 88px minmax(160px, 1fr) minmax(200px, 1.6fr) 132px 56px;
+  align-items: start;
+  gap: 0 12px;
+}
+
+.sp-editor-kind-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sp-editor-kind-label {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.sp-editor-kind {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 4px;
+  background: var(--cdnca-color-primary-bg);
+  color: var(--cdnca-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sp-editor-basic-grid .ant-input {
+  resize: none;
+}
+
+.sp-editor-card {
+  margin-top: 16px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+  background: var(--cdnca-color-bg-panel);
+}
+
+.sp-editor-settings-grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: end;
+  gap: 0 24px;
+}
+
+.sp-editor-setting {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 32px;
+  margin-bottom: 10px;
+  padding-top: 6px;
+}
+
+.sp-editor-setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-editor-setting-title {
+  color: var(--cdnca-color-text);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.sp-editor-setting-help {
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sp-editor-autoblock-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 160px));
+  gap: 0 12px;
+}
+
+.sp-editor-autoblock-grid .ant-input-number {
+  width: 100%;
+}
+
+.sp-editor-hint {
+  margin: 4px 0 0;
+  color: var(--cdnca-color-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sp-editor-rules-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.sp-editor-rules-head .sp-editor-section-title {
+  margin: 5px 0 0;
+  white-space: nowrap;
+}
+
+.sp-editor-rules-tools {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.sp-editor-rule {
+  margin-top: 10px;
+  border: 1px solid var(--cdnca-color-border-secondary);
+  border-radius: 6px;
+  background: var(--cdnca-color-bg-container);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.sp-editor-rule--dragging {
+  border-color: var(--cdnca-color-primary);
+  box-shadow: 0 0 0 2px var(--cdnca-color-focus-ring);
+}
+
+/* 拖拽柄 | 序号 | 名称 | 优先级 | 动作 | 后续处理 | 启用 | 更多 */
+.sp-editor-rule-head {
+  display: grid;
+  grid-template-columns: 18px 22px minmax(140px, 1fr) 96px 140px 120px 56px 32px;
+  align-items: end;
+  gap: 0 10px;
+  padding: 10px 12px 0;
+  border-bottom: 1px solid var(--cdnca-color-border-divider);
+  border-radius: 6px 6px 0 0;
+  background: var(--cdnca-color-bg-muted);
+}
+
+.sp-editor-rule-head .ant-input-number,
+.sp-editor-rule-head .ant-select {
+  width: 100%;
+}
+
+.sp-editor-rule-grip,
+.sp-editor-rule-index,
+.sp-editor-rule-more {
+  align-self: end;
+  margin-bottom: 10px;
+}
+
+.sp-editor-rule-grip {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  color: var(--cdnca-color-text-tertiary);
+  cursor: grab;
+}
+
+.sp-editor-rule-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-bottom: 15px;
+  border-radius: 11px;
+  background: var(--cdnca-color-primary-bg);
+  color: var(--cdnca-color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sp-editor-rule-body {
+  padding: 10px 12px 8px 40px;
+}
+
+.sp-editor-rule-body > .ant-space,
+.sp-editor-rule-body > .ant-form-item {
+  margin-bottom: 4px;
+}
+
+.sp-editor-conds {
+  margin-top: 2px;
+}
+
+/* 字段 | 运算符 | 值（含可选名称/过滤器） | 删除；表头与各行同一网格。 */
+.sp-editor-cond-header,
+.sp-editor-cond-row {
+  display: grid;
+  grid-template-columns: 168px 148px minmax(0, 1fr) 32px;
+  gap: 8px;
+}
+
+.sp-editor-cond-header {
+  padding-bottom: 4px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sp-editor-cond-row {
+  align-items: start;
+}
+
+.sp-editor-cond-row .ant-form-item {
+  margin-bottom: 8px;
+}
+
+.sp-editor-cond-row .ant-select {
+  width: 100%;
+}
+
+.sp-editor-cond-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 8px;
+  min-width: 0;
+}
+
+.sp-editor-cond-value > .sp-editor-cond-key {
+  flex: 0 0 120px;
+}
+
+.sp-editor-cond-value > .sp-editor-cond-input {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.sp-editor-cond-value > .sp-editor-cond-extra {
+  flex: 0 1 150px;
+}
+
+.sp-editor-cond-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  color: var(--cdnca-color-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.sp-editor-cond-remove {
+  color: var(--cdnca-color-text-tertiary);
+}
+
+.sp-editor-cond-remove:not(:disabled):hover {
+  color: var(--cdnca-color-error);
+}
+
+.sp-editor-cond-add {
+  padding-left: 0;
+}
+
+.sp-editor-footnotes {
+  margin-top: 10px;
+}
+
+.sp-editor-footnotes:empty {
+  display: none;
+}
+
+.sp-editor-acl-basic {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto 56px;
+  align-items: start;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .sp-editor-rule:hover {
+    border-color: var(--cdnca-color-border);
+  }
+}
+
+@media (max-width: 1080px) {
+  .sp-editor-basic-grid {
+    grid-template-columns: 88px minmax(0, 1fr) 132px 56px;
+  }
+
+  .sp-editor-basic-grid > :nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .sp-editor-rule-head {
+    grid-template-columns: 18px 22px minmax(120px, 1fr) 80px 120px 108px 48px 32px;
+    gap: 0 8px;
+  }
+}
+
+@media (max-width: 767px) {
+  .sp-editor-target-grid,
+  .sp-editor-basic-grid,
+  .sp-editor-acl-basic,
+  .sp-editor-settings-grid,
+  .sp-editor-autoblock-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sp-editor-basic-grid > :nth-child(3) {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .sp-editor-rules-head {
+    flex-direction: column;
+  }
+
+  .sp-editor-rules-tools {
+    justify-content: flex-start;
+  }
+
+  .sp-editor-rules-tools .ant-select {
+    min-width: 0 !important;
+    width: 100%;
+  }
+
+  .sp-editor-rule-head {
+    grid-template-columns: 18px minmax(0, 1fr) 32px;
+    padding: 10px 10px 0;
+  }
+
+  .sp-editor-rule-index {
+    display: none;
+  }
+
+  .sp-editor-rule-head > .ant-form-item {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .sp-editor-rule-head > .ant-form-item:first-of-type {
+    grid-row: 1;
+  }
+
+  .sp-editor-rule-more {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .sp-editor-rule-body {
+    padding: 10px;
+  }
+
+  .sp-editor-cond-header {
+    display: none;
+  }
+
+  .sp-editor-cond-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 32px;
+    padding-bottom: 6px;
+    border-bottom: 1px dashed var(--cdnca-color-border-divider);
+  }
+
+  .sp-editor-cond-value {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+
+  .sp-editor-cond-row > :last-child {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+.sp-editor-section-heading {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}

@@ -45,8 +45,8 @@ const zhCN = {
   notices: {
     adminOfficialOnly: '管理端只能使用官方主题，第三方主题请在「用户端」启用',
     downloaded: '已下载，尚未启用',
-    activated: '已启用“{{name}}”，管理端与用户前台已换肤',
-    activatedRepublishing: '已启用“{{name}}”，正在为 {{count}} 个租户重新发布错误页',
+    activated: '管理端已启用“{{name}}”',
+    activatedRepublishing: '管理端已启用“{{name}}”，正在为 {{count}} 个租户重新发布错误页',
     removed: '已删除',
     conflict: '主题已被其他管理员切换，请刷新后重试',
     entitlement: '该主题未授权，无法启用',
@@ -112,7 +112,7 @@ const zhCN = {
     discardInput: '放弃输入，恢复为 {{value}}',
     invalidPending: '有 {{count}} 处取值无效、尚未生效（{{names}}），请修正或恢复后再保存',
     layout: {
-      login_layout: '登录页布局', sidebar: '侧栏', look: '外观', motion: '动效',
+      login_layout: '登录页布局', sidebar: '侧栏', header: '顶栏', look: '外观', motion: '动效',
       values: {
         split: '左右分栏', centered: '居中卡片', background: '背景大图', light: '浅色', dark: '深色',
         classic: '经典', tech: '科技风', off: '关闭', subtle: '轻微', rich: '丰富',
@@ -331,8 +331,8 @@ const enUS: Messages = {
   notices: {
     adminOfficialOnly: 'The admin console takes official themes only; enable third-party themes under User console',
     downloaded: 'Downloaded, not active',
-    activated: '"{{name}}" is active; the consoles switched',
-    activatedRepublishing: '"{{name}}" is active; republishing the error pages of {{count}} tenants',
+    activated: 'The admin console now uses "{{name}}"',
+    activatedRepublishing: 'The admin console now uses "{{name}}"; republishing the error pages of {{count}} tenants',
     removed: 'Deleted',
     conflict: 'Another administrator switched the theme; refresh and retry',
     entitlement: 'This theme is not licensed',
@@ -398,7 +398,7 @@ const enUS: Messages = {
     discardInput: 'Discard the entry and restore {{value}}',
     invalidPending: '{{count}} invalid value(s) not applied ({{names}}); fix or restore them before saving',
     layout: {
-      login_layout: 'Sign-in layout', sidebar: 'Sidebar', look: 'Look', motion: 'Motion',
+      login_layout: 'Sign-in layout', sidebar: 'Sidebar', header: 'Top bar', look: 'Look', motion: 'Motion',
       values: {
         split: 'Split', centered: 'Centered card', background: 'Background image', light: 'Light', dark: 'Dark',
         classic: 'Classic', tech: 'Tech', off: 'Off', subtle: 'Subtle', rich: 'Rich',

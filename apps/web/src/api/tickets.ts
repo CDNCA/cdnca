@@ -42,6 +42,9 @@ export interface Ticket {
   /** 最新一条可见消息的作者显示名（仅列表；客户视角客服带「客服」前缀） */
   last_reply_author?: string
   last_reply_author_kind?: 'customer' | 'staff'
+  /** 创建者（仅详情）：客户自建为 customer；客服代建为 staff，归属客户仍是 username。 */
+  creator_kind?: 'customer' | 'staff'
+  creator_name?: string
   first_response_at?: string
   resolved_at?: string
   closed_at?: string

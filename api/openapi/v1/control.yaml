@@ -4098,6 +4098,7 @@ paths:
         - $ref: '#/components/parameters/APIKeyListKeyID'
         - $ref: '#/components/parameters/APIKeyListCursor'
         - $ref: '#/components/parameters/APIKeyListOffset'
+        - $ref: '#/components/parameters/APIKeyListUsable'
       responses:
         '200':
           description: API key metadata only; secret material is never returned.
@@ -4315,6 +4316,7 @@ paths:
         - $ref: '#/components/parameters/APIKeyListKeyID'
         - $ref: '#/components/parameters/APIKeyListCursor'
         - $ref: '#/components/parameters/APIKeyListOffset'
+        - $ref: '#/components/parameters/APIKeyListUsable'
       responses:
         '200':
           description: Target user's API key metadata.
@@ -7832,6 +7834,16 @@ components:
         Page-number access (canonical non-negative integer, 0-10000). Cannot be combined with
         cursor; an offset past the end returns empty items with total.
       schema: {type: integer, minimum: 0, maximum: 10000}
+    APIKeyListUsable:
+      name: usable
+      in: query
+      required: false
+      description: >-
+        Only `true` is accepted. Keeps keys that can authenticate at the page snapshot: status active and
+        expires_at absent or later than snapshot_at. An expired key keeps its active lifecycle status as
+        history, so status=active alone does not mean usable. Combinable only with status=active or no status.
+        Clients judge expiry against the response Date header (server clock), not their own clock.
+      schema: {type: string, enum: ['true']}
     SecurityPolicyID:
       name: id
       in: path
@@ -9517,6 +9529,14 @@ components:
             Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and
             api_keys.* are forbidden.
           items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
+        unavailable_scopes:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          description: >-
+            Read responses only (list/detail). Scopes of this key that the owner no longer holds; they are
+            not effective when the key is used (AA-KEY-01). Omitted when every scope is still granted.
+          items: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,127}$'}
         ip_allowlist: {$ref: '#/components/schemas/APIKeyIPAllowlist'}
         status: {$ref: '#/components/schemas/APIKeyStatus'}
         pending_expires_at: {type: string, format: date-time}
@@ -9707,7 +9727,7 @@ components:
         managed_by:
           type: string
           enum: [tenant, platform]
-          description: 'tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)'
+          description: 'tenant = an account the tenant entered; platform = the platform DNS copy (only the platform-allocated CNAME records and platform administrators use it). Only the platform view returns platform rows: a tenant-scope list omits them and a tenant update, delete or verify of one is 404 dns_resource_not_found, as for an absent account; a platform-scope update, delete or verify of one is 409 dns_provider_platform_managed.'
         version: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
@@ -10555,6 +10575,26 @@ components:
           type: string
           pattern: '^[A-Z][A-Z0-9_]{0,63}$'
           description: RUNTIME_* code of a rolled_back switch (see ControlUpgradeRolloutStatusReceipt.error_code).
+        telemetry_error_code:
+          type: string
+          pattern: '^[A-Z][A-Z0-9_]{0,63}$'
+          description: >-
+            Telemetry pipeline degradation of the latest heartbeat (EdgeRuntimeStatus.telemetry), e.g.
+            L4_USAGE_LEDGER_FULL, L4_USAGE_ATTRIBUTION_PENDING or TELEMETRY_*. Omitted, with the three fields
+            below, while the pipeline is healthy or the node did not report it.
+        telemetry_first_seen_at:
+          type: string
+          format: date-time
+          description: When the Agent first saw telemetry_error_code (Agent clock).
+        telemetry_last_seen_at:
+          type: string
+          format: date-time
+          description: The latest heartbeat that saw telemetry_error_code (Agent clock).
+        telemetry_count:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Number of heartbeats that saw telemetry_error_code since telemetry_first_seen_at.
     NodeInventory:
       allOf:
         - $ref: '#/components/schemas/Node'
@@ -12629,6 +12669,23 @@ components:
         details:
           oneOf:
             - $ref: '#/components/schemas/APIFieldErrorDetails'
+            - type: object
+              description: >-
+                Only on an API key write refused with permission_denied because the owner no longer holds
+                these scopes (AA-KEY-01).
+              additionalProperties: false
+              required: [reason, scopes]
+              properties:
+                reason:
+                  type: string
+                  const: scopes_revoked
+                scopes:
+                  type: array
+                  minItems: 1
+                  maxItems: 128
+                  uniqueItems: true
+                  items:
+                    type: string
             - type: object
               description: Only on supply_in_use (node updates, ADR 0012 ML-18).
               additionalProperties: false

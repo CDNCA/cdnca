@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { FeedbackWhen } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
-import { dnsApi } from '../api/dns'
+import { dnsApi, ownDNSProviders } from '../api/dns'
 import { securityPoliciesApi } from '../api/securityPolicies'
 import { siteGroupsApi } from '../api/siteGroups'
 import { siteTLSCustomCipherSuites } from '../api/sites'
@@ -161,7 +161,7 @@ export default function SiteDefaultsPanel() {
   })
   const policyNames = new Map((policies.data ?? []).map((item) => [item.id, item.name]))
   const policyOptions = (policies.data ?? []).filter((item) => !item.protected && item.kind === editingKind)
-  const dnsOptions = (dnsProviders.data?.items ?? []).filter((item) => item.status === 'verified' && item.managed_by !== 'platform')
+  const dnsOptions = ownDNSProviders(dnsProviders.data?.items ?? []).filter((item) => item.status === 'verified')
   const dnsNames = new Map((dnsProviders.data?.items ?? []).map((item) => [item.id, item.name]))
 
   useEffect(() => {

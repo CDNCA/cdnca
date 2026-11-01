@@ -22,7 +22,8 @@ export interface DNSProvider {
   updated_at: string
 }
 
-// 平台 DNS 配置同步来的副本只供平台维护网站 CNAME，用户端不可见：按 managed_by 过滤。
+// 平台 DNS 配置同步来的副本只供平台维护网站 CNAME，用户端不可见：
+// 租户列表接口已不返回它，用户端各处再按 managed_by 过滤一次以防旧响应。
 export function ownDNSProviders(items: DNSProvider[]): DNSProvider[] {
   return items.filter((item) => item.managed_by !== 'platform')
 }

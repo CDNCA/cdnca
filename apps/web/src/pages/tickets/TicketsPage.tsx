@@ -17,8 +17,12 @@ import {
 import { useSessionStore } from '../../auth/session'
 import '../../i18n/tickets'
 import { outcomeUnknown, useIdempotencyKey } from '../market/idempotency'
-import { AdvancedFilters, FeedbackWhen, useLiveApply } from '@cdnca/ui'
+import { AdvancedFilters, FeedbackWhen, useLiveApply, PageSection } from '@cdnca/ui'
 import { filterParam, useFilterUrl } from '../filterUrl'
+import {
+  emptyDraft, fingerprintOf, identityOf, isUnknown, keyFor, markUnknown, replyInputOf, settle, slotKeyOf, useReplySlots,
+  setDraft, useSlot, type ReplyDraft, type ReplySlot,
+} from './replyAttempts'
 import { TicketNotifyDrawer } from './TicketNotifyDrawer'
 import { TicketStaffCreateDrawer } from './TicketStaffCreateDrawer'
 import './TicketsChat.css'
@@ -305,12 +309,27 @@ function eventText(event: TicketEvent, t: (key: string, values?: Record<string, 
   }
 }
 
+// 代建归因：创建者按后端 creator_kind/creator_name（首条公开消息作者，与审计 actor 一致）；
+// 客服代建写“客服 X 为 客户 创建了工单”，归属客户（username）只在有时写出，客户视图没有 username。
+function filedText(ticket: Ticket, messages: TicketMessage[],
+  t: (key: string, values?: Record<string, string>) => string): string {
+  const first = messages.find((message) => !message.internal)
+  const kind = ticket.creator_kind ?? first?.author_kind
+  const name = ticket.creator_name || first?.author_name || ''
+  if (kind === 'staff') {
+    const staff = name.replace(/^客服\s+/, '').trim()
+    return ticket.username ? t('chat.filedForCustomer', { name: staff, customer: ticket.username })
+      : t('chat.filedByStaff', { name: staff })
+  }
+  return t('chat.filed', { name: ticket.username || name || t('detail.customer') })
+}
+
 function buildChat(ticket: Ticket, messages: TicketMessage[], ticketEvents: TicketEvent[],
   t: (key: string, values?: Record<string, string>) => string): ChatItem[] {
   const recorded = (kind: TicketEvent['kind'], to: string) =>
     ticketEvents.some((event) => event.to === to && (event.kind === kind || event.kind === 'status'))
   const events: Array<{ at: string; system?: string; message?: TicketMessage }> = [
-    { at: ticket.created_at, system: t('chat.filed', { name: ticket.username || messages[0]?.author_name || t('detail.customer') }) },
+    { at: ticket.created_at, system: filedText(ticket, messages, t) },
     ...messages.map((message) => ({ at: message.created_at, message })),
     ...ticketEvents.map((event) => ({ at: event.created_at, system: eventText(event, t) })),
     ...(ticket.resolved_at && !recorded('status', 'resolved') ? [{ at: ticket.resolved_at, system: t('chat.resolved') }] : []),
@@ -365,8 +384,11 @@ function AttachmentCard({ attachment, onDownload, onPreview }: {
   )
 }
 
-function TicketDetailView({ mode, id, onBack, replyKey }: {
-  mode: TicketMode; id: string; onBack: () => void; replyKey: IdempotencyKey
+// The page mounts one TicketDetailView per identity + mode + ticket (key), so a
+// history jump from A to B never shows B through A's state; the reply draft and
+// its pending attempts live in the page-level slot and come back with the ticket.
+function TicketDetailView({ mode, id, onBack, slot }: {
+  mode: TicketMode; id: string; onBack: () => void; slot: ReplySlot
 }) {
   const { t } = useTranslation('tickets')
   const { message } = App.useApp()
@@ -377,15 +399,27 @@ function TicketDetailView({ mode, id, onBack, replyKey }: {
   const canManage = mode === 'user' || permissions.includes(ticketsManagePermission) || permissions.includes('platform.admin')
   const client = useQueryClient()
   const errorText = useErrorText()
-  const [body, setBody] = useState('')
-  const [internal, setInternal] = useState(false)
-  const [attachments, setAttachments] = useState<TicketAttachment[]>([])
+  useSlot(slot)
+  const draft = slot.draft
+  const editDraft = (change: Partial<ReplyDraft>) => setDraft(slot, { ...slot.draft, ...change })
+  const { body, internal, attachments } = draft
+  const setBody = (value: string) => editDraft({ body: value })
+  const setInternal = (value: boolean) => editDraft({ internal: value })
+  const setAttachments = (value: TicketAttachment[]) => editDraft({ attachments: value })
   const [error, setError] = useState<string | null>(null)
+  // A reply settling after this view is gone (back to the list, history jump)
+  // still updates its own ticket and slot, but no longer this view's feedback.
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   const detail = useQuery({ queryKey: ['tickets', mode, 'detail', id], queryFn: () => ticketsApi.get(token, mode, id) })
   const assignees = useQuery({ queryKey: ['tickets', 'assignees'], queryFn: () => ticketsApi.assignees(token),
     enabled: mode === 'admin' && canManage })
   const refresh = (next: TicketDetail) => {
-    client.setQueryData(['tickets', mode, 'detail', id], next)
+    if (next.ticket.id === id) client.setQueryData(['tickets', mode, 'detail', id], next)
+    else void client.invalidateQueries({ queryKey: ['tickets', mode, 'detail', id] })
     void client.invalidateQueries({ queryKey: ['tickets', mode, 'list'] })
     void client.invalidateQueries({ queryKey: ['tickets', mode, 'summary'] })
   }
@@ -406,38 +440,43 @@ function TicketDetailView({ mode, id, onBack, replyKey }: {
       setError(t('errors.stateChanged'))
     }
   }
-  // One Idempotency-Key per reply (same ticket, body, note flag, attachments):
-  // an unknown outcome keeps it so the retry replays instead of posting twice.
-  const [replyUnknown, setReplyUnknown] = useState<string | null>(null)
-  const replyInput: ReplyTicketInput = {
-    body, ...(internal ? { internal: true } : {}),
-    ...(attachments.length ? { attachment_ids: attachments.map((item) => item.id) } : {}),
-  }
+  // One Idempotency-Key per reply attempt (same body, note flag, attachments) in
+  // this ticket's slot: an unknown outcome keeps it so the retry replays instead
+  // of posting twice, even after visiting other tickets. The mutation carries
+  // the input and key it was sent with; settling touches only that attempt.
+  const replyInput = replyInputOf(draft)
+  const replyFingerprint = fingerprintOf(replyInput)
+  const replyUnknown = isUnknown(slot, replyFingerprint)
   const replying = useRef(false)
   const reply = useMutation({
-    mutationFn: ({ input, key }: { input: ReplyTicketInput; key: string }) => ticketsApi.reply(token, mode, id, input, key),
+    mutationFn: ({ input, key }: { input: ReplyTicketInput; key: string; fingerprint: string }) =>
+      ticketsApi.reply(token, mode, id, input, key),
     onSettled: () => { replying.current = false },
-    onSuccess: (next, { key }) => {
-      replyKey.complete(key); setReplyUnknown(null)
-      setBody(''); setInternal(false); setAttachments([]); setError(null)
-      void message.success(t('detail.sent'))
+    onSuccess: (next, { key, fingerprint }) => {
+      settle(slot, key)
+      // Only the draft that was sent is cleared; newer typing stays.
+      if (fingerprintOf(replyInputOf(slot.draft)) === fingerprint) setDraft(slot, emptyDraft())
       refresh(next)
+      if (!mounted.current) return
+      setError(null)
+      void message.success(t('detail.sent'))
     },
-    onError: (err, { input, key }) => {
+    onError: (err, { key }) => {
       if (outcomeUnknown(err)) {
-        setReplyUnknown(JSON.stringify(input))
-        setError(t('detail.unknown'))
+        markUnknown(slot, key)
+        if (mounted.current) setError(null)
         return
       }
-      replyKey.complete(key); setReplyUnknown(null)
-      void fail(err)
+      settle(slot, key)
+      if (mounted.current) void fail(err)
+      else void client.invalidateQueries({ queryKey: ['tickets', mode, 'detail', id] })
     },
   })
   const sendReply = () => {
     if (replying.current) return
     replying.current = true
     setError(null)
-    reply.mutate({ input: replyInput, key: replyKey.keyFor({ mode, id, input: replyInput }) })
+    reply.mutate({ input: replyInput, key: keyFor(slot, replyFingerprint), fingerprint: replyFingerprint })
   }
   const transition = useMutation({
     mutationFn: (action: 'close' | 'reopen') => action === 'close' ? ticketsApi.close(token, id) : ticketsApi.reopen(token, id),
@@ -541,7 +580,7 @@ function TicketDetailView({ mode, id, onBack, replyKey }: {
           </ConfirmAction>
         </Space> : null}
       </header>
-      {error ? <FeedbackWhen title={error} /> : null}
+      {error ? <FeedbackWhen title={error} /> : replyUnknown ? <FeedbackWhen title={t('detail.unknown')} /> : null}
       <div className="ticket-chat-body">
         <section className={`ticket-chat-panel${dragging ? ' is-dragging' : ''}`} aria-label={t('chat.timeline')} {...dropProps}>
           <div className="ticket-chat-stream" ref={stream} role="log" aria-label={ticket.subject}>
@@ -606,7 +645,7 @@ function TicketDetailView({ mode, id, onBack, replyKey }: {
                 </Popconfirm> : null}
                 <Button type="primary" icon={<Send size={14} aria-hidden="true" />} disabled={!body.trim() || !canReply || upload.busy}
                   loading={reply.isPending} onClick={sendReply}>
-                  {replyUnknown === JSON.stringify(replyInput) ? t('detail.checkResult') : t('detail.send')}</Button>
+                  {replyUnknown ? t('detail.checkResult') : t('detail.send')}</Button>
               </span>
             </div>
           </div> : null}
@@ -855,7 +894,7 @@ export default function TicketsPage({ mode }: { mode: TicketMode }) {
   // Kept above the drawer and the detail view so leaving and coming back with
   // the same content still replays an attempt whose outcome was unknown.
   const createKey = useIdempotencyKey('ticket-create')
-  const replyKey = useIdempotencyKey('ticket-reply')
+  const replySlot = useReplySlots()
   const permissions = principal?.permissions ?? []
   const allowed = mode === 'user' ? principal?.scope_kind === 'tenant'
     : principal?.scope_kind === 'platform' && [ticketsReadPermission, ticketsManagePermission, 'platform.admin']
@@ -866,9 +905,10 @@ export default function TicketsPage({ mode }: { mode: TicketMode }) {
   const initialCreate = params.get('new') === '1'
     ? { siteID: newSite && relatedIDPattern.test(newSite) ? newSite : undefined } : undefined
   return (
-    <div className="page">
-      {id ? <TicketDetailView mode={mode} id={id} replyKey={replyKey} onBack={() => setParams({})} />
+    <PageSection>
+      {id ? <TicketDetailView key={slotKeyOf(identityOf(principal), mode, id)} mode={mode} id={id}
+        slot={replySlot(slotKeyOf(identityOf(principal), mode, id))} onBack={() => setParams({})} />
         : <TicketList mode={mode} createKey={createKey} initialCreate={initialCreate} onOpen={(next) => setParams({ id: next })} />}
-    </div>
+    </PageSection>
   )
 }

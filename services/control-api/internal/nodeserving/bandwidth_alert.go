@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math"
 	"strconv"
 	"strings"
@@ -80,49 +79,24 @@ func formatBandwidthMbps(value any) string {
 	return strconv.FormatFloat(math.Round(bps/1e5)/10, 'f', -1, 64) + " Mbps"
 }
 
-// enqueueBandwidthAlert runs inside Apply's transaction under a savepoint: a
-// notification failure is logged and never blocks the hold.
-func (store *Store) enqueueBandwidthAlert(ctx context.Context, tx pgx.Tx, nodeID, scopeID uuid.UUID, eventType string,
-	revision int64, detail map[string]any, now time.Time) {
-	if store.alerts == nil || eventType == "" {
-		return
-	}
-	err := func() error {
-		savepoint, err := tx.Begin(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = savepoint.Rollback(context.Background()) }()
-		if err := store.enqueueBandwidthAlertTx(ctx, savepoint, nodeID, scopeID, eventType, revision, detail, now); err != nil {
-			return err
-		}
-		return savepoint.Commit(ctx)
-	}()
-	if err != nil {
-		slog.Warn("node bandwidth alert not enqueued", "node_id", nodeID, "event_type", eventType, "error", err)
-	}
-}
-
-func (store *Store) enqueueBandwidthAlertTx(ctx context.Context, tx pgx.Tx, nodeID, scopeID uuid.UUID, eventType string,
-	revision int64, detail map[string]any, now time.Time) error {
+// bandwidthAlertIntent captures the bandwidth alert of one hold transition;
+// tenant-owned (marketplace seller) nodes are not alerted yet.
+func bandwidthAlertIntent(ctx context.Context, tx pgx.Tx, nodeID, scopeID uuid.UUID, eventType string,
+	revision int64, detail map[string]any, now time.Time) (alertIntent, bool, error) {
 	name, address, platform, err := readAlertedNode(ctx, tx, nodeID, scopeID)
 	if err != nil || !platform {
-		// Tenant-owned (marketplace seller) nodes are not alerted yet.
-		return err
+		return alertIntent{}, false, err
 	}
-	recipients, err := readNodeAlertRecipients(ctx, tx, scopeID)
-	if err != nil {
-		return err
-	}
-	values := notification.TemplateContext{
-		"node_name":       notification.PublicValue(name),
-		"node_ip":         notification.PublicValue(address),
-		"bandwidth":       notification.PublicValue(formatBandwidthMbps(detail["bandwidth_bps"])),
-		"bandwidth_limit": notification.PublicValue(formatBandwidthMbps(detail["bandwidth_limit_bps"])),
-		"occurred_at":     notification.PublicValue(now.UTC().Format(time.RFC3339)),
-	}
-	return enqueueNodeAlert(ctx, store.alerts, tx, scopeID, recipients, eventType,
-		bandwidthAlertSourceEventID(nodeID, revision), values)
+	return alertIntent{
+		scopeID: scopeID, eventType: eventType, occurredAt: now,
+		sourceEventID: bandwidthAlertSourceEventID(nodeID, revision),
+		params: map[string]string{
+			"node_name": name, "node_ip": address,
+			"bandwidth":       formatBandwidthMbps(detail["bandwidth_bps"]),
+			"bandwidth_limit": formatBandwidthMbps(detail["bandwidth_limit_bps"]),
+			"occurred_at":     now.UTC().Format(time.RFC3339),
+		},
+	}, true, nil
 }
 
 // readAlertedNode reads the node's name and address and whether it belongs

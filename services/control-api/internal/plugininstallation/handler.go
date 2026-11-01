@@ -2,10 +2,13 @@ package plugininstallation
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"regexp"
@@ -112,13 +115,15 @@ type HandlerDependencies struct {
 type Handler struct {
 	authenticate func(context.Context, string) (identity.AuthenticatedSession, error)
 	domain       Domain
+	logger       *slog.Logger
 }
 
 func NewHandler(dependencies HandlerDependencies) (*Handler, error) {
 	if dependencies.AuthenticateSession == nil || dependencies.Domain == nil {
 		return nil, ErrInvalidInput
 	}
-	return &Handler{authenticate: dependencies.AuthenticateSession, domain: dependencies.Domain}, nil
+	return &Handler{authenticate: dependencies.AuthenticateSession, domain: dependencies.Domain,
+		logger: slog.Default()}, nil
 }
 
 func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -220,7 +225,7 @@ func (handler *Handler) list(response http.ResponseWriter, request *http.Request
 	}
 	page, err := handler.domain.List(request.Context(), actor, input)
 	if err != nil {
-		writePluginInstallationDomainError(response, err, false)
+		handler.writeDomainError(response, actor, "list", uuid.Nil, err, false)
 		return
 	}
 	wire := installationPageWire{Items: make([]installationWire, len(page.Items)), NextCursor: page.NextCursor}
@@ -238,7 +243,7 @@ func (handler *Handler) get(response http.ResponseWriter, request *http.Request,
 	}
 	result, err := handler.domain.Get(request.Context(), actor, authorizationID)
 	if err != nil {
-		writePluginInstallationDomainError(response, err, false)
+		handler.writeDomainError(response, actor, "get", authorizationID, err, false)
 		return
 	}
 	response.Header().Set("ETag", fmt.Sprintf(`"%d"`, result.Installation.Revision))
@@ -313,7 +318,7 @@ func (handler *Handler) mutate(response http.ResponseWriter, request *http.Reque
 	}
 	result, err := handler.domain.Mutate(request.Context(), actor, input)
 	if err != nil {
-		writePluginInstallationDomainError(response, err, true)
+		handler.writeDomainError(response, actor, route.action, route.authorizationID, err, true)
 		return
 	}
 	response.Header().Set("ETag", fmt.Sprintf(`"%d"`, result.Installation.Revision))
@@ -517,7 +522,77 @@ func installationToWire(view InstallationView) installationWire {
 	return wire
 }
 
-func writePluginInstallationDomainError(response http.ResponseWriter, err error, mutation bool) {
+// writeDomainError answers a domain failure with its stable code and, for server-side failures, logs an allow-listed
+// diagnosis (request reference, operation, authorization, code, refusal reason). The web client sends a write's
+// idempotency key as its X-Request-ID, so only a digest of the request ID is logged; never the key, tokens, SQL
+// parameters or a signed response.
+func (handler *Handler) writeDomainError(response http.ResponseWriter, actor Actor, operation string,
+	authorizationID uuid.UUID, err error, mutation bool) {
+	status, code := pluginInstallationDomainError(err, mutation)
+	if status < http.StatusInternalServerError {
+		writePluginInstallationError(response, status, code)
+		return
+	}
+	// The same reference goes to the client (error.request_id) so support can match the log line.
+	reference := requestReference(actor.RequestID)
+	if handler.logger != nil {
+		attrs := []any{"request_ref", reference, "operation", operation, "code", code}
+		if authorizationID != uuid.Nil {
+			attrs = append(attrs, "authorization_id", authorizationID.String())
+		}
+		if reason := ActivationInvalidReason(err); reason != "" {
+			attrs = append(attrs, "activation_reason", reason)
+		}
+		if stage := StageOf(err); stage != "" {
+			attrs = append(attrs, "stage", stage)
+		}
+		attrs = append(attrs, "error_class", pluginInstallationErrorClass(err),
+			// committed: the local write went through and only its outcome report is missing.
+			"committed", errors.Is(err, ErrResultUnknown) && strings.HasSuffix(StageOf(err), ".report"))
+		if failure := StorageFailureOf(err); failure.SQLState != "" {
+			attrs = append(attrs, "sqlstate", failure.SQLState)
+			if failure.Constraint != "" {
+				attrs = append(attrs, "constraint", failure.Constraint)
+			}
+		}
+		handler.logger.Warn("plugin installation request failed", attrs...)
+	}
+	writePluginInstallationJSON(response, status, struct {
+		Error struct {
+			Code      string `json:"code"`
+			RequestID string `json:"request_id"`
+		} `json:"error"`
+	}{Error: struct {
+		Code      string `json:"code"`
+		RequestID string `json:"request_id"`
+	}{Code: code, RequestID: reference}})
+}
+
+// pluginInstallationErrorClass is the coarse origin of a server-side failure.
+func pluginInstallationErrorClass(err error) string {
+	switch {
+	case errors.Is(err, ErrActivationInvalid):
+		return "license_response"
+	case errors.Is(err, ErrFactUnavailable):
+		return "license_unreachable"
+	case errors.Is(err, ErrStorageUnavailable):
+		return "storage"
+	case errors.Is(err, ErrResultUnknown):
+		return "result_unknown"
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return "context"
+	default:
+		return "internal"
+	}
+}
+
+// requestReference is a stable, non-reversible reference to a request ID for correlating logs.
+func requestReference(requestID string) string {
+	sum := sha256.Sum256([]byte(requestID))
+	return hex.EncodeToString(sum[:8])
+}
+
+func pluginInstallationDomainError(err error, mutation bool) (int, string) {
 	status, code := http.StatusInternalServerError, "internal_error"
 	switch {
 	case errors.Is(err, identity.ErrInvalidSession):
@@ -542,8 +617,12 @@ func writePluginInstallationDomainError(response http.ResponseWriter, err error,
 		status, code = http.StatusConflict, "plugin_installation_state_conflict"
 	case errors.Is(err, ErrResultUnknown), mutation && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)):
 		status, code = http.StatusServiceUnavailable, "plugin_installation_result_unknown"
+	case errors.Is(err, ErrActivationInvalid):
+		// The license service answered but its signed response was refused before any local change: retryable,
+		// and distinct from a local storage failure.
+		status, code = http.StatusBadGateway, "plugin_installation_activation_response_invalid"
 	}
-	writePluginInstallationError(response, status, code)
+	return status, code
 }
 
 func writePluginInstallationJSON(response http.ResponseWriter, status int, value any) {

@@ -2132,8 +2132,8 @@ describe('SiteListPage', () => {
     expect(urls.some((url) => url.includes('/v1/dns/platform-config'))).toBe(false)
   })
 
-  // DNS-SEC-20261027-01：平台托管的 DNS 副本在用户端只读（标「平台托管」，无验证/编辑/删除，不能勾选）。
-  it('shows the platform-managed DNS copy read-only in the tenant DNS API', async () => {
+  // 平台托管的 DNS 副本用户端不可见（即使服务端仍返回也过滤），不计入总数。
+  it('hides the platform-managed DNS copy from the tenant DNS API', async () => {
     authenticate('user', ['sites.read', 'dns.read', 'dns.manage'])
     const own = {
       id: '019a03a3-735c-7b8c-9cc2-8543d041c901', scope_id: tenantAID, name: '我的阿里云', provider_type: 'aliyun',
@@ -2149,12 +2149,11 @@ describe('SiteListPage', () => {
     await screen.findByText(site.domain)
     await user.click(screen.getByRole('button', { name: 'DNS API' }))
 
-    const copyRow = (await screen.findByText('平台DNS配置')).closest('tr')!
-    expect(within(copyRow).getByText('平台托管')).toBeInTheDocument()
-    expect(within(copyRow).queryByRole('button', { name: /平台DNS配置/ })).not.toBeInTheDocument()
-    expect(within(copyRow).getByRole('checkbox')).toBeDisabled()
-    const ownRow = screen.getByText('我的阿里云').closest('tr')!
+    const ownRow = (await screen.findByText('我的阿里云')).closest('tr')!
     expect(within(ownRow).getAllByRole('button', { name: /我的阿里云/ })).toHaveLength(3)
+    expect(screen.queryByText('平台DNS配置')).not.toBeInTheDocument()
+    expect(screen.queryByText('平台托管')).not.toBeInTheDocument()
+    expect(screen.getAllByText('共 1 条').length).toBeGreaterThan(0)
   })
 
   // B2：DNS API 新增弹窗分区（基础信息 / 验证信息），带备注；列表显示备注列。

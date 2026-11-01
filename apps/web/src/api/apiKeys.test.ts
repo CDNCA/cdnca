@@ -1,4 +1,4 @@
-import { apiKeysApi, validateAPIKeyIPAllowlist } from './apiKeys'
+import { apiKeyExpired, apiKeysApi, validateAPIKeyIPAllowlist } from './apiKeys'
 
 const record = {
   id: '33333333-3333-4333-8333-333333333333',
@@ -92,6 +92,7 @@ describe('apiKeysApi IP allowlist contract', () => {
     { ...page([record]), total: -1 },
     { ...page([record]), total: 1.5 },
     { ...page([record]), total: '3' },
+    { ...page([record]), snapshot_at: '2026-10-28T11:52:01Z' },
   ])('rejects inconsistent or sensitive list payload %#', async (payload) => {
     vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() => response(payload))
     await expect(apiKeysApi.list('token', { limit: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
@@ -106,6 +107,32 @@ describe('apiKeysApi IP allowlist contract', () => {
     })
     await expect(apiKeysApi.list('token', { limit: 10, offset: 20 })).resolves.toEqual({ ...page([record]), total: 21 })
     expect(requested).toBe('/v1/account/api-keys?limit=10&offset=20')
+  })
+
+  // AA-UI02：简单区按"实际可用"查询，并带回服务端时间（Date 响应头）用于判断到期。
+  it('requests usable keys and returns the server clock from the Date header', async () => {
+    let requested = ''
+    vi.spyOn(globalThis, 'fetch').mockImplementationOnce((input) => {
+      const url = new URL(String(input), 'http://localhost')
+      requested = `${url.pathname}${url.search}`
+      return Promise.resolve(new Response(JSON.stringify(page([record])), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', Date: 'Wed, 28 Oct 2026 11:52:01 GMT' },
+      }))
+    })
+    await expect(apiKeysApi.list('token', { limit: 2, status: 'active', usable: true }))
+      .resolves.toEqual({ ...page([record]), server_time: Date.parse('2026-10-28T11:52:01Z') })
+    expect(requested).toBe('/v1/account/api-keys?limit=2&status=active&usable=true')
+  })
+
+  it('treats an active key as expired from its expiry instant on', () => {
+    const expiresAt = '2026-10-28T11:51:00Z'
+    const at = Date.parse(expiresAt)
+    expect(apiKeyExpired({ status: 'active', expires_at: expiresAt }, at - 1)).toBe(false)
+    expect(apiKeyExpired({ status: 'active', expires_at: expiresAt }, at)).toBe(true)
+    expect(apiKeyExpired({ status: 'active', expires_at: expiresAt }, at + 1)).toBe(true)
+    expect(apiKeyExpired({ status: 'active' }, at)).toBe(false)
+    expect(apiKeyExpired({ status: 'revoked', expires_at: expiresAt }, at + 1)).toBe(false)
   })
 
   it('serializes the exact allowlist in create and update writes', async () => {

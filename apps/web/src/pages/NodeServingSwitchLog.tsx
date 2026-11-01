@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { logListQueryOptions, useLogListGeneration } from './logListQuery'
 import { Alert, Button, ConfigProvider, Input, Pagination, Select, Space, Table, Typography, type TableColumnsType } from 'antd'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, IdOrNameInput, useLiveApply } from '@cdnca/ui'
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../api/auth'
@@ -10,9 +10,12 @@ import { nodeMonitoringApi, type NodeScopeServingEvent, type NodeScopeServingEve
 import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import './NodeListPage.locale'
+import { nodeSearch } from './idNameSources'
 
 // A10/N06：切换日志接真实 node_serving_events（节点何时因何被摘出/恢复解析）。
 // 查询成功且 0 条才显示"暂无数据"；无权限、查询失败分别展示，不冒充 0 条。
+// 筛选边输入边生效；节点ID 也可输入节点名称/IP，从联想中选中按节点 UUID 过滤
+// （接口只认 UUID，未选中的名称只联想不过滤）。
 
 const sources = ['availability_monitor', 'auto_disable', 'config_sync', 'external_probe'] as const
 const events = ['held', 'released', 'protected', 'protection_cleared'] as const
@@ -60,6 +63,14 @@ export default function NodeServingSwitchLog({ ownerKey }: { ownerKey: string })
     setApplied(next)
     setPage(1)
   }
+  const draftNodeInvalid = draft.node.trim() !== '' && !nodeIDOf(draft.node)
+  useLiveApply(draft, applied, apply, { valid: !draftNodeInvalid })
+  // 查询：有未生效改动时立即生效，否则立即刷新。
+  const search = () => {
+    if (JSON.stringify(draft) !== JSON.stringify(applied)) apply(draft)
+    else void result.refetch()
+  }
+  const nodeOptions = useMemo(() => nodeSearch(accessToken ?? '', 'id'), [accessToken])
   const columns: TableColumnsType<NodeScopeServingEvent> = [
     { title: t('switchLogs.columns.switchedAt'), dataIndex: 'occurred_at', width: 177, render: (value: string) => formatDateTime(value, language) || value },
     { title: t('switchLogs.columns.type'), dataIndex: 'source', width: 150, render: (value: NodeScopeServingEvent['source']) => nt(`monitorLog.servingSources.${value}`) },
@@ -85,15 +96,15 @@ export default function NodeServingSwitchLog({ ownerKey }: { ownerKey: string })
         <Space.Compact block className="node-monitor-switch-log-control">
           <span className="node-monitor-switch-log-addon">{t('switchLogs.filters.ip')}</span>
           <Input aria-label={t('switchLogs.filters.ip')} placeholder={t('switchLogs.filters.ipPlaceholder')} value={draft.ip}
-            onChange={(event) => setDraft({ ...draft, ip: event.target.value })} onPressEnter={() => apply(draft)} />
+            onChange={(event) => { const ip = event.target.value; setDraft((current) => ({ ...current, ip })) }} onPressEnter={search} />
         </Space.Compact>
         <Space.Compact block className="node-monitor-switch-log-control">
           <span className="node-monitor-switch-log-addon">{t('switchLogs.filters.nodeID')}</span>
-          <Input aria-label={t('switchLogs.filters.nodeID')} placeholder={t('switchLogs.filters.nodePlaceholder')} value={draft.node}
-            status={nodeInvalid ? 'error' : undefined}
-            onChange={(event) => setDraft({ ...draft, node: event.target.value })} onPressEnter={() => apply(draft)} />
+          <IdOrNameInput aria-label={t('switchLogs.filters.nodeID')} placeholder={t('switchLogs.filters.nodePlaceholder')} value={draft.node}
+            status={nodeInvalid ? 'error' : undefined} isId={(text) => Boolean(nodeIDOf(text))} search={nodeOptions}
+            onChange={(node) => setDraft((current) => ({ ...current, node }))} onPressEnter={search} />
         </Space.Compact>
-        <Button type="primary" onClick={() => apply(draft)}>{t('switchLogs.actions.query')}</Button>
+        <Button type="primary" onClick={search}>{t('switchLogs.actions.query')}</Button>
         <Button type="link" onClick={() => apply(emptyFilters)}>{t('switchLogs.actions.clear')}</Button>
       </div>
       <p className="node-monitor-switch-log-hint">{t('switchLogs.windowHint')}</p>

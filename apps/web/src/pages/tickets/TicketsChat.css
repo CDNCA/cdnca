@@ -635,3 +635,33 @@
     padding: 10px 6px;
   }
 }
+
+/* 窄屏（手机，以及带侧栏的 768–1023 宽）头部两行：第一行返回与管理操作，
+   第二行标题和元信息占满整行，长标题不再被两侧按钮挤成窄列；操作组放不下时在组内换行，
+   不压住返回按钮。1024 及以上保持单行原密度。 */
+@media (max-width: 1023px) {
+  .ticket-chat .ticket-chat-head {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  /* 比 antd Space 的 CSS-in-JS（同为两个类、注入更晚）高一级，换行才生效。 */
+  .ticket-chat .ticket-chat-head .ticket-chat-head-ops {
+    /* 占返回按钮右侧剩余宽度，按钮在组内换行；放不下单个按钮时整组才换到下一行。 */
+    flex: 1 1 0;
+    min-width: min-content;
+    max-width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .ticket-chat .ticket-chat-head .ant-btn {
+    padding-inline: 11px;
+  }
+
+  .ticket-chat .ticket-chat-head-text {
+    order: 3;
+    flex: 1 0 100%;
+  }
+}

@@ -4,6 +4,7 @@ package tickets
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,14 @@ func TestStaffCreateTicket(t *testing.T) {
 		ticket.TenantScopeID != f.customer.ScopeID.String() || len(detail.Messages) != 1 ||
 		detail.Messages[0].AuthorKind != AuthorStaff || ticket.FirstResponseAt == nil {
 		t.Fatalf("staff created ticket = %+v", detail)
+	}
+	// 代建归因：两端都把创建者报成客服本人（与审计 actor 一致），归属客户仍是 user_id。
+	if ticket.CreatorKind != AuthorStaff || ticket.CreatorName != detail.Messages[0].AuthorName || ticket.UserID != f.customer.UserID.String() {
+		t.Fatalf("staff view creator = %q %q, owner %s", ticket.CreatorKind, ticket.CreatorName, ticket.UserID)
+	}
+	if seen, err := f.service.Get(ctx, f.customer, false, ticket.ID); err != nil || seen.Ticket.CreatorKind != AuthorStaff ||
+		seen.Ticket.CreatorName != seen.Messages[0].AuthorName || !strings.HasPrefix(seen.Ticket.CreatorName, "客服 ") {
+		t.Fatalf("customer view creator = %+v, %v", seen.Ticket, err)
 	}
 	if again, err := f.service.StaffCreate(ctx, f.manager, "sc-1", "req-sc-1", input); err != nil || again.Ticket.ID != ticket.ID {
 		t.Fatalf("replay = %+v, %v", again.Ticket, err)

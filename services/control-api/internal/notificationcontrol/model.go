@@ -170,8 +170,12 @@ type Subscription struct {
 	// InboxEnabled (546): the in-app copy of a ticket event;
 	// absent for every other event.
 	InboxEnabled *bool `json:"inbox_enabled,omitempty"`
-	Revision     int64 `json:"revision"`
-	Changed      bool  `json:"changed"`
+	// EmailBound / PhoneBound: whether the member's own email /
+	// phone can receive this channel; read only, never the address itself.
+	EmailBound *bool `json:"email_bound,omitempty"`
+	PhoneBound *bool `json:"phone_bound,omitempty"`
+	Revision   int64 `json:"revision"`
+	Changed    bool  `json:"changed"`
 }
 
 type UpdateSubscriptionRequest struct {

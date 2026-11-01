@@ -26,6 +26,10 @@ type Runner interface {
 var (
 	ErrInvalid   = errors.New("invalid DDoS protection")
 	ErrUnhealthy = errors.New("DDoS protection table does not match its spec")
+	// ErrOwnershipUnknown: the record of the bans Ban wrote could not be
+	// read back after a restart; Unban cannot tell them from bans it did not
+	// write and deletes nothing (SEC-CONTROL-RECOVERY-01/R3).
+	ErrOwnershipUnknown = errors.New("DDoS protection: own ban record unreadable")
 )
 
 // Manager owns inet cdnca_ddos. Apply is serialized; Ban only adds elements.
@@ -38,8 +42,13 @@ type Manager struct {
 	// front is the NIC side filter mirroring the table (SetFront).
 	front Front
 	// own are the bans Ban wrote, until they end (RateBans does not report
-	// them as kernel rate bans); at most MaxTrackedBans.
+	// them as kernel rate bans); at most MaxTrackedBans. Kept in ownFile so
+	// an adopted table's bans stay releasable after an agent restart.
 	own map[netip.Addr]time.Time
+	// ownUnknownUntil: ownFile could not be read at a start; until every ban
+	// written before could have ended (MaxBanSeconds later) own may be
+	// incomplete and Unban refuses. Kept in ownFile across restarts.
+	ownUnknownUntil time.Time
 	// auto is the auto defense part every Apply adds (SetAutoDefense).
 	auto *AutoDefense
 	// siteDrop are the site drop ports (site_drop.go), outside the spec.
@@ -89,7 +98,11 @@ func (spec *Spec) FrontConfig() xdp.Config {
 	return xdp.ConfigOf(spec.protection(), ports, spec.Exempt)
 }
 
-const stateFile = "active.json"
+const (
+	stateFile = "active.json"
+	// ownFile records own and ownUnknownUntil (ownRecord).
+	ownFile = "own.json"
+)
 
 // NewManager keeps its state (the applied spec) and nft batch files in
 // stateRoot, a private directory. A table the previous Agent process applied
@@ -112,7 +125,56 @@ func NewManager(ctx context.Context, runner Runner, stateRoot string) (*Manager,
 			}
 		}
 	}
+	manager.loadOwn()
 	return manager, nil
+}
+
+type ownRecord struct {
+	Own          map[netip.Addr]time.Time `json:"own"`
+	UnknownUntil time.Time                `json:"unknown_until,omitzero"`
+}
+
+// loadOwn reads the bans Ban wrote before a restart (those still running).
+func (manager *Manager) loadOwn() {
+	raw, err := os.ReadFile(filepath.Join(manager.scratch, ownFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	now := time.Now()
+	var record ownRecord
+	if err != nil || json.Unmarshal(raw, &record) != nil {
+		slog.Warn("DDoS protection: own ban record unreadable; single releases refuse until the bans written before end", "error", err)
+		manager.ownUnknownUntil = now.Add(MaxBanSeconds * time.Second)
+		if err := manager.saveOwn(); err != nil {
+			slog.Warn("DDoS protection: own ban record not written", "error", err)
+		}
+		return
+	}
+	if record.UnknownUntil.After(now) {
+		manager.ownUnknownUntil = record.UnknownUntil
+	}
+	for client, end := range record.Own {
+		if end.After(now) {
+			if manager.own == nil {
+				manager.own = map[netip.Addr]time.Time{}
+			}
+			manager.own[client] = end
+		}
+	}
+}
+
+// saveOwn writes own (caller holds the lock).
+func (manager *Manager) saveOwn() error {
+	encoded, err := json.Marshal(ownRecord{Own: manager.own, UnknownUntil: manager.ownUnknownUntil})
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(manager.scratch, ownFile)
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, encoded, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, path)
 }
 
 func (manager *Manager) saveState(spec *Spec) error {
@@ -331,6 +393,10 @@ func (manager *Manager) Ban(ctx context.Context, clients []netip.Addr, duration 
 		return 0, err
 	}
 	manager.rememberOwn(banned, time.Now().Add(duration))
+	if err := manager.saveOwn(); err != nil {
+		// the ban runs; after a restart it is not releasable before its end
+		slog.Warn("DDoS protection: own ban record not written", "error", err)
+	}
 	if manager.front != nil && manager.front.Running() {
 		if err := manager.front.Ban(banned, time.Now().Add(duration)); err != nil {
 			slog.Warn("XDP filter ban not written", "error", err)
@@ -350,6 +416,9 @@ func (manager *Manager) Unban(ctx context.Context, clients []netip.Addr) (int, e
 		return 0, nil
 	}
 	now := time.Now()
+	if now.Before(manager.ownUnknownUntil) {
+		return 0, ErrOwnershipUnknown
+	}
 	var removed []netip.Addr
 	var failed error
 	for _, client := range clients {
@@ -378,6 +447,9 @@ func (manager *Manager) Unban(ctx context.Context, clients []netip.Addr) (int, e
 	}
 	if len(removed) == 0 {
 		return 0, failed
+	}
+	if err := manager.saveOwn(); err != nil {
+		slog.Warn("DDoS protection: own ban record not written", "error", err)
 	}
 	if manager.front != nil && manager.front.Running() {
 		if err := manager.front.Unban(removed); err != nil {

@@ -96,7 +96,7 @@ const zhCN = {
   dnsCheck: {
     sync: '同步解析', syncHint: '请选择要同步的域名', stats: '统计当前页',
     filters: { all: '全部', failed: '解析失败', unconfigured: '未配置 DNS API', pending: '检测中', configure: '去配置' },
-    search: { domain: '域名', domainPlaceholder: '域名关键字', siteId: '网站ID', siteIdPlaceholder: '网站ID', clear: '清除' },
+    search: { domain: '域名', domainPlaceholder: '域名关键字', siteId: '网站ID', siteIdPlaceholder: '网站ID或域名', clear: '清除' },
     columns: { id: 'ID', siteId: '网站ID', domain: '域名', cname: 'CNAME', resolve: '解析状态', dnsApi: 'DNS API', task: '任务状态', actions: '操作' },
     resolve: { done: '解析正常', failed: '解析失败', pending: '检测中', none: '未检测' },
     dnsApi: { unconfigured: '未配置' },
@@ -214,7 +214,7 @@ const enUS: typeof zhCN = {
   dnsCheck: {
     sync: 'Sync records', syncHint: 'Select the domains to sync', stats: 'Counts for this page',
     filters: { all: 'All', failed: 'Failed', unconfigured: 'No DNS API', pending: 'Checking', configure: 'Configure' },
-    search: { domain: 'Domain', domainPlaceholder: 'Domain keyword', siteId: 'Site ID', siteIdPlaceholder: 'Site ID', clear: 'Clear' },
+    search: { domain: 'Domain', domainPlaceholder: 'Domain keyword', siteId: 'Site ID', siteIdPlaceholder: 'Site ID or domain', clear: 'Clear' },
     columns: { id: 'ID', siteId: 'Site ID', domain: 'Domain', cname: 'CNAME', resolve: 'Resolution', dnsApi: 'DNS API', task: 'Task', actions: 'Actions' },
     resolve: { done: 'Resolved', failed: 'Failed', pending: 'Checking', none: 'Not checked' },
     dnsApi: { unconfigured: 'Not set' },

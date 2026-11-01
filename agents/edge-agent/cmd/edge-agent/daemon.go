@@ -602,6 +602,10 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 		statusPath := nativeRuntimeStatusPath(config)
 		runtimeStatusProbe.NativeRuntime = func() *agentv1.NativeRuntimeStatus { return nativeRuntimeReport(statusPath) }
 	}
+	// the telemetry pipeline is assembled after the client;
+	// its snapshot is bound below once the daemon exists.
+	telemetryHealth := newTelemetryHealthTracker(time.Now)
+	runtimeStatusProbe.Telemetry = telemetryHealth.Report
 	if firewallReady {
 		runtimeStatusProbe.Firewall = firewallManager.Probe
 	}
@@ -959,6 +963,7 @@ func assembleClient(config fileConfig, timeouts parsedTimeouts, bootID string) (
 	if dynamicRouting != nil {
 		daemon.dynamicRouting = dynamicRouting
 	}
+	telemetryHealth.Bind(daemon.TelemetrySnapshot)
 	daemon.installationBan = installationBan
 	l4TOAOwned = true
 	xdpFilterOwned = true
@@ -1042,7 +1047,7 @@ func assembleTelemetryPipeline(config fileConfig, timeouts parsedTimeouts, nodeI
 	sink := telemetrySink(spool, config.DeploymentRoot)
 	var ledger *l4usage.Ledger
 	if l4Usage != nil {
-		if ledger, err = l4Usage.ledger(config.Telemetry.SpoolRoot, nodeID, config.Telemetry.MaxSpoolBatchEvents); err != nil {
+		if ledger, err = l4Usage.ledger(config.Telemetry.SpoolRoot, nodeID, config.Telemetry.MaxSpoolBatchEvents, timeouts.TelemetryHardAgeLimit); err != nil {
 			return nil, fmt.Errorf("configure L4 usage checkpoints: %w", err)
 		}
 		// session end lines carry the bytes their checkpoints billed

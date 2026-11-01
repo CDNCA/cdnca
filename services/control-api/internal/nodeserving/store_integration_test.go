@@ -162,6 +162,14 @@ func (harness *servingHarness) report(nodeID uuid.UUID, healthy, succeeded bool,
 // endpoint per node (same statements as the edgepublish resolver fixture).
 func (harness *servingHarness) lineGroup(addresses map[uuid.UUID]string) (uuid.UUID, int64) {
 	harness.t.Helper()
+	return harness.lineGroupWithPriorities(addresses, nil)
+}
+
+// lineGroupWithPriorities sets endpoint priorities when the revision is
+// created: a sealed revision's endpoints are immutable (a standby endpoint
+// has a larger priority value).
+func (harness *servingHarness) lineGroupWithPriorities(addresses map[uuid.UUID]string, priorities map[uuid.UUID]int) (uuid.UUID, int64) {
+	harness.t.Helper()
 	groupID := uuid.New()
 	err := pgx.BeginFunc(harness.ctx, harness.pool, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(harness.ctx, `INSERT INTO node_line_groups(id,tenant_scope_id,name,current_revision,created_by_user_id,
@@ -183,7 +191,8 @@ func (harness *servingHarness) lineGroup(addresses map[uuid.UUID]string) (uuid.U
 			}
 			if _, err := tx.Exec(harness.ctx, `INSERT INTO node_line_endpoints(id,node_id,tenant_scope_id,line_group_id,
 				config_revision,address,address_family,port,region,carrier,priority,weight,enabled)
-				VALUES($1,$2,$3,$4,1,$5,$6,80,'','',0,1,true)`, uuid.New(), nodeID, harness.scopeID, groupID, address, family); err != nil {
+				VALUES($1,$2,$3,$4,1,$5,$6,80,'','',$7,1,true)`, uuid.New(), nodeID, harness.scopeID, groupID, address, family,
+				priorities[nodeID]); err != nil {
 				return err
 			}
 		}

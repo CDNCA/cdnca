@@ -12,7 +12,7 @@ import {
 import { useSessionStore } from '../../auth/session'
 import { PurchaseModuleLink } from '../../components/PurchaseModuleLink'
 import '../../i18n/ipIntelUpdates'
-import { useFeedback, FeedbackWhen, useFormSubmitError } from '@cdnca/ui'
+import { useFeedback, FeedbackWhen, PageSection, useFormSubmitError } from '@cdnca/ui'
 
 interface FormValues {
   enabled: boolean
@@ -97,7 +97,7 @@ export default function IPIntelUpdatesPage() {
     {!value.usable ? <Tag color="orange">{t('libraries.unusable')}</Tag> : null}
   </Space> : t('libraries.none')
 
-  return <Space direction="vertical" size="large" style={{ width: '100%' }}>
+  return <PageSection><Space direction="vertical" size="large" style={{ width: '100%' }}>
     <Typography.Title level={3}>{t('title')}</Typography.Title>
     <Typography.Paragraph type="secondary">{t('intro')}</Typography.Paragraph>
     {data && !licensed ? <Alert type="warning" showIcon message={t('notLicensed')} action={<PurchaseModuleLink size="small" featureCode={ipIntelUpdatesModule} />} /> : null}
@@ -167,5 +167,5 @@ export default function IPIntelUpdatesPage() {
         </Descriptions.Item>
       </Descriptions>
     </Card> : null}
-  </Space>
+  </Space></PageSection>
 }

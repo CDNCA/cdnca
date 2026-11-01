@@ -180,3 +180,25 @@ func TestIssuanceScopesRefreshesOnlyForRotate(t *testing.T) {
 		t.Fatalf("grant-all rotate with nothing grantable error = %v, want %v", err, ErrPermissionDenied)
 	}
 }
+
+// AA-KEY-01：锁内按实时权限重核，已收回的权限单独报出（仍属于 ErrPermissionDenied）。
+func TestRecheckScopesReportsRevokedScopes(t *testing.T) {
+	live := []string{"api_keys.self.manage", "sites.read"}
+	err := recheckScopes([]string{"sites.read", "sites.manage", "dns.manage"}, live)
+	var refusal *ScopesUnavailableError
+	if !errors.As(err, &refusal) || !errors.Is(err, ErrPermissionDenied) ||
+		strings.Join(refusal.Scopes, ",") != "dns.manage,sites.manage" {
+		t.Fatalf("recheckScopes revoked = %v", err)
+	}
+	if err := recheckScopes([]string{"sites.read"}, live); err != nil {
+		t.Fatalf("recheckScopes granted = %v", err)
+	}
+	if err := recheckScopes([]string{"api_keys.self.manage"}, live); !errors.Is(err, ErrInvalidInput) || errors.As(err, &refusal) {
+		t.Fatalf("recheckScopes forbidden scope = %v, want invalid input", err)
+	}
+	items := []Key{{Scopes: []string{"sites.read"}}, {Scopes: []string{"sites.manage", "sites.read"}}}
+	annotateUnavailable(items, live)
+	if items[0].UnavailableScopes != nil || strings.Join(items[1].UnavailableScopes, ",") != "sites.manage" {
+		t.Fatalf("annotateUnavailable = %v / %v", items[0].UnavailableScopes, items[1].UnavailableScopes)
+	}
+}

@@ -1,6 +1,7 @@
 package certificateasset
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"reflect"
@@ -200,3 +201,30 @@ func TestPublicationStatusSuccessExposesOnlyDurableResultIdentity47(t *testing.T
 }
 
 func pointerTime44(value time.Time) *time.Time { return &value }
+
+// ①-15：pgx 按 time.Local 扫描 occurred_at 与 transaction_timestamp()（主控是 Asia/Shanghai），
+// 下一页游标必须是 UTC，否则 PublicationCursorCodec.Encode 拒绝（列表 500）。
+func TestPublicationStatusNextCursorIsUTCWhenScannedInLocalZone(t *testing.T) {
+	shanghai := time.FixedZone("UTC+8", 8*60*60)
+	snapshot := time.Now().UTC().Truncate(time.Microsecond).In(shanghai)
+	items := []PublicationStatus{
+		{SiteID: uuid.New(), BindingRevision: 2, OccurredAt: snapshot.Add(-time.Second)},
+		{SiteID: uuid.New(), BindingRevision: 1, OccurredAt: snapshot.Add(-2 * time.Second)},
+	}
+	page := publicationStatusPage(items, 1, snapshot)
+	if page.NextCursor == nil {
+		t.Fatal("no next cursor")
+	}
+	actor, tenantScopeID, filter, _ := publicationCursorFixture45()
+	codec := mustPublicationCursorCodec45(t, PublicationCursorKeyring{
+		ActiveKID: "k", Keys: map[string][]byte{"k": bytes.Repeat([]byte{0x42}, 32)},
+	})
+	token, err := codec.Encode(actor, tenantScopeID, filter, *page.NextCursor)
+	if err != nil {
+		t.Fatalf("下一页游标编码失败：%v", err)
+	}
+	decoded, err := codec.Decode(token, actor, tenantScopeID, filter)
+	if err != nil || !decoded.LastOccurredAt.Equal(items[0].OccurredAt) || !decoded.SnapshotAt.Equal(snapshot) {
+		t.Fatalf("decode = (%+v, %v)", decoded, err)
+	}
+}

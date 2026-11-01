@@ -45,6 +45,10 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 		if !hasPluginInstallationParameter(operation.Parameters, "#/components/parameters/RequestID") {
 			t.Errorf("%s %s does not require X-Request-ID", method, route)
 		}
+		// 授权服务签名响应校验未通过（PLUG-CLIENT-CLOCK-01）：列表、详情与写操作都可能经签名同步遇到。
+		if _, found := operation.Responses["502"]; !found {
+			t.Errorf("%s %s does not declare 502", method, route)
+		}
 		if method == "post" && (route[len(route)-7:] == "confirm" || route[len(route)-7:] == "upgrade") {
 			if _, found := operation.Responses["422"]; !found {
 				t.Errorf("%s %s does not declare 422", method, route)
@@ -72,7 +76,8 @@ func TestPluginInstallationOpenAPIExactRoutesHeadersErrorsAndPendingIdentity(t *
 		"plugin_installation_revision_conflict", "plugin_installation_idempotency_conflict",
 		"plugin_installation_scope_approval_required", "plugin_installation_platform_paused",
 		"plugin_installation_license_unavailable",
-		"plugin_installation_state_conflict", "plugin_installation_result_unknown", "internal_error",
+		"plugin_installation_state_conflict", "plugin_installation_result_unknown",
+		"plugin_installation_activation_response_invalid", "internal_error",
 	}
 	gotErrors := document.Components.Schemas["Error"].Properties["error"].Properties["code"].Enum
 	if !reflect.DeepEqual(gotErrors, wantErrors) {

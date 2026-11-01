@@ -259,6 +259,10 @@ export interface StreamListParams {
   upstream?: string
   display_id?: string
   owner_display_id?: string
+  /** Name / remark substring (name form of display_id). */
+  forward?: string
+  /** Owner username / display name substring, platform only. */
+  owner?: string
   publication_state?: StreamPublicationState
 	group_id?: string
 	cname_domain?: string
@@ -689,6 +693,8 @@ async function list(accessToken: string, params: StreamListParams): Promise<Stre
   if (params.upstream) query.set('upstream', params.upstream)
   if (params.display_id) query.set('display_id', params.display_id)
   if (params.owner_display_id) query.set('owner_display_id', params.owner_display_id)
+  if (params.forward) query.set('forward', params.forward)
+  if (params.owner) query.set('owner', params.owner)
   if (params.publication_state) query.set('publication_state', params.publication_state)
 	if (params.group_id) query.set('group_id', params.group_id)
 	if (params.cname_domain) query.set('cname_domain', params.cname_domain)

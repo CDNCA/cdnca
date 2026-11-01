@@ -8,7 +8,7 @@ import { useSessionStore } from '../auth/session'
 import { DataState } from '../components/DataState'
 import { localizedApiError } from '../i18n/apiError'
 import { adminAccessMessages } from '../i18n/adminAccess'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, PageSection } from '@cdnca/ui'
 
 // Platform administration access allowlist: who may
 // reach the console, with the "do not lock yourself out" rules spelled out.
@@ -71,7 +71,7 @@ export default function AdminAccessPage() {
   }
 
   return (
-    <div className="page-stack">
+    <PageSection className="page-stack">
       <Typography.Title level={3}>{t('title')}</Typography.Title>
       {loadError ? <DataState status="error" description={localizedApiError(loadError)} onRetry={() => void load()} />
         : !policy ? <DataState status="loading" /> : <Card>
@@ -98,6 +98,6 @@ export default function AdminAccessPage() {
             </>} />
           </Space>
         </Card>}
-    </div>
+    </PageSection>
   )
 }

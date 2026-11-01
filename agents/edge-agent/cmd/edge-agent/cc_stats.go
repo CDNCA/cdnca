@@ -292,6 +292,13 @@ func withCCStatsReports(runtime gatewayclient.AutoDefenseRuntime, stats *ccStats
 	return &ccStatsUpstream{AutoDefenseRuntime: runtime, stats: stats}
 }
 
+// AutoDefenseSessionStarted passes the session start to the wrapped runtime.
+func (upstream *ccStatsUpstream) AutoDefenseSessionStarted() {
+	if notifier, ok := upstream.AutoDefenseRuntime.(gatewayclient.AutoDefenseSessionNotifier); ok {
+		notifier.AutoDefenseSessionStarted()
+	}
+}
+
 // Reports implements gatewayclient.AutoDefenseRuntime.
 func (upstream *ccStatsUpstream) Reports() <-chan []byte {
 	upstream.reportsOnce.Do(func() {

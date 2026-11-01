@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -91,56 +90,34 @@ func (store *Store) ApplyAlert(ctx context.Context, nodeID, scopeID uuid.UUID, e
 		}
 		changed = true
 		if decision.Held || decision.Reason == ReasonProbeRecovered {
-			if err := store.enqueueAvailabilityAlert(ctx, tx, nodeID, scopeID, decision.Held, decision.Reason, next, now); err != nil {
-				slog.Warn("node availability alert not enqueued", "node_id", nodeID, "error", err)
-			}
+			store.raiseAlert(ctx, tx, func(tx pgx.Tx) (alertIntent, bool, error) {
+				return availabilityAlertIntent(ctx, tx, nodeID, scopeID, decision.Held, decision.Reason, next, now)
+			})
 		}
 		return nil
 	})
 	return changed, err
 }
 
-// enqueueAvailabilityAlert runs inside ApplyAlert's transaction under a
-// savepoint: a notification failure is logged but never blocks the state.
-func (store *Store) enqueueAvailabilityAlert(ctx context.Context, tx pgx.Tx, nodeID, scopeID uuid.UUID,
-	held bool, reason string, revision int64, now time.Time) error {
-	if store.alerts == nil {
-		return nil
-	}
-	savepoint, err := tx.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = savepoint.Rollback(context.Background()) }()
-	if err := store.enqueueAvailabilityAlertTx(ctx, savepoint, nodeID, scopeID, held, reason, revision, now); err != nil {
-		return err
-	}
-	return savepoint.Commit(ctx)
-}
-
-func (store *Store) enqueueAvailabilityAlertTx(ctx context.Context, tx pgx.Tx, nodeID, scopeID uuid.UUID,
-	held bool, reason string, revision int64, now time.Time) error {
+// availabilityAlertIntent captures the offline/recovered alert of one
+// transition; tenant-owned (marketplace seller) nodes are not alerted yet.
+func availabilityAlertIntent(ctx context.Context, tx pgx.Tx, nodeID, scopeID uuid.UUID,
+	held bool, reason string, revision int64, now time.Time) (alertIntent, bool, error) {
 	eventType := EventTypeNodeRecovered
 	if held {
 		eventType = EventTypeNodeOffline
 	}
 	name, address, platform, err := readAlertedNode(ctx, tx, nodeID, scopeID)
 	if err != nil || !platform {
-		// Tenant-owned (marketplace seller) nodes are not alerted yet.
-		return err
+		return alertIntent{}, false, err
 	}
-	recipients, err := readNodeAlertRecipients(ctx, tx, scopeID)
-	if err != nil {
-		return err
-	}
-	sourceEventID := "node-availability/" + nodeID.String() + "/" + strconv.FormatInt(revision, 10)
-	values := notification.TemplateContext{
-		"node_name":   notification.PublicValue(name),
-		"node_ip":     notification.PublicValue(address),
-		"reason":      notification.PublicValue(reason),
-		"occurred_at": notification.PublicValue(now.UTC().Format(time.RFC3339)),
-	}
-	return enqueueNodeAlert(ctx, store.alerts, tx, scopeID, recipients, eventType, sourceEventID, values)
+	return alertIntent{
+		scopeID: scopeID, eventType: eventType, occurredAt: now,
+		sourceEventID: "node-availability/" + nodeID.String() + "/" + strconv.FormatInt(revision, 10),
+		params: map[string]string{
+			"node_name": name, "node_ip": address, "reason": reason, "occurred_at": now.UTC().Format(time.RFC3339),
+		},
+	}, true, nil
 }
 
 // AvailabilityAlertReplayGuard keeps a scheduled repeat of a node alert only

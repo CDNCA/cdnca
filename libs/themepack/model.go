@@ -107,8 +107,11 @@ type BrandSlot struct {
 }
 
 type Layout struct {
-	LoginLayout string       `json:"login_layout"`
-	Sidebar     string       `json:"sidebar"`
+	LoginLayout string `json:"login_layout"`
+	Sidebar     string `json:"sidebar"`
+	// Header is the console top bar: "light" (default) or "dark", the dark
+	// sidebar's color, so top bar and sidebar form one frame.
+	Header      string       `json:"header,omitempty"`
 	HeaderLinks []HeaderLink `json:"header_links,omitempty"`
 	FooterText  I18nText     `json:"footer_text,omitempty"`
 	// BrandName is the product name the consoles and sign-in page show (PA-26
@@ -208,6 +211,9 @@ func (pkg Package) validate() error {
 	}
 	if !oneOf(pkg.Layout.Sidebar, sidebarModes) {
 		return invalid("layout_value", "layout_slots.sidebar")
+	}
+	if pkg.Layout.Header != "" && !oneOf(pkg.Layout.Header, sidebarModes) {
+		return invalid("layout_value", "layout_slots.header")
 	}
 	if pkg.Layout.Look != "" && !oneOf(pkg.Layout.Look, looks) {
 		return invalid("layout_value", "layout_slots.look")

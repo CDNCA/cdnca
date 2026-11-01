@@ -266,7 +266,11 @@ func (store *Store) Apply(ctx context.Context, nodeID, scopeID uuid.UUID, source
 		if err := store.appendEvent(ctx, tx, nodeID, scopeID, source, event, decision.Reason, next, detail, now); err != nil {
 			return err
 		}
-		store.enqueueBandwidthAlert(ctx, tx, nodeID, scopeID, bandwidthAlertEvent(source, held, reason, decision), next, detail, now)
+		if eventType := bandwidthAlertEvent(source, held, reason, decision); eventType != "" {
+			store.raiseAlert(ctx, tx, func(tx pgx.Tx) (alertIntent, bool, error) {
+				return bandwidthAlertIntent(ctx, tx, nodeID, scopeID, eventType, next, detail, now)
+			})
+		}
 		changed = true
 		return nil
 	})

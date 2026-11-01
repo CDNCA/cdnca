@@ -5,10 +5,10 @@ local originauth = require "cdnca_originauth"
 
 local _M = {}
 
-local function pool(id, port, sni, scheme)
+local function pool(id, port, sni, scheme, anchor)
   return { id = id, kind = "origin", algorithm = "round_robin",
     endpoints = { { id = "e", scheme = scheme or "https", host = "127.0.0.1", port = port, weight = 1,
-      sni = scheme ~= "http" and sni or nil, trust_anchor = scheme ~= "http" and ANCHOR or nil } } }
+      sni = scheme ~= "http" and sni or nil, trust_anchor = scheme ~= "http" and (anchor or ANCHOR) or nil } } }
 end
 local function secret(id, revision)
   return { kind = "origin_auth_secret", id = id, revision = revision }
@@ -23,6 +23,13 @@ local site = {
       pool("s3", 19501, S3), pool("oss", 19502, OSS), pool("cos", 19503, COS),
       pool("s3r2", 19501, S3), pool("missing", 19501, S3), pool("plain", 19501, S3, "http"),
       pool("unsigned", 19501, S3),
+      -- self-signed origin (capability 77): anchor none accepts it with the host
+      -- name check off (native patch 29; SNI differs from its name), the system
+      -- CA bundle rejects it
+      pool("selfnone", 19504, "other-name.origin.test", "https", "none"),
+      pool("selfsystem", 19504, "self-signed.origin.test", "https", "system"),
+      -- trusted chain, SNI not the certificate name: the host name check is on again
+      pool("wrongname", 19501, "wrong-name.origin.test"),
     },
     auth = {
       { pool_id = "s3", endpoint = "https://" .. S3, secret = secret("0d5b0000-0000-4000-8000-0000000000a1", 1) },

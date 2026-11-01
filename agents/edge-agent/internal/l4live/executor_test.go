@@ -106,8 +106,10 @@ func TestExecutorListsFiltersAndCloses(t *testing.T) {
 		socket("10.0.0.1:18481", "198.51.100.7:40003", 4), // the other stream's port
 	}}
 	registry := &fakeRegistry{values: map[string]string{
-		"10.0.0.1|18480|192.0.2.9|50000":    logged + "|" + logged + "|203.0.113.10|61000|1700000000.500|1:1|0",
-		"10.0.0.1|18480|198.51.100.7|40001": logged + "|" + logged + "|198.51.100.7|40001|1700000001.000|1:2|0",
+		"10.0.0.1|18480|192.0.2.9|50000": logged + "|" + logged + "|203.0.113.10|61000|1700000000.500|1:1|0",
+		// with the session's release identity (NR-M01)
+		"10.0.0.1|18480|198.51.100.7|40001": logged + "|" + logged + "|198.51.100.7|40001|1700000001.000|" +
+			"11111111-1111-4111-8111-111111111111|22222222-2222-4222-8222-222222222222|v1|3||1:2|0",
 	}}
 	executor, err := New(fakeRuntime{config: &config}, kernel, registry, true)
 	if err != nil || executor.APIVersion() != APIVersionClose {
@@ -125,6 +127,9 @@ func TestExecutorListsFiltersAndCloses(t *testing.T) {
 	if proxied.ClientIp != "203.0.113.10" || proxied.ClientPort != 61000 || proxied.PeerIp != "192.0.2.9" ||
 		proxied.Upstream != "10.0.0.9:443" || proxied.StartedAt.AsTime().UnixMilli() != 1700000000500 || proxied.GetBytesReceived() != 10 {
 		t.Fatalf("proxied = %+v", proxied)
+	}
+	if direct := result.Connections[1]; direct.StartedAt.AsTime().UnixMilli() != 1700000001000 || direct.ClientPort != 40001 {
+		t.Fatalf("direct (identity entry) = %+v", direct)
 	}
 	if untracked := result.Connections[2]; untracked.StartedAt != nil || untracked.ClientIp != "198.51.100.8" {
 		t.Fatalf("untracked = %+v", untracked)

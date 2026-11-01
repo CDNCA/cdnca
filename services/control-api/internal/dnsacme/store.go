@@ -317,14 +317,18 @@ func (s *Store) ListProviders(ctx context.Context, actor Actor, limit int, after
 		afterCreatedAt = &after.CreatedAt
 		afterID = after.ID
 	}
+	// A tenant does not see its platform DNS copy:
+	// the copy only serves the platform-allocated CNAME records, which read it
+	// by its deterministic id, not through this list. The platform view keeps it.
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, scope_id, name, remark, provider_type, credentials_configured, status, managed_by,
 		       revision, created_at, updated_at
 		FROM dns_providers
-		WHERE ($1 = 'platform' OR scope_id = $2)
+		WHERE ($1 = 'platform' OR (scope_id = $2 AND managed_by = 'tenant' AND id <> $6))
 		  AND ($3::timestamptz IS NULL OR created_at < $3 OR (created_at = $3 AND id < $4))
 		ORDER BY created_at DESC, id DESC
-		LIMIT $5`, actor.ScopeKind, actor.ScopeID, afterCreatedAt, afterID, limit)
+		LIMIT $5`, actor.ScopeKind, actor.ScopeID, afterCreatedAt, afterID, limit,
+		PlatformProviderCopyID(actor.ScopeID))
 	if err != nil {
 		return nil, fmt.Errorf("list DNS providers: %w", err)
 	}
@@ -376,7 +380,7 @@ func (s *Store) PrepareProviderVerification(
 	}
 	if IsPlatformManagedProvider(target.ManagedBy, target.ScopeID, target.ID) {
 		clear(target.CredentialCiphertext)
-		return providerVerificationTarget{}, nil, ErrPlatformManagedProvider
+		return providerVerificationTarget{}, nil, platformManagedRefusal(actor)
 	}
 	if target.Revision != request.ExpectedRevision {
 		clear(target.CredentialCiphertext)

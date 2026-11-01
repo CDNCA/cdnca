@@ -1548,6 +1548,28 @@ func loadTelemetrySiteScopes(
 			  AND ((deployment.action='apply' AND deployment.state='healthy' AND event.state='healthy')
 			    OR (deployment.action='rollback' AND deployment.state='reverted' AND event.state='reverted'))
 			UNION
+			-- the version a deployment in the window replaced
+			-- was in effect on the node until then; its retired workers'
+			-- long sessions still report, however long ago it was deployed.
+			SELECT deployment.previous_config_version_id
+			FROM node_deployments deployment
+			JOIN deployment_status_events event
+			  ON event.deployment_id=deployment.id AND event.attempt=deployment.attempt
+			WHERE deployment.node_id=$1
+			  AND deployment.previous_config_version_id IS NOT NULL
+			  AND EXISTS (SELECT 1 FROM config_versions applied JOIN config_versions replaced
+			              ON replaced.configuration_scope_id=applied.configuration_scope_id
+			              WHERE applied.id=deployment.config_version_id AND replaced.id=deployment.previous_config_version_id)
+			  AND event.occurred_at BETWEEN $2 AND $3
+			  AND ((deployment.action='apply' AND deployment.state='healthy' AND event.state='healthy')
+			    OR (deployment.action='rollback' AND deployment.state='reverted' AND event.state='reverted'))
+			UNION
+			SELECT reconciliation.previous_config_version_id
+			FROM node_config_reconciliations reconciliation
+			WHERE reconciliation.node_id=$1
+			  AND reconciliation.reconciled_at BETWEEN $2 AND $3
+			  AND reconciliation.previous_config_version_id IS NOT NULL
+			UNION
 			SELECT reconciliation.observed_config_version_id
 			FROM node_config_reconciliations reconciliation
 			WHERE reconciliation.node_id=$1

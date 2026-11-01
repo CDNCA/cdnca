@@ -41,7 +41,7 @@ import { SubscriberHoldsTab, SupplierTab } from './supplier/SupplierTab'
 import { CursorPager, LoadFailure, NotOpen, useCursorPages } from './supplier/shared'
 import { sellingFeatures } from './supplier/model'
 import '../../i18n/marketSupplier'
-import { AdvancedFilters, useFeedback, useLiveApply, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
+import { AdvancedFilters, PageSection, useFeedback, useLiveApply, FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
 import { closeReason, marketReason } from '@cdnca/ui/market-reasons'
 import { outcomeUnknown, useIdempotencyKey } from '../market/idempotency'
 import { clearPending, loadPending, pendingAccount, savePending } from './pendingPurchase'
@@ -1063,7 +1063,7 @@ export default function NodeMarketPage() {
     return next
   }, { replace: true })
   return (
-    <div className="page node-market-v2">
+    <PageSection className="page node-market-v2">
       <div className="node-market-v2-head">
         <Typography.Title level={4}>{t('title')}</Typography.Title>
         <Typography.Text type="secondary">{t('description')}</Typography.Text>
@@ -1101,6 +1101,6 @@ export default function NodeMarketPage() {
         </div>
       </>}
       <MarketAgreementFooter agreements={agreements} />
-    </div>
+    </PageSection>
   )
 }

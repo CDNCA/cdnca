@@ -11,6 +11,8 @@ export const jobsReadPermission = 'jobs.read'
 export const controlUpgradesReadPermission = 'control.upgrades.read'
 export const controlUpgradesManagePermission = 'control.upgrades.manage'
 export const firewallReadPermission = 'firewall.read'
+// /config/waf 只调 /v1/openresty-security/* 与 /v1/cc-rule-groups，后端认这个码（openrestysecurity.PermissionRead）。
+export const openrestySecurityReadPermission = 'openresty_security.read'
 
 export const observedRouteAliases: readonly RouteAlias[] = [
   { from: '/site', to: '/site/list' },

@@ -254,6 +254,7 @@ components:
           properties:
             login_layout: {enum: [split, centered, background]}
             sidebar: {enum: [light, dark]}
+            header: {enum: [light, dark], description: 'Console top bar (layout_slots.header); dark takes the dark sidebar color so both form one frame. Absent when the package sets none: light.'}
             header_links: {type: array, items: {type: object}}
             footer_text: {type: object}
             brand_name: {type: object, description: 'Product name for the consoles and sign-in page (layout_slots.brand_name, zh-CN required); absent when the package sets none, the SPA then shows cdnca.'}
@@ -336,17 +337,22 @@ components:
             package_sha256: {$ref: '#/components/schemas/SHA256'}
     Catalog:
       type: object
-      required: [schema, activation_revision, active_package_sha256, user_package_sha256, available, packages, error_page_republication]
+      required: [schema, activation_revision, active_package_sha256, user_package_sha256, user_follows_admin, available, packages, error_page_republication]
       properties:
         schema: {const: cdnca.theme.catalog/v1}
         activation_revision: {type: integer, minimum: 0}
         active_package_sha256: {$ref: '#/components/schemas/SHA256'}
         user_package_sha256:
           description: >-
-            The package the user console shows (its latest user or all activation); empty before any console
-            activation. A plain cdnca.theme/v1 package chosen for the user console is recognized by this pointer.
+            The package the user console shows: its own choice, else (following) the admin console's current
+            package; empty before any console activation (the default theme).
           type: string
           pattern: '^([0-9a-f]{64})?$'
+        user_follows_admin:
+          description: >-
+            The user console has no theme of its own and shows the admin console's theme, also after the admin
+            console changes. False once a theme is chosen for the user console, even one equal to the admin's.
+          type: boolean
         available: {type: array, items: {type: object}}
         packages: {type: array, items: {$ref: '#/components/schemas/Package'}}
         error_page_republication: {$ref: '#/components/schemas/ErrorPageRepublication'}

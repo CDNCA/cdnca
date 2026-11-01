@@ -182,6 +182,7 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 	firewallState := runtimeState(heartbeat.Runtime.FirewallState)
 	marketProbeRole := MarketProbeRole(heartbeat.Runtime.MarketProbe)
 	nativeRuntime := nativeRuntimeColumns(heartbeat.Runtime.NativeRuntime)
+	telemetry := telemetryHealthColumns(heartbeat.Runtime.Telemetry)
 	resources := heartbeat.Resources
 	agentVersion := cloneString(heartbeat.AgentVersion)
 	var identityAPIVersion *int32
@@ -208,12 +209,14 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 					previous_config_identity_schema, previous_config_artifact_sha256,
 					loaded_config_identity_schema, loaded_config_artifact_sha256,
 					market_probe_role, native_runtime_state, native_runtime_release,
-					native_runtime_previous_release, native_runtime_error_code, revision, updated_at
+					native_runtime_previous_release, native_runtime_error_code,
+					telemetry_error_code, telemetry_first_seen_at, telemetry_last_seen_at, telemetry_count,
+					revision, updated_at
 				) VALUES (
 					$1, 'offline', $2, $3, $4, $5, $6, $7, $8, NULL, $9,
 					NULL, NULL, NULL, NULL, NULL, NULL, NULL, $8,
 					$10, $11, $12, $13, $14, $15::numeric, $16::numeric, $17::numeric, $18,
-					$19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, 1, $8
+					$19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, 1, $8
 				)`,
 			envelope.NodeID, epoch, sequence, eventID, requestID, envelope.Digest[:],
 			heartbeat.Event.OccurredTime.AsTime().UTC(), now, agentVersion,
@@ -225,6 +228,7 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 			identitySchema(previousIdentity), identityDigest(previousIdentity),
 			identitySchema(loadedIdentity), identityDigest(loadedIdentity), marketProbeRole,
 			nativeRuntime.State, nativeRuntime.Release, nativeRuntime.PreviousRelease, nativeRuntime.ErrorCode,
+			telemetry.ErrorCode, telemetry.FirstSeenAt, telemetry.LastSeenAt, telemetry.Count,
 		)
 	} else {
 		_, err = tx.Exec(ctx, `
@@ -243,6 +247,8 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 					loaded_config_identity_schema = $24, loaded_config_artifact_sha256 = $25,
 					market_probe_role = $26, native_runtime_state = $27, native_runtime_release = $28,
 					native_runtime_previous_release = $29, native_runtime_error_code = $30,
+					telemetry_error_code = $31, telemetry_first_seen_at = $32,
+					telemetry_last_seen_at = $33, telemetry_count = $34,
 					revision = revision + 1, updated_at = $8
 			WHERE node_id = $1`,
 			envelope.NodeID, epoch, sequence, eventID, requestID, envelope.Digest[:],
@@ -255,6 +261,7 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 			identitySchema(previousIdentity), identityDigest(previousIdentity),
 			identitySchema(loadedIdentity), identityDigest(loadedIdentity), marketProbeRole,
 			nativeRuntime.State, nativeRuntime.Release, nativeRuntime.PreviousRelease, nativeRuntime.ErrorCode,
+			telemetry.ErrorCode, telemetry.FirstSeenAt, telemetry.LastSeenAt, telemetry.Count,
 		)
 	}
 	if err != nil {

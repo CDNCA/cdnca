@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import {
   getBreadcrumbLabels,
   getDeclaredPaths,
@@ -10,6 +13,7 @@ import {
   adminObservedUserBlockedPaths,
   firewallReadPermission,
   jobsReadPermission,
+  openrestySecurityReadPermission,
 } from '../routes/routePolicy'
 import type { RuntimeFeature } from '../api/runtimeFeatures'
 
@@ -242,7 +246,8 @@ describe('role navigation', () => {
     expect(paths).toContain('/site/list')
     expect(paths).toContain('/node/list')
     expect(paths).toContain('/account/api')
-    expect(paths).not.toContain('/account/api-key')
+    // AA-NAV01：真实页面 /account/api-key 作为 direct route 登记元数据（不进菜单）。
+    expect(paths).toContain('/account/api-key')
     expect(paths).toContain('/site/list/:id')
     expect(paths).toContain('/site/:id/edit')
     expect(paths).toContain('/stream/list')
@@ -346,11 +351,13 @@ describe('role navigation', () => {
 
   it('exposes the global WAF route only to authorized administrators', () => {
     expect(getDeclaredPaths()).toContain('/config/waf')
-    expect(isImplementedPath('admin', '/config/waf', [firewallReadPermission])).toBe(true)
+    // 页面只调 /v1/openresty-security/* 与 /v1/cc-rule-groups，后端认 openresty_security.read。
+    expect(isImplementedPath('admin', '/config/waf', [openrestySecurityReadPermission])).toBe(true)
     expect(isImplementedPath('admin', '/config/waf', ['platform.admin'])).toBe(true)
     expect(isImplementedPath('admin', '/config/waf', [])).toBe(false)
-    expect(isImplementedPath('admin', '/config/waf', ['firewall.manage'])).toBe(false)
-    expect(isImplementedPath('user', '/config/waf', [firewallReadPermission])).toBe(false)
+    expect(isImplementedPath('admin', '/config/waf', [firewallReadPermission])).toBe(false)
+    expect(isImplementedPath('admin', '/config/waf', ['openresty_security.manage'])).toBe(false)
+    expect(isImplementedPath('user', '/config/waf', [openrestySecurityReadPermission])).toBe(false)
     expect(getParentNavigationKey('admin', '/config/waf')).toBe('config')
     expect(getDeclaredPaths()).toContain('/config/firewall-action')
     expect(isImplementedPath('admin', '/config/firewall-action', [firewallReadPermission])).toBe(true)
@@ -360,17 +367,20 @@ describe('role navigation', () => {
     expect(getBreadcrumbLabels('admin', '/config/waf')).toEqual(['首页', '全局配置', '防火墙配置'])
   })
 
-  it('uses the firewall read contract for administrator menu visibility and fallback', () => {
-    const readNavigation = getNavigation('admin', undefined, [firewallReadPermission])
-    const manageOnlyNavigation = getNavigation('admin', undefined, ['firewall.manage'])
+  it('uses the OpenResty security read contract for the firewall configuration menu', () => {
+    const readNavigation = getNavigation('admin', undefined, [openrestySecurityReadPermission])
+    const firewallOnlyNavigation = getNavigation('admin', undefined, [firewallReadPermission])
+    const manageOnlyNavigation = getNavigation('admin', undefined, ['firewall.manage', 'openresty_security.manage'])
     const platformNavigation = getNavigation('admin', undefined, ['platform.admin'])
 
     expect(readNavigation.find((item) => item.key === 'config')?.children?.map((item) => item.key))
       .toContain('/config/waf')
     expect(manageOnlyNavigation.some((item) => item.key === 'config')).toBe(false)
+    expect(firewallOnlyNavigation.find((item) => item.key === 'config')?.children?.map((item) => item.key))
+      .toEqual(['/config/firewall-action'])
     expect(platformNavigation.find((item) => item.key === 'config')?.children?.map((item) => item.key))
       .toContain('/config/waf')
-    expect(getNavigation('user', undefined, [firewallReadPermission, 'platform.admin']).some((item) => item.key === 'config')).toBe(false)
+    expect(getNavigation('user', undefined, [openrestySecurityReadPermission, 'platform.admin']).some((item) => item.key === 'config')).toBe(false)
   })
 
   it('exposes the WAF rule-library in the website menu for both roles', () => {
@@ -470,7 +480,7 @@ describe('role navigation', () => {
   })
 
   it('exposes exactly the seven canonical global-configuration entries', () => {
-    expect(getNavigation('admin', undefined, ['system_configuration.read', firewallReadPermission, 'error_pages.read'])
+    expect(getNavigation('admin', undefined, ['system_configuration.read', openrestySecurityReadPermission, firewallReadPermission, 'error_pages.read'])
       .find((item) => item.key === 'config')?.children?.map((item) => item.key)).toEqual([
         '/config/waf',
         '/config/firewall-action',
@@ -876,5 +886,43 @@ describe('market navigation group', () => {
     expect(getNavigationSelectionKey('admin', '/sys/node-market')).toBe('/sys/node-market')
     expect(getParentNavigationKey('admin', '/sys/plugin-store')).toBe('market')
     expect(getBreadcrumbLabels('admin', '/sys/plugin-store')).toEqual(['首页', '市场', '插件商店'])
+  })
+})
+
+// AA-NAV01：菜单「API密钥」是 /account/api，别名跳到真实页面 /account/api-key；
+// 真实页面原先缺 direct-route 元数据，顶部标题显示「首页」、侧栏无高亮。
+describe('AA-NAV01 API key route metadata', () => {
+  it('titles, selects and breadcrumbs the real API key page under the account centre', () => {
+    expect(getBreadcrumbLabels('user', '/account/api-key')).toEqual(['首页', '账户中心', 'API密钥'])
+    expect(getNavigationSelectionKey('user', '/account/api-key')).toBe('/account/api')
+    expect(getParentNavigationKey('user', '/account/api-key')).toBe('account')
+    expect(isImplementedPath('user', '/account/api-key', [])).toBe(true)
+  })
+
+  it('does not give administrators the tenant API key page', () => {
+    expect(isImplementedPath('admin', '/account/api-key', ['platform.admin'])).toBe(false)
+    expect(getBreadcrumbLabels('admin', '/account/api-key')).toEqual(['首页'])
+  })
+})
+
+// 守卫：App.tsx 里每个真实页面路由都要有标题/面包屑元数据，不能退化成只有「首页」。
+// 例外只有公开页、错误页、插件页和纯重定向路由。
+describe('route metadata guard', () => {
+  const exempt = new Set([
+    '/login', '/register', '/forgot-password', '/reset-password', '/forget-password', '/sso/bridge',
+    '/403', '/500', '*', '/plugin-ui/:pluginId/:pageId',
+    // 纯重定向（Navigate / AliasRedirect）
+    '/sys/custom-roles', '/sys/notification', '/sys/log', '/finance/recharge',
+  ])
+
+  it('gives every rendered App route a breadcrumb beyond the home label', () => {
+    const source = readFileSync(resolve(__dirname, '..', 'App.tsx'), 'utf8')
+    const paths = [...new Set([...source.matchAll(/path="([^"]+)"/g)].map((match) => match[1]))]
+    const missing = paths
+      .filter((path) => !exempt.has(path))
+      .filter((path) => (['admin', 'user'] as const).every(
+        (role) => getBreadcrumbLabels(role, path.replace(/:[A-Za-z]+/g, 'x1')).length <= 1,
+      ))
+    expect(missing).toEqual([])
   })
 })

@@ -516,3 +516,59 @@
     margin: 0 auto;
   }
 }
+
+/* AA-KEY-01：账号已不再拥有的权限，调用时不生效；删除线+警示色，并配文字说明（不只靠颜色）。 */
+.account-api-keys-page .account-api-key-scope-revoked {
+  color: var(--cdnca-color-text-tertiary);
+  text-decoration: line-through;
+  border-style: dashed;
+}
+
+.account-api-keys-page .account-api-key-scope-revoked-note {
+  color: var(--cdnca-color-warning);
+  font-size: 12px;
+/* AA-UI01：白名单草稿冲突就地提示，左右对照当前已保存与你的修改。 */
+.account-api-key-allowlist-conflict {
+  margin-top: 4px;
+}
+
+.account-api-key-allowlist-conflict .ant-alert-message {
+  font-size: 14px;
+}
+
+.account-api-key-allowlist-conflict-actions {
+  margin-top: 8px;
+}
+
+/* 简单区值列里的 .ant-btn 默认是 28px 图标按钮；提示条里的文字按钮按内容宽度显示。 */
+.account-api-key-compatibility-value .ant-alert .ant-btn {
+  width: auto;
+  padding: 0 8px;
+}
+
+.account-api-key-allowlist-diff {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+.account-api-key-allowlist-diff > div {
+  display: grid;
+  grid-template-columns: 6em minmax(0, 1fr);
+  gap: 8px;
+}
+
+.account-api-key-allowlist-diff dt {
+  color: var(--cdnca-color-text-secondary);
+}
+
+.account-api-key-allowlist-diff dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* AA-UI02：到期说明用正文高对比色（警示色只用于状态标签，#ff9900 做正文对比度不足）。 */
+.account-api-key-expiry-note {
+  color: var(--cdnca-color-title);
+}

@@ -17,13 +17,16 @@ type l4UsageSource struct {
 	manager *l4runtime.Manager
 }
 
-func (source *l4UsageSource) ledger(spoolRoot, nodeID string, maxBatch int) (*l4usage.Ledger, error) {
+// endLineHorizon is the spool's hard age: a session end line older than it
+// is dropped by the spool, so the ledger keeps a session pending
+// settlement until then (NR-M02).
+func (source *l4UsageSource) ledger(spoolRoot, nodeID string, maxBatch int, endLineHorizon time.Duration) (*l4usage.Ledger, error) {
 	directory := filepath.Join(spoolRoot, "state")
 	if err := ensurePrivateDirectory(spoolRoot, directory); err != nil {
 		return nil, err
 	}
 	return l4usage.New(l4usage.Config{
-		StatePath: filepath.Join(directory, "l4-usage.json"), NodeID: nodeID, Now: time.Now, MaxBatch: maxBatch,
+		StatePath: filepath.Join(directory, "l4-usage.json"), NodeID: nodeID, Now: time.Now, MaxBatch: maxBatch, EndLineHorizon: endLineHorizon,
 		Kernel: l4live.LinuxKernel{}, Registry: l4live.ControlRegistry{Path: l4runtime.L4ControlSocketPath},
 		Sockets: func(ctx context.Context) (map[string]l4runtime.UsageSocketV2, error) {
 			config, err := source.manager.ActiveConfigV2(ctx)

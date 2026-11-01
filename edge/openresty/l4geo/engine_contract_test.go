@@ -114,7 +114,7 @@ func TestLuaSourceKeepsVerifiedLKGAndNeverTurnsProxyTrustIntoBypass(t *testing.T
 		// session_log (tcp/udp v7): reasons, live registry, agent control.
 		`function _M.enforce(listener_id, log)`,
 		`ngx.var.cdnca_l4_end_reason`,
-		`function _M.session_track(stream_id, listener_id, client, dispatched)`,
+		`function _M.session_track(stream_id, listener_id, client, dispatched, identity)`,
 		`function _M.session_end()`,
 		`function _M.control()`,
 		`local LIVE_DICT = "l4_v2_live"`,

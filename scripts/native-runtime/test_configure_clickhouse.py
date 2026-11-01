@@ -249,6 +249,7 @@ class TestNativeClickHouseMigrationLedger(unittest.TestCase):
             self.assertTrue(all(call["database"] == "cdnca_analytics" for call in calls))
             sql = "\n".join(fake.statements)
             self.assertIn("GRANT INSERT ON cdnca_analytics.l4_session_facts_v1 TO cdnca_analytics_ingest", sql)
+            self.assertIn("GRANT INSERT ON cdnca_analytics.l4_usage_checkpoints_v1 TO cdnca_analytics_ingest", sql)
             self.assertIn("MODIFY SQL SECURITY DEFINER DEFINER = cdnca_analytics_rollup", sql)
             self.assertNotIn("CREATE USER", sql)
             fake.statements.clear()
@@ -382,6 +383,9 @@ class TestNativeClickHouseConfiguration(unittest.TestCase):
             self.assertIn("GRANT SELECT ON cdnca_analytics.connections_ingest_receipts_v1 TO cdnca_analytics_ingest", sql)
             self.assertIn("GRANT INSERT ON cdnca_analytics.l4_session_facts_v1 TO cdnca_analytics_ingest", sql)
             self.assertNotIn("GRANT SELECT ON cdnca_analytics.l4_session_facts_v1 TO cdnca_analytics_ingest", sql)
+            # control-api writes L4 usage checkpoints (CH 029) with the ingest identity.
+            self.assertIn("GRANT INSERT ON cdnca_analytics.l4_usage_checkpoints_v1 TO cdnca_analytics_ingest", sql)
+            self.assertNotIn("GRANT SELECT ON cdnca_analytics.l4_usage_checkpoints_v1 TO cdnca_analytics_ingest", sql)
             # Smart auto defense (AD-08): write only.
             self.assertIn("GRANT INSERT ON cdnca_analytics.autodefense_verdicts_v1 TO cdnca_analytics_ingest", sql)
             self.assertIn("GRANT INSERT ON cdnca_analytics.market_security_events_v1 TO cdnca_analytics_ingest", sql)

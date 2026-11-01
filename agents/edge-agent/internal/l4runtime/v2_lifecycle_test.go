@@ -77,6 +77,8 @@ func TestV2LegacyCompiledBytesRemainIdentical(t *testing.T) {
 	// former site slot (geo, nginx variables, telemetry path). nginx repinned
 	// for L4-USAGE-01: every TCP socket tracks live sessions and the log
 	// lines carry $pid; canonical, Geo and runtime bytes are unchanged.
+	// nginx repinned for NR-M01: session_track records the release identity
+	// (only that argument differs).
 	compiled, err := CompileV2(v2LifecycleConfig(t, "legacy", 3, 3), map[string][]netip.Addr{l403Stream: {netip.MustParseAddr("8.8.8.8")}})
 	if err != nil {
 		t.Fatal(err)
@@ -93,8 +95,8 @@ func TestV2LegacyCompiledBytesRemainIdentical(t *testing.T) {
 		{"canonical", compiled.CanonicalJSON, "d3d65b95f9b1fa98d554217ca54826451f382d5a46a73b0e8981fbe082563c5b"},
 		{"geo", compiled.GeoJSON, "e41616bca4acd091c1d2fac7fb6591ac97e3e8747b3d2075303fbf8333704d52"},
 		// The master-side Geo preload directive is the only addition since then.
-		{"nginx", bytes.Replace(compiled.NginxConfig, []byte(geoPreloadDirectiveV2), nil, 1), "efc201a5bfd2a50f571abef908c9be4fd0b457aeb31dc84c6542f88c25327fae"},
-		{"nginx-preload", compiled.NginxConfig, "d62a70b8c9badbc78180f8b21322253dd23c03806cc2df6957df3fce9f4298af"},
+		{"nginx", bytes.Replace(compiled.NginxConfig, []byte(geoPreloadDirectiveV2), nil, 1), "643925b3caf770eade6dcb4bbf91f7351bae586520d1d00285601595056e6f22"},
+		{"nginx-preload", compiled.NginxConfig, "4862c93fcc0a204c009289bd23665627cd784178bbc0d676626ccdc44fd56e95"},
 		{"runtime", stored, "41364e7e4e7865393f0059fc68704eeb8d9a530839f4d695b001e3935e8b6369"},
 	} {
 		if got := fmt.Sprintf("%x", sha256.Sum256(test.bytes)); got != test.hash {

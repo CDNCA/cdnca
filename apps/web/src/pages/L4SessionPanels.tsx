@@ -330,7 +330,8 @@ function LiveConnectionsPanel({ audience, ownerKey, canManage }: { audience: L4R
       onClearAdvanced={() => refresh({ tenantId: true, nodeId: true, listenPort: true })}
       onRemove={(key) => refresh({ [key]: true })}
     />
-    <p className="l4-session-muted density-note">{t('live.help')}</p>
+    <p className="l4-session-muted density-note">{t('live.summary')}</p>
+    <details className="l4-session-help"><summary>{t('live.helpTitle')}</summary><p className="l4-session-muted">{t('live.help')}</p></details>
     {validation ? <Alert type="error" showIcon message={validation} /> : null}
     {query.error ? <FeedbackWhen title={t(errorKey(query.error))} /> : null}
     {close.error ? <FeedbackWhen title={t('live.closeFailed')} /> : null}
@@ -355,10 +356,12 @@ function scopedPrincipal(principal: Principal | null, tenantAllowed: (permission
   return principal.scope_kind === 'platform' && principal.tenant_id === null && platformAllowed(principal.permissions)
 }
 
-function SessionPage({ id, heading, children }: { id: string; heading: string; children: ReactNode }) {
+function SessionPage({ id, heading, visibleHeading = false, children }: { id: string; heading: string; visibleHeading?: boolean; children: ReactNode }) {
   return <section className="l4-realtime-baseline-page" aria-labelledby={id}>
-    <h1 className="visually-hidden" id={id}>{heading}</h1>
-    <div className="l4-realtime-baseline-panel">{children}</div>
+    <div className="l4-realtime-baseline-panel">
+      <h1 className={visibleHeading ? 'l4-session-heading' : 'visually-hidden'} id={id}>{heading}</h1>
+      {children}
+    </div>
   </section>
 }
 
@@ -383,7 +386,7 @@ export function L4LiveConnectionsPage() {
     return <DataState status="forbidden" className="identity-page" message={t('states.permissionTitle')} description={t('live.forbidden')} />
   }
   const ownerKey = `${principal.user_id}:${principal.scope_kind}:${principal.scope_id}`
-  return <SessionPage id="l4-live-title" heading={t('live.heading')}>
+  return <SessionPage id="l4-live-title" heading={t('live.heading')} visibleHeading>
     <LiveConnectionsPanel audience={principal.scope_kind === 'tenant' ? 'tenant' : 'admin'} ownerKey={ownerKey} canManage={hasStreamManagePermission(principal.permissions)} />
   </SessionPage>
 }

@@ -9,7 +9,7 @@ import { useSessionStore } from '../auth/session'
 import { inboxUnreadKey } from '../components/AdminInboxBell'
 import { localizedApiError } from '../i18n/apiError'
 import { adminInboxText } from '../i18n/adminInbox'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, PageSection } from '@cdnca/ui'
 
 // Message center: for platform administrators node offline/recovered, HTTP-01
 // drift and staff ticket events; for tenant members (scope account) the
@@ -71,7 +71,7 @@ export default function AdminInboxPage({ scope = 'admin' }: { scope?: InboxScope
   const formatter = new Intl.DateTimeFormat(i18n.resolvedLanguage ?? 'zh-CN', { dateStyle: 'medium', timeStyle: 'short' })
 
   return (
-    <div className="page-stack admin-inbox-page">
+    <PageSection className="admin-inbox-page">
       <Typography.Title level={3}>{t('title')}</Typography.Title>
       <Space>
         <Checkbox checked={unreadOnly} onChange={event => setUnreadOnly(event.target.checked)}>{t('unreadOnly')}</Checkbox>
@@ -96,6 +96,6 @@ export default function AdminInboxPage({ scope = 'admin' }: { scope?: InboxScope
         )}
       />
       {cursor ? <Button loading={loading} onClick={() => void load(cursor)}>{t('loadMore')}</Button> : null}
-    </div>
+    </PageSection>
   )
 }

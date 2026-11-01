@@ -1268,6 +1268,26 @@
   "waf.custom_rule.report.read": {
    "zh": "查看自定义 WAF 规则上报详情",
    "en": "View custom WAF rule report"
+  },
+  "operator_account.disable": {
+   "zh": "停用运营人员账号",
+   "en": "Disable operator account"
+  },
+  "operator_account.enable": {
+   "zh": "启用运营人员账号",
+   "en": "Enable operator account"
+  },
+  "operator_sessions.revoke": {
+   "zh": "撤销运营人员全部会话",
+   "en": "Revoke all operator sessions"
+  },
+  "operator_invitation.create": {
+   "zh": "邀请运营人员（含预选角色）",
+   "en": "Invite an operator (with pre-selected roles)"
+  },
+  "operator_invitation.accept": {
+   "zh": "运营人员接受邀请并获得预选角色",
+   "en": "Operator accepted an invitation and got its roles"
   }
  },
  "resource_types": {
@@ -1534,6 +1554,10 @@
   "operator_permissions": {
    "zh": "权限",
    "en": "Permissions"
+  },
+  "operator_invitation": {
+   "zh": "运营人员邀请",
+   "en": "Operator invitation"
   },
   "operator_role": {
    "zh": "角色",
@@ -2439,6 +2463,14 @@
    "zh": "当前密钥 ID",
    "en": "Active key ID"
   },
+  "added_permissions": {
+   "zh": "新增权限",
+   "en": "Permissions added"
+  },
+  "added_roles": {
+   "zh": "新增角色",
+   "en": "Roles added"
+  },
   "after_status": {
    "zh": "变更后状态",
    "en": "New status"
@@ -2542,6 +2574,14 @@
   "default_method": {
    "zh": "默认支付方式",
    "en": "Default method"
+  },
+  "default_roles": {
+   "zh": "使用默认角色",
+   "en": "Default roles"
+  },
+  "invitation_id": {
+   "zh": "邀请 ID",
+   "en": "Invitation ID"
   },
   "due_at": {
    "zh": "最晚凭证续期时间",
@@ -2731,6 +2771,10 @@
    "zh": "永久",
    "en": "Permanent"
   },
+  "permissions": {
+   "zh": "权限",
+   "en": "Permissions"
+  },
   "phone_changed": {
    "zh": "手机号已变更",
    "en": "Phone changed"
@@ -2779,6 +2823,10 @@
    "zh": "原名称",
    "en": "Previous name"
   },
+  "previous_permissions": {
+   "zh": "变更前权限",
+   "en": "Permissions before"
+  },
   "previous_pow_difficulty": {
    "zh": "原工作量证明难度",
    "en": "Previous PoW difficulty"
@@ -2790,6 +2838,10 @@
   "previous_role": {
    "zh": "原角色",
    "en": "Previous role"
+  },
+  "previous_roles": {
+   "zh": "变更前角色",
+   "en": "Roles before"
   },
   "previous_state": {
    "zh": "原状态",
@@ -2851,6 +2903,14 @@
    "zh": "驳回数",
    "en": "Reject count"
   },
+  "removed_permissions": {
+   "zh": "移除权限",
+   "en": "Permissions removed"
+  },
+  "removed_roles": {
+   "zh": "移除角色",
+   "en": "Roles removed"
+  },
   "revision": {
    "zh": "修订",
    "en": "Revision"
@@ -2874,6 +2934,10 @@
   "role": {
    "zh": "角色",
    "en": "Role"
+  },
+  "roles": {
+   "zh": "角色",
+   "en": "Roles"
   },
   "route": {
    "zh": "退款路径",

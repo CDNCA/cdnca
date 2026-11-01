@@ -22,6 +22,10 @@ paths:
     get:
       operationId: listDNSProviders
       summary: List DNS provider configurations
+      description: >-
+        A tenant scope lists only the accounts it entered (managed_by=tenant);
+        the platform DNS copy is not returned. The platform scope lists every
+        tenant's accounts, platform copies included.
       parameters:
         - name: limit
           in: query
@@ -1061,7 +1065,7 @@ components:
         managed_by:
           type: string
           enum: [tenant, platform]
-          description: 'tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)'
+          description: 'tenant = an account the tenant entered; platform = the platform DNS copy (only the platform-allocated CNAME records and platform administrators use it). Only the platform view returns platform rows: a tenant-scope list omits them and a tenant update, delete or verify of one is 404 dns_resource_not_found, as for an absent account; a platform-scope update, delete or verify of one is 409 dns_provider_platform_managed.'
         version: {type: integer, format: int64, minimum: 1}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}

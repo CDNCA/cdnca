@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 
 import { AppRoutes } from '../App'
 import { sitesApi, type SiteListResponse } from '../api/sites'
@@ -240,5 +241,26 @@ describe('security ban list page', () => {
       const hidden = getNavigation(role, undefined, []).find((item) => item.key === 'site')
       expect(hidden?.children?.some((item) => item.key === '/site/security-bans') ?? false).toBe(false)
     }
+  })
+
+  // 筛选边输入边生效，网站可输入域名从联想中选中按网站 UUID 过滤。
+  it('applies filters as typed and filters by a picked site domain', async () => {
+    authenticate('tenant', ['security_policies.read', 'sites.read'])
+    const calls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      calls.push(String(input).replace(/^https?:\/\/[^/]+/, ''))
+      return json({ items: [], total: 0, page: 1, limit: 20 })
+    })
+    const sites = mockSites([{ id: siteID, domain: 'shop.example.com', display_id: '5' } as { id: string; domain: string }])
+    const user = userEvent.setup()
+    renderWithProviders(<AppRoutes />, ['/site/security-bans'])
+    expect(await screen.findByRole('heading', { name: '封禁名单' })).toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: '客户端 IP' }), '198.51.100.9')
+    await waitFor(() => expect(calls).toContain('/v1/security-bans?page=1&limit=20&client_ip=198.51.100.9&state=active'))
+    await user.type(screen.getByRole('combobox', { name: '网站 ID' }), 'shop')
+    await user.click(await screen.findByText('shop.example.com（5）'))
+    expect(sites).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ domain: 'shop' }))
+    await waitFor(() => expect(calls).toContain(`/v1/security-bans?page=1&limit=20&site_id=${siteID}&client_ip=198.51.100.9&state=active`))
   })
 })

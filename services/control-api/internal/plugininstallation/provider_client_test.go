@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -148,7 +149,8 @@ func TestActivationClientRejectsTamperAndMapsStableFailures(t *testing.T) {
 	}
 	responseFraming = "canonical"
 	tamper = true
-	if _, err := client.Resolve(context.Background(), input); err != ErrActivationInvalid {
+	if _, err := client.Resolve(context.Background(), input); !errors.Is(err, ErrActivationInvalid) ||
+		ActivationInvalidReason(err) != ActivationInvalidSignature {
 		t.Fatalf("tampered response error=%v", err)
 	}
 	tamper = false

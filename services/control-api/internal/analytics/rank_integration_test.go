@@ -202,7 +202,7 @@ func TestAnalyticsClickHouseRankReplacementWindowIntegration(t *testing.T) {
 	}
 	filter := Filter{From: from, To: to}
 	want := map[RankDimension]string{
-		RankByURL: "/latest", RankByIP: "2001:db8::40", RankByDomain: "latest.example",
+		RankByURL: "latest.example/latest", RankByIP: "2001:db8::40", RankByDomain: "latest.example",
 		RankByRegion: "CN", RankByCarrier: "latest-carrier",
 	}
 	for dimension, key := range want {
@@ -287,7 +287,7 @@ func TestAnalyticsClickHouseRankReplacementWindowIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	equalPage, err := client.Rank(context.Background(), equalScope, filter, RankByURL, 10, "")
-	if err != nil || len(equalPage.Items) != 1 || equalPage.Items[0].Key != "/equal-latest" ||
+	if err != nil || len(equalPage.Items) != 1 || equalPage.Items[0].Key != "equal-latest.example/equal-latest" ||
 		equalPage.Items[0].ResponseBytes != 333 {
 		t.Fatalf("equal-ingested-at deterministic replacement = %#v, error = %v", equalPage, err)
 	}
@@ -432,7 +432,7 @@ func assertRankHandlerQueries(
 		name string
 		keys []string
 	}{
-		{name: "url", keys: []string{"/alpha", "/beta", "/tie-a", "/tie-b"}},
+		{name: "url", keys: []string{"alpha.example/alpha", "beta.example/beta", "tie-a.example/tie-a", "tie-b.example/tie-b"}},
 		{name: "ip", keys: []string{"2001:db8::1", "2001:db8::2", "2001:db8::3", "2001:db8::4"}},
 		{name: "domain", keys: []string{"alpha.example", "beta.example", "tie-a.example", "tie-b.example"}},
 		{name: "region", keys: []string{"CN", "US", "DE", "JP"}},
@@ -461,14 +461,14 @@ func assertRankHandlerQueries(
 	values.Set("limit", "100")
 	response = rankGET(t, tenantHandler, "/v1/analytics/top/url", values)
 	filteredRank := rankDecodePage(t, response)
-	if got := rankItemKeys(filteredRank.Data); !reflect.DeepEqual(got, []string{"/alpha", "/beta", "/tie-a"}) {
+	if got := rankItemKeys(filteredRank.Data); !reflect.DeepEqual(got, []string{"alpha.example/alpha", "beta.example/beta", "tie-a.example/tie-a"}) {
 		t.Fatalf("site/node filtered rank = %v", got)
 	}
 
 	values = rankQueryValues(from, to)
 	values.Set("limit", "2")
 	first := rankDecodePage(t, rankGET(t, tenantHandler, "/v1/analytics/top/url", values))
-	if got := rankItemKeys(first.Data); !reflect.DeepEqual(got, []string{"/alpha", "/beta"}) || first.Page.NextCursor == "" {
+	if got := rankItemKeys(first.Data); !reflect.DeepEqual(got, []string{"alpha.example/alpha", "beta.example/beta"}) || first.Page.NextCursor == "" {
 		t.Fatalf("first rank page = %#v", first)
 	}
 	snapshot, err := time.Parse(time.RFC3339Nano, first.Page.SnapshotAt)
@@ -484,14 +484,14 @@ func assertRankHandlerQueries(
 
 	values.Set("cursor", first.Page.NextCursor)
 	second := rankDecodePage(t, rankGET(t, tenantHandler, "/v1/analytics/top/url", values))
-	if got := rankItemKeys(second.Data); !reflect.DeepEqual(got, []string{"/tie-a", "/tie-b"}) || second.Page.NextCursor != "" {
+	if got := rankItemKeys(second.Data); !reflect.DeepEqual(got, []string{"tie-a.example/tie-a", "tie-b.example/tie-b"}) || second.Page.NextCursor != "" {
 		t.Fatalf("second rank page = %#v", second)
 	}
 	if first.Page.SnapshotAt != second.Page.SnapshotAt {
 		t.Fatalf("snapshot changed across pages: %q != %q", first.Page.SnapshotAt, second.Page.SnapshotAt)
 	}
 	combined := append(rankItemKeys(first.Data), rankItemKeys(second.Data)...)
-	if !reflect.DeepEqual(combined, []string{"/alpha", "/beta", "/tie-a", "/tie-b"}) {
+	if !reflect.DeepEqual(combined, []string{"alpha.example/alpha", "beta.example/beta", "tie-a.example/tie-a", "tie-b.example/tie-b"}) {
 		t.Fatalf("two rank pages contain gaps or duplicates: %v", combined)
 	}
 }

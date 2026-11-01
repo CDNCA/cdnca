@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Form, Input, Modal, Select, Space, Table, Tag, Typography, type TableColumnsType } from 'antd'
 import { Plus, RefreshCw, Unlock } from 'lucide-react'
@@ -18,7 +18,8 @@ import { formatDateTime } from '../i18n/formatters'
 import '../i18n/securityBans'
 import { cacheWriteIdentity, cacheWriteOwner, pendingCacheWriteKey, rememberCacheWrite, settleCacheWrite } from './cacheWriteJournal'
 import { writeOutcomeUnknown } from './site-edit/writeOutcome'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, IdOrNameInput, PageSection, useLiveApply } from '@cdnca/ui'
+import { siteSearch as siteNameSearch } from './idNameSources'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const stateColors: Record<SecurityBanState, string> = { active: 'red', released: 'green', expired: 'default' }
@@ -116,6 +117,16 @@ export default function SecurityBansPage() {
     refetchOnWindowFocus: false,
   })
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['security-bans'] })
+  // 筛选边输入边生效；网站也可输入域名从联想中选中（接口只认网站 UUID，
+  // 未选中的域名只联想不过滤）。查询按钮：无未生效改动时刷新。
+  const applyFilters = (next: Filters) => { setApplied(next); setPage(1) }
+  const draftValid = draft.site === '' || uuidPattern.test(draft.site)
+  useLiveApply(draft, applied, applyFilters, { valid: draftValid })
+  const search = () => {
+    if (JSON.stringify(draft) !== JSON.stringify(applied)) applyFilters(draft)
+    else void query.refetch()
+  }
+  const siteOptions = useMemo(() => siteNameSearch(accessToken ?? '', 'id'), [accessToken])
 
   // One request per (site, address); the results are summed up, every
   // failure with its reason.
@@ -217,20 +228,20 @@ export default function SecurityBansPage() {
   ]
 
   return (
-    <div className="page-container">
+    <PageSection>
       <Typography.Title level={4}>{t('title')}</Typography.Title>
       <Typography.Paragraph type="secondary">{t('description')}</Typography.Paragraph>
       {message ? resultAlert(message, () => setMessage(null)) : null}
       <Space wrap style={{ marginBottom: 12 }}>
-        <Input aria-label={t('filters.site')} placeholder={t('filters.site')} value={draft.site} style={{ width: 300 }}
-          onChange={(event) => setDraft({ ...draft, site: event.target.value.trim() })} />
-        <Input aria-label={t('filters.ip')} placeholder={t('filters.ip')} value={draft.ip} style={{ width: 220 }}
-          onChange={(event) => setDraft({ ...draft, ip: event.target.value.trim() })} />
+        <IdOrNameInput aria-label={t('filters.site')} placeholder={t('filters.sitePlaceholder')} value={draft.site} style={{ width: 300 }}
+          isId={(text) => uuidPattern.test(text.toLowerCase())} search={siteOptions} onPressEnter={search}
+          onChange={(site) => setDraft((current) => ({ ...current, site: site.trim().toLowerCase() }))} />
+        <Input aria-label={t('filters.ip')} placeholder={t('filters.ip')} value={draft.ip} style={{ width: 220 }} onPressEnter={search}
+          onChange={(event) => { const ip = event.target.value.trim(); setDraft((current) => ({ ...current, ip })) }} />
         <Select aria-label={t('filters.state')} value={draft.state} style={{ width: 140 }}
-          onChange={(value) => setDraft({ ...draft, state: value })}
+          onChange={(value) => setDraft((current) => ({ ...current, state: value }))}
           options={[{ value: '', label: t('filters.all') }, ...(['active', 'released', 'expired'] as const).map((value) => ({ value, label: t(`state.${value}`) }))]} />
-        <Button type="primary" disabled={draft.site !== '' && !uuidPattern.test(draft.site)}
-          onClick={() => { setApplied(draft); setPage(1) }}>{t('filters.search')}</Button>
+        <Button type="primary" disabled={!draftValid} onClick={search}>{t('filters.search')}</Button>
         <Button onClick={() => { const empty: Filters = { site: '', ip: '', state: 'active' }; setDraft(empty); setApplied(empty); setPage(1) }}>{t('filters.reset')}</Button>
         <Button icon={<RefreshCw size={14} aria-hidden />} onClick={() => void refresh()}>{t('actions.refresh')}</Button>
         {canManage ? <Button icon={<Plus size={14} aria-hidden />} onClick={() => setCreating(true)}>{t('actions.create')}</Button> : null}
@@ -284,6 +295,6 @@ export default function SecurityBansPage() {
         confirmLoading={busy} onOk={() => void confirmRelease()} onCancel={() => setReleasing(null)}>
         {releasing ? t('releaseConfirm', { ip: releasing.client_ip, site: releasing.site_domain }) : null}
       </Modal>
-    </div>
+    </PageSection>
   )
 }

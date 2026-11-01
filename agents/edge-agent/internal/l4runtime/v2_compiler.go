@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cdnca/cdnca/libs/edgeconfig"
@@ -329,7 +330,7 @@ func renderV2(config ConfigV2, addressSets map[string][]netip.Addr, digest strin
 				if track {
 					output.WriteString("        set $cdnca_l4_live_key \"\";\n        set $cdnca_l4_live_token \"\";\n")
 				}
-				writeSessionLogPreread(&output, listener, track, mode == socketDispatched, guard, subscription)
+				writeSessionLogPreread(&output, listener, track, mode == socketDispatched, guard, subscription, sessionReleaseIdentity(config, listener))
 			} else if rate := listener.NewConnRate; rate != nil || guard != "" || subscription != "" || track {
 				if track {
 					output.WriteString("        set $cdnca_l4_live_key \"\";\n        set $cdnca_l4_live_token \"\";\n")
@@ -344,7 +345,8 @@ func renderV2(config ConfigV2, addressSets map[string][]netip.Addr, digest strin
 				}
 				output.WriteString(subscription)
 				if track {
-					fmt.Fprintf(&output, " geo.session_track(\"%s\", \"%s\", client, %t);", listener.StreamID, listener.ID, mode == socketDispatched)
+					fmt.Fprintf(&output, " geo.session_track(\"%s\", \"%s\", client, %t, \"%s\");", listener.StreamID, listener.ID, mode == socketDispatched,
+						sessionReleaseIdentity(config, listener))
 				}
 				output.WriteString(" }\n")
 			} else {
@@ -523,10 +525,21 @@ func sessionLogFormatV2(name, port string) string {
 		`"upstream_connect_time":"$upstream_connect_time","end_reason":"$cdnca_l4_end_reason"}';` + "\n"
 }
 
+// sessionReleaseIdentity is the release identity session_track records for
+// a live session (NR-M01): "<tenant>|<site>|<config version>|<config
+// revision>|<package subscription>". The worker rendered from this release
+// keeps it for every session it accepted, so usage checkpoints bill a
+// session under the release it was established in, not the one active later.
+// Every field is a validated identifier (no '|' or '"').
+func sessionReleaseIdentity(config ConfigV2, listener ListenerV2) string {
+	versionID, revision := listener.telemetryIdentity(config)
+	return listener.TenantID + "|" + listener.SiteID + "|" + versionID + "|" + strconv.FormatInt(revision, 10) + "|" + listener.PackageSubscriptionID
+}
+
 // writeSessionLogPreread renders the preread of a logging socket: the Geo
 // and rate checks record a refusal's reason and the client, then an admitted
 // TCP session is registered as live.
-func writeSessionLogPreread(output *strings.Builder, listener ListenerV2, track, dispatched bool, guard, subscription string) {
+func writeSessionLogPreread(output *strings.Builder, listener ListenerV2, track, dispatched bool, guard, subscription, identity string) {
 	fmt.Fprintf(output, "        preread_by_lua_block { local geo = require(\"cdnca_l4_geo\"); local ok, reason, client = geo.enforce(\"%s\", true); "+
 		"if not ok then ngx.log(ngx.WARN, \"l4_geo \", reason) return end;%s", listener.StreamID, guard)
 	if rate := listener.NewConnRate; rate != nil {
@@ -535,7 +548,7 @@ func writeSessionLogPreread(output *strings.Builder, listener ListenerV2, track,
 	}
 	output.WriteString(subscription)
 	if track {
-		fmt.Fprintf(output, " geo.session_track(\"%s\", \"%s\", client, %t);", listener.StreamID, listener.ID, dispatched)
+		fmt.Fprintf(output, " geo.session_track(\"%s\", \"%s\", client, %t, \"%s\");", listener.StreamID, listener.ID, dispatched, identity)
 	}
 	output.WriteString(" }\n")
 }

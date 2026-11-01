@@ -2367,7 +2367,7 @@ func (s *Server) authorizeImpersonationCookie(request *http.Request) (impersonat
 	// WithImpersonationDelegate already authorized (and audited) this request.
 	if delegated, ok := request.Context().Value(impersonationDelegateKey{}).(impersonationDelegate); ok {
 		if delegated.err != nil {
-			return impersonationhttp.AuthorizedSession{}, true, identity.ErrInvalidSession
+			return impersonationhttp.AuthorizedSession{}, true, impersonationAuthorizationError(delegated.err)
 		}
 		return delegated.session, true, nil
 	}
@@ -2378,11 +2378,23 @@ func (s *Server) authorizeImpersonationCookie(request *http.Request) (impersonat
 		authorizationRequest := impersonationAuthorizationRequest(request)
 		authorized, err := s.impersonationSessionAuthorizer.Authorize(authorizationRequest, impersonationRequestAction(request))
 		if err != nil {
-			return impersonationhttp.AuthorizedSession{}, true, identity.ErrInvalidSession
+			return impersonationhttp.AuthorizedSession{}, true, impersonationAuthorizationError(err)
 		}
 		return authorized, true, nil
 	}
 	return impersonationhttp.AuthorizedSession{}, false, nil
+}
+
+// impersonationAuthorizationError keeps the one refusal that is not a session
+// failure: a sensitive action denied during impersonation (ID-06). The cookie
+// and session stay valid, so it must answer 403, not 401 invalid_session.
+// Every other refusal stays an invalid session and never falls back to the
+// administrator's Bearer.
+func impersonationAuthorizationError(err error) error {
+	if errors.Is(err, impersonation.ErrSensitiveAction) {
+		return impersonation.ErrSensitiveAction
+	}
+	return identity.ErrInvalidSession
 }
 
 func impersonationAuthorizationRequest(request *http.Request) *http.Request {
@@ -2563,6 +2575,14 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		s.writeAPIError(w, r, http.StatusUnauthorized, "invalid_api_key", "API key authentication failed")
 	case errors.Is(err, apikey.ErrInvalidInput):
 		s.writeAPIError(w, r, http.StatusBadRequest, "validation_error", "API key request fields are invalid")
+	case errors.As(err, new(*apikey.ScopesUnavailableError)):
+		// AA-KEY-01：锁内重核发现这些权限已被收回；仍是 403 permission_denied，details 列出哪些权限，前端据此说明原因。
+		var refusal *apikey.ScopesUnavailableError
+		errors.As(err, &refusal)
+		writeJSONStatus(w, http.StatusForbidden, errorEnvelope{Error: apiError{
+			Code: "permission_denied", Message: "some requested API key scopes are no longer granted",
+			RequestID: requestID(r.Context()), Details: apiKeyScopesUnavailableDetails{Reason: "scopes_revoked", Scopes: refusal.Scopes},
+		}})
 	case errors.Is(err, apikey.ErrPermissionDenied):
 		s.writeAPIError(w, r, http.StatusForbidden, "permission_denied", "permission is required")
 	case errors.Is(err, apikey.ErrNotFound):
@@ -2581,6 +2601,9 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		s.writeAPIError(w, r, http.StatusServiceUnavailable, "api_key_unavailable", "API key service is unavailable")
 	case errors.Is(err, identity.ErrInvalidCredentials):
 		s.writeAPIError(w, r, http.StatusUnauthorized, "invalid_credentials", "username or password is incorrect")
+	case errors.Is(err, impersonation.ErrSensitiveAction):
+		s.writeAPIError(w, r, http.StatusForbidden, "impersonation_sensitive_action_denied",
+			"this action is not allowed while impersonating a user")
 	case errors.Is(err, identity.ErrInvalidSession):
 		s.writeAPIError(w, r, http.StatusUnauthorized, "invalid_session", "authentication is required")
 	case errors.Is(err, identity.ErrRefreshReplay):

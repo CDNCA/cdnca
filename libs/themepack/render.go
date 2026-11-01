@@ -90,8 +90,11 @@ type renderedBrand struct {
 // renderedLayout.BrandName is omitted when the package sets none, so
 // documents of packages without it render byte for byte as before.
 type renderedLayout struct {
-	LoginLayout    string       `json:"login_layout"`
-	Sidebar        string       `json:"sidebar"`
+	LoginLayout string `json:"login_layout"`
+	Sidebar     string `json:"sidebar"`
+	// Header is omitted when the package sets none (light), so older
+	// packages render byte for byte as before.
+	Header         string       `json:"header,omitempty"`
 	HeaderLinks    []HeaderLink `json:"header_links"`
 	FooterText     I18nText     `json:"footer_text"`
 	BrandName      I18nText     `json:"brand_name,omitempty"`
@@ -269,7 +272,7 @@ func renderJSON(pkg Package, result Rendered) ([]byte, error) {
 		}
 	}
 	layout := renderedLayout{
-		LoginLayout: pkg.Layout.LoginLayout, Sidebar: pkg.Layout.Sidebar,
+		LoginLayout: pkg.Layout.LoginLayout, Sidebar: pkg.Layout.Sidebar, Header: pkg.Layout.Header,
 		HeaderLinks: pkg.Layout.HeaderLinks, FooterText: pkg.Layout.FooterText, BrandName: pkg.Layout.BrandName, UserHomeBlocks: pkg.Layout.UserHome,
 		Look: pkg.Layout.Look, Motion: pkg.Layout.Motion,
 	}

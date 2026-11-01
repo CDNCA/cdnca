@@ -18,7 +18,7 @@ import { useSessionStore } from '../auth/session'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/securityIPLists'
 import { isIPAddress, validCIDR } from './streamForm'
-import { FeedbackWhen } from '@cdnca/ui'
+import { FeedbackWhen, PageSection } from '@cdnca/ui'
 
 interface ListForm {
   name: string
@@ -134,7 +134,7 @@ export default function SecurityIPListsPage() {
   ]
 
   return (
-    <div className="page security-ip-lists-page">
+    <PageSection className="security-ip-lists-page">
       <Typography.Title level={3}>{t('title')}</Typography.Title>
       <Typography.Paragraph type="secondary">{t('description')}</Typography.Paragraph>
       {audience === 'tenant' ? <Typography.Paragraph type="secondary">{t('platformHint')}</Typography.Paragraph> : null}
@@ -171,6 +171,6 @@ export default function SecurityIPListsPage() {
         cancelText={t('actions.cancel')} confirmLoading={busy} onOk={() => void remove()} onCancel={() => setDeleting(null)}>
         {deleting ? t('confirmDelete', { name: deleting.name }) : null}
       </Modal>
-    </div>
+    </PageSection>
   )
 }

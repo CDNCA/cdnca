@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/cdnca/cdnca/agents/edge-agent/internal/nodemonitoring"
+	agentv1 "github.com/cdnca/cdnca/proto/gen/go/agent/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestNodeMonitoringBridgePersistsTypedLoadMetricsOutsideStrictProbeJSON(t *testing.T) {
@@ -34,6 +36,8 @@ func TestNodeMonitoringBridgePersistsTypedLoadMetricsOutsideStrictProbeJSON(t *t
 				DDoSDrops: []nodemonitoring.DDoSDropMetrics{{Kind: "ct_invalid", Packets: 4, Bytes: 160}, {Kind: "tcp_xmas", Packets: 2, Bytes: 80}},
 				XDP: &nodemonitoring.XDPStatusMetrics{Mode: "generic", Interfaces: []string{"eth0=generic"},
 					Drops: []nodemonitoring.DDoSDropMetrics{{Kind: "xdp_block", Packets: 7, Bytes: 420}}},
+				SiteDrop: &nodemonitoring.SiteDropMetrics{SiteIDs: []string{"01990000-0000-7000-8000-0000000000a1",
+					"01990000-0000-7000-8000-0000000000a2"}, Packets: 11, Bytes: 660},
 				DDoSProtection: &nodemonitoring.DDoSProtectionMetrics{State: "unavailable", Reason: "nft_missing", Detail: "nft command not found"},
 				Mounts: []nodemonitoring.MountMetrics{{Path: "/", Device: "8:1", FSType: "ext4"},
 					{Path: "/snap/core", Device: "7:0", FSType: "squashfs", ReadOnly: true, FilterReason: "squashfs"}},
@@ -65,5 +69,19 @@ func TestNodeMonitoringBridgePersistsTypedLoadMetricsOutsideStrictProbeJSON(t *t
 		pending[0].LoadMetricsV1.Telemetry.GetPortGroupOverrides()[0].GetReason() != "manual" ||
 		bytes.Contains(pending[0].PayloadJson, []byte("cpu_percent")) {
 		t.Fatalf("pending report = %#v payload=%s", pending, pending[0].GetPayloadJson())
+	}
+	// The site drop counters survive the gateway wire (NodeTelemetryV1.site_drop = 10).
+	wire, err := proto.Marshal(pending[0].LoadMetricsV1)
+	if err != nil {
+		t.Fatalf("proto.Marshal() error = %v", err)
+	}
+	var decoded agentv1.NodeLoadMetricsV1
+	if err := proto.Unmarshal(wire, &decoded); err != nil {
+		t.Fatalf("proto.Unmarshal() error = %v", err)
+	}
+	drop := decoded.GetTelemetry().GetSiteDrop()
+	if drop.GetPackets() != 11 || drop.GetBytes() != 660 || len(drop.GetSiteIds()) != 2 ||
+		drop.GetSiteIds()[1] != "01990000-0000-7000-8000-0000000000a2" {
+		t.Fatalf("decoded site_drop = %v", drop)
 	}
 }

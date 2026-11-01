@@ -312,7 +312,7 @@ def native_clickhouse_grants(database, execute):
     execute(f"GRANT SELECT ON system.replicas TO {query_user}")
     execute(f"GRANT SELECT ON system.columns TO {ingest_user}")
     for table in ["access_events", "security_events", "connections_ingest_receipts_v1", "l4_session_facts_v1", "l4_session_logs_v1",
-                  "autodefense_verdicts_v1", "node_security_events_v1", "cc_rule_stats_v1", "subscription_minutes_v1",
+                  "l4_usage_checkpoints_v1", "autodefense_verdicts_v1", "node_security_events_v1", "cc_rule_stats_v1", "subscription_minutes_v1",
                   "market_security_events_v1"]:
         execute(f"GRANT INSERT ON {database}.{table} TO {ingest_user}")
     execute(f"GRANT SELECT ON {database}.connections_ingest_receipts_v1 TO {ingest_user}")

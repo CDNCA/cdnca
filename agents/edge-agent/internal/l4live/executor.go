@@ -155,7 +155,9 @@ type entry struct {
 
 func parseEntry(value string) (entry, bool) {
 	parts := strings.Split(value, "|")
-	if len(parts) != 7 {
+	// 12 fields: the session's release identity (NR-M01) sits between the
+	// start and the token; 7: an entry without it.
+	if len(parts) != 7 && len(parts) != 12 {
 		return entry{}, false
 	}
 	port, _ := strconv.ParseUint(parts[3], 10, 16)

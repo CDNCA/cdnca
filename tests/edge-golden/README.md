@@ -114,6 +114,10 @@ Recorded v7 behaviour worth knowing before a new runtime is judged against it
   `X-Forwarded-Host`, `Proxy-Authorization` and a header named by
   `Connection` are forwarded untouched. `forwarding/origin-redirect`: a
   Location naming the origin is rewritten to the visitor's host.
+- `l2-fallback/via-l2`: the request to an L2 carries `X-Cdnca-L2-Hop: 1`
+  and the edge's `X-Forwarded-For` / `X-Real-IP` / `X-Forwarded-Proto`
+  (L2_ROUTING v2: the L2 trusts the mark only from a node network and takes
+  the visitor from X-Real-IP). v7 sent neither to an L2.
 - Scenarios declare site_runtime 6 (the 1.0.35 floor); with
   2–5 every one but five failed to start.
 - `cache/rule-other-*`: with rule routes (cache policy v2) a path no rule

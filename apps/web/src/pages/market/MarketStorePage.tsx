@@ -28,7 +28,7 @@ import './messages'
 import '../plugin-market/PluginMarketPage.css'
 import './MarketStorePage.css'
 import '../node-market/NodeMarketV2.css'
-import { useFeedback } from '@cdnca/ui'
+import { PageSection, useFeedback } from '@cdnca/ui'
 import { SellerSiteGuide } from '../node-market/SellerSiteGuide'
 
 const codeOf = (error: unknown) => (error instanceof ApiError ? error.code : 'request_failed')
@@ -276,7 +276,7 @@ export default function MarketStorePage() {
     Boolean(principal.permissions.includes('plugin_installations.platform.read'))
   const requestedTab = searchParams.get('tab')
   return (
-    <div className="plugin-market-page market-store-v2">
+    <PageSection className="plugin-market-page market-store-v2">
       <div className="market-store-v2-head">
         <Typography.Title level={4}>{storeT('title')}</Typography.Title>
         <Typography.Text type="secondary">{t('subtitle')}</Typography.Text>
@@ -291,6 +291,6 @@ export default function MarketStorePage() {
           children: advisories.query.error ? <LoadError error={advisories.query.error} />
             : <AdvisoryList items={advisories.items} loading={advisories.query.isLoading} canAcknowledge={access.purchase} /> },
       ]} /></div>}
-    </div>
+    </PageSection>
   )
 }

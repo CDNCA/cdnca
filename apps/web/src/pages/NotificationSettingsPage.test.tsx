@@ -128,6 +128,36 @@ describe('NotificationSettingsPage', () => {
     expect(screen.getByText(template.template_id)).toBeInTheDocument()
   })
 
+  // 发送日志每行给出事件、渠道、状态、中文原因、下一步与可复制记录号；
+  // 联系人问题直达用户管理，未识别的原因码照实显示代码。供应商已接受不写成已送达。
+  it('explains delivery failures in Chinese with the event, next step and record number', async () => {
+    await changeLocale('zh-CN')
+    authenticate(['system_configuration.read'])
+    mockAdminReads()
+    vi.spyOn(notificationsApi, 'listDeliveries').mockResolvedValue({ items: [
+      { ...deliveryLog, event_type: 'node.availability.offline', template_id: 'node.availability.offline.zh-cn',
+        state: 'permanent_failed', failure_code: 'recipient_unavailable' },
+      { ...deliveryLog, outbox_id: '44444444-4444-4444-8444-444444444444', channel: 'sms', state: 'accepted', failure_code: undefined },
+      { ...deliveryLog, outbox_id: '55555555-5555-4555-8555-555555555555', state: 'exhausted', failure_code: 'smtp_mystery' },
+    ] })
+    const user = userEvent.setup()
+    renderWithProviders(<NotificationSettingsPage mode="admin" />)
+    await user.click(await screen.findByRole('button', { name: '查看发送日志' }))
+    const drawer = await screen.findByRole('dialog', { name: '通知发送日志' })
+    const contact = (await within(drawer).findByText('节点离线告警')).closest('tr')!
+    expect(within(contact).getByText('永久失败')).toBeInTheDocument()
+    expect(within(contact).getByText('接收人没有可用的邮箱或手机号')).toBeInTheDocument()
+    expect(within(contact).getByRole('link', { name: '补全联系方式' })).toHaveAttribute('href', '/sys/user')
+    expect(within(contact).getByText(`记录号 ${deliveryLog.outbox_id}`)).toBeInTheDocument()
+    expect(within(contact).queryByText('recipient_unavailable')).not.toBeInTheDocument()
+    const accepted = within(drawer).getByText(/44444444-4444-4444-8444-444444444444/).closest('tr')!
+    expect(within(accepted).getByText('供应商已接受')).toBeInTheDocument()
+    expect(within(accepted).getByText('供应商已接收，尚未确认送达')).toBeInTheDocument()
+    expect(within(accepted).queryByText('已送达')).not.toBeInTheDocument()
+    const unknown = within(drawer).getByText(/55555555-5555-4555-8555-555555555555/).closest('tr')!
+    expect(within(unknown).getByText('未识别的失败原因（代码 smtp_mystery）')).toBeInTheDocument()
+  })
+
   it('names templates and variables in Chinese (W2)', async () => {
     await changeLocale('zh-CN')
     authenticate(['system_configuration.read', 'system_configuration.manage'])
@@ -162,7 +192,8 @@ describe('NotificationSettingsPage', () => {
     await user.click(await screen.findByRole('button', { name: '查看发送日志' }))
     const drawer = await screen.findByRole('dialog', { name: '通知发送日志' })
     expect(await within(drawer).findByText('等待重试')).toBeInTheDocument()
-    expect(within(drawer).getByText('smtp_temporary_failure')).toBeInTheDocument()
+    // 已知原因码显示中文解释。
+    expect(within(drawer).getAllByText('邮件服务器暂时拒绝，稍后自动重试').length).toBeGreaterThan(0)
     expect(document.body).not.toHaveTextContent('private')
     expect(listDeliveries).toHaveBeenCalledWith(expect.any(String), { limit: 20 })
 

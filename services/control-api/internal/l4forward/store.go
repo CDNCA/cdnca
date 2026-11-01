@@ -1211,6 +1211,18 @@ func listWhere(actor Actor, filter ListFilter) (string, []any) {
 	if filter.OwnerDisplayID != nil {
 		add("u.display_id = $%d", *filter.OwnerDisplayID)
 	}
+	if filter.Forward != "" {
+		args = append(args, filter.Forward)
+		position := len(args)
+		conditions = append(conditions, fmt.Sprintf(
+			"(position($%d in lower(f.name)) > 0 OR position($%d in lower(f.remark)) > 0)", position, position))
+	}
+	if filter.Owner != "" {
+		args = append(args, filter.Owner)
+		position := len(args)
+		conditions = append(conditions, fmt.Sprintf(
+			"(position($%d in lower(u.username)) > 0 OR position($%d in lower(COALESCE(u.display_name, ''))) > 0)", position, position))
+	}
 	if filter.PublicationState != "" {
 		add(`CASE WHEN automatic.state IN ('pending','leased','reconciling','succeeded','failed','superseded')
 			THEN automatic.state WHEN automatic.state='retry_wait' THEN 'retrying' ELSE 'unknown' END = $%d`, filter.PublicationState)

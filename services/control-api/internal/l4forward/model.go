@@ -462,15 +462,20 @@ type DeleteRequest struct {
 }
 
 type ListFilter struct {
-	Page             int
-	Limit            int
-	Search           string
-	Protocol         string
-	Enabled          *bool
-	ListenPort       *int64
-	Upstream         string
-	DisplayID        *int64
-	OwnerDisplayID   *int64
+	Page           int
+	Limit          int
+	Search         string
+	Protocol       string
+	Enabled        *bool
+	ListenPort     *int64
+	Upstream       string
+	DisplayID      *int64
+	OwnerDisplayID *int64
+	// Forward (name/remark substring) and Owner (username/display name
+	// substring, platform only) are the name forms of DisplayID /
+	// OwnerDisplayID.
+	Forward          string
+	Owner            string
 	PublicationState string
 	GroupID          *uuid.UUID
 	PackageProductID *uuid.UUID

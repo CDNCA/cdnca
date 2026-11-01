@@ -20,7 +20,7 @@ async function setup() {
   renderWithProviders(<StreamListPage />, ['/stream/list'])
   await screen.findByText(stream.name)
   const user = userEvent.setup()
-  await user.click(screen.getByRole('button', { name: /^高级筛选/ }))
+  await user.click(screen.getByRole('button', { name: '高级筛选' }))
   const panel = within(screen.getByRole('group', { name: '高级筛选' }))
   return { list, user, panel }
 }
@@ -29,6 +29,9 @@ async function setup() {
 beforeEach(() => { localStorage.removeItem('cdnca.advancedFilters.stream-list') })
 
 describe('stream list precise filters', () => {
+  // 高级筛选展开状态记在 localStorage（AdvancedFilters storageKey），每个用例从收起开始。
+  beforeEach(() => window.localStorage.clear())
+
   it('preserves advanced source filters while replacing quick user and publication conditions', async () => {
     authenticate()
     const list = vi.spyOn(streamsApi, 'list').mockResolvedValue({ items: [stream], total: 1, page: 1, limit: 10 })
@@ -39,7 +42,7 @@ describe('stream list precise filters', () => {
       await user.click(screen.getByRole('combobox', { name: '搜索字段' }))
       await user.click(await screen.findByText(label, { selector: '.ant-select-item-option-content' }))
     }
-    await user.click(screen.getByRole('button', { name: /^高级筛选/ }))
+    await user.click(screen.getByRole('button', { name: '高级筛选' }))
     const panel = within(screen.getByRole('group', { name: '高级筛选' }))
     await user.type(panel.getByRole('textbox', { name: '源IP' }), 'Origin_%')
     await user.click(panel.getByRole('button', { name: '应用' }))
@@ -78,6 +81,8 @@ describe('stream list precise filters', () => {
     await user.type(panel.getByLabelText('CNAME域名'), 'edge.example.net')
     await user.type(panel.getByLabelText('CNAME主机名'), 'tenant-edge')
     await user.type(panel.getByLabelText('转发ID'), '9223372036854775807')
+    // 转发ID 是「ID 或名称」联想框：等联想请求（search=输入值）发出，免得它落在「应用」之后。
+    await waitFor(() => expect(list.mock.calls.some(([, params]) => params.search === '9223372036854775807')).toBe(true))
     await user.click(panel.getByRole('combobox', { name: '转发分组' }))
     await user.click(await screen.findByText('筛选分组', { selector: '.ant-select-item-option-content' }))
     await waitFor(() => expect(panel.getByRole('combobox', { name: '转发分组' }).closest('.ant-select')).toHaveTextContent('筛选分组'))

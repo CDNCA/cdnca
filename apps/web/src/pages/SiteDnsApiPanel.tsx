@@ -1,12 +1,12 @@
 import { useRef, useState } from 'react'
-import { Button, Pagination, Popconfirm, Space, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Pagination, Popconfirm, Space, Table, Tooltip, type TableColumnsType } from 'antd'
 import { CircleCheck, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { FeedbackWhen } from '@cdnca/ui'
 
 import { ApiError } from '../api/auth'
-import { dnsApi, type CreateDNSProviderInput, type DNSProvider, type UpdateDNSProviderInput } from '../api/dns'
+import { dnsApi, ownDNSProviders, type CreateDNSProviderInput, type DNSProvider, type UpdateDNSProviderInput } from '../api/dns'
 import { useSessionStore } from '../auth/session'
 import {
   credentialFields, errorMessage, isCreatableProviderType, ProviderEditor, providerLabel,
@@ -30,12 +30,6 @@ function attemptKey(kind: Write['kind']): string {
 // 网络中断/超时/5xx 时结果未知，保留同一幂等键供重试。
 function outcomeUnknown(error: unknown): boolean {
   return !(error instanceof ApiError) || error.status === 0 || error.status === 408 || error.status >= 500
-}
-
-// 平台 DNS 配置同步来的副本：平台只用它维护网站 CNAME，用户不能编辑、删除、验证或拿去做本人用途
-// （DNS-SEC-20261027-01，服务端同样拒绝）。
-function platformManaged(item: DNSProvider): boolean {
-  return item.managed_by === 'platform'
 }
 
 function clearCredentials(attempt: Attempt | null): void {
@@ -145,7 +139,7 @@ export default function SiteDnsApiPanel() {
     const accessToken = token('dns.manage')
     if (!accessToken) return
     try {
-      for (const item of items.filter((value) => selected.includes(value.id) && !platformManaged(value))) {
+      for (const item of items.filter((value) => selected.includes(value.id))) {
         await dnsApi.remove(accessToken, item.id, item.version, attemptKey('delete'))
       }
       setSelected([])
@@ -155,27 +149,19 @@ export default function SiteDnsApiPanel() {
     await queryClient.invalidateQueries({ queryKey })
   }
 
-  const items = query.data?.items ?? []
+  const items = ownDNSProviders(query.data?.items ?? [])
   const pageItems = items.slice((page - 1) * limit, page * limit)
   const locked = mutation.isPending || attempt !== null
   const uncertain = attempt !== null && writeError !== null && outcomeUnknown(writeError)
   const columns: TableColumnsType<DNSProvider> = [
     { title: 'ID', dataIndex: 'id', width: 300, ellipsis: true },
-    {
-      title: t('columns.name'), dataIndex: 'name', ellipsis: true,
-      render: (value: string, item) => platformManaged(item) ? (
-        <Space size={6}>
-          <span>{value}</span>
-          <Tooltip title={t('platformManaged.hint')}><Tag>{t('platformManaged.tag')}</Tag></Tooltip>
-        </Space>
-      ) : value,
-    },
+    { title: t('columns.name'), dataIndex: 'name', ellipsis: true },
     { title: t('columns.provider'), dataIndex: 'provider_type', width: 200, render: (value: string) => providerLabel(value, t) },
     { title: t('columns.remark'), dataIndex: 'remark', ellipsis: true, render: (value?: string) => value || '-' },
     { title: t('columns.status'), dataIndex: 'status', width: 120, render: (value: string) => t(`states.${value}`) },
     {
       title: t('columns.actions'), key: 'actions', width: 140, fixed: 'right',
-      render: (_, item) => canManage && !platformManaged(item) ? (
+      render: (_, item) => canManage ? (
         <Space size={2}>
           {isCreatableProviderType(item.provider_type) ? (
             <Tooltip title={t('actions.verify')}>
@@ -221,7 +207,6 @@ export default function SiteDnsApiPanel() {
         loading={query.isPending || query.isFetching} locale={{ emptyText: query.isPending ? ' ' : certT('dnsApi.empty') }}
         rowSelection={canManage ? {
           selectedRowKeys: selected, onChange: (keys) => setSelected(keys.map(String)),
-          getCheckboxProps: (item) => ({ disabled: platformManaged(item) }),
         } : undefined} />
       <div className="identity-pagination">
         <Pagination current={page} pageSize={limit} total={items.length} showSizeChanger pageSizeOptions={[10, 20, 50]}

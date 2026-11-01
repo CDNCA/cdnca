@@ -315,6 +315,9 @@ func (fixture *pageReaderFixture) read(_ context.Context, request apiKeyPageStor
 			request.KeyID != "" && item.KeyID != request.KeyID {
 			continue
 		}
+		if request.Usable && (item.Status != StatusActive || item.ExpiresAt != nil && !request.SnapshotAt.Before(*item.ExpiresAt)) {
+			continue
+		}
 		items = append(items, item)
 	}
 	sort.Slice(items, func(left, right int) bool {
@@ -437,4 +440,32 @@ func decodeCursorPayload(t *testing.T, cursor string) map[string]any {
 		t.Fatal(err)
 	}
 	return result
+}
+
+// ①-15：pgx 按 time.Local 扫描 timestamptz（主控是 Asia/Shanghai），下一页游标的
+// AfterCreatedAt 必须转 UTC，否则解码时 canonicalCursorTime 拒绝（400）。
+func TestAPIKeyListCursorAcceptsRowsScannedInLocalZone(t *testing.T) {
+	snapshot := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	shanghai := time.FixedZone("UTC+8", 8*60*60)
+	scopeID := uuid.MustParse("00000000-0000-4000-8000-000000000101")
+	userID := uuid.MustParse("00000000-0000-4000-8000-000000000102")
+	rows := []Key{
+		pageKey(3, scopeID, userID, "cfk_AAAAAAAAAAAAAAAAAAAAAA", "Alpha", StatusActive, snapshot.Add(-time.Minute).In(shanghai)),
+		pageKey(2, scopeID, userID, "cfk_BBBBBBBBBBBBBBBBBBBBBB", "Beta", StatusActive, snapshot.Add(-2*time.Minute).In(shanghai)),
+		pageKey(1, scopeID, userID, "cfk_CCCCCCCCCCCCCCCCCCCCCC", "Gamma", StatusActive, snapshot.Add(-3*time.Minute).In(shanghai)),
+	}
+	reader := &pageReaderFixture{rows: &rows}
+	service := pageTestService(snapshot, scopeID, userID, reader.read)
+	principal := tenantPagePrincipal(scopeID, userID)
+	first, err := service.ListSelfPage(t.Context(), principal, APIKeyListInput{Limit: 2})
+	if err != nil || first.NextCursor == "" {
+		t.Fatalf("first page: cursor=%t err=%v", first.NextCursor != "", err)
+	}
+	second, err := service.ListSelfPage(t.Context(), principal, APIKeyListInput{Limit: 2, Cursor: first.NextCursor})
+	if err != nil {
+		t.Fatalf("下一页游标被拒：%v", err)
+	}
+	if got := pageIDs(second.Items); !reflect.DeepEqual(got, []int{1}) || second.NextCursor != "" {
+		t.Fatalf("second page = ids=%v cursor=%q", got, second.NextCursor)
+	}
 }

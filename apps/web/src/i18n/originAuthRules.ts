@@ -4,7 +4,7 @@ const zhCN = {
   title: '源站鉴权规则',
   description: '管理当前租户站点与源站位置绑定的对象存储签名规则。',
   readOnly: '只读模式',
-  filters: { site: '站点 ID', provider: '存储提供商', enabled: '启用状态', all: '全部', query: '查询' },
+  filters: { site: '站点 ID', sitePlaceholder: '站点 UUID，或输入域名选择', provider: '存储提供商', enabled: '启用状态', all: '全部', query: '查询' },
   actions: {
     refresh: '刷新', create: '新建规则', detail: '查看详情', edit: '编辑', enable: '启用', disable: '停用',
     rotate: '轮换凭据', delete: '删除', confirmDelete: '确认删除', cancel: '取消', save: '保存',
@@ -42,7 +42,7 @@ const enUS: typeof zhCN = {
   title: 'Origin authentication rules',
   description: 'Manage object-storage signing rules bound to tenant sites and origin positions.',
   readOnly: 'Read-only mode',
-  filters: { site: 'Site ID', provider: 'Storage provider', enabled: 'Enabled state', all: 'All', query: 'Query' },
+  filters: { site: 'Site ID', sitePlaceholder: 'Site UUID, or type a domain to pick', provider: 'Storage provider', enabled: 'Enabled state', all: 'All', query: 'Query' },
   actions: {
     refresh: 'Refresh', create: 'Create rule', detail: 'View detail', edit: 'Edit', enable: 'Enable', disable: 'Disable',
     rotate: 'Rotate credential', delete: 'Delete', confirmDelete: 'Confirm delete', cancel: 'Cancel', save: 'Save',

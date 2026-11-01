@@ -44,6 +44,8 @@ export interface ThemeDocument {
   layout: {
     login_layout: LoginLayout
     sidebar: SidebarMode
+    /** Console top bar; absent: light. dark joins it to the dark sidebar. */
+    header?: SidebarMode
     header_links: { label: I18nText; url: string }[]
     footer_text: I18nText
     /** Product name for the consoles and sign-in page (PA-26 white label); absent: "cdnca". */
@@ -138,6 +140,7 @@ export function isThemeDocument(value: unknown): value is ThemeDocument {
   if (!Object.entries(value.css_variables).every(([name, text]) => cssVariablePattern.test(name) && typeof text === 'string' && cssValuePattern.test(text))) return false
   const layout = value.layout
   if (!loginLayouts.has(layout.login_layout as LoginLayout) || (layout.sidebar !== 'light' && layout.sidebar !== 'dark') ||
+    (layout.header !== undefined && layout.header !== 'light' && layout.header !== 'dark') ||
     (layout.look !== undefined && layout.look !== 'classic' && layout.look !== 'tech') ||
     (layout.motion !== undefined && layout.motion !== 'off' && layout.motion !== 'subtle' && layout.motion !== 'rich') ||
     !isI18n(layout.footer_text) || (layout.brand_name !== undefined && !isI18n(layout.brand_name)) ||

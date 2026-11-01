@@ -26,6 +26,7 @@
       "pages/CertificateListPage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/L4RealtimeMonitorPage.css",
@@ -58,6 +59,7 @@
       "pages/node-market/NodeMarketV2.css",
       "pages/plugin-webhooks/PluginWebhooksPage.css",
       "pages/site-edit/BasicSiteTab.css",
+      "pages/site-edit/CacheSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
       "pages/site-edit/SiteEditSyncStatus.css",
       "pages/site-edit/SiteEditV4.css",
@@ -112,6 +114,7 @@
       "pages/CnameAllocationsPage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
@@ -143,6 +146,7 @@
       "pages/WafLogsV2.css",
       "pages/dns-hub/DnsHubPage.css",
       "pages/node-market/NodeMarketV2.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/plugin-webhooks/PluginWebhooksPage.css",
       "pages/site-edit/CacheSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
@@ -167,6 +171,7 @@
       "components/AppShell.css",
       "components/CacheOperationOutcome.css",
       "components/CertificateFailureReason.css",
+      "components/CertificateSyncStatus.css",
       "components/NodeFrozenTag.css",
       "components/ResourceID.css",
       "pages/AccountApiKeysPage.css",
@@ -182,6 +187,7 @@
       "pages/CnameAllocationsPage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
@@ -213,6 +219,7 @@
       "pages/WafLogsV2.css",
       "pages/dns-hub/DnsHubPage.css",
       "pages/node-market/NodeMarketV2.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/plugin-webhooks/PluginWebhooksPage.css",
       "pages/site-edit/CacheSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
@@ -245,6 +252,7 @@
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
       "pages/ControlUpgradesPage.css",
+      "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/NodeDnsPage.css",
@@ -252,6 +260,7 @@
       "pages/NodeMonitorSettingsPage.css",
       "pages/NodeSchedulingPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
       "pages/SiteAccessLogPage.css",
       "pages/SiteAnalysisPage.css",
       "pages/SiteGroupsPage.css",
@@ -305,6 +314,7 @@
       "pages/CertificateListPage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/DnsReconcilePage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/L4RealtimeMonitorPage.css",
       "pages/LogCenterPage.css",
@@ -359,6 +369,7 @@
     ],
     "used_in": [
       "@cdnca/ui/styles.css",
+      "pages/FirewallActionPoliciesPage.css",
       "pages/dns-hub/DnsHubPage.css",
       "pages/site-edit/CacheSiteTab.css",
       "styles.css"
@@ -430,7 +441,9 @@
       "pages/CacheOperationHistoryPage.css",
       "pages/CacheOperationsPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
+      "pages/FirewallActionPoliciesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
       "pages/L4RealtimeMonitorPage.css",
@@ -457,6 +470,7 @@
       "pages/SystemSettingsPage.css",
       "pages/WafLogsPage.css",
       "pages/WafLogsV2.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/BasicSiteTab.css",
       "pages/site-edit/CacheSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
@@ -504,6 +518,7 @@
     ],
     "used_in": [
       "@cdnca/ui/console.css",
+      "@cdnca/ui/styles.css",
       "components/AppShell.css",
       "pages/NodeMonitorSettingsPage.css",
       "styles/tech-look.css"
@@ -539,6 +554,7 @@
       "pages/CnameAllocationsPage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/DnsReconcilePage.css",
       "pages/ErrorPagesPage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
@@ -561,6 +577,7 @@
       "pages/WafLogsV2.css",
       "pages/dns-hub/DnsHubPage.css",
       "pages/node-market/NodeMarketV2.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/BasicSiteTab.css",
       "pages/site-edit/CacheSiteTab.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
@@ -577,6 +594,7 @@
     "kind": "color",
     "group": "status",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
       "components/CacheOperationOutcome.css",
       "pages/AccountUserPage.css",
@@ -585,6 +603,7 @@
       "pages/CertificateListPage.css",
       "pages/ControlUpgradesPage.css",
       "pages/DDoSProtectionV2.css",
+      "pages/DnsReconcilePage.css",
       "pages/NodeDnsPage.css",
       "pages/NodeL2TopologyDetailPage.css",
       "pages/NodeL2TopologyPage.css",
@@ -595,6 +614,7 @@
       "pages/StreamDetailPage.css",
       "pages/StreamListPage.css",
       "pages/SystemGlobalSettingsV2.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
       "pages/site-edit/SiteEditSyncStatus.css",
       "pages/site-edit/SiteEditV4.css",
@@ -608,7 +628,9 @@
     "kind": "color",
     "group": "status",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
+      "pages/AccountApiKeysPage.css",
       "pages/AccountUserPage.css",
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
@@ -637,6 +659,7 @@
     "group": "status",
     "used_in": [
       "@cdnca/ui/console.css",
+      "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
       "components/CacheOperationOutcome.css",
       "pages/AccountApiKeysPage.css",
@@ -645,6 +668,7 @@
       "pages/CacheOperationHistoryPage.css",
       "pages/CacheOperationsPage.css",
       "pages/CertificateListPage.css",
+      "pages/DnsReconcilePage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/LogCenterPage.css",
       "pages/NodeDnsPage.css",
@@ -652,12 +676,14 @@
       "pages/NodeL2TopologyPage.css",
       "pages/NodeListPage.css",
       "pages/NotificationDeliveryPolicyPanel.css",
+      "pages/SecurityPoliciesPage.css",
       "pages/SiteBlockLogPage.css",
       "pages/StreamDetailPage.css",
       "pages/StreamListPage.css",
       "pages/SystemGlobalSettingsPage.css",
       "pages/WafLogsV2.css",
       "pages/dns-hub/DnsHubPage.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
       "pages/site-edit/SiteEditSyncStatus.css",
       "pages/site-edit/SiteEditV4.css",
@@ -685,6 +711,7 @@
     "kind": "color",
     "group": "status",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "styles/tech-look.css"
     ]
   },
@@ -692,6 +719,7 @@
     "kind": "color",
     "group": "status",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
       "pages/SystemGlobalSettingsV2.css",
       "pages/site-edit/SiteAutoDefenseTab.css",
@@ -704,9 +732,9 @@
     "kind": "color",
     "group": "status",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
       "pages/CacheOperationsPage.css",
-      "pages/site-edit/SiteEditV4.css",
       "styles.css",
       "styles/tech-look.css"
     ]
@@ -733,6 +761,7 @@
       "pages/SiteCreateModal.css",
       "pages/StreamListPage.css",
       "pages/SystemSettingsPage.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/CacheSiteTab.css",
       "styles.css",
       "styles/tech-look.css"
@@ -742,6 +771,7 @@
     "kind": "color",
     "group": "table",
     "used_in": [
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "styles/tech-look.css"
     ]
   },
@@ -757,12 +787,15 @@
     "group": "base",
     "used_in": [
       "@cdnca/ui/styles.css",
+      "pages/DnsReconcilePage.css",
       "pages/NodeRealtimePage.css",
+      "pages/SecurityPoliciesPage.css",
       "pages/SystemGlobalSettingsV2.css",
       "pages/SystemOtherSettingsV2.css",
       "pages/WafLogsPage.css",
       "pages/WafLogsV2.css",
       "pages/node-market/NodeMarketV2.css",
+      "pages/node-scheduling/SmartScheduleDrawer.css",
       "pages/site-edit/SiteEditV4.css",
       "pages/tickets/TicketsChat.css",
       "styles/tech-look.css"
@@ -926,6 +959,8 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
+      "pages/NodeListPage.css",
       "styles.css",
       "styles/adminHomeReference.css",
       "styles/userHomeReference.css"
@@ -935,6 +970,7 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "components/AppShell.css",
       "styles.css",
       "styles/adminHomeReference.css"
     ]
@@ -943,6 +979,7 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "components/AppShell.css",
       "styles.css",
       "styles/adminHomeReference.css",
@@ -953,6 +990,7 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "styles.css",
       "styles/adminHomeReference.css",
       "styles/userHomeReference.css"
@@ -962,6 +1000,7 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "components/AppShell.css",
       "styles.css",
       "styles/adminHomeReference.css",
@@ -972,6 +1011,7 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "styles.css",
       "styles/adminHomeReference.css"
     ]
@@ -980,6 +1020,7 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
       "components/AppShell.css",
       "pages/SiteRealtimeMonitorPage.css",
@@ -992,6 +1033,8 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
+      "pages/NodeListPage.css",
       "styles.css",
       "styles/adminHomeReference.css",
       "styles/userHomeReference.css"
@@ -1001,6 +1044,7 @@
     "kind": "color",
     "group": "dark",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "components/AppShell.css",
       "styles.css",
       "styles/adminHomeReference.css",
@@ -1081,6 +1125,7 @@
       "pages/AccountMessagesPage.css",
       "pages/AccountSubscriptionsPage.css",
       "pages/CertificateListPage.css",
+      "pages/DnsReconcilePage.css",
       "pages/FirewallPoliciesPage.css",
       "pages/IdentitySessionsPage.css",
       "pages/NodeL2TopologyPage.css",
@@ -1100,6 +1145,7 @@
     "used_in": [
       "@cdnca/ui/styles.css",
       "components/CacheOperationOutcome.css",
+      "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/plugin-webhooks/PluginWebhooksPage.css",
       "pages/tickets/TicketsChat.css",
@@ -1166,6 +1212,7 @@
       "components/SiteCacheTabs.css",
       "pages/CacheOperationsPage.css",
       "pages/FirewallPoliciesPage.css",
+      "pages/SecurityPoliciesPage.css",
       "pages/StreamDetailPage.css",
       "pages/StreamListPage.css",
       "pages/SystemGlobalSettingsV2.css",
@@ -1266,6 +1313,7 @@
     "kind": "color",
     "group": "base",
     "used_in": [
+      "pages/AccountApiKeysPage.css",
       "pages/CacheOperationHistoryPage.css",
       "pages/CertificateListPage.css",
       "pages/SecurityPoliciesPage.css",
@@ -2285,6 +2333,7 @@
     "kind": "color",
     "group": "scale",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "pages/SystemSettingsPage.css"
     ]
   },
@@ -2370,6 +2419,7 @@
     "kind": "color",
     "group": "scale",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "@cdnca/ui/styles.css",
       "pages/SystemSettingsPage.css"
     ]
@@ -2452,6 +2502,7 @@
     "kind": "color",
     "group": "scale",
     "used_in": [
+      "@cdnca/ui/dark.css",
       "pages/market/MarketStorePage.css"
     ]
   },

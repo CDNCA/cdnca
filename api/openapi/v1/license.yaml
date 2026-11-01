@@ -347,9 +347,13 @@ paths:
         - name: status
           in: query
           schema: {type: string, enum: [active, disabled]}
+        - name: focus
+          in: query
+          description: 返回该管理员所在的页（同一筛选与默认排序）；不在结果内时按 page 返回。响应 page 为实际返回的页。
+          schema: {type: string, format: uuid}
       responses:
         '200':
-          description: Stable platform-operator page
+          description: Stable platform-operator page. 默认排序：正常在前、停用在后；平台所有者、持有未归档角色、无有效角色；加入时间倒序
           content:
             application/json:
               schema: {$ref: '#/components/schemas/RBACOperatorPage'}
@@ -386,6 +390,86 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/OperatorLoginProtection'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /operator/v1/rbac/operators/{operator_id}/status:
+    put:
+      tags: [Operator Identity]
+      operationId: setOperatorStatus
+      summary: Disable or re-enable one platform operator account
+      description: |
+        Disabling changes the status, revokes every session of that operator and
+        writes an audit fact in one transaction under the exclusive RBAC lock; the
+        last active owner / RBAC manager cannot be disabled. Re-enabling only allows
+        a new sign-in: sessions revoked earlier stay revoked. This is separate from
+        the temporary login lock. An operator cannot change their own status.
+      security:
+        - OperatorSession: []
+      x-required-permissions: [identity.rbac.manage]
+      x-requires-recent-reauthentication: true
+      parameters:
+        - name: operator_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/OperatorOrigin'
+        - $ref: '#/components/parameters/OperatorIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/SetOperatorStatusRequest'}
+      responses:
+        '200':
+          description: Status changed or exact idempotent replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/OperatorStatusResult'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: |
+            revision_conflict, conflict (already in that status), last_administrator,
+            operator_self_status, or idempotency_conflict.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /operator/v1/rbac/operators/{operator_id}/sessions/revoke:
+    post:
+      tags: [Operator Identity]
+      operationId: revokeOperatorSessions
+      summary: Sign one platform operator out of every session
+      description: |
+        Revokes every active session of the operator without changing the account
+        status; the operator can sign in again. Audited. An operator cannot revoke
+        their own sessions here.
+      security:
+        - OperatorSession: []
+      x-required-permissions: [identity.rbac.manage]
+      x-requires-recent-reauthentication: true
+      parameters:
+        - name: operator_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - $ref: '#/components/parameters/OperatorOrigin'
+        - $ref: '#/components/parameters/OperatorIdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RevokeOperatorSessionsRequest'}
+      responses:
+        '200':
+          description: Sessions revoked or exact idempotent replay
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/RevokeOperatorSessionsResult'}
         '400': {$ref: '#/components/responses/InvalidRequest'}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '403': {$ref: '#/components/responses/Forbidden'}
@@ -7621,6 +7705,35 @@ components:
           uniqueItems: true
           items: {type: string, format: uuid}
         expected_revision: {type: integer, format: int64, minimum: 1}
+    SetOperatorStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status, expected_revision]
+      properties:
+        status: {type: string, enum: [active, disabled]}
+        reason: {type: string, maxLength: 200, description: Optional note kept in the audit record.}
+        expected_revision: {type: integer, format: int64, minimum: 1}
+    OperatorStatusResult:
+      type: object
+      additionalProperties: false
+      required: [operator_id, status, revision, revoked_sessions]
+      properties:
+        operator_id: {type: string, format: uuid}
+        status: {type: string, enum: [active, disabled]}
+        revision: {type: integer, format: int64, minimum: 1}
+        revoked_sessions: {type: integer, format: int64, minimum: 0}
+    RevokeOperatorSessionsRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: {type: string, maxLength: 200, description: Optional note kept in the audit record.}
+    RevokeOperatorSessionsResult:
+      type: object
+      additionalProperties: false
+      required: [operator_id, revoked_sessions]
+      properties:
+        operator_id: {type: string, format: uuid}
+        revoked_sessions: {type: integer, format: int64, minimum: 0}
     UnlockOperatorLoginRequest:
       type: object
       additionalProperties: false
@@ -7636,10 +7749,17 @@ components:
         display_name: {type: string, minLength: 1, maxLength: 200}
         email: {type: string, format: email, maxLength: 320}
         ttl_seconds: {type: integer, minimum: 300, maximum: 86400, default: 3600}
+        role_ids:
+          description: 接受后获得的岗位角色。省略=系统默认角色 platform_operator；传入需 identity.rbac.manage，角色未归档，平台所有者角色只能由活跃所有者授予。
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: {type: string, format: uuid}
     OperatorInvitation:
       type: object
       additionalProperties: false
-      required: [id, username, display_name, email, status, expires_at, created_at]
+      required: [id, username, display_name, email, status, expires_at, created_at, role_ids, role_names, operator_id]
       properties:
         id: {type: string, format: uuid}
         username: {type: string}
@@ -7648,6 +7768,15 @@ components:
         status: {type: string, enum: [pending, accepted, expired, revoked]}
         expires_at: {type: string, format: date-time}
         created_at: {type: string, format: date-time}
+        role_ids:
+          description: 接受后获得的角色，按名称排序
+          type: array
+          items: {type: string, format: uuid}
+        role_names: {type: array, items: {type: string}}
+        operator_id:
+          description: 已接受的邀请所创建的员工账号；其他状态为 null
+          type: [string, 'null']
+          format: uuid
     OperatorInvitationPage:
       type: object
       additionalProperties: false

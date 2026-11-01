@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Checkbox, InputNumber, Result, Space, Spin, Tag, Typography } from 'antd'
-import { useFeedbackMessage, FeedbackWhen } from '@cdnca/ui'
+import { useFeedbackMessage, FeedbackWhen, PageSection } from '@cdnca/ui'
 import { CheckCircle, RefreshCw, Rocket, Save } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -143,7 +143,7 @@ function AccessLogFieldsContent({ canManage }: { canManage: boolean }) {
     setSelected((current) => canonical(on ? [...current, key] : current.filter((item) => item !== key)))
 
   return (
-    <div className="access-log-fields-settings">
+    <PageSection className="access-log-fields-settings">
       {messageContext}
       <Space direction="vertical" size={16} style={{ width: '100%' }}>
         <div>
@@ -194,7 +194,7 @@ function AccessLogFieldsContent({ canManage }: { canManage: boolean }) {
         )}
         <RetentionCard canManage={canManage} />
       </Space>
-    </div>
+    </PageSection>
   )
 }
 

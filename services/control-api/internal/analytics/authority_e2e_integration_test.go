@@ -170,7 +170,7 @@ func TestAuthorityNATSClickHouseReconciliation(t *testing.T) {
 		t.Fatalf("summary=%#v error=%v", summary, err)
 	}
 	wantRank := map[RankDimension]string{
-		RankByURL: "/asset-a", RankByIP: "2001:db8::1", RankByDomain: "a.example.test",
+		RankByURL: "a.example.test/asset-a", RankByIP: "2001:db8::1", RankByDomain: "a.example.test",
 		RankByRegion: "CN", RankByCarrier: "carrier-a",
 	}
 	for dimension, wantKey := range wantRank {

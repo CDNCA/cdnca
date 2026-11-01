@@ -4,7 +4,7 @@ import {
   Alert, Button, Card, Descriptions, Input, InputNumber, Modal, Popconfirm, Segmented, Select, Space, Switch, Table, Tag,
   Tooltip, Typography, type TableColumnsType,
 } from 'antd'
-import { useFeedbackMessage, useFeedback } from '@cdnca/ui'
+import { useFeedbackMessage, useFeedback, PageSection } from '@cdnca/ui'
 import { Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSearchParams } from 'react-router-dom'
@@ -200,7 +200,7 @@ export default function RulePacksPage() {
     </Space> : null}
   </Space>
 
-  return <Space direction="vertical" style={{ width: '100%' }} className="rule-packs-page">
+  return <PageSection className="rule-packs-page"><Space direction="vertical" style={{ width: '100%' }}>
     {messageContext}
     <Typography.Title level={4}>{t('title')}</Typography.Title>
     <Alert className="density-note" type="info" showIcon message={t(endUser ? 'tenantIntro' : 'intro')} />
@@ -228,7 +228,7 @@ export default function RulePacksPage() {
         onChange={(event) => { const file = event.target.files?.[0]; if (file) void file.text().then(setImportText) }} />
       <Input.TextArea rows={12} value={importText} onChange={(event) => setImportText(event.target.value)} style={{ marginTop: 8, fontFamily: 'monospace' }} />
     </Modal>
-  </Space>
+  </Space></PageSection>
 }
 
 // ParamsEditor edits this level's parameter overrides of a pack within its

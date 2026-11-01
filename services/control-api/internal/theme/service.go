@@ -47,6 +47,9 @@ const (
 	ActionUpload   = "plugin.theme.upload"
 	ActionActivate = "plugin.theme.activate"
 	ActionRemove   = "plugin.theme.remove"
+	// The user console starts or stops following the admin console's theme.
+	ActionUserFollow   = "plugin.theme.user_follow"
+	ActionUserUnfollow = "plugin.theme.user_unfollow"
 )
 
 // AuditEventCatalog registers the theme events and their plain-language
@@ -58,6 +61,8 @@ var AuditEventCatalog = []struct {
 	{ActionUpload, "plugin", "管理员 {actor} 在 {time} 从 {ip} 上传了主题「{theme_id}」{version}", "Admin {actor} uploaded theme {theme_id} {version} from {ip} at {time}"},
 	{ActionActivate, "plugin", "管理员 {actor} 在 {time} 从 {ip} 把平台主题从「{changes.theme_id.from}」切换为「{changes.theme_id.to}」", "Admin {actor} switched the platform theme from {changes.theme_id.from} to {changes.theme_id.to} from {ip} at {time}"},
 	{ActionRemove, "plugin", "管理员 {actor} 在 {time} 从 {ip} 删除了已下载的主题「{theme_id}」{version}", "Admin {actor} removed downloaded theme {theme_id} {version} from {ip} at {time}"},
+	{ActionUserFollow, "plugin", "管理员 {actor} 在 {time} 让用户端跟随管理端主题（当前「{theme_id}」）", "Admin {actor} made the user console follow the admin console theme (now {theme_id}) at {time}"},
+	{ActionUserUnfollow, "plugin", "管理员 {actor} 在 {time} 为用户端单独选用主题「{theme_id}」，不再跟随管理端", "Admin {actor} chose theme {theme_id} for the user console at {time}; it no longer follows the admin console"},
 	{edgepublish.ThemeRepublicationAudit, "site", "系统在 {time} 因启用主题「{theme_id}」为 {scope_count} 个租户重新发布错误页", "The system republished error pages of {scope_count} tenants at {time} after theme {theme_id} was activated"},
 }
 
@@ -139,12 +144,14 @@ type CatalogView struct {
 	Schema             string `json:"schema"`
 	ActivationRevision int64  `json:"activation_revision"`
 	ActivePackage      string `json:"active_package_sha256"`
-	// UserPackage is the package the user console shows (its latest user or
-	// all activation; "" before any): the user tab tells a plain
-	// cdnca.theme/v1 package chosen there apart from "follows official" (F2).
-	UserPackage string          `json:"user_package_sha256"`
-	Available   []AvailableView `json:"available"`
-	Packages    []PackageView   `json:"packages"`
+	// UserPackage is the package the user console shows: its own choice, else
+	// the admin console's ("" before any activation: the default theme).
+	UserPackage string `json:"user_package_sha256"`
+	// UserFollowsAdmin: the user console has no theme of its own and shows
+	// whatever the admin console shows, now and after the admin console changes.
+	UserFollowsAdmin bool            `json:"user_follows_admin"`
+	Available        []AvailableView `json:"available"`
+	Packages         []PackageView   `json:"packages"`
 	// ErrorPageRepublication is the latest activation's automatic error page
 	// republication to the tenants.
 	ErrorPageRepublication edgepublish.ThemeRepublicationProgress `json:"error_page_republication"`
@@ -280,6 +287,9 @@ func (s *Service) Catalog(ctx context.Context, actor Actor) (CatalogView, error)
 		view.ActivationRevision = revision
 		view.ActivePackage = active
 		if view.UserPackage, err = slotPackage(ctx, tx, SlotUser); err != nil {
+			return err
+		}
+		if view.UserFollowsAdmin, err = UserFollowsAdminTx(ctx, tx); err != nil {
 			return err
 		}
 		if active == "" {
@@ -641,19 +651,22 @@ func (s *Service) ActivateSlot(ctx context.Context, actor Actor, packageSHA256 s
 			return err
 		}
 		adminChanges := slot != SlotUser
+		pinned, err := userPinned(ctx, tx)
+		if err != nil {
+			return err
+		}
+		already := previous == packageSHA256
 		if !adminChanges {
+			// The user console takes the package as its own choice, even one
+			// the admin console shows now: it stops following.
 			if previous, err = slotPackage(ctx, tx, SlotUser); err != nil {
 				return err
 			}
+			already = pinned == packageSHA256
 		}
-		already := previous == packageSHA256
 		if slot == SlotAll && already {
-			// all is in effect only when the user console shows it too.
-			user, err := slotPackage(ctx, tx, SlotUser)
-			if err != nil {
-				return err
-			}
-			already = user == packageSHA256
+			// all is in effect only when the user console follows it too.
+			already = pinned == ""
 		}
 		if already {
 			// Activating the active theme again changes nothing: no new
@@ -692,6 +705,20 @@ func (s *Service) ActivateSlot(ctx context.Context, actor Actor, packageSHA256 s
 		if _, err := tx.Exec(ctx, `INSERT INTO theme_activations(revision,platform_scope_id,package_sha256,activated_by_user_id,request_id,activated_at,slot)
 			VALUES($1,$2,$3,$4,$5,$6,$7)`, revision+1, actor.ScopeID, digest, actor.UserID, actor.RequestID, now, slot); err != nil {
 			return err
+		}
+		// all makes the user console follow the admin console again; user
+		// gives it a theme of its own.
+		if follow := slot == SlotAll && pinned != ""; follow || (slot == SlotUser && pinned == "") {
+			action := ActionUserUnfollow
+			if follow {
+				action = ActionUserFollow
+			}
+			if err := s.auditor.Append(ctx, tx, s.event(actor, action, packageSHA256, "success", map[string]any{
+				"theme_id": themeID, "activation_revision": revision + 1, "slot": SlotUser,
+				"changes": map[string]any{"follows_admin": map[string]any{"from": !follow, "to": follow}},
+			})); err != nil {
+				return err
+			}
 		}
 		if !adminChanges {
 			result = ActivationResult{Revision: revision + 1, PackageSHA256: packageSHA256, ThemeID: themeID, Slot: slot}
@@ -930,8 +957,9 @@ func activeActivation(ctx context.Context, tx pgx.Tx) (int64, string, error) {
 
 // ActivateUserTx activates a downloaded console theme on the user console
 // only, in the caller's transaction (the website theme plugin page enables a
-// plugin's console theme there). packageSHA256 "" activates the admin
-// console's theme (or the default) for the user console again. Any theme
+// plugin's console theme there). packageSHA256 "" makes the user console
+// follow the admin console's theme (or the default) again, also through
+// later admin changes; it is a no-op while it already follows. Any theme
 // may be the user console's, a third party's too; nothing is republished
 // (node error pages follow the admin console).
 func ActivateUserTx(ctx context.Context, tx pgx.Tx, auditor AuditAppender, scopeID, userID uuid.UUID, packageSHA256, requestID string,
@@ -946,24 +974,32 @@ func ActivateUserTx(ctx context.Context, tx pgx.Tx, auditor AuditAppender, scope
 	if err != nil {
 		return err
 	}
+	pinned, err := userPinned(ctx, tx)
+	if err != nil {
+		return err
+	}
 	if packageSHA256 == "" {
-		packageSHA256 = admin
-		if packageSHA256 == "" {
-			// Before any activation the consoles show the default theme;
-			// store it (downloaded) so the activation can reference it.
-			rendered := DefaultRendered()
-			defaultDigest, _ := hex.DecodeString(rendered.PackageSHA256)
-			var stored bool
-			if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM theme_packages WHERE package_sha256=$1)`, defaultDigest).Scan(&stored); err != nil {
-				return err
-			}
-			if !stored {
-				if err := insertRendered(ctx, tx, rendered, "builtin", "", userID, now); err != nil {
-					return err
-				}
-			}
-			packageSHA256 = rendered.PackageSHA256
+		// Follow the admin console: a user row without a package (migration
+		// 596), resolved live, so a later admin change reaches the user
+		// console, its sign-in pages and the tenants falling back to it.
+		if pinned == "" {
+			return nil
 		}
+		if _, err := tx.Exec(ctx, `INSERT INTO theme_activations(revision,platform_scope_id,package_sha256,activated_by_user_id,request_id,activated_at,slot)
+			VALUES($1,$2,NULL,$3,$4,$5,'user')`, revision+1, scopeID, userID, requestID, now); err != nil {
+			return err
+		}
+		adminID, err := packageThemeID(ctx, tx, admin)
+		if err != nil {
+			return err
+		}
+		return auditor.Append(ctx, tx, audit.Event{ScopeID: scopeID, ActorUserID: &userID, Action: ActionUserFollow,
+			ResourceType: auditResourceType, ResourceID: "console:" + SlotUser, RequestID: requestID, Result: "success",
+			Payload: map[string]any{"theme_id": adminID, "activation_revision": revision + 1, "slot": SlotUser, "scope": "platform",
+				"changes": map[string]any{
+					"follows_admin":  map[string]any{"from": false, "to": true},
+					"package_sha256": map[string]any{"from": pinned, "to": ""},
+				}}})
 	}
 	digest, err := hex.DecodeString(packageSHA256)
 	if err != nil || len(digest) != sha256.Size {
@@ -990,6 +1026,14 @@ func ActivateUserTx(ctx context.Context, tx pgx.Tx, auditor AuditAppender, scope
 		VALUES($1,$2,$3,$4,$5,$6,'user')`, revision+1, scopeID, digest, userID, requestID, now); err != nil {
 		return err
 	}
+	if pinned == "" {
+		if err := auditor.Append(ctx, tx, audit.Event{ScopeID: scopeID, ActorUserID: &userID, Action: ActionUserUnfollow,
+			ResourceType: auditResourceType, ResourceID: packageSHA256, RequestID: requestID, Result: "success",
+			Payload: map[string]any{"theme_id": themeID, "activation_revision": revision + 1, "slot": SlotUser, "scope": "platform",
+				"changes": map[string]any{"follows_admin": map[string]any{"from": true, "to": false}}}}); err != nil {
+			return err
+		}
+	}
 	return auditor.Append(ctx, tx, audit.Event{ScopeID: scopeID, ActorUserID: &userID, Action: ActionActivate,
 		ResourceType: auditResourceType, ResourceID: packageSHA256, RequestID: requestID, Result: "success",
 		Payload: map[string]any{"theme_id": themeID, "activation_revision": revision + 1, "slot": SlotUser, "scope": "platform",
@@ -1013,14 +1057,53 @@ const (
 	SlotAll   = "all"
 )
 
-// slotPackage is the package active on one console ("" before any).
+// The user console follows the admin console unless its latest activation
+// (user or all) is a user row naming a package (migration 596): an all row
+// is "admin X, user follows", a user row without a package is "follow
+// again". userPinnedSQL is that own package (NULL while following).
+const (
+	userPinnedSQL = `(SELECT CASE WHEN slot='user' THEN package_sha256 END FROM theme_activations
+		WHERE slot IN ('user','all') ORDER BY revision DESC LIMIT 1)`
+	adminPackageSQL = `(SELECT package_sha256 FROM theme_activations WHERE slot IN ('admin','all') ORDER BY revision DESC LIMIT 1)`
+	// UserPackageSQL is a scalar SQL expression: the package the user console
+	// shows, its own or the admin console's at the moment of reading (NULL
+	// before any activation: the default theme).
+	UserPackageSQL = `COALESCE(` + userPinnedSQL + `,` + adminPackageSQL + `)`
+)
+
+// slotPackage is the package active on one console ("" before any). The
+// user console's is resolved live: following, it is the admin console's.
 func slotPackage(ctx context.Context, q rowQuerier, slot string) (string, error) {
+	query := `SELECT ` + adminPackageSQL
+	if slot == SlotUser {
+		query = `SELECT ` + UserPackageSQL
+	}
 	var digest []byte
-	err := q.QueryRow(ctx, `SELECT package_sha256 FROM theme_activations WHERE slot IN ($1,'all') ORDER BY revision DESC LIMIT 1`, slot).Scan(&digest)
-	if errors.Is(err, pgx.ErrNoRows) {
+	if err := q.QueryRow(ctx, query).Scan(&digest); err != nil {
+		return "", err
+	}
+	if digest == nil {
 		return "", nil
 	}
-	if err != nil {
+	return hex.EncodeToString(digest), nil
+}
+
+// packageThemeID is a stored package's theme id; "" is the default theme.
+func packageThemeID(ctx context.Context, q rowQuerier, packageSHA256 string) (string, error) {
+	if packageSHA256 == "" {
+		return DefaultThemeID, nil
+	}
+	digest, _ := hex.DecodeString(packageSHA256)
+	var themeID string
+	err := q.QueryRow(ctx, `SELECT theme_id FROM theme_packages WHERE package_sha256=$1`, digest).Scan(&themeID)
+	return themeID, err
+}
+
+// userPinned is the user console's own package, "" while it follows the
+// admin console.
+func userPinned(ctx context.Context, q rowQuerier) (string, error) {
+	var digest []byte
+	if err := q.QueryRow(ctx, `SELECT `+userPinnedSQL).Scan(&digest); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(digest), nil
@@ -1096,24 +1179,13 @@ func authorize(ctx context.Context, tx pgx.Tx, actor Actor, permission string) e
 	return nil
 }
 
-// UserFollowsAdminTx reports whether the user console shows the admin
-// console's theme (both unset counts). controlsite's "恢复官方主题" accepts
-// any other user console theme, a plain cdnca.theme/v1 package too (F2).
+// UserFollowsAdminTx reports whether the user console follows the admin
+// console's theme (no theme of its own; before any activation too).
+// controlsite's "恢复官方主题" accepts any user console theme of its own, a
+// plain cdnca.theme/v1 package too (F2), even one equal to the admin's.
 func UserFollowsAdminTx(ctx context.Context, q rowQuerier) (bool, error) {
-	user, err := slotPackage(ctx, q, SlotUser)
-	if err != nil {
-		return false, err
-	}
-	admin, err := slotPackage(ctx, q, SlotAdmin)
-	if err != nil {
-		return false, err
-	}
-	if admin == "" {
-		// Before any admin activation the admin console shows the default
-		// theme, which ActivateUserTx stores for a cleared user console.
-		admin = DefaultRendered().PackageSHA256
-	}
-	return user == admin, nil
+	pinned, err := userPinned(ctx, q)
+	return pinned == "", err
 }
 
 // querier is a pool or a transaction.

@@ -101,6 +101,9 @@ func (v *Validator) validateHeartbeat(heartbeat *agentv1.Heartbeat) error {
 	if !validNativeRuntime(heartbeat.Runtime.NativeRuntime) {
 		return fmt.Errorf("%w: native runtime", ErrInvalidHeartbeat)
 	}
+	if !validTelemetryHealth(heartbeat.Runtime.Telemetry) {
+		return fmt.Errorf("%w: telemetry health", ErrInvalidHeartbeat)
+	}
 	if heartbeat.Resources.FilesystemAvailableBytes > heartbeat.Resources.FilesystemTotalBytes {
 		return fmt.Errorf("%w: filesystem usage", ErrInvalidHeartbeat)
 	}
@@ -438,6 +441,38 @@ func validNativeRuntime(status *agentv1.NativeRuntimeStatus) bool {
 	}
 	return status.ErrorCode == "" || status.State == agentv1.NativeRuntimeState_NATIVE_RUNTIME_STATE_ROLLED_BACK &&
 		nativeRuntimeCodePattern.MatchString(status.ErrorCode)
+}
+
+// TelemetryHealth is the stored node_presence.telemetry_* of a heartbeat
+// (migration 592): all nil while the telemetry pipeline is healthy.
+type TelemetryHealth struct {
+	ErrorCode               *string
+	FirstSeenAt, LastSeenAt *time.Time
+	Count                   *int64
+}
+
+func telemetryHealthColumns(health *agentv1.TelemetryHealth) TelemetryHealth {
+	if health == nil {
+		return TelemetryHealth{}
+	}
+	code := health.ErrorCode
+	first, last := health.FirstSeenTime.AsTime().UTC(), health.LastSeenTime.AsTime().UTC()
+	count := int64(health.Count)
+	return TelemetryHealth{ErrorCode: &code, FirstSeenAt: &first, LastSeenAt: &last, Count: &count}
+}
+
+// validTelemetryHealth mirrors the 592 checks: absent, or an upper-case code
+// seen 1..MaxInt64 times between two valid timestamps, first <= last.
+func validTelemetryHealth(health *agentv1.TelemetryHealth) bool {
+	if health == nil {
+		return true
+	}
+	if !nativeRuntimeCodePattern.MatchString(health.ErrorCode) || health.Count < 1 || health.Count > math.MaxInt64 ||
+		health.FirstSeenTime == nil || health.LastSeenTime == nil ||
+		health.FirstSeenTime.CheckValid() != nil || health.LastSeenTime.CheckValid() != nil {
+		return false
+	}
+	return !health.LastSeenTime.AsTime().Before(health.FirstSeenTime.AsTime())
 }
 
 var (

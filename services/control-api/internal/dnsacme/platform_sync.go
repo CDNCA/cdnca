@@ -35,6 +35,16 @@ func IsPlatformManagedProvider(managedBy string, scopeID, providerID uuid.UUID) 
 	return managedBy == ProviderManagedByPlatform || providerID == PlatformProviderCopyID(scopeID)
 }
 
+// platformManagedRefusal is the error for editing, deleting or verifying the
+// platform DNS copy: a tenant does not see the copy, so for it the copy does not exist (ErrNotFound, nothing disclosed);
+// the platform side gets ErrPlatformManagedProvider.
+func platformManagedRefusal(actor Actor) error {
+	if actor.ScopeKind == "tenant" {
+		return ErrNotFound
+	}
+	return ErrPlatformManagedProvider
+}
+
 // refusePlatformManagedUse: ErrPlatformManagedProvider when providerID is
 // the platform DNS copy of scopeID and the actor is not a platform
 // administrator. Only the platform side may use the platform credentials

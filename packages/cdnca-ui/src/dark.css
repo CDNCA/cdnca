@@ -1,0 +1,142 @@
+/*
+ * the one dark palette of every cdnca front end.
+ *
+ * Dark mode is <html data-theme="dark"> (web AppShell sets it). Under it every
+ * --cdnca-color-* the pages read is re-pointed at the theme's *-dark tokens
+ * (colorBgDark, colorSurfaceDark, colorTextDark, colorPrimaryDark ...), so a
+ * page needs no dark rules of its own: white cards, PageSection, titles,
+ * descriptions, alerts, stats and tabs all follow. Built-in and white-label
+ * themes only set the *-dark tokens; the rest is derived here.
+ *
+ * :not(#cdnca-dark) lifts the block over a theme package's
+ * :root[data-cdnca-theme][data-cdnca-role] light values.
+ * Contrast (WCAG AA) is checked by tests/DarkModeGuard.test.ts.
+ */
+:root[data-theme="dark"]:not(#cdnca-dark) {
+  color-scheme: dark;
+
+  /* Surfaces: page < shell < card < raised (popups use antd colorBgElevated). */
+  --cdnca-color-bg-layout: var(--cdnca-color-bg-dark);
+  --cdnca-color-bg-page: var(--cdnca-color-bg-dark);
+  --cdnca-color-bg-login: var(--cdnca-color-bg-dark);
+  --cdnca-color-bg-container: var(--cdnca-color-surface-dark);
+  --cdnca-color-bg-panel: var(--cdnca-color-surface-muted-dark);
+  --cdnca-color-bg-subtle: var(--cdnca-color-surface-muted-dark);
+  --cdnca-color-bg-muted: var(--cdnca-color-surface-muted-dark);
+  --cdnca-color-bg-slate: var(--cdnca-color-surface-muted-dark);
+  --cdnca-color-bg-soft: var(--cdnca-color-surface-muted-dark);
+  --cdnca-color-bg-field: var(--cdnca-color-surface-muted-dark);
+  --cdnca-color-bg-hover: color-mix(in srgb, var(--cdnca-color-text-dark) 6%, var(--cdnca-color-surface-dark));
+
+  /* Borders: hairlines stay quiet; input outlines keep 3:1 against the card. */
+  --cdnca-color-border: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 62%, var(--cdnca-color-surface-dark));
+  --cdnca-color-border-input: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 62%, var(--cdnca-color-surface-dark));
+  --cdnca-color-border-secondary: var(--cdnca-color-border-dark);
+  --cdnca-color-border-panel: var(--cdnca-color-border-dark);
+  --cdnca-color-border-card: var(--cdnca-color-border-dark);
+  --cdnca-color-border-muted: var(--cdnca-color-border-dark);
+  --cdnca-color-border-light: var(--cdnca-color-border-soft-dark);
+  --cdnca-color-border-divider: var(--cdnca-color-border-soft-dark);
+
+  /* Text: title > body > secondary > weak > disabled. */
+  --cdnca-color-title: color-mix(in srgb, var(--cdnca-color-text-dark) 50%, #ffffff);
+  --cdnca-color-text-emphasis: color-mix(in srgb, var(--cdnca-color-text-dark) 50%, #ffffff);
+  --cdnca-color-text: var(--cdnca-color-text-dark);
+  --cdnca-color-text-secondary: var(--cdnca-color-text-secondary-dark);
+  --cdnca-color-text-subtle: var(--cdnca-color-text-secondary-dark);
+  --cdnca-color-text-hint: var(--cdnca-color-text-secondary-dark);
+  --cdnca-color-text-tertiary: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 90%, var(--cdnca-color-surface-dark));
+  --cdnca-color-text-faint: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 90%, var(--cdnca-color-surface-dark));
+  --cdnca-color-placeholder: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 90%, var(--cdnca-color-surface-dark));
+  --cdnca-color-text-disabled: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 55%, var(--cdnca-color-surface-dark));
+
+  /* Brand and status: lighter tonal variants (HIG/MD color-dark-mode), not inverted. */
+  --cdnca-color-primary: var(--cdnca-color-primary-dark);
+  --cdnca-color-link: var(--cdnca-color-primary-dark);
+  --cdnca-color-link-hover: color-mix(in srgb, var(--cdnca-color-primary-dark) 75%, #ffffff);
+  --cdnca-color-focus-ring: var(--cdnca-color-primary-dark);
+  /* Text on primary/status fills: the lighter dark-mode fills need dark text (white on #60a5fa is 2.5:1). */
+  --cdnca-color-text-inverse: var(--cdnca-color-bg-dark);
+  --cdnca-color-success: #4ade80;
+  --cdnca-color-warning: #fbbf24;
+  --cdnca-color-error: #f87171;
+  --cdnca-color-status-pending: #fbbf24;
+  --cdnca-color-primary-bg: color-mix(in srgb, var(--cdnca-color-primary-dark) 12%, var(--cdnca-color-surface-dark));
+  --cdnca-color-primary-bg-soft: color-mix(in srgb, var(--cdnca-color-primary-dark) 10%, var(--cdnca-color-surface-dark));
+  --cdnca-color-info-bg: color-mix(in srgb, var(--cdnca-color-primary-dark) 14%, var(--cdnca-color-surface-dark));
+  --cdnca-color-success-bg: color-mix(in srgb, var(--cdnca-color-success) 14%, var(--cdnca-color-surface-dark));
+  --cdnca-color-warning-bg: color-mix(in srgb, var(--cdnca-color-warning) 14%, var(--cdnca-color-surface-dark));
+  --cdnca-color-error-bg: color-mix(in srgb, var(--cdnca-color-error) 14%, var(--cdnca-color-surface-dark));
+
+  /* Tables. */
+  --cdnca-color-table-header: var(--cdnca-color-surface-muted-dark);
+  --cdnca-color-table-header-text: var(--cdnca-color-text-dark);
+  --cdnca-color-table-row-hover: color-mix(in srgb, var(--cdnca-color-primary-dark) 8%, var(--cdnca-color-surface-dark));
+
+  /* Shadows read nothing on a dark page: a faint top highlight edge and a deep drop. */
+  --cdnca-shadow-card: inset 0 1px 0 rgb(255 255 255 / 4%), 0 8px 24px rgb(0 0 0 / 32%);
+  --cdnca-shadow-popup: 0 0 0 1px var(--cdnca-color-border-dark), 0 12px 32px rgb(0 0 0 / 48%);
+
+  /* Numbered steps (page stylesheets): pale fills → tinted surfaces, mid steps → borders, deep steps → light text. */
+  --dk-tint-xs: color-mix(in srgb, var(--cdnca-color-primary-dark) 6%, var(--cdnca-color-surface-dark));
+  --dk-tint-sm: color-mix(in srgb, var(--cdnca-color-primary-dark) 10%, var(--cdnca-color-surface-dark));
+  --dk-tint-md: color-mix(in srgb, var(--cdnca-color-primary-dark) 16%, var(--cdnca-color-surface-dark));
+  --dk-tint-line: color-mix(in srgb, var(--cdnca-color-primary-dark) 40%, var(--cdnca-color-surface-dark));
+  --dk-fill: color-mix(in srgb, var(--cdnca-color-text-dark) 4%, var(--cdnca-color-surface-dark));
+  --dk-fill-md: color-mix(in srgb, var(--cdnca-color-text-dark) 7%, var(--cdnca-color-surface-dark));
+  --dk-line-strong: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 40%, var(--cdnca-color-surface-dark));
+  --dk-weak: color-mix(in srgb, var(--cdnca-color-text-secondary-dark) 90%, var(--cdnca-color-surface-dark));
+
+  --cdnca-color-blue1: var(--dk-tint-xs); --cdnca-color-blue2: var(--dk-tint-xs); --cdnca-color-blue3: var(--dk-tint-xs); --cdnca-color-blue4: var(--dk-tint-xs);
+  --cdnca-color-blue5: var(--dk-tint-xs); --cdnca-color-blue6: var(--dk-tint-xs); --cdnca-color-blue7: var(--dk-tint-sm); --cdnca-color-blue8: var(--dk-tint-sm);
+  --cdnca-color-blue9: var(--dk-tint-sm); --cdnca-color-blue10: var(--dk-tint-sm); --cdnca-color-blue11: var(--dk-tint-sm); --cdnca-color-blue12: var(--dk-tint-sm);
+  --cdnca-color-blue13: var(--dk-tint-md); --cdnca-color-blue14: var(--dk-tint-md); --cdnca-color-blue15: var(--dk-tint-md); --cdnca-color-blue16: var(--dk-tint-md);
+  --cdnca-color-blue17: var(--dk-tint-md); --cdnca-color-blue18: var(--dk-tint-md); --cdnca-color-blue19: var(--dk-tint-md);
+  --cdnca-color-blue20: var(--dk-tint-line); --cdnca-color-blue21: var(--dk-tint-line); --cdnca-color-blue22: var(--dk-tint-line); --cdnca-color-blue23: var(--dk-tint-line);
+  --cdnca-color-blue24: var(--dk-tint-line); --cdnca-color-blue25: var(--dk-tint-line); --cdnca-color-blue26: var(--dk-tint-line); --cdnca-color-blue27: var(--dk-tint-line);
+  --cdnca-color-blue28: var(--dk-tint-line); --cdnca-color-blue29: var(--dk-tint-line); --cdnca-color-blue30: var(--dk-tint-line); --cdnca-color-blue31: var(--dk-tint-line);
+  --cdnca-color-blue32: var(--dk-tint-line); --cdnca-color-blue33: var(--dk-tint-line); --cdnca-color-blue34: var(--dk-tint-line);
+  --cdnca-color-blue35: var(--cdnca-color-primary-dark); --cdnca-color-blue36: var(--cdnca-color-primary-dark); --cdnca-color-blue37: var(--cdnca-color-primary-dark);
+  --cdnca-color-blue38: var(--cdnca-color-primary-dark); --cdnca-color-blue39: var(--cdnca-color-primary-dark); --cdnca-color-blue40: var(--cdnca-color-primary-dark);
+  --cdnca-color-blue41: var(--cdnca-color-primary-dark); --cdnca-color-blue42: var(--cdnca-color-primary-dark); --cdnca-color-blue43: var(--cdnca-color-primary-dark);
+  --cdnca-color-blue44: var(--cdnca-color-primary-dark); --cdnca-color-blue47: var(--cdnca-color-text-dark); --cdnca-color-blue49: var(--cdnca-color-text-dark);
+
+  --cdnca-color-neutral1: var(--dk-fill); --cdnca-color-neutral2: var(--dk-fill); --cdnca-color-neutral3: var(--dk-fill); --cdnca-color-neutral4: var(--dk-fill);
+  --cdnca-color-neutral5: var(--dk-fill); --cdnca-color-neutral6: var(--dk-fill); --cdnca-color-neutral7: var(--dk-fill); --cdnca-color-neutral8: var(--dk-fill);
+  --cdnca-color-neutral9: var(--dk-fill); --cdnca-color-neutral10: var(--dk-fill); --cdnca-color-neutral11: var(--dk-fill); --cdnca-color-neutral12: var(--dk-fill);
+  --cdnca-color-neutral13: var(--dk-fill-md); --cdnca-color-neutral14: var(--dk-fill-md); --cdnca-color-neutral15: var(--dk-fill-md); --cdnca-color-neutral16: var(--dk-fill-md);
+  --cdnca-color-neutral17: var(--dk-fill-md); --cdnca-color-neutral18: var(--dk-fill-md); --cdnca-color-neutral19: var(--dk-fill-md); --cdnca-color-neutral20: var(--dk-fill-md);
+  --cdnca-color-neutral21: var(--dk-fill-md); --cdnca-color-neutral22: var(--dk-fill-md); --cdnca-color-neutral23: var(--dk-fill-md); --cdnca-color-neutral24: var(--dk-fill-md);
+  --cdnca-color-neutral25: var(--cdnca-color-border-dark); --cdnca-color-neutral26: var(--cdnca-color-border-dark); --cdnca-color-neutral27: var(--cdnca-color-border-dark);
+  --cdnca-color-neutral28: var(--cdnca-color-border-dark); --cdnca-color-neutral29: var(--cdnca-color-border-dark); --cdnca-color-neutral30: var(--cdnca-color-border-dark);
+  --cdnca-color-neutral31: var(--cdnca-color-border-dark); --cdnca-color-neutral32: var(--cdnca-color-border-dark);
+  --cdnca-color-neutral33: var(--dk-line-strong); --cdnca-color-neutral34: var(--dk-line-strong); --cdnca-color-neutral35: var(--dk-line-strong); --cdnca-color-neutral36: var(--dk-line-strong);
+  --cdnca-color-neutral37: var(--dk-line-strong); --cdnca-color-neutral38: var(--dk-line-strong); --cdnca-color-neutral39: var(--dk-line-strong); --cdnca-color-neutral40: var(--dk-line-strong);
+  --cdnca-color-neutral41: var(--dk-weak); --cdnca-color-neutral42: var(--dk-weak); --cdnca-color-neutral43: var(--dk-weak); --cdnca-color-neutral44: var(--dk-weak);
+  --cdnca-color-neutral45: var(--dk-weak); --cdnca-color-neutral46: var(--dk-weak); --cdnca-color-neutral47: var(--dk-weak); --cdnca-color-neutral48: var(--dk-weak);
+  --cdnca-color-neutral49: var(--dk-weak); --cdnca-color-neutral50: var(--dk-weak); --cdnca-color-neutral51: var(--dk-weak); --cdnca-color-neutral52: var(--dk-weak);
+  --cdnca-color-neutral53: var(--dk-weak); --cdnca-color-neutral54: var(--dk-weak); --cdnca-color-neutral55: var(--dk-weak); --cdnca-color-neutral56: var(--dk-weak);
+  --cdnca-color-neutral57: var(--dk-weak); --cdnca-color-neutral58: var(--dk-weak); --cdnca-color-neutral59: var(--dk-weak); --cdnca-color-neutral60: var(--dk-weak);
+  --cdnca-color-neutral61: var(--cdnca-color-text-secondary-dark); --cdnca-color-neutral62: var(--cdnca-color-text-secondary-dark); --cdnca-color-neutral63: var(--cdnca-color-text-secondary-dark);
+  --cdnca-color-neutral65: var(--cdnca-color-text-secondary-dark); --cdnca-color-neutral66: var(--cdnca-color-text-secondary-dark); --cdnca-color-neutral67: var(--cdnca-color-text-secondary-dark);
+  --cdnca-color-neutral68: var(--cdnca-color-text-secondary-dark); --cdnca-color-neutral69: var(--cdnca-color-text-secondary-dark);
+  --cdnca-color-neutral70: var(--cdnca-color-text-dark); --cdnca-color-neutral71: var(--cdnca-color-text-dark); --cdnca-color-neutral72: var(--cdnca-color-text-dark);
+  --cdnca-color-neutral73: var(--cdnca-color-text-dark); --cdnca-color-neutral74: var(--cdnca-color-text-dark); --cdnca-color-neutral75: var(--cdnca-color-text-dark);
+  --cdnca-color-neutral77: var(--cdnca-color-text-dark); --cdnca-color-neutral78: var(--cdnca-color-text-dark);
+
+  --cdnca-color-green1: var(--cdnca-color-success-bg); --cdnca-color-green2: var(--cdnca-color-success-bg); --cdnca-color-green3: var(--cdnca-color-success-bg);
+  --cdnca-color-green4: var(--cdnca-color-success-bg); --cdnca-color-green5: var(--cdnca-color-success-bg); --cdnca-color-green6: var(--cdnca-color-success-bg);
+  --cdnca-color-green7: var(--cdnca-color-warning-bg); --cdnca-color-green8: var(--cdnca-color-success-bg);
+  --cdnca-color-green9: color-mix(in srgb, var(--cdnca-color-success) 40%, var(--cdnca-color-surface-dark));
+  --cdnca-color-green10: var(--cdnca-color-green9); --cdnca-color-green11: var(--cdnca-color-green9); --cdnca-color-green12: var(--cdnca-color-green9); --cdnca-color-green13: var(--cdnca-color-green9);
+  --cdnca-color-green14: var(--cdnca-color-success); --cdnca-color-green15: var(--cdnca-color-success); --cdnca-color-green16: var(--cdnca-color-success);
+  --cdnca-color-green17: var(--cdnca-color-success); --cdnca-color-green18: var(--cdnca-color-success);
+  --cdnca-color-orange1: var(--cdnca-color-warning-bg); --cdnca-color-orange2: var(--cdnca-color-warning-bg);
+  --cdnca-color-orange3: color-mix(in srgb, var(--cdnca-color-warning) 40%, var(--cdnca-color-surface-dark)); --cdnca-color-orange4: var(--cdnca-color-orange3);
+  --cdnca-color-orange5: var(--cdnca-color-warning); --cdnca-color-orange6: var(--cdnca-color-warning); --cdnca-color-orange7: var(--cdnca-color-warning);
+  --cdnca-color-orange8: var(--cdnca-color-warning); --cdnca-color-orange9: var(--cdnca-color-warning); --cdnca-color-orange10: var(--cdnca-color-warning); --cdnca-color-orange11: var(--cdnca-color-warning);
+  --cdnca-color-red1: var(--cdnca-color-error-bg); --cdnca-color-red2: var(--cdnca-color-error-bg); --cdnca-color-red3: var(--cdnca-color-error-bg);
+  --cdnca-color-red4: color-mix(in srgb, var(--cdnca-color-error) 40%, var(--cdnca-color-surface-dark)); --cdnca-color-red5: var(--cdnca-color-red4);
+  --cdnca-color-red6: var(--cdnca-color-error); --cdnca-color-red7: var(--cdnca-color-error); --cdnca-color-red8: var(--cdnca-color-error);
+  --cdnca-color-purple1: #f472b6;
+}

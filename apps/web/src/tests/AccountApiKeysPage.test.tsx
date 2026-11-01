@@ -37,7 +37,8 @@ const activeKey = {
   scopes: ['sites.read'],
   ip_allowlist: ['192.0.2.0/24', '2001:db8::/32'],
   status: 'active' as const,
-  expires_at: '2026-08-22T12:00:00Z',
+  // 远期到期：到期展示（AA-UI02）按真实时钟判断，夹具不能落在过去。
+  expires_at: '2099-08-22T12:00:00Z',
   revision: 1,
   created_at: '2026-07-22T12:00:00Z',
   updated_at: '2026-07-22T12:00:00Z',
@@ -210,7 +211,7 @@ describe('AccountApiKeysPage', () => {
     expect(await within(compatibility).findByText('未开启')).toBeInTheDocument()
     expect(within(compatibility).getByText('开启 API 后可配置 IP 白名单。')).toBeInTheDocument()
     expect(within(compatibility).getByText('API 未开启，暂无可用密钥。')).toBeInTheDocument()
-    expect(list).toHaveBeenCalledWith(expect.any(String), { limit: 2, status: 'active' }, expect.any(AbortSignal))
+    expect(list).toHaveBeenCalledWith(expect.any(String), { limit: 2, status: 'active', usable: true }, expect.any(AbortSignal))
     const toggle = within(compatibility).getByRole('switch', { name: 'API 密钥状态' })
     expect(toggle).not.toBeChecked()
 
@@ -490,7 +491,8 @@ describe('AccountApiKeysPage', () => {
 
     const secretDialog = await screen.findByRole('dialog', { name: 'API密钥（仅显示一次）' })
     expect(within(secretDialog).getByLabelText('一次性API密钥')).toHaveValue(`${issued.key.key_id}.${issued.secret}`)
-    await waitFor(() => expect(listSpy).toHaveBeenCalledTimes(4))
+    // 每轮 3 次读取：简单区可用密钥、无可用密钥时的到期判定（AA-UI02）、高级列表；创建成功后再刷新一轮。
+    await waitFor(() => expect(listSpy).toHaveBeenCalledTimes(6))
     expect(queryClient.getQueryState([
       'account-api-keys', tenantA.user_id, tenantAEpoch, 10, '', '', '', 0,
     ])?.isInvalidated).toBe(false)
@@ -734,7 +736,8 @@ describe('AccountApiKeysPage', () => {
     expect(screen.getByTestId('api-key-table-scroll')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '重试' }))
     expect(await screen.findByText('暂无API密钥')).toBeInTheDocument()
-    expect(list).toHaveBeenCalledTimes(3)
+    // 简单区可用密钥 + 到期判定（AA-UI02）各 1 次，高级列表失败后重试共 2 次。
+    expect(list).toHaveBeenCalledTimes(4)
     expect(mainReads).toBe(2)
   })
 
@@ -1103,5 +1106,327 @@ describe('AccountApiKeysPage', () => {
     expect(panel).toBeInTheDocument()
     expect(panel).toContainElement(screen.getByTestId('api-key-table-scroll'))
     expect(panel?.querySelector('.identity-toolbar')).toBeInTheDocument()
+  })
+
+  // AA-KEY-01：撤权与创建并发，后端锁内重核后拒绝（403 permission_denied + details.reason=scopes_revoked）。
+  it('keeps the create draft, drops revoked scopes, and names them when the server refuses stale permissions', async () => {
+    authenticate()
+    const posts: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation((_input, init) => {
+      if (init?.method === 'POST') {
+        posts.push(String(init.body))
+        return jsonResponse({ error: {
+          code: 'permission_denied', message: 'some requested API key scopes are no longer granted', request_id: 'req-1',
+          details: { reason: 'scopes_revoked', scopes: ['sites.manage'] },
+        } }, 403)
+      }
+      return jsonResponse(apiPage([activeKey]))
+    })
+    const refreshed = principal({ permissions: ['identity.self.read', 'api_keys.self.manage', 'sites.read'] })
+    const refresh = vi.spyOn(await import('../auth/session'), 'refreshSession').mockImplementation(async () => {
+      useSessionStore.getState().setSession(authResponse(refreshed), refreshed, 'refresh')
+      return refreshed
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<AccountApiKeysPage />, ['/account/api-key'])
+    await openAdvanced()
+    await user.click(screen.getByRole('button', { name: '创建密钥' }))
+    const dialog = screen.getByRole('dialog', { name: '创建API密钥' })
+    await user.type(within(dialog).getByLabelText('名称'), 'stale writer')
+    await user.click(within(dialog).getByRole('combobox', { name: '最小权限范围' }))
+    await user.click(await screen.findByRole('option', { name: '查看网站' }))
+    await user.click(await screen.findByRole('option', { name: '管理网站' }))
+    await user.click(within(dialog).getByRole('button', { name: /^创建密钥$/ }))
+
+    expect(await within(dialog).findByText('以下权限已被收回，已从选择中移除：管理网站。请确认后重新提交。')).toBeInTheDocument()
+    expect(posts).toHaveLength(1)
+    expect(JSON.parse(posts[0]).scopes).toEqual(['sites.read', 'sites.manage'])
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+    // 草稿保留：名称不变、仍持有的权限还在、被收回的已移除，弹窗未关、不报"登录失效"/"无权管理"。
+    expect(within(dialog).getByLabelText('名称')).toHaveValue('stale writer')
+    // 再次提交只带仍持有的权限（草稿里的名称与 sites.read 保留，sites.manage 已移除）。
+    await user.click(within(dialog).getByRole('button', { name: /^创建密钥$/ }))
+    await waitFor(() => expect(posts).toHaveLength(2))
+    expect(JSON.parse(posts[1])).toMatchObject({ name: 'stale writer', scopes: ['sites.read'] })
+    expect(screen.queryByText('登录状态已失效，请重新登录')).not.toBeInTheDocument()
+    expect(screen.queryByText('无权管理API密钥')).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'API密钥（仅显示一次）' })).not.toBeInTheDocument()
+  })
+
+  it('marks scopes that no longer take effect in the table and detail', async () => {
+    authenticate()
+    const narrowed = { ...secondActiveKey, scopes: ['sites.manage', 'sites.read'], unavailable_scopes: ['sites.manage'] }
+    vi.spyOn(apiKeysApi, 'list').mockResolvedValue(apiPage([activeKey, narrowed]))
+    vi.spyOn(apiKeysApi, 'get').mockResolvedValue(narrowed)
+    const user = userEvent.setup()
+    renderWithProviders(<AccountApiKeysPage />, ['/account/api-key'])
+    await openAdvanced()
+
+    const row = (await screen.findByText('automation writer')).closest('tr') as HTMLElement
+    const revoked = within(row).getByText('管理网站')
+    expect(revoked.closest('.ant-tag')).toHaveClass('account-api-key-scope-revoked')
+    expect(revoked.closest('.ant-tag')).toHaveAttribute('title', expect.stringContaining('已失效'))
+    expect(within(row).getByText('部分权限已失效：账号已不再拥有，调用时不会生效')).toBeInTheDocument()
+    const healthy = (await screen.findByText('production reader')).closest('tr') as HTMLElement
+    expect(within(healthy).queryByText(/已失效/)).not.toBeInTheDocument()
+
+    await user.click(within(row).getByRole('button', { name: '查看automation writer' }))
+    const detail = await findDialogTitled('API密钥详情')
+    expect(within(detail).getByText('管理网站（已失效）、查看网站')).toBeInTheDocument()
+  })
+
+  it('rejects malformed unavailable_scopes in a key record', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => jsonResponse(apiPage([{ ...activeKey, unavailable_scopes: ['Bad Scope'] }])))
+    await expect(apiKeysApi.list('token', { limit: 10 })).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+})
+
+// ID-06 / AA-KEY-02：代登录时可查看密钥（不含明文），产生或修改密钥的入口在控件和提交层都禁用并说明原因；
+// 若仍有写请求被后端以 403 impersonation_sensitive_action_denied 拒绝，提示归因到代登录，不报登录失效、不登出。
+describe('AccountApiKeysPage during impersonation', () => {
+  const impersonating = {
+    grant_id: '99999999-9999-4999-8999-999999999999',
+    actor_user_id: '77777777-7777-4777-8777-777777777777',
+    actor_display_name: 'Platform administrator',
+    subject_user_id: '11111111-1111-4111-8111-111111111111',
+    subject_display_name: 'jason',
+    tenant_id: '2a2a2a2a-2a2a-4a2a-8a2a-2a2a2a2a2a2a',
+    expires_at: '2099-10-28T15:00:00Z',
+  }
+
+  it('keeps keys readable but disables every key-writing control with the reason', async () => {
+    authenticate({ impersonation: impersonating })
+    const writes: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (init?.method && init.method !== 'GET') writes.push(String(input))
+      return jsonResponse(apiPage([activeKey, pendingKey], '', 2))
+    })
+    renderApiKeysWithQueryClient(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+
+    const allowlist = await screen.findByRole('textbox', { name: 'IP 白名单' })
+    expect(allowlist).toBeDisabled()
+    expect(screen.getAllByText('代登录期间仅可查看密钥，创建、修改、轮换或撤销请由用户本人登录后操作。').length).toBeGreaterThan(0)
+    await openAdvanced()
+    expect(screen.getByRole('button', { name: '创建密钥' })).toBeDisabled()
+    for (const name of ['编辑production reader', '轮换production reader', '撤销production reader', '激活pending reader']) {
+      expect(screen.getByRole('button', { name }), name).toBeDisabled()
+    }
+    expect(screen.getByRole('button', { name: '查看production reader' })).toBeEnabled()
+    expect(writes).toEqual([])
+  })
+
+  it('attributes a refused write to impersonation instead of an expired session', async () => {
+    authenticate()
+    let refuse = false
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      if (init?.method === 'POST' && refuse) {
+        return jsonResponse({ error: { code: 'impersonation_sensitive_action_denied', message: 'synthetic', request_id: 'req-imp-1' } }, 403)
+      }
+      return jsonResponse(apiPage([activeKey], '', 1))
+    })
+    const user = userEvent.setup()
+    renderApiKeysWithQueryClient(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+    await openAdvanced()
+    expect(await screen.findByText('production reader')).toBeInTheDocument()
+    refuse = true
+    await user.click(screen.getByRole('button', { name: '轮换production reader' }))
+    await user.click(await screen.findByRole('button', { name: /^轮换$/ }))
+    // 反馈弹窗把整句拆成标题与说明两段显示。
+    await waitFor(() => expect(document.body.textContent).toMatch(/代登录期间不能执行此操作.*请由用户本人登录后操作/))
+    expect(screen.queryByText(/登录状态已失效/)).not.toBeInTheDocument()
+    expect(useSessionStore.getState().accessToken).not.toBeNull()
+  })
+})
+
+// AA-UI02：唯一 active 生命周期密钥已到期时，简单区不能显示"已开启"、表格不能显示"有效"。
+describe('AccountApiKeysPage expired keys', () => {
+  const expired = { ...activeKey, name: 'expired reader', expires_at: '2026-10-28T11:51:00Z' }
+
+  function serve(usable: unknown[], lifecycle: unknown[], snapshot = '2026-10-28T11:52:01Z') {
+    const requests: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(String(input), 'http://localhost')
+      requests.push(`${url.pathname}${url.search}`)
+      const items = url.searchParams.get('usable') === 'true' ? usable : lifecycle
+      return new Response(JSON.stringify(apiPage(items, '', items.length)), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', Date: new Date(snapshot).toUTCString() },
+      })
+    })
+    return requests
+  }
+
+  it('reports an expired only key as expired, not enabled, and keeps it as history', async () => {
+    authenticate()
+    const requests = serve([], [expired])
+    renderApiKeysWithQueryClient(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+    const compatibility = await screen.findByTestId('api-key-compatibility')
+    expect(await within(compatibility).findByText('已到期')).toBeInTheDocument()
+    expect(within(compatibility).queryByText('已开启')).not.toBeInTheDocument()
+    expect(within(compatibility).getByText(/密钥已于 .+ 到期，外部程序已无法调用/)).toBeInTheDocument()
+    expect(requests).toContain('/v1/account/api-keys?limit=2&status=active&usable=true')
+    await openAdvanced()
+    const row = (await screen.findByText('expired reader')).closest('tr') as HTMLElement
+    expect(within(row).getByText('已到期')).toBeInTheDocument()
+    expect(within(row).queryByText('有效')).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: '轮换expired reader' })).not.toBeInTheDocument()
+    expect(within(row).getByRole('button', { name: '撤销expired reader' })).toBeEnabled()
+  })
+
+  it('uses a usable third key even when the two newest active keys have expired', async () => {
+    authenticate()
+    const usable = { ...secondActiveKey, expires_at: undefined }
+    serve([usable], [expired, { ...expired, id: '77777777-7777-4777-8777-777777777777', name: 'expired two' }, usable])
+    renderApiKeysWithQueryClient(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+    const compatibility = await screen.findByTestId('api-key-compatibility')
+    expect(await within(compatibility).findByText('已开启')).toBeInTheDocument()
+    expect(within(compatibility).getByText(usable.key_id)).toBeInTheDocument()
+    expect(within(compatibility).queryByText('已到期')).not.toBeInTheDocument()
+  })
+
+  it('warns when the current key expires within seven days using the server clock', async () => {
+    authenticate()
+    // 本机时钟比服务端快一年：仍按服务端快照判断"即将到期"。
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2027-10-28T00:00:00Z'))
+    const soon = { ...activeKey, expires_at: '2026-10-30T00:00:00Z' }
+    serve([soon], [soon], '2026-10-28T00:00:00Z')
+    renderApiKeysWithQueryClient(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+    const compatibility = await screen.findByTestId('api-key-compatibility')
+    expect(await within(compatibility).findByText('已开启')).toBeInTheDocument()
+    expect(within(compatibility).getByText(/密钥将于 .+ 到期/)).toBeInTheDocument()
+  })
+})
+
+// AA-UI01：简单区白名单草稿不被后台新版本静默替换；冲突就地提示，提交钉住开始编辑时的版本。
+describe('AccountApiKeysPage simple allowlist draft', () => {
+  const key = { ...activeKey, ip_allowlist: ['192.0.2.0/24'], expires_at: undefined }
+
+  function serve(initial: typeof key) {
+    const state = { record: initial }
+    const writes: Array<{ url: string; ifMatch: string | null; body: unknown }> = []
+    let respond: (() => Promise<Response>) | null = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (init?.method && init.method !== 'GET') {
+        writes.push({ url: String(input), ifMatch: new Headers(init.headers).get('If-Match'), body: JSON.parse(String(init.body)) })
+        if (respond) return respond()
+        const body = JSON.parse(String(init.body)) as { ip_allowlist: string[] }
+        state.record = { ...state.record, ip_allowlist: body.ip_allowlist, revision: state.record.revision + 1 }
+        return jsonResponse(state.record)
+      }
+      return jsonResponse(apiPage([state.record], '', 1))
+    })
+    return { state, writes, setResponder: (next: typeof respond) => { respond = next } }
+  }
+
+  async function refetch(client: QueryClient) {
+    await act(async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ['account-api-key-compatibility'] }),
+        client.invalidateQueries({ queryKey: ['account-api-keys'] }),
+      ])
+    })
+  }
+
+  it('keeps the draft when a background refresh brings a newer revision and explains the conflict', async () => {
+    authenticate()
+    const server = serve(key)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderApiKeysWithQueryClient(client)
+    const input = await screen.findByRole('textbox', { name: 'IP 白名单' })
+    fireEvent.change(input, { target: { value: '198.51.100.10' } })
+    server.state.record = { ...key, name: 'server revision 2', revision: 2, ip_allowlist: ['203.0.113.0/24'] }
+    await refetch(client)
+    const conflict = await screen.findByText('白名单已被其他操作修改，你的修改尚未保存。')
+    expect(screen.getByRole('textbox', { name: 'IP 白名单' })).toHaveValue('198.51.100.10')
+    const panel = conflict.closest('.ant-alert') as HTMLElement
+    expect(within(panel).getByText('203.0.113.0/24')).toBeInTheDocument()
+    // 冲突未处理时，回车不提交。
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'IP 白名单' }), { key: 'Enter', code: 'Enter', keyCode: 13 })
+    expect(server.writes).toHaveLength(0)
+
+    // 继续编辑：基于新版本保存自己的草稿。
+    fireEvent.click(within(panel).getByRole('button', { name: '继续编辑' }))
+    expect(screen.queryByText('白名单已被其他操作修改，你的修改尚未保存。')).not.toBeInTheDocument()
+    fireEvent.blur(screen.getByRole('textbox', { name: 'IP 白名单' }))
+    await waitFor(() => expect(server.writes).toHaveLength(1))
+    expect(server.writes[0].ifMatch).toBe('"2"')
+    expect(server.writes[0].body).toMatchObject({ ip_allowlist: ['198.51.100.10/32'] })
+    expect(await screen.findByText('已保存')).toBeInTheDocument()
+  })
+
+  it('loads the newer server value when the user chooses it', async () => {
+    authenticate()
+    const server = serve(key)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderApiKeysWithQueryClient(client)
+    fireEvent.change(await screen.findByRole('textbox', { name: 'IP 白名单' }), { target: { value: '198.51.100.10' } })
+    server.state.record = { ...key, revision: 2, ip_allowlist: ['203.0.113.0/24'] }
+    await refetch(client)
+    fireEvent.click(await screen.findByRole('button', { name: '采用新版' }))
+    expect(screen.getByRole('textbox', { name: 'IP 白名单' })).toHaveValue('203.0.113.0/24')
+    expect(server.writes).toHaveLength(0)
+  })
+
+  it('lets untouched fields follow server refreshes', async () => {
+    authenticate()
+    const server = serve(key)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderApiKeysWithQueryClient(client)
+    await screen.findByRole('textbox', { name: 'IP 白名单' })
+    server.state.record = { ...key, revision: 2, ip_allowlist: ['203.0.113.0/24'] }
+    await refetch(client)
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'IP 白名单' })).toHaveValue('203.0.113.0/24'))
+    expect(screen.queryByText('白名单已被其他操作修改，你的修改尚未保存。')).not.toBeInTheDocument()
+  })
+
+  it('submits once when Enter and blur overlap and keeps the draft on a version conflict', async () => {
+    authenticate()
+    const server = serve(key)
+    server.setResponder(() => jsonResponse({ error: { code: 'version_conflict', message: 'stale', request_id: 'req-1' } }, 409))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    renderApiKeysWithQueryClient(client)
+    const input = await screen.findByRole('textbox', { name: 'IP 白名单' })
+    fireEvent.change(input, { target: { value: '198.51.100.10' } })
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', keyCode: 13 })
+    fireEvent.blur(input)
+    await waitFor(() => expect(server.writes).toHaveLength(1))
+    expect(server.writes[0].ifMatch).toBe('"1"')
+    server.state.record = { ...key, revision: 3, ip_allowlist: ['203.0.113.0/24'] }
+    await refetch(client)
+    expect(await screen.findByText('白名单已被其他操作修改，你的修改尚未保存。')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'IP 白名单' })).toHaveValue('198.51.100.10')
+    expect(server.writes).toHaveLength(1)
+  })
+
+  it('shows a refused save under the field and keeps the draft for correction', async () => {
+    authenticate()
+    const server = serve(key)
+    server.setResponder(() => jsonResponse({ error: { code: 'api_key_ip_allowlist_overlap', message: 'synthetic private data', request_id: 'req-2' } }, 422))
+    renderApiKeysWithQueryClient(new QueryClient({ defaultOptions: { queries: { retry: false } } }))
+    const input = await screen.findByRole('textbox', { name: 'IP 白名单' })
+    fireEvent.change(input, { target: { value: '198.51.100.10' } })
+    fireEvent.blur(input)
+    expect(await screen.findByText('IP 允许列表不能包含重叠网段')).toBeInTheDocument()
+    expect(screen.queryByText('synthetic private data')).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'IP 白名单' })).toHaveValue('198.51.100.10')
+  })
+
+  it('drops a draft whose key was revoked elsewhere and says why', async () => {
+    authenticate()
+    const server = serve(key)
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+      if (init?.method && init.method !== 'GET') return jsonResponse(key)
+      const url = new URL(String(input), 'http://localhost')
+      const status = url.searchParams.get('status')
+      const items = [server.state.record].filter((item) => !status || item.status === status)
+      return jsonResponse(apiPage(items, '', items.length))
+    })
+    renderApiKeysWithQueryClient(client)
+    fireEvent.change(await screen.findByRole('textbox', { name: 'IP 白名单' }), { target: { value: '198.51.100.10' } })
+    server.state.record = { ...key, status: 'revoked' as 'active', revision: 2 }
+    await refetch(client)
+    expect(await screen.findByText('你正在编辑的密钥已被撤销、到期或替换，未保存的白名单修改没有提交。')).toBeInTheDocument()
+    expect(server.writes).toHaveLength(0)
   })
 })

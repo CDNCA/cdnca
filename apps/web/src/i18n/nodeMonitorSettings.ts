@@ -106,7 +106,8 @@ const zhCN = {
     availability: 'IP可用性监控',
     channelUnconfigured: '未配置的发送通道不能勾选，请先在系统设置中配置邮件或短信。',
     openChannels: '配置发送通道',
-    unwiredEvents: '当前版本只发送 IP 可用性（节点离线/恢复）通知；带宽超限、备用 IP、备用默认解析、备用线路组切换暂无通知事件，因此不提供订阅。',
+    unwiredEvents: 'IP 可用性（节点离线/恢复）、带宽超限（摘除/恢复）、备用 IP 启用/恢复主 IP 已发送通知，接收人与渠道在通知设置中统一管理；备用默认解析、备用线路组切换暂无通知事件。',
+    openEvents: '在通知设置中管理这些事件',
     recipients: '接收人',
     recipientsDescription: '通知发送给拥有节点管理权限的平台成员，使用其账号上的邮箱和手机号；在成员管理中维护。',
     openMembers: '前往用户管理',
@@ -194,7 +195,7 @@ const zhCN = {
       ip: '节点IP',
       ipPlaceholder: '请输入节点IP',
       nodeID: '节点ID',
-      nodePlaceholder: '请输入节点 UUID',
+      nodePlaceholder: '节点 UUID，或输入名称/IP 选择',
     },
     actions: { clear: '清除', query: '查询', retry: '重试' },
     columns: {
@@ -296,7 +297,8 @@ const enUS = {
     availability: 'IP availability',
     channelUnconfigured: 'A delivery channel that is not configured cannot be selected. Configure email or SMS in system settings first.',
     openChannels: 'Configure delivery channels',
-    unwiredEvents: 'This version only sends IP availability (node offline / recovered) notifications. Bandwidth limit, backup IP, backup default resolution and backup line-group switches have no notification events yet, so they cannot be subscribed.',
+    unwiredEvents: 'IP availability (node offline / recovered), bandwidth limit (removed / restored) and backup IP activated / primary IP restored send notifications; recipients and channels are managed in notification settings. Backup default resolution and backup line-group switches have no notification events yet.',
+    openEvents: 'Manage these events in notification settings',
     recipients: 'Recipients',
     recipientsDescription: 'Notifications go to platform members with node management permission, using the email and phone on their accounts. Maintain them in user management.',
     openMembers: 'Open user management',
@@ -374,7 +376,7 @@ const enUS = {
   switchLogs: {
     filters: {
       type: 'Source', action: 'Action', allTypes: 'All sources', allActions: 'All actions', ip: 'Node IP',
-      ipPlaceholder: 'Enter node IP', nodeID: 'Node ID', nodePlaceholder: 'Enter node UUID',
+      ipPlaceholder: 'Enter node IP', nodeID: 'Node ID', nodePlaceholder: 'Node UUID, or type a name/IP to pick',
     },
     actions: { clear: 'Clear', query: 'Search', retry: 'Retry' },
     columns: { switchedAt: 'Switched at', type: 'Source', node: 'Node', action: 'Action', reason: 'Reason' },

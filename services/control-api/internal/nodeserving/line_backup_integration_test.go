@@ -22,9 +22,9 @@ func TestLineBackupStateFollowsHoldsAndAlertsOnce(t *testing.T) {
 	}
 	harness.store.EnableAvailabilityAlerts(notifications)
 	primary, standby := harness.addNode(), harness.addNode()
-	groupID, _ := harness.lineGroup(map[uuid.UUID]string{primary: "192.0.2.10", standby: "192.0.2.20"})
-	// 备用端点优先级更低（数值更大）。
-	harness.exec(`UPDATE node_line_endpoints SET priority=10 WHERE line_group_id=$1 AND node_id=$2`, groupID, standby)
+	// 备用端点优先级更低（数值更大）；在建修订时给出，已封存端点不可改。
+	groupID, _ := harness.lineGroupWithPriorities(map[uuid.UUID]string{primary: "192.0.2.10", standby: "192.0.2.20"},
+		map[uuid.UUID]int{standby: 10})
 	harness.activate("pause")
 	worker, err := NewWorker(harness.store, time.Second, nil, NewMonitorEvaluator(harness.store), NewLineBackupEvaluator(harness.store))
 	if err != nil {
