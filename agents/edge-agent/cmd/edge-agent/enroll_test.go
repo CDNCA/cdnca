@@ -144,3 +144,35 @@ func TestExecuteEnrollmentResumeModes(t *testing.T) {
 		t.Fatalf("group-readable response file: code=%d stderr=%s", code, stderr.String())
 	}
 }
+
+// 直连与 443 WebSocket 都失败时，日志带 direct_*/tunnel_* 字段供 install-node.sh 写清报错。
+func TestExecuteEnrollmentPassesFallbackTunnelAndLogsBothFailures(t *testing.T) {
+	token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{0x55}, 32))
+	var fallback string
+	runner := func(_ context.Context, config enrollment.Config, _ []byte) (enrollment.Result, error) {
+		fallback = config.FallbackTunnelAddress
+		return enrollment.Result{}, &enrollment.ConnectError{DirectAddress: config.Address, Direct: errors.New("context deadline exceeded"),
+			TunnelAddress: config.FallbackTunnelAddress, Tunnel: errors.New("gateway tunnel upgrade 502 Bad Gateway")}
+	}
+	var stdout, stderr bytes.Buffer
+	code := executeEnrollment(context.Background(), []string{
+		"--gateway-address", "diaocdn.com:26080", "--gateway-server-name", "diaocdn.com",
+		"--gateway-root-ca-file", "/etc/cdnca-edge-agent/tls/ca.pem", "--gateway-fallback-tunnel-address", "diaocdn.com:443",
+	}, strings.NewReader(token), &stdout, &stderr, runner)
+	if code != 1 || fallback != "diaocdn.com:443" {
+		t.Fatalf("code=%d fallback=%q", code, fallback)
+	}
+	for _, want := range []string{`"direct_address":"diaocdn.com:26080"`, `"direct_error":"context deadline exceeded"`,
+		`"tunnel_address":"diaocdn.com:443"`, `"tunnel_error":"gateway tunnel upgrade 502 Bad Gateway"`} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr lacks %s: %s", want, stderr.String())
+		}
+	}
+	// ws installs have no fallback.
+	if code := executeEnrollment(context.Background(), []string{
+		"--gateway-address", "cdn.example:443", "--gateway-server-name", "gw", "--gateway-transport", "ws",
+		"--gateway-root-ca-file", "/etc/cdnca-edge-agent/tls/ca.pem", "--gateway-fallback-tunnel-address", "cdn.example:443",
+	}, strings.NewReader(token), &stdout, &stderr, runner); code != 2 {
+		t.Fatalf("ws with fallback: code=%d", code)
+	}
+}

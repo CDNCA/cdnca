@@ -294,16 +294,27 @@ var (
 // created: "zh" / "en" append --lang zh / --lang en (a stock Ubuntu has
 // LANG=C.UTF-8 and no terminal, so the installer would otherwise pick
 // English); "" (older jobs) appends nothing.
+//
+// gateway (the node connects to the Gateway IP directly) is the
+// console's published direct Gateway entry (gatewayregistry
+// DirectNodeInstallGateway, the same values as node-install-defaults):
+// a non-zero one adds --gateway-enrollment-address, --gateway-address and
+// --gateway-server-name; the zero value (ws console, no registry) adds none.
 func InstallCommand(controlPlane, registrationKey, host, name string, root bool, sudoPassword bool,
-	controlCASHA256, language string) (string, error) {
+	controlCASHA256, language string, gateway Gateway) (string, error) {
 	parsed, err := url.Parse(controlPlane)
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.Path != "" || parsed.RawQuery != "" ||
 		parsed.User != nil || parsed.Fragment != "" || !registrationKeyPattern.MatchString(registrationKey) ||
-		(controlCASHA256 != "" && !controlCADigestPattern.MatchString(controlCASHA256)) || !ValidLanguage(language) {
+		(controlCASHA256 != "" && !controlCADigestPattern.MatchString(controlCASHA256)) || !ValidLanguage(language) ||
+		!gateway.valid() {
 		return "", ErrInvalidInput
 	}
 	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'" }
 	arguments := []string{"--control-plane", quote(controlPlane), "--registration-key-stdin", "-y"}
+	if gateway != (Gateway{}) {
+		arguments = append(arguments, "--gateway-enrollment-address", quote(gateway.EnrollmentAddress),
+			"--gateway-address", quote(gateway.Address), "--gateway-server-name", quote(gateway.ServerName))
+	}
 	if address, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil && address.Is4() {
 		arguments = append(arguments, "--public-ip", quote(address.String()))
 	}
@@ -334,6 +345,40 @@ func InstallCommand(controlPlane, registrationKey, host, name string, root bool,
 		`IFS= read -r k || exit 1; %s%s && %s`+
 		`printf '%%s\n' "$k" | %s "$d/install-node.sh" %s`,
 		trust, download, prefix, runner, strings.Join(arguments, " ")), nil
+}
+
+// Gateway is the direct Gateway entry written into the install command.
+type Gateway struct {
+	EnrollmentAddress string
+	Address           string
+	ServerName        string
+}
+
+var (
+	gatewayAddressPattern = regexp.MustCompile(`^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$`)
+	gatewayServerPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$`)
+)
+
+// valid: all three set in the install-node.sh accepted forms, or all empty.
+func (g Gateway) valid() bool {
+	return g == (Gateway{}) || (gatewayAddressPattern.MatchString(g.EnrollmentAddress) &&
+		gatewayAddressPattern.MatchString(g.Address) && gatewayServerPattern.MatchString(g.ServerName))
+}
+
+// UseGateway sets where SSH installs read the direct Gateway entry; it is
+// read for every job so a Gateway change needs no restart. Call it before Run.
+func (service *Service) UseGateway(gateway func(context.Context) (Gateway, bool)) {
+	service.gateway = gateway
+}
+
+func (service *Service) installGateway(ctx context.Context) Gateway {
+	if service.gateway == nil {
+		return Gateway{}
+	}
+	if g, ok := service.gateway(ctx); ok {
+		return g
+	}
+	return Gateway{}
 }
 
 // ValidLanguage is a job language: "" (none), "zh" or "en".

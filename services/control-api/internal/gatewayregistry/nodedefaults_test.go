@@ -72,6 +72,28 @@ func TestWriteNodeGatewayDefaultsReplacesOnlyTheGatewayLines(t *testing.T) {
 	}
 }
 
+func TestDirectNodeInstallGatewayMatchesTheDefaultsAndSkipsWebSocket(t *testing.T) {
+	local := Entrypoint{Address: "203.0.113.20:20407", ServerName: "203.0.113.20", Transport: TransportGRPC, EnrollmentAddress: "203.0.113.20:29402"}
+	d, ok := DirectNodeInstallGateway([]Entrypoint{local}, local)
+	if !ok || d.EnrollmentAddress != "203.0.113.20:29402" || d.Address != "203.0.113.20:20407" || d.ServerName != "203.0.113.20" {
+		t.Fatalf("direct = %+v ok=%v", d, ok)
+	}
+	ws := Entrypoint{Address: "cdn.example:443", ServerName: "gw.example", Transport: TransportWS, TunnelHost: "cdn.example"}
+	if _, ok := DirectNodeInstallGateway([]Entrypoint{local, ws}, local); ok {
+		t.Fatal("a ws console keeps the command without gateway arguments")
+	}
+	if _, ok := DirectNodeInstallGateway(nil, local); ok {
+		t.Fatal("nothing published")
+	}
+	if _, ok := DirectNodeInstallGateway([]Entrypoint{{Address: "bad host:1", ServerName: "x"}}, Entrypoint{}); ok {
+		t.Fatal("invalid entry accepted")
+	}
+	var none *Service
+	if _, ok, err := none.NodeInstallGateway(t.Context()); ok || err != nil {
+		t.Fatal("nil service")
+	}
+}
+
 func TestMoveLocalGatewayKeepsTheCDNEntry(t *testing.T) {
 	old := Entrypoint{Address: "203.0.113.20:20407", ServerName: "203.0.113.20", EnrollmentAddress: "203.0.113.20:29402"}
 	updated := Entrypoint{Address: "gw.example:20407", ServerName: "gw.example", EnrollmentAddress: "gw.example:29402"}

@@ -20,21 +20,24 @@ function prompt(input, values = {}, interactive = true) {
   return spawnSync('bash', ['-c', [
     'set -Eeuo pipefail',
     // prompt_public_endpoints 在 IP 控制域名且未提供证书时会 warn（10/12 起），需要这两个依赖与 PUBLIC_CERT_FILE。
-    ...['fail', 'warn', 'valid_host', 'valid_port', 'control_domain_is_ip', 'prompt_public_endpoints'].map(block),
+    ...['fail', 'warn', 'valid_host', 'valid_port', 'control_domain_is_ip', 'summary_host_addresses', 'gateway_transport_resolve',
+      'default_gateway_host', 'prompt_public_endpoints'].map(block),
+    // 网关默认取本机公网 IP：桩掉 ipify 探测与本机地址。
+    `curl() { printf '198.51.100.20'; }`, `ip() { :; }`,
     interactive ? '[() { if [[ "$1" == "-t" ]]; then return 0; fi; builtin [ "$@"; }' : '',
     'prompt_public_endpoints',
     'printf "%s|%s|%s|%s\\n" "$MASTER_HOST" "$MASTER_PORT" "$GATEWAY_HOST" "$CONTROL_DOMAIN"',
   ].join('\n')], {
-    encoding: 'utf8', input, env: { ...process.env, MASTER_HOST: '', MASTER_PORT: '', GATEWAY_HOST: '', CONTROL_DOMAIN: '', PUBLIC_CERT_FILE: '', ...values },
+    encoding: 'utf8', input, env: { ...process.env, MASTER_HOST: '', MASTER_PORT: '', GATEWAY_HOST: '', CONTROL_DOMAIN: '', PUBLIC_CERT_FILE: '', GATEWAY_TRANSPORT: '', GATEWAY_TUNNEL_HOST: '', ...values },
   })
 }
 
-// 2026-10-14 起交互只问管理端地址与端口；节点 Gateway 默认与管理端同地址（端口安装时随机 20000–29999，ADR 0013 §3.5），
+// 2026-10-14 起交互只问管理端地址与端口；节点 Gateway 默认本机公网 IP 直连（端口安装时随机 20000–29999，ADR 0013 §3.5），
 // 仅分离部署时用 --gateway-host 显式传入，不再交互询问。
 test('interactive prompt collects addresses and port without falling back to machine hostname', () => {
   const result = prompt('CONTROL.example.com\n8443\n')
   assert.equal(result.status, 0, result.stderr)
-  assert.equal(result.stdout.trim(), 'control.example.com|8443|control.example.com|control.example.com')
+  assert.equal(result.stdout.trim(), 'control.example.com|8443|198.51.100.20|control.example.com')
   assert.match(result.stderr, /管理端公网/)
   assert.doesNotMatch(result.stderr, /Gateway/)
   assert.doesNotMatch(block('normalise_defaults'), /hostname/)
@@ -43,7 +46,7 @@ test('interactive prompt collects addresses and port without falling back to mac
 test('interactive defaults are visible and only chosen at the terminal', () => {
   const result = prompt('control.example.com\n\n')
   assert.equal(result.status, 0, result.stderr)
-  assert.equal(result.stdout.trim(), 'control.example.com|443|control.example.com|control.example.com')
+  assert.equal(result.stdout.trim(), 'control.example.com|443|198.51.100.20|control.example.com')
   assert.match(result.stderr, /\[443\]/)
 })
 
@@ -85,6 +88,7 @@ GATEWAY_PORTS=21443,21444
 LICENSING_SERVER=https://auth.example.test
 DATABASE_URL=postgresql://localhost/fixture
 host_architecture() { printf amd64; }
+curl() { return 7; }
 ss() { ${occupied ? 'printf occupied' : ':'}; }
 normalise_defaults
 printf accepted

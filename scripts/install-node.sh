@@ -62,6 +62,9 @@ GATEWAY_SERVER_NAME=""
 # grpc (direct) or ws (WebSocket tunnel through a CDN, ADR 0013 §4.2).
 GATEWAY_TRANSPORT=""
 GATEWAY_TUNNEL_HOST=""
+# Management HTTPS host:port whose /agent/v1/ WebSocket tunnel is
+# tried when the direct gateway port does not answer (set by gateway_fallback_defaults).
+GATEWAY_FALLBACK_TUNNEL_ADDRESS=""
 # Extra endpoints tried after the first (ADR 0013 §4.5): address|server_name|transport[|tunnel_host] separated by spaces.
 GATEWAY_ENDPOINTS=""
 GATEWAY_ENROLLMENT_PORT="19443"
@@ -484,6 +487,7 @@ normalise_defaults() {
   GATEWAY_TRANSPORT=${GATEWAY_TRANSPORT:-grpc}
   [[ "$GATEWAY_TRANSPORT" =~ ^(grpc|ws)$ ]] || fail '--gateway-transport must be grpc or ws'
   [ -z "$GATEWAY_TUNNEL_HOST" ] || [ "$GATEWAY_TRANSPORT" = ws ] || fail '--gateway-tunnel-host requires --gateway-transport ws'
+  gateway_fallback_defaults
   ARTIFACT_TRUST_FILE=${ARTIFACT_TRUST_FILE:-${TRUST_DIR}/artifacts.json}
   CONTROL_PLANE_CA_URL=${CONTROL_PLANE_CA_URL:-${CONTROL_PLANE}/downloads/gateway-ca.pem}
   CONTROL_PLANE_CA_FALLBACK_URL=${CONTROL_PLANE_CA_FALLBACK_URL:-${CONTROL_PLANE_CA_URL}}
@@ -3147,8 +3151,52 @@ recover_registered_identity() {
   log "$(msg '续装：已从主控取回本机已签发的身份，跳过注册' 'resume: recovered the issued identity from the control plane; skipping registration')"
 }
 
+# 直连优先，直连不通自动换 WebSocket，都不行再报错：直连 grpc 安装时，
+# 管理端 HTTPS 入口（主控 nginx 的 /agent/v1/ 隧道，tcp/ws 两种主控安装都开着）作为注册与长连接的
+# WebSocket 备用；内层 TLS 仍校验网关证书名。已有 ws 入口或已满 8 个入口时不再追加。
+gateway_fallback_defaults() {
+  GATEWAY_FALLBACK_TUNNEL_ADDRESS=""
+  [ "${GATEWAY_TRANSPORT:-grpc}" = grpc ] || return 0
+  local authority entry count=0
+  authority=$(printf '%s' "${CONTROL_PLANE%/}" | sed -E 's#^[A-Za-z]+://([^/]+).*#\1#')
+  [[ "$authority" =~ ^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(:[0-9]{1,5})?$ ]] || return 0
+  [ -n "${BASH_REMATCH[2]}" ] || authority="${authority}:443"
+  for entry in $GATEWAY_ENDPOINTS; do
+    count=$((count + 1))
+    [[ "$entry" != *'|ws'* ]] || return 0
+  done
+  [ "$count" -lt 8 ] || return 0
+  GATEWAY_FALLBACK_TUNNEL_ADDRESS=$authority
+  GATEWAY_ENDPOINTS="${GATEWAY_ENDPOINTS:+$GATEWAY_ENDPOINTS }${authority}|${GATEWAY_SERVER_NAME}|ws"
+}
+
+# Agent 注册失败日志（JSON 行，direct_*/tunnel_* 字段）-> 写清两种方式结果与放行端口的报错。
+enrollment_failure_message() {
+  local log=$1 line direct_error tunnel_error tunnel_address direct_result tunnel_result ports port
+  line=$(grep -F '"enrollment_failed"' "$log" 2>/dev/null | tail -n 1)
+  direct_error=$(jq -r '.direct_error // empty' <<<"$line" 2>/dev/null || true)
+  tunnel_error=$(jq -r '.tunnel_error // empty' <<<"$line" 2>/dev/null || true)
+  tunnel_address=$(jq -r '.tunnel_address // empty' <<<"$line" 2>/dev/null || true)
+  port=${GATEWAY_ENROLLMENT_ADDRESS##*:}
+  ports=$port
+  [ "${GATEWAY_ADDRESS##*:}" = "$port" ] || ports="${port}$(msg '、' ', ')${GATEWAY_ADDRESS##*:}"
+  case "$direct_error" in
+    *refused*) direct_result=$(msg "直连 ${port} 拒绝" "direct port ${port} refused the connection") ;;
+    '') direct_result=$(msg '未直连（WebSocket 安装）' 'no direct dial (WebSocket install)') ;;
+    *deadline*|*timeout*|*'timed out'*) direct_result=$(msg "直连 ${port} 超时" "direct port ${port} timed out") ;;
+    *) direct_result=$(msg "直连 ${port} 失败：${direct_error}" "direct port ${port} failed: ${direct_error}") ;;
+  esac
+  if [ -n "$tunnel_error" ]; then
+    tunnel_result=$(msg "已尝试经 ${tunnel_address##*:} WebSocket：${tunnel_error}" "tried WebSocket via ${tunnel_address##*:}: ${tunnel_error}")
+  else
+    tunnel_result=$(msg '未尝试 443 WebSocket' 'WebSocket via 443 was not tried')
+  fi
+  msg "无法连接网关 ${GATEWAY_ENROLLMENT_ADDRESS}（${direct_result}；${tunnel_result}）。请在主控防火墙/云安全组放行网关端口 ${ports}（TCP），或检查网关地址是否为主控 IP" \
+    "cannot connect to Gateway ${GATEWAY_ENROLLMENT_ADDRESS} (${direct_result}; ${tunnel_result}). Open Gateway ports ${ports} (TCP) in the control-plane firewall / cloud security group, or check that the Gateway address is the control-plane IP"
+}
+
 enroll() {
-  local token_file="${TEMP_DIR}/enrollment-token"
+  local token_file="${TEMP_DIR}/enrollment-token" enroll_log="${TEMP_DIR}/enrollment.log" status=0
   printf '%s' "$ENROLLMENT_TOKEN" >"$token_file"
   chmod 0600 "$token_file"
   unset ENROLLMENT_TOKEN
@@ -3163,10 +3211,16 @@ enroll() {
     --gateway-server-name "$GATEWAY_SERVER_NAME" \
     --gateway-root-ca-file "$GATEWAY_ROOT_CA_FILE" \
     --gateway-transport "$GATEWAY_TRANSPORT" ${GATEWAY_TUNNEL_HOST:+--gateway-tunnel-host "$GATEWAY_TUNNEL_HOST"} \
+    ${GATEWAY_FALLBACK_TUNNEL_ADDRESS:+--gateway-fallback-tunnel-address "$GATEWAY_FALLBACK_TUNNEL_ADDRESS"} \
     --identity-dir "$IDENTITY_DIR" \
     --machine-id-file /etc/machine-id \
-    --token-file "$token_file" >/"${TEMP_DIR}/enrollment-result.json"
+    --token-file "$token_file" >/"${TEMP_DIR}/enrollment-result.json" 2>"$enroll_log" || status=$?
   rm -f -- "$token_file"
+  if [ "$status" -ne 0 ]; then
+    cat "$enroll_log" >&2
+    if grep -Fq 'connect to enrollment endpoint' "$enroll_log"; then fail "$(enrollment_failure_message "$enroll_log")"; fi
+    fail "$(msg "节点注册失败（edge-agent enroll 退出码 ${status}），详见上方日志" "node enrollment failed (edge-agent enroll exit ${status}); see the log above")"
+  fi
   [ -f "${IDENTITY_DIR}/identity.json" ] || fail 'enrollment returned without an identity file'
 }
 

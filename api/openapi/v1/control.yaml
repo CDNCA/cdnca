@@ -11699,6 +11699,25 @@ components:
         issued_at:
           type: string
           format: date-time
+        gateway:
+          description: >-
+            Direct Gateway entry the console writes into the node install command as
+            --gateway-enrollment-address, --gateway-address and --gateway-server-name (the same values as
+            /downloads/node-install-defaults). Absent when the preferred entry is a WebSocket (CDN) tunnel
+            or no Gateway entry is published; install-node.sh then reads node-install-defaults.
+          type: object
+          additionalProperties: false
+          required: [enrollment_address, address, server_name]
+          properties:
+            enrollment_address:
+              type: string
+              pattern: '^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$'
+            address:
+              type: string
+              pattern: '^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$'
+            server_name:
+              type: string
+              pattern: '^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$'
     NodeRegistrationRequest:
       type: object
       additionalProperties: false

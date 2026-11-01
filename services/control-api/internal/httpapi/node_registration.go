@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"sync"
@@ -92,7 +93,37 @@ func (s *Server) serveNodeRegistrationCredential(w http.ResponseWriter, r *http.
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSONStatus(w, http.StatusOK, credential)
+	writeJSONStatus(w, http.StatusOK, s.nodeRegistrationCredentialResponse(r.Context(), credential))
+}
+
+// nodeRegistrationCredentialResponse adds the direct Gateway entry; a failed
+// read only drops it (install-node.sh still reads node-install-defaults).
+func (s *Server) nodeRegistrationCredentialResponse(ctx context.Context, credential node.RegistrationCredential) nodeRegistrationCredentialResponse {
+	response := nodeRegistrationCredentialResponse{RegistrationCredential: credential}
+	if s.nodeInstallGateway == nil {
+		return response
+	}
+	gateway, ok, err := s.nodeInstallGateway(ctx)
+	if err != nil {
+		s.logger.Warn("node install command without the Gateway entry", "error", err)
+	} else if ok {
+		response.Gateway = &gateway
+	}
+	return response
+}
+
+// NodeInstallGateway is the direct Gateway entry the console writes into the
+// node install command (the node connects to the Gateway IP
+// directly); absent for a ws (CDN tunnel) console.
+type NodeInstallGateway struct {
+	EnrollmentAddress string `json:"enrollment_address"`
+	Address           string `json:"address"`
+	ServerName        string `json:"server_name"`
+}
+
+type nodeRegistrationCredentialResponse struct {
+	node.RegistrationCredential
+	Gateway *NodeInstallGateway `json:"gateway,omitempty"`
 }
 
 func (s *Server) handleRegisterNode(w http.ResponseWriter, r *http.Request) {

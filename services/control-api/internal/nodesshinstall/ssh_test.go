@@ -1,6 +1,7 @@
 package nodesshinstall
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -8,7 +9,7 @@ import (
 
 func TestInstallCommandQuotesAndSudo(t *testing.T) {
 	const key = "nrk1.0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-	root, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge 'a'", true, false, "", "")
+	root, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge 'a'", true, false, "", "", Gateway{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,12 +27,12 @@ func TestInstallCommandQuotesAndSudo(t *testing.T) {
 	if strings.Contains(root, "--node-region") {
 		t.Fatalf("the node takes its region from the control plane (fz-x12): %s", root)
 	}
-	sudo, _ := InstallCommand("https://console.example.com", key, "edge.example.net", "", false, true, "", "")
+	sudo, _ := InstallCommand("https://console.example.com", key, "edge.example.net", "", false, true, "", "", Gateway{})
 	if !strings.Contains(sudo, "&& sudo -S -p '' -v && printf '%s\\n' \"$k\" | sudo -n bash \"$d/install-node.sh\"") ||
 		strings.Contains(sudo, "--public-ip") {
 		t.Fatalf("sudo command: %s", sudo)
 	}
-	keyOnly, _ := InstallCommand("https://console.example.com", key, "203.0.113.7", "", false, false, "", "")
+	keyOnly, _ := InstallCommand("https://console.example.com", key, "203.0.113.7", "", false, false, "", "", Gateway{})
 	if strings.Contains(keyOnly, "sudo -S") || !strings.Contains(keyOnly, "| sudo -n bash") {
 		t.Fatalf("key login command: %s", keyOnly)
 	}
@@ -42,12 +43,12 @@ func TestInstallCommandQuotesAndSudo(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"http://console.example.com", "https://console.example.com/path", "https://a@b.example.com"} {
-		if _, err := InstallCommand(bad, key, "203.0.113.7", "", true, false, "", ""); !errors.Is(err, ErrInvalidInput) {
+		if _, err := InstallCommand(bad, key, "203.0.113.7", "", true, false, "", "", Gateway{}); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("control plane %q accepted", bad)
 		}
 	}
 	for _, bad := range []string{"", key + "\n", "x'y"} {
-		if _, err := InstallCommand("https://console.example.com", bad, "203.0.113.7", "", true, false, "", ""); !errors.Is(err, ErrInvalidInput) {
+		if _, err := InstallCommand("https://console.example.com", bad, "203.0.113.7", "", true, false, "", "", Gateway{}); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("registration key %q accepted", bad)
 		}
 	}
@@ -102,5 +103,40 @@ func TestNormalizeCreate(t *testing.T) {
 		if err := normalizeCreate(&request, defaultBlocked); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("%s accepted", name)
 		}
+	}
+}
+
+func TestInstallCommandCarriesTheDirectGateway(t *testing.T) {
+	const key = "nrk1.0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	gateway := Gateway{EnrollmentAddress: "203.0.113.20:29402", Address: "203.0.113.20:20407", ServerName: "203.0.113.20"}
+	command, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "", true, false, "", "", gateway)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "--gateway-enrollment-address '203.0.113.20:29402' --gateway-address '203.0.113.20:20407' --gateway-server-name '203.0.113.20'"
+	if !strings.Contains(command, want) {
+		t.Fatalf("command missing the gateway arguments:\n%s", command)
+	}
+	plain, _ := InstallCommand("https://console.example.com", key, "203.0.113.7", "", true, false, "", "", Gateway{})
+	if strings.Contains(plain, "--gateway-") {
+		t.Fatalf("no gateway (ws console) must keep the command unchanged: %s", plain)
+	}
+	for _, bad := range []Gateway{{Address: "203.0.113.20:20407"}, {EnrollmentAddress: "a b:1", Address: "a:2", ServerName: "a"},
+		{EnrollmentAddress: "a:1", Address: "a:2", ServerName: "a'; id"}} {
+		if _, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "", true, false, "", "", bad); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("gateway %+v accepted", bad)
+		}
+	}
+	service := &Service{}
+	if service.installGateway(t.Context()) != (Gateway{}) {
+		t.Fatal("no source yields no gateway")
+	}
+	service.UseGateway(func(context.Context) (Gateway, bool) { return gateway, true })
+	if service.installGateway(t.Context()) != gateway {
+		t.Fatal("source not used")
+	}
+	service.UseGateway(func(context.Context) (Gateway, bool) { return gateway, false })
+	if service.installGateway(t.Context()) != (Gateway{}) {
+		t.Fatal("ok=false must yield no gateway")
 	}
 }

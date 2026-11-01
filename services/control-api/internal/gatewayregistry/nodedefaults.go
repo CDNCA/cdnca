@@ -231,6 +231,38 @@ func (s *Service) SyncNodeDefaults(ctx context.Context) (bool, error) {
 	return WriteNodeGatewayDefaults(s.config.NodeDefaultsFile, defaults)
 }
 
+// DirectNodeInstallGateway is the Gateway entry the console writes into the
+// copied / SSH node install command (--gateway-enrollment-address,
+// --gateway-address, --gateway-server-name; the node connects to
+// the Gateway IP directly). Same choice as node-install-defaults
+// (NodeGatewayDefaultsFor); ok=false when nothing is published, the
+// preferred entry is ws (CDN tunnel: the command stays as it is) or the
+// values would not pass Lines.
+func DirectNodeInstallGateway(published []Entrypoint, local Entrypoint) (NodeGatewayDefaults, bool) {
+	d, ok := NodeGatewayDefaultsFor(published, local)
+	if !ok || d.Transport != TransportGRPC {
+		return NodeGatewayDefaults{}, false
+	}
+	if _, err := d.Lines(); err != nil {
+		return NodeGatewayDefaults{}, false
+	}
+	return NodeGatewayDefaults{EnrollmentAddress: d.EnrollmentAddress, Address: d.Address, ServerName: d.ServerName, Transport: TransportGRPC}, true
+}
+
+// NodeInstallGateway reads the published list and applies DirectNodeInstallGateway.
+// A nil service (no Gateway registry on this console) yields ok=false.
+func (s *Service) NodeInstallGateway(ctx context.Context) (NodeGatewayDefaults, bool, error) {
+	if s == nil {
+		return NodeGatewayDefaults{}, false, nil
+	}
+	published, err := s.Publish(ctx)
+	if err != nil {
+		return NodeGatewayDefaults{}, false, err
+	}
+	d, ok := DirectNodeInstallGateway(published.Endpoints, s.config.LocalGateway)
+	return d, ok, nil
+}
+
 // syncNodeDefaultsAfterChange: the change itself is committed; a failed
 // rewrite is logged (control-api retries at the next start or change).
 func (s *Service) syncNodeDefaultsAfterChange(ctx context.Context) {

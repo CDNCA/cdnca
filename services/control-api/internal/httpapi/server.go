@@ -94,6 +94,7 @@ type Server struct {
 	identity                             *identity.Service
 	nodes                                *node.Service
 	nodeRegistrationLimiter              *registrationLimiter
+	nodeInstallGateway                   func(context.Context) (NodeInstallGateway, bool, error)
 	pluginWriteLimiter                   *pluginWriteLimiter
 	nodeInventory                        *nodepresence.Inventory
 	nodeMetrics                          NodeMetricsReader
@@ -347,12 +348,15 @@ type Config struct {
 	ProbeDNSPupHandlerFactory MountedHandlerFactory
 	// GatewayRegistryHandlerFactory serves Agent Gateway management and the
 	// public binding route (internal/gatewayregistry.Patterns).
-	GatewayRegistryHandlerFactory             MountedHandlerFactory
-	DomainTrustHandlerFactory                 MountedHandlerFactory
-	DNSHubHandlerFactory                      MountedHandlerFactory
-	TicketHandlerFactory                      MountedHandlerFactory
-	AggregatedEdgeHandlerFactory              MountedHandlerFactory
-	NodeSSHInstallHandlerFactory              MountedHandlerFactory
+	GatewayRegistryHandlerFactory MountedHandlerFactory
+	DomainTrustHandlerFactory     MountedHandlerFactory
+	DNSHubHandlerFactory          MountedHandlerFactory
+	TicketHandlerFactory          MountedHandlerFactory
+	AggregatedEdgeHandlerFactory  MountedHandlerFactory
+	NodeSSHInstallHandlerFactory  MountedHandlerFactory
+	// NodeInstallGateway is the direct Gateway entry of the copied node install
+	// command (gatewayregistry DirectNodeInstallGateway; nil or ok=false: none).
+	NodeInstallGateway                        func(context.Context) (NodeInstallGateway, bool, error)
 	AccountRegistrationHandlerFactory         MountedHandlerFactory
 	AccountLoginHandlerFactory                MountedHandlerFactory
 	SecurityCoordinationMetricsHandlerFactory MountedHandlerFactory
@@ -460,6 +464,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 	server.nodeInventory.WithTelemetryExclusions(nodeidentity.TelemetryScopeExclusions)
 	server.maintenanceUpgradeRuntime = config.MaintenanceUpgradeRuntime
 	server.nodeRegistrationLimiter = newRegistrationLimiter(config.Now)
+	server.nodeInstallGateway = config.NodeInstallGateway
 	server.pluginWriteLimiter = newPluginWriteLimiter(config.Now)
 	// Self-registration derives its credential MAC from the API key pepper; a
 	// missing pepper leaves the endpoints failing closed (503).

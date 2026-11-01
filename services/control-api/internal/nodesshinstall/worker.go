@@ -130,7 +130,7 @@ func (service *Service) execute(ctx context.Context, job claimed) {
 	}
 	root := job.username == "root"
 	command, err := InstallCommand(job.controlPlane, registration.Credential, job.host, job.name, root,
-		!root && credential.Password != "", service.controlCASHA256(), job.language)
+		!root && credential.Password != "", service.controlCASHA256(), job.language, service.installGateway(ctx))
 	if err != nil {
 		fail(FailInstall)
 		return

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -272,5 +273,70 @@ func TestFailoverDialerSessionRefusedMovesToNextEntry(t *testing.T) {
 	_, _ = dialer.Dial(context.Background())
 	if calls[len(calls)-1] != "primary/grpc" {
 		t.Fatalf("list did not wrap: %v", calls)
+	}
+}
+
+// timeoutDialer blocks until its context ends (a firewalled gateway port).
+type timeoutDialer struct {
+	calls    *[]string
+	deadline *time.Duration
+}
+
+func (d timeoutDialer) Dial(ctx context.Context) (Connection, error) {
+	*d.calls = append(*d.calls, "primary/grpc")
+	if deadline, ok := ctx.Deadline(); ok {
+		*d.deadline = time.Until(deadline)
+	}
+	<-ctx.Done()
+	return nil, errors.New("dial tcp 203.0.113.5:26081: i/o timeout")
+}
+
+// 直连网关端口快速失败后同一次拨号改走管理端 443 的 ws 隧道，成功则记住，
+// 重启后先走 ws。
+func TestFailoverDialerFallsBackToTunnelEntryAndRemembersIt(t *testing.T) {
+	if DirectDialTimeout < 3*time.Second || DirectDialTimeout > 5*time.Second {
+		t.Fatalf("DirectDialTimeout = %s, want 3-5s", DirectDialTimeout)
+	}
+	saved := DirectDialTimeout
+	DirectDialTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { DirectDialTimeout = saved })
+	file := filepath.Join(t.TempDir(), "gateway-endpoints.json")
+	base := MTLSDialerConfig{Address: "203.0.113.5:26081", Transport: "grpc", TunnelAudience: "aud"}
+	tunnel := GatewayEndpoint{Address: "control.example:443", ServerName: "gw", Transport: "ws", TunnelHost: "control.example"}
+	var calls []string
+	var remaining time.Duration
+	dialer := newTestFailover(&calls, nil, base, tunnel)
+	dialer.primary = timeoutDialer{calls: &calls, deadline: &remaining}
+	dialer.learnedFile = file
+	if _, err := dialer.Dial(context.Background()); err != nil {
+		t.Fatalf("ws fallback: %v", err)
+	}
+	if remaining <= 0 || remaining > DirectDialTimeout {
+		t.Fatalf("direct dial deadline = %s, want <= %s", remaining, DirectDialTimeout)
+	}
+	if want := "primary/grpc,control.example:443/ws"; strings.Join(calls, ",") != want {
+		t.Fatalf("calls = %v, want %s", calls, want)
+	}
+	restarted := newTestFailover(&calls, nil, base, tunnel)
+	restarted.loadLearned(file)
+	calls = nil
+	if _, err := restarted.Dial(context.Background()); err != nil || strings.Join(calls, ",") != "control.example:443/ws" {
+		t.Fatalf("restart did not start on ws: calls=%v err=%v", calls, err)
+	}
+}
+
+func TestFailoverDialerReportsDirectAndTunnelFailures(t *testing.T) {
+	var calls []string
+	base := MTLSDialerConfig{Address: "203.0.113.5:26081", Transport: "grpc", TunnelAudience: "aud"}
+	tunnel := GatewayEndpoint{Address: "control.example:443", ServerName: "gw", Transport: "ws"}
+	dialer := newTestFailover(&calls, map[string]bool{"primary/grpc": true, "primary/ws": true, "control.example:443/ws": true}, base, tunnel)
+	_, err := dialer.Dial(context.Background())
+	if err == nil {
+		t.Fatal("both down returned a connection")
+	}
+	for _, want := range []string{"primary/grpc down", "websocket via control.example:443", "control.example:443/ws down"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q lacks %q", err, want)
+		}
 	}
 }

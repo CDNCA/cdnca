@@ -90,7 +90,7 @@ printf '%s\n' '<注册密钥>' | bash <(curl --proto '=https' -fsSL 'https://<�
   --control-plane 'https://<管理端>' --registration-key-stdin
 ```
 
-注册密钥经 stdin 传入，不出现在进程参数里。升级信任摘要、Gateway 入口（含安装时选定的实际端口）和下载备用源由 `install-node.sh` 从 `https://<管理端>/downloads/node-install-defaults` 读取，命令里不需要写 `--gateway-address`、`--gateway-enrollment-address`；只有自定义入口时才追加这两个参数和 `--gateway-server-name`。
+注册密钥经 stdin 传入，不出现在进程参数里。升级信任摘要、Gateway 入口（含安装时选定的实际端口）和下载备用源由 `install-node.sh` 从 `https://<管理端>/downloads/node-install-defaults` 读取。主控页面复制的命令与 SSH 远程安装会直接带上当前发布的网关入口（`--gateway-enrollment-address`、`--gateway-address`、`--gateway-server-name`，与 node-install-defaults 同值），节点直连网关 IP；网关首选入口为 ws（经 CDN）时命令不带这三个参数。自定义入口时改这三个参数即可。
 
 **安装流程**：
 1. 检查系统要求

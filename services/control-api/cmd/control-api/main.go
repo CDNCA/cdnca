@@ -1825,6 +1825,7 @@ func runServer() error {
 	if err != nil {
 		return runtimeStageError{stage: "initialize node SSH install", err: err}
 	}
+	nodeSSHInstall.UseGateway(nodeInstallGatewayForSSH(gatewayRegistry))
 	go nodeSSHInstall.Run(ctx, nodeSSHInstallInterval)
 	nodeSSHAccess, err := buildNodeSSHAccessDelivery(nodeSSHInstall, edgeRuntime.connection)
 	if err != nil {
@@ -2791,6 +2792,7 @@ func runServer() error {
 		DNSHubHandlerFactory:                       dnsHubHandlerFactory,
 		TicketHandlerFactory:                       ticketHandlerFactory,
 		NodeSSHInstallHandlerFactory:               nodeSSHInstallHandlerFactory,
+		NodeInstallGateway:                         nodeInstallGatewayForAPI(gatewayRegistry),
 		AccountRegistrationHandlerFactory:          accountRegistrationRuntime.HandlerFactory(),
 		AccountLoginHandlerFactory:                 accountLoginRuntime.HandlerFactory(),
 		CertificateAssetHandlerFactory:             certificateAssetHandlerFactory,

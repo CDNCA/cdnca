@@ -47,7 +47,8 @@ const (
 )
 
 type Service struct {
-	controlCA    func() string // see UseControlCA
+	controlCA    func() string                         // see UseControlCA
+	gateway      func(context.Context) (Gateway, bool) // see UseGateway
 	pool         *pgxpool.Pool
 	cipher       CredentialCipher
 	registration RegistrationKeys

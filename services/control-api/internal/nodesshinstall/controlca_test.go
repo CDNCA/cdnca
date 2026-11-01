@@ -18,7 +18,7 @@ const testRegistrationKey = "nrk1.0123456789abcdef0123456789abcdef.AAAAAAAAAAAAA
 
 func TestInstallCommandPinsSelfSignedControlCA(t *testing.T) {
 	digest := strings.Repeat("ef", 32)
-	command, err := InstallCommand("https://198.51.100.126", testRegistrationKey, "203.0.113.7", "", true, false, digest, "")
+	command, err := InstallCommand("https://198.51.100.126", testRegistrationKey, "203.0.113.7", "", true, false, digest, "", Gateway{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,12 +35,12 @@ func TestInstallCommandPinsSelfSignedControlCA(t *testing.T) {
 	if strings.Count(command, " -k ") != 1 {
 		t.Fatalf("unverified fetch beyond the pinned CA: %s", command)
 	}
-	plain, _ := InstallCommand("https://198.51.100.126", testRegistrationKey, "203.0.113.7", "", true, false, "", "")
+	plain, _ := InstallCommand("https://198.51.100.126", testRegistrationKey, "203.0.113.7", "", true, false, "", "", Gateway{})
 	if strings.Contains(plain, "gateway-ca.pem") || strings.Contains(plain, "--control-plane-ca") {
 		t.Fatalf("publicly trusted console got a pin: %s", plain)
 	}
 	for _, bad := range []string{"AB" + strings.Repeat("ab", 31), strings.Repeat("ab", 31), strings.Repeat("ab", 32) + "'; id"} {
-		if _, err := InstallCommand("https://198.51.100.126", testRegistrationKey, "203.0.113.7", "", true, false, bad, ""); !errors.Is(err, ErrInvalidInput) {
+		if _, err := InstallCommand("https://198.51.100.126", testRegistrationKey, "203.0.113.7", "", true, false, bad, "", Gateway{}); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("digest %q accepted", bad)
 		}
 	}
@@ -127,7 +127,7 @@ printf '#!/usr/bin/env bash\nmain() { printf "%%s\\n" "$@" > "$T/args"; for a in
 	sum := sha256.Sum256(root)
 	run := func(digest string) (string, error, string) {
 		out := t.TempDir()
-		command, err := InstallCommand(origin, testRegistrationKey, "203.0.113.7", "", true, false, digest, "")
+		command, err := InstallCommand(origin, testRegistrationKey, "203.0.113.7", "", true, false, digest, "", Gateway{})
 		if err != nil {
 			t.Fatal(err)
 		}

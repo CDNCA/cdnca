@@ -132,6 +132,32 @@ describe('reusable node installation command', () => {
     expect(english).toMatch(/--control-plane-ca-sha256 '[0-9a-f]{64}' --lang en\)$/)
   })
 
+  // the node connects to the published Gateway IP directly (same values as node-install-defaults).
+  const gateway = { enrollment_address: '203.0.113.20:29402', address: '203.0.113.20:20407', server_name: '203.0.113.20' }
+  const gatewayArgs = `--gateway-enrollment-address '203.0.113.20:29402' --gateway-address '203.0.113.20:20407' --gateway-server-name '203.0.113.20'`
+
+  it('writes the published direct Gateway entry into the command', () => {
+    const plain = buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'zh-CN')
+    expect(buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'zh-CN', gateway))
+      .toBe(plain.replace('--registration-key-stdin --lang zh)', `--registration-key-stdin ${gatewayArgs} --lang zh)`))
+    // A ws console (no gateway in the response) keeps the command unchanged.
+    expect(buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, 'zh-CN', undefined)).toBe(plain)
+  })
+
+  it.each([{ ...gateway, address: "a:1'; id" }, { ...gateway, server_name: '' }, { ...gateway, enrollment_address: 'no-port' }])('refuses a malformed Gateway entry %o', (bad) => {
+    expect(() => buildNodeInstallCommand(credential().credential, 'https://control.example', upgradeTrust, undefined, bad)).toThrow()
+  })
+
+  it('shows the Gateway arguments returned with the credential', async () => {
+    const { get } = setup()
+    get.mockResolvedValue({ ...credential(), gateway })
+    renderWithProviders(<NodeInstallCommand getAccessToken={() => 'other-access'} errorText={(error) => error.code} />)
+    await waitFor(async () => {
+      const boxes = await screen.findAllByRole('textbox', { name: '节点安装命令' }) as HTMLTextAreaElement[]
+      expect(boxes.some((box) => box.value.includes(gatewayArgs))).toBe(true)
+    })
+  })
+
   it.each(['AB'.repeat(32), 'ab'.repeat(31), `${'ab'.repeat(32)}'; id`])('refuses a malformed management root digest (%s)', (digest) => {
     expect(() => buildNodeInstallCommand(credential().credential, 'https://control.example', { ...upgradeTrust, __CDNCA_CONTROL_CA_SHA256__: digest })).toThrow()
   })

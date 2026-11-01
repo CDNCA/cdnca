@@ -14,12 +14,12 @@ func TestInstallCommandLanguage(t *testing.T) {
 	const key = "nrk1.0123456789abcdef0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	const digest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	for _, ca := range []string{"", digest} {
-		plain, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge", false, true, ca, "")
+		plain, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge", false, true, ca, "", Gateway{})
 		if err != nil || strings.Contains(plain, "--lang") {
 			t.Fatalf("no language: %v %s", err, plain)
 		}
 		for _, language := range []string{"zh", "en"} {
-			command, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge", false, true, ca, language)
+			command, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "edge", false, true, ca, language, Gateway{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -30,7 +30,7 @@ func TestInstallCommandLanguage(t *testing.T) {
 		}
 	}
 	for _, bad := range []string{"zh-CN", "fr", "en'", " zh"} {
-		if _, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "", true, false, "", bad); !errors.Is(err, ErrInvalidInput) {
+		if _, err := InstallCommand("https://console.example.com", key, "203.0.113.7", "", true, false, "", bad, Gateway{}); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("language %q accepted", bad)
 		}
 	}

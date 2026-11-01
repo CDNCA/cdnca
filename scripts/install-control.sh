@@ -2420,9 +2420,7 @@ prompt_public_endpoints() {
     MASTER_PORT=${MASTER_PORT:-443}
   fi
   valid_port "$MASTER_PORT" || fail '--master-port must be between 1 and 65535'
-  # Nodes reach this same host on the two Gateway ports (enrollment and
-  # agent channel). Only a split deployment needs a different name: --gateway-host.
-  GATEWAY_HOST=${GATEWAY_HOST:-$MASTER_HOST}
+  [ -n "$GATEWAY_HOST" ] || GATEWAY_HOST=$(default_gateway_host)
   GATEWAY_HOST=$(printf '%s' "$GATEWAY_HOST" | tr '[:upper:]' '[:lower:]')
   valid_host "$GATEWAY_HOST" || fail 'invalid public Gateway host'
   CONTROL_DOMAIN=$(printf '%s' "${CONTROL_DOMAIN:-$MASTER_HOST}" | tr '[:upper:]' '[:lower:]')
@@ -2434,6 +2432,27 @@ prompt_public_endpoints() {
 
 control_domain_is_ip() { [[ "$CONTROL_DOMAIN" =~ ^[0-9.]+$ || "$CONTROL_DOMAIN" == *:* ]]; }
 
+# 未传 --gateway-host 时节点连网关的地址：主控几乎都套 CDN，CDN 不转发网关随机端口
+# 20000–29999，所以 tcp 传输下默认用本机公网 IP 直连（先问 api.ipify.org，再看本机非私网地址）；
+# 取不到才回落管理端地址并警告。管理端本身是 IP、或 ws 传输（节点经 CDN 443 隧道，需要域名）时用管理端地址。
+default_gateway_host() {
+  local address
+  gateway_transport_resolve
+  if [[ "$MASTER_HOST" =~ ^[0-9.]+$ || "$MASTER_HOST" == *:* ]] || [ "$GATEWAY_TRANSPORT" = ws ]; then
+    printf '%s' "$MASTER_HOST"; return 0
+  fi
+  address=$(curl -fsS --max-time 10 https://api.ipify.org 2>/dev/null || true)
+  [[ "$address" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { address=$(summary_host_addresses); address=${address%%|*}; }
+  if [ -n "$address" ]; then printf '%s' "$address"; return 0; fi
+  warn "$(msg "未取到本机公网 IP，节点网关地址回落为管理端地址 ${MASTER_HOST}；管理端套 CDN 时节点连不上网关端口，请用 --gateway-host <本机公网 IP> 重新指定" "could not detect this host's public IP, so the node Gateway host falls back to the console host ${MASTER_HOST}; behind a CDN nodes cannot reach the Gateway ports, so pass --gateway-host <public IP>")"
+  printf '%s' "$MASTER_HOST"
+}
+
+# 网关直连放行提示（安装摘要与 check 共用）：<网关主机> <注册端口> <通道端口>。
+gateway_direct_ports_hint() {
+  msg "请在防火墙/云安全组放行网关两个端口 $2、$3（TCP），节点直连 $1" "Open both Gateway ports $2 and $3 (TCP) in the firewall / cloud security group; nodes connect directly to $1"
+}
+
 normalise_defaults() {
   local value architecture listeners
   [ -n "$LICENSING_SERVER" ] || fail '--release-server is required'
@@ -2443,7 +2462,7 @@ normalise_defaults() {
   [ -n "$MASTER_HOST" ] || fail 'public control-plane host was not provided'
   MASTER_PORT=${MASTER_PORT:-443}
   CONTROL_DOMAIN=${CONTROL_DOMAIN:-$MASTER_HOST}
-  GATEWAY_HOST=${GATEWAY_HOST:-$MASTER_HOST}
+  [ -n "$GATEWAY_HOST" ] || GATEWAY_HOST=$(default_gateway_host)
   if ! valid_host "$MASTER_HOST" || ! valid_host "$CONTROL_DOMAIN" || ! valid_host "$GATEWAY_HOST"; then
     fail 'invalid public host'
   fi
@@ -2752,6 +2771,14 @@ host_san() {
   fi
 }
 
+# 网关服务证书 SAN：网关主机（默认本机公网 IP）+ 管理端地址（网关管理页切 ws 时内层 TLS 用它），去重。
+gateway_server_san() {
+  local san
+  san=$(host_san "$GATEWAY_HOST")
+  [ -z "$MASTER_HOST" ] || [ "$MASTER_HOST" = "$GATEWAY_HOST" ] || san="$san,$(host_san "$MASTER_HOST")"
+  printf '%s,DNS:localhost,IP:127.0.0.1' "$san"
+}
+
 issue_certificate() {
   local prefix=$1 common_name=$2 san=$3 eku=$4 ca_cert=$5 ca_key=$6
   openssl genrsa -out "${PKI_DIR}/${prefix}-key.pem" 2048 >/dev/null 2>&1
@@ -2781,7 +2808,7 @@ generate_pki() {
   generate_ca 'CDNCA node CA' "${PKI_DIR}/node-ca-key.pem" "${PKI_DIR}/node-ca-cert.pem"
   issue_certificate control-internal-server localhost "$(control_internal_server_san)" serverAuth \
     "${PKI_DIR}/root-ca-cert.pem" "${PKI_DIR}/root-ca-key.pem"
-  issue_certificate gateway-server "$GATEWAY_HOST" "$(host_san "$GATEWAY_HOST"),DNS:localhost,IP:127.0.0.1" serverAuth \
+  issue_certificate gateway-server "$GATEWAY_HOST" "$(gateway_server_san)" serverAuth \
     "${PKI_DIR}/root-ca-cert.pem" "${PKI_DIR}/root-ca-key.pem"
   issue_certificate public-server "$CONTROL_DOMAIN" "$(host_san "$CONTROL_DOMAIN"),DNS:localhost,IP:127.0.0.1" serverAuth \
     "${PKI_DIR}/root-ca-cert.pem" "${PKI_DIR}/root-ca-key.pem"
@@ -5684,6 +5711,7 @@ control_install_summary() {
     printf '  %s\n' "$web_line"
     printf '  TCP %-5s %s\n' "$GATEWAY_ENROLLMENT_PORT" "$(msg '节点网关注册' 'node Gateway enrollment')"
     printf '  TCP %-5s %s\n' "$GATEWAY_AGENT_PORT" "$(msg '节点网关通道' 'node Gateway agent channel')"
+    [ "${GATEWAY_TRANSPORT:-tcp}" = ws ] || printf '  %s\n' "$(gateway_direct_ports_hint "$GATEWAY_HOST" "$GATEWAY_ENROLLMENT_PORT" "$GATEWAY_AGENT_PORT")"
     [ "$INSTALL_ENV" != bt ] || printf '  TCP %-5s %s\n' "$NODE_DOWNLOAD_PORT" "$(msg '节点升级下载（直连）' 'node upgrade downloads (direct)')"
     if [ -n "$PUBLIC_CERT_FILE" ] && [ -n "$(public_certificate_lineage)" ] && [ "$INSTALL_ENV" != bt ]; then
       printf '  TCP 80    %s\n' "$(msg "Let's Encrypt 续期验证（certbot 续期时临时占用）" "Let's Encrypt renewal (used by certbot while renewing)")"
@@ -5979,6 +6007,11 @@ check_main() {
   if [ -n "${defaults_body:-}" ]; then
     if value=$(check_gateway_entry "$defaults_body" "${port:-443}"); then ok "$(msg "节点网关入口可用：$value" "node Gateway entry reachable: $value")"
     else bad "$(msg "节点网关入口不可用：$value" "node Gateway entry unreachable: $value")"; fi
+    if ! grep -qx 'gateway_transport=ws' <<<"$defaults_body"; then
+      value=$(sed -n 's/^gateway_enrollment_address=//p' <<<"$defaults_body")
+      key=$(sed -n 's/^gateway_address=//p' <<<"$defaults_body")
+      [ -z "$key" ] || printf '     %s\n' "$(gateway_direct_ports_hint "${key%:*}" "${value##*:}" "${key##*:}")"
+    fi
   else bad "$(msg '节点网关入口无法核对（node-install-defaults 取不到）' 'node Gateway entry not verified (node-install-defaults unavailable)')"; fi
   if body=$(check_fetch ${via[@]+"${via[@]}"} "$origin/runtime-config.js") && grep -q '^window.__CDNCA_GATEWAY_ADDRESS__ = ' <<<"$body" &&
     [ "$(sed -n 's/^window.__CDNCA_NODE_UPGRADE_TRUST_SHA256__ = "\([0-9a-f]\{64\}\)";$/\1/p' <<<"$body")" = "$trust_digest" ]; then

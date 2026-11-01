@@ -69,16 +69,45 @@ type Config struct {
 	RootCAFile string
 	// Transport "ws" enrolls through the gateway tunnel /agent/v1/enroll
 	// at Address (CDN entrance); TunnelHost is the outer SNI/Host.
-	Transport         string
-	TunnelHost        string
-	IdentityDir       string
-	MachineIDFile     string
-	SupportedVersions *commonv1.ProtocolVersionRange
-	Capabilities      *agentv1.AgentCapabilities
-	Now               func() time.Time
-	Random            io.Reader
-	Dial              func(context.Context, Config) (RPC, io.Closer, error)
+	Transport  string
+	TunnelHost string
+	// FallbackTunnelAddress (grpc only) is the management HTTPS
+	// host:port whose /agent/v1/enroll tunnel is tried when the direct dial
+	// fails; the direct dial is then bounded by DirectDialTimeout.
+	FallbackTunnelAddress string
+	IdentityDir           string
+	MachineIDFile         string
+	SupportedVersions     *commonv1.ProtocolVersionRange
+	Capabilities          *agentv1.AgentCapabilities
+	Now                   func() time.Time
+	Random                io.Reader
+	Dial                  func(context.Context, Config) (RPC, io.Closer, error)
 }
+
+// DirectDialTimeout bounds the direct enrollment dial when a WebSocket
+// fallback is configured: a firewalled gateway port fails fast.
+var DirectDialTimeout = 4 * time.Second
+
+// ConnectError reports every way the enrollment endpoint was tried.
+type ConnectError struct {
+	DirectAddress string
+	Direct        error
+	TunnelAddress string
+	Tunnel        error
+}
+
+func (e *ConnectError) Error() string {
+	parts := []string{}
+	if e.Direct != nil {
+		parts = append(parts, fmt.Sprintf("direct gRPC to %s: %v", e.DirectAddress, e.Direct))
+	}
+	if e.Tunnel != nil {
+		parts = append(parts, fmt.Sprintf("websocket via %s: %v", e.TunnelAddress, e.Tunnel))
+	}
+	return fmt.Sprintf("%v: connect to enrollment endpoint (%s)", ErrEnrollmentRejected, strings.Join(parts, "; "))
+}
+
+func (e *ConnectError) Unwrap() error { return ErrEnrollmentRejected }
 
 type RPC interface {
 	Enroll(context.Context, *agentv1.EnrollRequest, ...grpc.CallOption) (*agentv1.EnrollResponse, error)
@@ -189,9 +218,9 @@ func Run(ctx context.Context, config Config, token []byte) (Result, error) {
 		ArtifactEncryptionPublicKey:  prepared.artifactKey.PublicKey().Bytes(),
 	}
 	defer func() { request.EnrollmentToken = "" }()
-	rpc, closer, err := config.Dial(ctx, config)
+	rpc, closer, err := dialEnrollment(ctx, config)
 	if err != nil {
-		return Result{}, fmt.Errorf("%w: connect to enrollment endpoint", ErrEnrollmentRejected)
+		return Result{}, err
 	}
 	if rpc == nil {
 		return Result{}, fmt.Errorf("%w: enrollment endpoint unavailable", ErrEnrollmentRejected)
@@ -295,7 +324,7 @@ func Dial(ctx context.Context, config Config) (RPC, io.Closer, error) {
 		return nil, nil, fmt.Errorf("gateway transport must be grpc or ws")
 	}
 	connection, err := grpc.DialContext(ctx, target, append(options,
-		grpc.WithBlock(),
+		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{
 			MinVersion: tls.VersionTLS13, ServerName: config.ServerName, RootCAs: roots,
 		})),
@@ -305,6 +334,39 @@ func Dial(ctx context.Context, config Config) (RPC, io.Closer, error) {
 		return nil, nil, err
 	}
 	return agentv1.NewAgentGatewayServiceClient(connection), connection, nil
+}
+
+// dialEnrollment dials directly and, when that fails and a fallback tunnel is
+// configured, through the management HTTPS /agent/v1/enroll WebSocket; the
+// inner TLS still verifies the gateway server name.
+func dialEnrollment(ctx context.Context, config Config) (RPC, io.Closer, error) {
+	if config.Transport == gatewaytunnel.TransportWS {
+		rpc, closer, err := config.Dial(ctx, config)
+		if err != nil {
+			return nil, nil, &ConnectError{TunnelAddress: config.Address, Tunnel: err}
+		}
+		return rpc, closer, nil
+	}
+	directCtx, cancel := ctx, context.CancelFunc(func() {})
+	if config.FallbackTunnelAddress != "" {
+		directCtx, cancel = context.WithTimeout(ctx, DirectDialTimeout)
+	}
+	rpc, closer, err := config.Dial(directCtx, config)
+	cancel()
+	if err == nil {
+		return rpc, closer, nil
+	}
+	failure := &ConnectError{DirectAddress: config.Address, Direct: err}
+	if config.FallbackTunnelAddress == "" || ctx.Err() != nil {
+		return nil, nil, failure
+	}
+	tunnel := config
+	tunnel.Address, tunnel.Transport, tunnel.TunnelHost = config.FallbackTunnelAddress, gatewaytunnel.TransportWS, ""
+	if rpc, closer, err = config.Dial(ctx, tunnel); err != nil {
+		failure.TunnelAddress, failure.Tunnel = config.FallbackTunnelAddress, err
+		return nil, nil, failure
+	}
+	return rpc, closer, nil
 }
 
 func withDefaults(config Config) Config {
@@ -328,6 +390,14 @@ func validateConfig(config Config) error {
 	portNumber, portErr := strconv.ParseUint(port, 10, 16)
 	if err != nil || host == "" || portErr != nil || portNumber == 0 || strings.TrimSpace(config.ServerName) != config.ServerName || config.ServerName == "" || len(config.ServerName) > 253 {
 		return fmt.Errorf("%w: gateway address and server name are required", ErrInvalidInput)
+	}
+	if fallback := config.FallbackTunnelAddress; fallback != "" {
+		host, port, err := net.SplitHostPort(fallback)
+		portNumber, portErr := strconv.ParseUint(port, 10, 16)
+		if err != nil || host == "" || portErr != nil || portNumber == 0 || strings.TrimSpace(fallback) != fallback ||
+			(config.Transport != "" && config.Transport != gatewaytunnel.TransportGRPC) {
+			return fmt.Errorf("%w: fallback tunnel address must be host:port with the grpc transport", ErrInvalidInput)
+		}
 	}
 	for _, path := range []string{config.RootCAFile, config.IdentityDir, config.MachineIDFile} {
 		if path == "" || !filepath.IsAbs(path) || filepath.Clean(path) != path || path == string(filepath.Separator) {

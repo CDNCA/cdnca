@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"github.com/cdnca/cdnca/services/control-api/internal/nativebackup"
 	"net/http"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/gatewayregistry"
 	"github.com/cdnca/cdnca/services/control-api/internal/httpapi"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
+	"github.com/cdnca/cdnca/services/control-api/internal/nodesshinstall"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -195,4 +197,25 @@ func nodeDefaultsFileFor(local gatewayregistry.Entrypoint) string {
 		return ""
 	}
 	return nativebackup.NodeInstallDefaultsFile
+}
+
+// nodeInstallGatewayForAPI / nodeInstallGatewayForSSH: the direct Gateway entry
+// of the copied and the SSH node install command, read from the
+// published list on every request so Gateway changes need no restart.
+func nodeInstallGatewayForAPI(service *gatewayregistry.Service) func(context.Context) (httpapi.NodeInstallGateway, bool, error) {
+	return func(ctx context.Context) (httpapi.NodeInstallGateway, bool, error) {
+		d, ok, err := service.NodeInstallGateway(ctx)
+		return httpapi.NodeInstallGateway{EnrollmentAddress: d.EnrollmentAddress, Address: d.Address, ServerName: d.ServerName}, ok, err
+	}
+}
+
+func nodeInstallGatewayForSSH(service *gatewayregistry.Service) func(context.Context) (nodesshinstall.Gateway, bool) {
+	return func(ctx context.Context) (nodesshinstall.Gateway, bool) {
+		d, ok, err := service.NodeInstallGateway(ctx)
+		if err != nil {
+			slog.Warn("SSH node install without the Gateway entry", "error", err)
+			return nodesshinstall.Gateway{}, false
+		}
+		return nodesshinstall.Gateway{EnrollmentAddress: d.EnrollmentAddress, Address: d.Address, ServerName: d.ServerName}, ok
+	}
 }

@@ -40,6 +40,7 @@ func executeEnrollment(ctx context.Context, args []string, stdin io.Reader, stdo
 	rootCA := flags.String("gateway-root-ca-file", "", "absolute Gateway root CA path")
 	transport := flags.String("gateway-transport", "grpc", "grpc (direct) or ws (WebSocket tunnel /agent/v1/enroll)")
 	tunnelHost := flags.String("gateway-tunnel-host", "", "outer SNI/Host for the ws transport (CDN name)")
+	fallbackTunnel := flags.String("gateway-fallback-tunnel-address", "", "management HTTPS host:port whose /agent/v1/enroll WebSocket is tried when the direct grpc dial fails")
 	identityDir := flags.String("identity-dir", defaultIdentityDir, "absolute identity output directory")
 	machineID := flags.String("machine-id-file", defaultMachineIDFile, "absolute machine ID path")
 	tokenFile := flags.String("token-file", "", "owner-only enrollment token file; stdin when omitted")
@@ -61,19 +62,20 @@ func executeEnrollment(ctx context.Context, args []string, stdin io.Reader, stdo
 		return resumeEnrollment(*identityDir, *machineID, *recoverFrom, stdout, logger)
 	}
 	if parseErr != nil || flags.NArg() != 0 || *timeout <= 0 || *timeout > 10*time.Minute || *rootCA == "" ||
-		(*transport != "grpc" && *transport != "ws") || (*tunnelHost != "" && *transport != "ws") {
+		(*transport != "grpc" && *transport != "ws") || (*tunnelHost != "" && *transport != "ws") ||
+		(*fallbackTunnel != "" && (*transport != "grpc" || *address == "")) {
 		return rejectArguments()
 	}
 	// targets: the explicit endpoint, or (ADR 0013 §5.2) every published
 	// Gateway enrollment port; the server name belongs to each entry, so an
 	// explicit one only goes with an explicit address.
-	type target struct{ address, serverName, transport, tunnelHost string }
+	type target struct{ address, serverName, transport, tunnelHost, fallback string }
 	var targets []target
 	if *address != "" {
 		if *serverName == "" {
 			return rejectArguments()
 		}
-		targets = []target{{*address, *serverName, *transport, *tunnelHost}}
+		targets = []target{{*address, *serverName, *transport, *tunnelHost, *fallbackTunnel}}
 	} else {
 		if *serverName != "" || *transport != "grpc" || *tunnelHost != "" || !filepath.IsAbs(*journalDir) {
 			return rejectArguments()
@@ -85,7 +87,7 @@ func executeEnrollment(ctx context.Context, args []string, stdin io.Reader, stdo
 		}
 		for _, endpoint := range endpoints {
 			if endpoint.EnrollmentAddress != "" && endpoint.ServerName != "" && endpoint.Transport == "grpc" {
-				targets = append(targets, target{endpoint.EnrollmentAddress, endpoint.ServerName, "grpc", ""})
+				targets = append(targets, target{endpoint.EnrollmentAddress, endpoint.ServerName, "grpc", "", ""})
 			}
 		}
 		if len(targets) == 0 {
@@ -125,7 +127,7 @@ func executeEnrollment(ctx context.Context, args []string, stdin io.Reader, stdo
 	for index, item := range targets {
 		result, err = run(callCtx, enrollment.Config{
 			Address: item.address, ServerName: item.serverName, RootCAFile: *rootCA,
-			Transport: item.transport, TunnelHost: item.tunnelHost,
+			Transport: item.transport, TunnelHost: item.tunnelHost, FallbackTunnelAddress: item.fallback,
 			IdentityDir: *identityDir, MachineIDFile: *machineID,
 			SupportedVersions: &commonv1.ProtocolVersionRange{
 				Minimum: &commonv1.ProtocolVersion{Major: 1},
@@ -141,7 +143,18 @@ func executeEnrollment(ctx context.Context, args []string, stdin io.Reader, stdo
 		logger.Warn("edge agent enrollment endpoint failed; trying the next Gateway", "event", "enrollment_retry", "endpoint_index", index, "error", safeLogError(err))
 	}
 	if err != nil {
-		logger.Error("edge agent enrollment failed", "event", "enrollment_failed", "error", safeLogError(err))
+		attributes := []any{"event", "enrollment_failed", "error", safeLogError(err)}
+		// install-node.sh reads these to explain which ways were tried.
+		var connectErr *enrollment.ConnectError
+		if errors.As(err, &connectErr) {
+			if connectErr.Direct != nil {
+				attributes = append(attributes, "direct_address", connectErr.DirectAddress, "direct_error", safeLogError(connectErr.Direct))
+			}
+			if connectErr.Tunnel != nil {
+				attributes = append(attributes, "tunnel_address", connectErr.TunnelAddress, "tunnel_error", safeLogError(connectErr.Tunnel))
+			}
+		}
+		logger.Error("edge agent enrollment failed", attributes...)
 		return 1
 	}
 	encoder := json.NewEncoder(stdout)

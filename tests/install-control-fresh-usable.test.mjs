@@ -114,7 +114,7 @@ cat "$f"
     ORIGIN_AUTH_SECRET_FILE: p('etc/origin-auth.secret'), PLUGIN_RUNTIME_DIR: p('etc/plugin-runtime'), UPGRADE_STATUS_FILE: p('run/status.json'),
     CHECK_OWNER_UID: uid, SERVICE_NAME: 'cdnca-control-api', GATEWAY_SERVICE_NAME: 'cdnca-agent-gateway',
     NATS_SERVICE_NAME: 'cdnca-control-nats', WEB_SERVICE_NAME: 'cdnca-control-web', INSTALL_LANG: 'zh' }
-  return bash(root, ['log', 'warn', 'fail', 'file_owner_mode', 'check_env_value', 'check_fetch', 'check_gateway_endpoints_value', 'check_node_install_defaults_lines', 'check_port_listening', 'check_gateway_entry', 'check_main'], 'check_main', env)
+  return bash(root, ['log', 'warn', 'fail', 'file_owner_mode', 'check_env_value', 'check_fetch', 'check_gateway_endpoints_value', 'check_node_install_defaults_lines', 'check_port_listening', 'check_gateway_entry', 'gateway_direct_ports_hint', 'check_main'], 'check_main', env)
 }
 
 test('check passes on a complete fresh installation', () => withRoot((root) => {
@@ -122,7 +122,7 @@ test('check passes on a complete fresh installation', () => withRoot((root) => {
   assert.equal(result.status, 0, result.stdout + result.stderr)
   const out = result.stdout + result.stderr
   for (const item of ['cdnca-control-api', 'cdnca-agent-gateway', 'control-api /health/ready', 'agent-gateway /health/ready',
-    'signer-trust.json', 'installation-ban', 'node-install-defaults', 'runtime-config.js', '安装汇总', '回源', '升级 runner', '安装记录']) {
+    'signer-trust.json', 'installation-ban', 'node-install-defaults', 'runtime-config.js', '安装汇总', '回源', '升级 runner', '安装记录', '请在防火墙/云安全组放行网关两个端口']) {
     assert.ok(out.includes(item), `check output lacks ${item}\n${out}`)
   }
   assert.match(out, /失败 0/)

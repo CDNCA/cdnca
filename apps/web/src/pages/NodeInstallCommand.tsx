@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Input, Popconfirm, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { ApiError } from '../api/auth'
-import { nodesApi } from '../api/nodes'
+import { nodesApi, type NodeInstallGateway } from '../api/nodes'
 import './NodeListPage.locale'
 import { FeedbackWhen } from '@cdnca/ui'
 import { buildInstallerCommand, quoteShellArgument as quote } from '@cdnca/ui/installer-command'
@@ -25,6 +25,9 @@ function publicOrigin(value: string): URL {
 type InstallRuntime = { __CDNCA_NODE_UPGRADE_TRUST_SHA256__?: string; __CDNCA_CONTROL_CA_SHA256__?: string }
 
 const registrationCredentialPattern = /^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/
+// Same forms install-node.sh accepts for node-install-defaults.
+const gatewayAddressPattern = /^([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\]):[0-9]{1,5}$/
+const gatewayServerPattern = /^[A-Za-z0-9][A-Za-z0-9.:-]{0,252}$/
 
 // One command for every node: the host registers itself with the scope-level
 // credential and appears as pending ("待初始化"); nothing is created here.
@@ -33,7 +36,11 @@ const registrationCredentialPattern = /^nrk1\.[0-9a-f]{32}\.[A-Za-z0-9_-]{43}$/
 // is downloaded to a temporary file and checked before it runs; the command
 // returns the installer's own exit status (packages/cdnca-ui/src/installerCommand.ts).
 // language: console UI language; an English UI adds --lang en, a Chinese one --lang zh.
-export function buildNodeInstallCommand(credential: string, origin: string, runtime: InstallRuntime = {}, language?: string): string {
+// gateway (the node connects to the Gateway IP directly): the console's
+// published direct Gateway entry, the same values as node-install-defaults; absent
+// for a ws (CDN tunnel) console, whose command stays unchanged.
+export function buildNodeInstallCommand(credential: string, origin: string, runtime: InstallRuntime = {}, language?: string,
+  gateway?: NodeInstallGateway): string {
   if (!registrationCredentialPattern.test(credential)) throw new Error('invalid registration credential')
   // Published by install-control.sh together with node-install-defaults; a
   // console without it cannot hand out an upgradable node.
@@ -41,9 +48,13 @@ export function buildNodeInstallCommand(credential: string, origin: string, runt
   const control = publicOrigin(origin).origin
   const caDigest = runtime.__CDNCA_CONTROL_CA_SHA256__ ?? ''
   if (caDigest !== '' && !/^[0-9a-f]{64}$/.test(caDigest)) throw new Error('invalid control-plane CA digest')
+  if (gateway && !(gatewayAddressPattern.test(gateway.enrollment_address) && gatewayAddressPattern.test(gateway.address) &&
+      gatewayServerPattern.test(gateway.server_name))) throw new Error('invalid gateway entry')
+  const gatewayArgs = gateway ? ` --gateway-enrollment-address ${quote(gateway.enrollment_address)} --gateway-address ${quote(gateway.address)}` +
+    ` --gateway-server-name ${quote(gateway.server_name)}` : ''
   return buildInstallerCommand({
     urls: [`${control}/downloads/install-node.sh`], protocols: '=https', label: '[cdnca-edge]',
-    args: `--control-plane ${quote(control)} --registration-key-stdin`, stdinSecret: credential, language,
+    args: `--control-plane ${quote(control)} --registration-key-stdin${gatewayArgs}`, stdinSecret: credential, language,
     controlPlaneCA: caDigest ? { url: `${control}/downloads/gateway-ca.pem`, sha256: caDigest } : undefined,
   })
 }
@@ -74,7 +85,7 @@ export default function NodeInstallCommand({ getAccessToken, errorText }: {
         ? await nodesApi.resetRegistrationCredential(accessToken)
         : await nodesApi.getRegistrationCredential(accessToken)
       if (!active.current || !getAccessToken()) return
-      setCommand(buildNodeInstallCommand(result.credential, window.location.origin, window as InstallRuntime, i18n.resolvedLanguage))
+      setCommand(buildNodeInstallCommand(result.credential, window.location.origin, window as InstallRuntime, i18n.resolvedLanguage, result.gateway))
       setCopied(false)
     } catch (cause) {
       if (!active.current || !getAccessToken()) return

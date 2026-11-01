@@ -29,7 +29,7 @@ function summary({ lang = 'zh', env = 'plain', cert = 'self', mode = 'all', inte
   const publicCert = { self: '', own: join(dir, 'own.pem'), le: '/etc/letsencrypt/live/cdnca.com/fullchain.pem' }[cert]
   const publicKey = { self: '', own: join(dir, 'own-key.pem'), le: '/etc/letsencrypt/live/cdnca.com/privkey.pem' }[cert]
   const script = ['set -Eeuo pipefail', i18n,
-    ...['log', 'warn', 'fail', 'remote_gateway_access', 'public_certificate_lineage', 'summary_host_addresses', 'summary_certificate'].map(block),
+    ...['log', 'warn', 'fail', 'remote_gateway_access', 'public_certificate_lineage', 'summary_host_addresses', 'summary_certificate', 'gateway_direct_ports_hint'].map(block),
     source.match(/^CONTROL_SUMMARY_FILE=.*$/m)[0], block('control_install_summary'),
     `ip() { printf '%s\\n' '2: eth0    inet 203.0.113.10/24 brd 203.0.113.255 scope global eth0' '3: eth1    inet 10.0.0.5/8 scope global eth1'; }`,
     `openssl() { printf 'notAfter=Jan 29 00:00:00 2027 GMT\\n'; }`,
@@ -63,6 +63,7 @@ test('Chinese summary lists every recorded field and the file matches the screen
     '/data/cdnca-native-root/cdnca/current', '管理端地址： https://cdnca.com/dashboard/', '用户端地址：',
     '节点网关地址： gateway.cdnca.com', '本机公网 IP： 203.0.113.10', '本机内网 IP： 10.0.0.5', '管理员账号： admin',
     '使用你在安装时设置的口令', 'TCP 443  管理端网页 HTTPS', 'TCP 21443 节点网关注册', 'TCP 21444 节点网关通道',
+    '请在防火墙/云安全组放行网关两个端口 21443、21444（TCP），节点直连 gateway.cdnca.com',
     '主控私有 CA 自签', '到期 Jan 29 00:00:00 2027 GMT', '节点管理 → 节点列表 → 安装节点', 'native-backup create',
     'migrate-from', '/var/log/cdnca-install-control-20261031-010203.log', 'journalctl -u cdnca-control-api']) {
     assert.ok(result.stderr.includes(expected), `missing ${expected}\n${result.stderr}`)
@@ -78,7 +79,7 @@ test('English summary is in English', () => {
   const result = summary({ lang: 'en' })
   assert.equal(result.status, 0, result.stderr)
   for (const expected of ['CDNCA control plane installed', 'Management URL: https://cdnca.com/dashboard/', 'Administrator: admin',
-    'the password you set during installation', 'TCP 21443 node Gateway enrollment', 'Self-signed by the private control CA',
+    'the password you set during installation', 'TCP 21443 node Gateway enrollment', 'Open both Gateway ports 21443 and 21444 (TCP)', 'Self-signed by the private control CA',
     'Nodes → Node list → Install node', 'Next steps:']) {
     assert.ok(result.stderr.includes(expected), `missing ${expected}\n${result.stderr}`)
   }

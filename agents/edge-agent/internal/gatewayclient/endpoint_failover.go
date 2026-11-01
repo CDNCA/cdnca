@@ -43,6 +43,11 @@ const MaxLearnedGatewayEndpoints = 32
 // FallbackProbeInterval is how often earlier endpoints are retried (§4.5).
 const FallbackProbeInterval = 5 * time.Minute
 
+// DirectDialTimeout bounds a direct grpc dial that has a later ws entry to
+// fall back to (a firewalled gateway port fails fast, then the
+// management HTTPS WebSocket tunnel is dialed in the same Dial).
+var DirectDialTimeout = 4 * time.Second
+
 type FailoverDialer struct {
 	primary Dialer
 	base    MTLSDialerConfig
@@ -60,11 +65,16 @@ type FailoverDialer struct {
 	// transport) skipped by the fallback probe until a new list names them.
 	dialed  int
 	avoided map[string]bool
+	// preferred is the endpointID of a ws entry reached after the direct
+	// dial failed; persisted in learnedFile, reconnects and restarts start
+	// there and the fallback probe leaves it alone until it fails.
+	preferred string
 }
 
 type learnedEndpointsFile struct {
 	Version   string            `json:"version"`
 	Endpoints []GatewayEndpoint `json:"endpoints"`
+	Preferred string            `json:"preferred,omitempty"`
 }
 
 func validateEndpoint(base MTLSDialerConfig, endpoint GatewayEndpoint, newMTLS func(MTLSDialerConfig) (Dialer, error)) error {
@@ -100,6 +110,12 @@ func (d *FailoverDialer) loadLearned(path string) {
 		var stored learnedEndpointsFile
 		if json.Unmarshal(raw, &stored) == nil {
 			d.setLearned(stored.Endpoints, stored.Version)
+			for index := 1; stored.Preferred != "" && index <= len(d.extra)+len(d.learned); index++ {
+				if d.endpointKey(index) == stored.Preferred {
+					d.next, d.preferred = index, stored.Preferred
+					break
+				}
+			}
 		}
 	}
 }
@@ -177,7 +193,7 @@ func (d *FailoverDialer) Learn(endpoints []*agentv1.GatewayEndpointV1, version s
 		}
 	}
 	changed := d.setLearned(converted, version)
-	stored := learnedEndpointsFile{Version: d.learnedVersion, Endpoints: append([]GatewayEndpoint(nil), d.learned...)}
+	stored := d.storedLocked()
 	d.mu.Unlock()
 	if !changed || d.learnedFile == "" {
 		return
@@ -199,6 +215,25 @@ func LoadLearnedEndpoints(path string) ([]GatewayEndpoint, error) {
 		return nil, fmt.Errorf("decode gateway endpoint list: %w", err)
 	}
 	return stored.Endpoints, nil
+}
+
+func (d *FailoverDialer) storedLocked() learnedEndpointsFile {
+	return learnedEndpointsFile{Version: d.learnedVersion, Endpoints: append([]GatewayEndpoint(nil), d.learned...), Preferred: d.preferred}
+}
+
+// setPreferred changes and persists the preferred ws fallback entry.
+func (d *FailoverDialer) setPreferred(key string) {
+	d.mu.Lock()
+	changed := key != d.preferred
+	d.preferred = key
+	stored := d.storedLocked()
+	d.mu.Unlock()
+	if !changed || d.learnedFile == "" {
+		return
+	}
+	if err := writeLearnedEndpoints(d.learnedFile, stored); err != nil {
+		slog.Warn("persist preferred gateway endpoint failed", "error", err)
+	}
 }
 
 func writeLearnedEndpoints(path string, stored learnedEndpointsFile) error {
@@ -246,7 +281,11 @@ func (d *FailoverDialer) RunFallbackProbe(ctx context.Context, interval, timeout
 func (d *FailoverDialer) probeEarlier(ctx context.Context, timeout time.Duration) {
 	d.mu.Lock()
 	current := d.next
+	preferred := d.preferred
 	d.mu.Unlock()
+	if preferred != "" && d.endpointKey(current) == preferred {
+		return
+	}
 	for index := 0; index < current; index++ {
 		if d.isAvoided(index) {
 			continue
@@ -276,24 +315,80 @@ func endpointConfig(base MTLSDialerConfig, endpoint GatewayEndpoint) MTLSDialerC
 
 // Dial tries the current entry; on failure it advances so the next session
 // starts at the following endpoint (the client loop applies backoff).
+// A direct (grpc) entry followed by a ws entry is bounded by
+// DirectDialTimeout and, when it fails, the ws entry is dialed at once; that
+// ws entry then stays preferred until it fails, when the direct one is
+// tried again.
 func (d *FailoverDialer) Dial(ctx context.Context) (Connection, error) {
 	d.mu.Lock()
 	index := d.next
 	d.mu.Unlock()
-	connection, err := d.dialIndex(ctx, index)
+	key := d.endpointKey(index)
+	fallback, fallbackAddress := d.wsFallbackAfter(index)
+	directCtx, cancel := ctx, context.CancelFunc(func() {})
+	if fallback > 0 {
+		directCtx, cancel = context.WithTimeout(ctx, DirectDialTimeout)
+	}
+	connection, err := d.dialIndex(directCtx, index)
+	cancel()
 	if err == nil {
 		d.mu.Lock()
 		d.dialed = index
+		preferred := d.preferred
 		d.mu.Unlock()
+		if preferred != "" && preferred != key {
+			d.setPreferred("")
+		}
 		return connection, nil
 	}
+	slog.Warn("gateway endpoint failed", "endpoint_index", index, "error", err)
+	if fallback > 0 && ctx.Err() == nil {
+		connection, tunnelErr := d.dialIndex(ctx, fallback)
+		if tunnelErr == nil {
+			slog.Info("direct gateway connection failed; connected through the WebSocket tunnel", "endpoint_index", fallback, "address", fallbackAddress)
+			d.mu.Lock()
+			d.dialed, d.next = fallback, fallback
+			d.mu.Unlock()
+			d.setPreferred(d.endpointKey(fallback))
+			return connection, nil
+		}
+		err = errors.Join(fmt.Errorf("direct gRPC: %w", err), fmt.Errorf("websocket via %s: %w", fallbackAddress, tunnelErr))
+		slog.Warn("gateway WebSocket fallback failed", "endpoint_index", fallback, "error", tunnelErr)
+	}
 	d.mu.Lock()
+	wasPreferred := d.preferred != "" && d.preferred == key
 	if d.next == index {
 		d.next = (index + 1) % (len(d.extra) + len(d.learned) + 1)
+		if wasPreferred {
+			d.next = 0
+		}
 	}
 	d.mu.Unlock()
-	slog.Warn("gateway endpoint failed", "endpoint_index", index, "error", err)
+	if wasPreferred {
+		d.setPreferred("")
+	}
 	return nil, err
+}
+
+// wsFallbackAfter is the first ws entry after the grpc entry index (0: none).
+func (d *FailoverDialer) wsFallbackAfter(index int) (int, string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	entries := d.entries()
+	transport := d.base.Transport
+	if index > 0 && index <= len(entries) {
+		transport = entries[index-1].Transport
+	}
+	if transport == gatewaytunnel.TransportWS {
+		return 0, ""
+	}
+	for position := index; position < len(entries); position++ {
+		entry := entries[position]
+		if entry.Transport == gatewaytunnel.TransportWS && !d.avoided[endpointID(entry.Address, entry.Transport)] {
+			return position + 1, entry.Address
+		}
+	}
+	return 0, ""
 }
 
 // endpointKey is address|transport of entry index (0: the primary).

@@ -551,6 +551,14 @@ export interface NodeRegistrationCredential {
   key_id: string
   credential: string
   issued_at: string
+  /** Direct Gateway entry for the install command; absent for a ws (CDN tunnel) console. */
+  gateway?: NodeInstallGateway
+}
+
+export interface NodeInstallGateway {
+  enrollment_address: string
+  address: string
+  server_name: string
 }
 
 export interface CreateNodeResponse {
