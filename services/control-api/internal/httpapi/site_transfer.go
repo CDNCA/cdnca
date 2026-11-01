@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// POST /v1/sites/{id}/transfer (fix-transfer): a platform administrator moves
+// POST /v1/sites/{id}/transfer: a platform administrator moves
 // the site to another user. The site is re-created in the target user's
 // tenant (new id, new CNAME) and the old one deleted in one transaction; the
 // response is the new site and the old CNAME the customer must repoint from.

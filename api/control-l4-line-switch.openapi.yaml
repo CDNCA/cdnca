@@ -11,6 +11,7 @@ paths:
   /v1/tenant-scopes/{scope_id}/l4-line-switches:
     post:
       operationId: createL4LineSwitch
+      x-summary-zh: "创建幂等的线路组切换"
       summary: Create an idempotent line-group switch
       parameters:
         - $ref: '#/components/parameters/ScopeID'
@@ -46,6 +47,7 @@ paths:
   /v1/tenant-scopes/{scope_id}/l4-line-switches/current:
     get:
       operationId: getCurrentL4LineSwitch
+      x-summary-zh: "读取最近一次持久化的切换，供运维恢复"
       summary: Read the latest durable switch for operator recovery
       parameters:
         - $ref: '#/components/parameters/ScopeID'
@@ -67,6 +69,7 @@ paths:
   /v1/tenant-scopes/{scope_id}/l4-line-switches/{switch_id}:
     get:
       operationId: getL4LineSwitch
+      x-summary-zh: "读取持久化的切换状态"
       summary: Read durable switch state
       parameters:
         - $ref: '#/components/parameters/ScopeID'
@@ -89,6 +92,7 @@ paths:
   /v1/tenant-scopes/{scope_id}/l4-line-switches/{switch_id}/reconcile:
     post:
       operationId: reconcileL4LineSwitch
+      x-summary-zh: "基于持久化事实推进一步幂等状态机"
       summary: Advance one idempotent state-machine step from durable facts
       description: The request has no body and cannot nominate a desired state. Production workers call the same service method.
       parameters:

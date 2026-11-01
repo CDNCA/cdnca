@@ -15,7 +15,7 @@ describe('cnameFailureText (cname-retry)', () => {
     expect(cnameFailureText('dns_provider_not_configured', null, t, exists)).toBe('尚未配置 DNS 服务商（节点管理 → DNS配置）')
   })
 
-  it('explains a DNS permission refusal instead of a provider failure (fix-regen2)', () => {
+  it('explains a DNS permission refusal instead of a provider failure', () => {
     expect(cnameFailureText('dns_permission_denied', null, t, exists)).toBe('操作人没有该租户的 DNS 权限')
     const en = i18n.getFixedT('en-US', 'siteCnameRegeneration')
     expect(cnameFailureText('dns_permission_denied', null, en, (key) => i18n.exists(key, { lng: 'en-US' })))

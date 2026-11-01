@@ -6,6 +6,7 @@ paths:
   /v1/admin/security/coordination/metrics:
     get:
       operationId: getSecurityCoordinationMetrics
+      x-summary-zh: "读取有界的跨节点 CC 与全局防火墙联动计数"
       summary: Read bounded cross-node CC and global firewall coordination counters
       description: Returns fixed-cardinality process counters. Node, tenant, policy, subject, address, and message labels are never exposed.
       security: [{bearerSession: []}]

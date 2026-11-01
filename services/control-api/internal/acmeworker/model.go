@@ -58,7 +58,7 @@ type Error struct {
 	RetryAfter time.Duration
 	Temporary  bool
 	// Terminal: the operation is settled failed, so no retry of the same
-	// operation can succeed (fix-certstuck).
+	// operation can succeed.
 	Terminal bool
 	cause    error
 }

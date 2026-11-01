@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/firewall-actions/default",
    "summary": "Read the tenant default firewall action",
+   "summary_zh": "读取租户默认防火墙动作",
    "auth": [
     "bearer"
    ],
@@ -124,6 +125,7 @@
    "method": "PUT",
    "path": "/v1/firewall-actions/default",
    "summary": "Save the tenant default firewall action",
+   "summary_zh": "保存租户默认防火墙动作",
    "auth": [
     "bearer"
    ],
@@ -316,6 +318,7 @@
    "method": "GET",
    "path": "/v1/firewall-actions/policy",
    "summary": "Read the site's effective firewall action policy",
+   "summary_zh": "读取网站实际生效的防火墙动作策略",
    "auth": [
     "bearer"
    ],
@@ -490,6 +493,7 @@
    "method": "PUT",
    "path": "/v1/firewall-actions/policy",
    "summary": "Override the site with its own immutable firewall action policy candidate",
+   "summary_zh": "为网站单独设置一份不可变的防火墙动作策略候选",
    "auth": [
     "bearer"
    ],
@@ -739,6 +743,7 @@
    "method": "PATCH",
    "path": "/v1/firewall-actions/policy",
    "summary": "Enable or disable the site's firewall action policy",
+   "summary_zh": "启用或停用网站的防火墙动作策略",
    "auth": [
     "bearer"
    ],
@@ -952,6 +957,7 @@
    "method": "DELETE",
    "path": "/v1/firewall-actions/policy",
    "summary": "Drop the site's own policy and inherit the tenant default again",
+   "summary_zh": "删除网站自己的策略，重新继承租户默认",
    "auth": [
     "bearer"
    ],
@@ -1152,6 +1158,7 @@
    "method": "POST",
    "path": "/v1/firewall-actions/policy/recover",
    "summary": "Create a monotonic recovery candidate from the last-known-good policy",
+   "summary_zh": "从最近一次正常的策略生成单调递增的恢复候选",
    "auth": [
     "bearer"
    ],

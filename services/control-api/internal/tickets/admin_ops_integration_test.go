@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// TestTicketStaffStatusAndDelete (fix-ticketops): staff move a ticket through
+// TestTicketStaffStatusAndDelete: staff move a ticket through
 // every status (待处理/处理中/待用户回复/已解决/已关闭), close it, and soft-delete
 // it; a deleted ticket is gone from all surfaces, its attachment can no longer
 // be downloaded, it cannot be changed, and the delete is audited.

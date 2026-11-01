@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/plugin-providers",
    "summary": "List third-party DNS / SMS / ICP provider plugins with their installation contract results",
+   "summary_zh": "列出第三方 DNS / 短信 / 备案服务商插件及其安装契约检查结果",
    "auth": [
     "bearer"
    ],
@@ -44,6 +45,7 @@
    "method": "POST",
    "path": "/v1/admin/plugin-providers/{plugin_id}/{action}",
    "summary": "Run the installation contract, enable or disable a provider plugin",
+   "summary_zh": "运行安装契约检查，或启用、停用服务商插件",
    "auth": [
     "bearer"
    ],

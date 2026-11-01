@@ -18,6 +18,7 @@ paths:
     post:
       tags: [Account registration challenge]
       operationId: createAccountRegistrationChallenge
+      x-summary-zh: "完成人机验证并发送一个联系方式验证码"
       security: []
       summary: Verify a human and queue one contact verification code
       parameters:
@@ -44,6 +45,7 @@ paths:
     post:
       tags: [Account registration challenge]
       operationId: verifyAccountRegistrationChallenge
+      x-summary-zh: "核销一个联系方式验证码并下发注册凭证 Cookie"
       security: []
       summary: Consume one contact verification code and issue a registration proof cookie
       parameters:

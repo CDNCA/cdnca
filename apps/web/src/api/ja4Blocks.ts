@@ -97,7 +97,7 @@ function validateMetadata(value: unknown): asserts value is JA4BlockWriteMetadat
   if (!exact(value, ['requestId', 'idempotencyKey', 'stepUpToken']) ||
     typeof value.requestId !== 'string' || !metadataPattern.test(value.requestId) ||
     typeof value.idempotencyKey !== 'string' || !metadataPattern.test(value.idempotencyKey) ||
-    typeof value.stepUpToken !== 'string' || value.stepUpToken.length < 1 || value.stepUpToken.length > 8192) {
+    typeof value.stepUpToken !== 'string' || value.stepUpToken.length > 8192) {
     throw invalidRequest()
   }
 }
@@ -199,7 +199,8 @@ async function create(
     headers: {
       'Content-Type': 'application/json', 'If-Match': '"0"',
       'Idempotency-Key': metadata.idempotencyKey, 'X-Request-ID': metadata.requestId,
-      'X-Step-Up-Token': metadata.stepUpToken,
+      // 空：操作者未启用 MFA，不带证明（后端放行并审计，MFA optional 2）。
+      ...(metadata.stepUpToken ? { 'X-Step-Up-Token': metadata.stepUpToken } : {}),
     },
     body: JSON.stringify(input),
   })

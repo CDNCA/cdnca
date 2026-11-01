@@ -139,6 +139,10 @@ func poolConfigured(pool *pgxpool.Pool) (configured bool) {
 	return pool.Config() != nil
 }
 
+// FindLoginIdentity resolves the sign-in identifier the login pages ask for
+// ("用户名、手机或邮箱"): a username, email or phone. Each is unique and stored
+// normalized (lowercase, trimmed); usernames cannot contain '@', and an exact
+// username match wins over another account's phone.
 func (s *Store) FindLoginIdentity(ctx context.Context, username string, scopeID *uuid.UUID) (LoginIdentity, error) {
 	var identity LoginIdentity
 	err := s.pool.QueryRow(ctx, `
@@ -146,9 +150,10 @@ func (s *Store) FindLoginIdentity(ctx context.Context, username string, scopeID 
 		FROM users u
 		JOIN memberships m ON m.user_id = u.id
 		JOIN access_scopes scope ON scope.id = m.scope_id
-		WHERE u.username = $1
+		WHERE (lower(u.username) = $1 OR u.email = $1 OR u.phone = $1)
 		  AND ($2::uuid IS NULL OR m.scope_id = $2)
-		ORDER BY CASE scope.kind WHEN 'platform' THEN 0 ELSE 1 END, m.created_at
+		ORDER BY CASE WHEN lower(u.username) = $1 THEN 0 ELSE 1 END,
+		         CASE scope.kind WHEN 'platform' THEN 0 ELSE 1 END, m.created_at
 		LIMIT 1`, username, scopeID,
 	).Scan(
 		&identity.UserID,

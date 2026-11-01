@@ -9,6 +9,7 @@ paths:
   /v1/openresty-security/configs/global:
     get:
       operationId: getGlobalOpenRestySecurityConfig
+      x-summary-zh: "读取全局 OpenResty 安全配置"
       x-required-permissions: [openresty_security.read]
       responses:
         '200': {$ref: '#/components/responses/Document'}
@@ -16,6 +17,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     patch:
       operationId: patchGlobalOpenRestySecurityConfig
+      x-summary-zh: "修改全局 OpenResty 安全配置"
       description: Applies the smallest auto-save patch. A logical retry must reuse the same Idempotency-Key.
       x-required-permissions: [openresty_security.manage]
       parameters:
@@ -41,6 +43,7 @@ paths:
   /v1/openresty-security/overrides:
     get:
       operationId: listOpenRestySecurityOverrides
+      x-summary-zh: "列出 OpenResty 安全配置覆盖"
       x-required-permissions: [openresty_security.read]
       parameters:
         - {name: scope_type, in: query, schema: {type: string, enum: [region, node]}}
@@ -55,6 +58,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
       operationId: createOpenRestySecurityOverride
+      x-summary-zh: "创建 OpenResty 安全配置覆盖"
       x-required-permissions: [openresty_security.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}
@@ -83,6 +87,7 @@ paths:
       - {name: id, in: path, required: true, schema: {$ref: '#/components/schemas/UUID'}}
     patch:
       operationId: patchOpenRestySecurityOverride
+      x-summary-zh: "修改 OpenResty 安全配置覆盖"
       x-required-permissions: [openresty_security.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}
@@ -114,6 +119,7 @@ paths:
         '412': {$ref: '#/components/responses/PreconditionFailed'}
     delete:
       operationId: deleteOpenRestySecurityOverride
+      x-summary-zh: "删除 OpenResty 安全配置覆盖"
       x-required-permissions: [openresty_security.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}
@@ -128,6 +134,7 @@ paths:
   /v1/openresty-security/targets:
     get:
       operationId: searchOpenRestySecurityTargets
+      x-summary-zh: "搜索可设置覆盖的对象"
       x-required-permissions: [openresty_security.read]
       parameters:
         - {name: scope_type, in: query, required: true, schema: {type: string, enum: [region, node]}}
@@ -143,6 +150,7 @@ paths:
   /v1/openresty-security/effective:
     get:
       operationId: getEffectiveOpenRestySecurityConfig
+      x-summary-zh: "读取实际生效的 OpenResty 安全配置"
       description: Resolves the deterministic node-over-region-over-global configuration.
       x-required-permissions: [openresty_security.read]
       parameters:
@@ -155,6 +163,7 @@ paths:
   /v1/cc-rule-groups:
     get:
       operationId: listCCRuleGroupsForOpenRestyConfig
+      x-summary-zh: "列出 CC 规则组（供 OpenResty 安全配置选择）"
       x-required-permissions: [openresty_security.read]
       responses:
         '200':
@@ -167,6 +176,7 @@ paths:
   /v1/cc-rule-groups/summary:
     get:
       operationId: summarizeCCRuleGroups
+      x-summary-zh: "全部 CC 规则组的分类计数"
       summary: CC rule group pill counts over every group
       description: >-
         System groups count from the signed rule catalog once it has synced,
@@ -216,6 +226,7 @@ paths:
   /v1/openresty-security/actions/download-cc-image:
     post:
       operationId: queueCCImageDownload
+      x-summary-zh: "排队下载 CC 验证图片资源"
       x-required-permissions: [openresty_security.manage]
       parameters:
         - {$ref: '#/components/parameters/IdempotencyKey'}

@@ -393,7 +393,7 @@ export function OfferListingForm({ initialSource = 'own' }: { initialSource?: Li
     const c = formatCap(metric, l.cap)
     return t('unified.upstreamCap', { value: c.value, unit: t(`limitUnits.${c.unit}`), action: t(`limitActions.${l.action}`) })
   }
-  // Live example under the price (fix-offerform): what one subscriber pays.
+  // Live example under the price: what one subscriber pays.
   const charge = exampleCharge(model, Number(price))
   const example = charge ? t(`listing.example.${model}`, { quantity: charge.quantity, total: formatYuan(charge.total) }) : ''
   const shownIDs = shown.map((n) => n.id)

@@ -219,3 +219,20 @@ func TestChallengeDeliverySourceOperationContractIsClosed(t *testing.T) {
 		t.Fatal("challenge delivery republication accepted a wrong operation, permission, resource or intent")
 	}
 }
+
+// A3-04: every reason permanentFailure returns is a terminal reason
+// FailAutomaticPublication accepts; site_config_invalid was refused as
+// invalid input, so its request never recorded a failure code.
+func TestPermanentFailureReasonsAreTerminal(t *testing.T) {
+	for _, reason := range []string{
+		FailureRBACRevoked, FailureNoTargetNodes, FailureNodeCapability, FailureNodeArtifactsSyncing,
+		FailureNodeScopeConflict, FailureSiteConfigInvalid,
+	} {
+		if !validTerminalReason(reason) {
+			t.Errorf("validTerminalReason(%q) = false", reason)
+		}
+	}
+	if validTerminalReason(FailurePublishUnknown) {
+		t.Error("a retry class is not a terminal reason")
+	}
+}

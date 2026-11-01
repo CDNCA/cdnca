@@ -221,10 +221,10 @@ type RolloutProgress struct {
 	Failed    int
 	Cancelled int
 	// Superseded: nodes that ignored this old release because they already
-	// run a newer one (or it was rolled back); not a failure (fix-cfgflow2).
+	// run a newer one (or it was rolled back); not a failure.
 	Superseded int
 	// Frozen: nodes that refused this release while frozen (expired service
-	// ticket); waiting for redelivery, not a failure (fix-stoppolicy2).
+	// ticket); waiting for redelivery, not a failure.
 	Frozen int
 }
 

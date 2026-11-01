@@ -209,6 +209,7 @@ function RetentionCard({ canManage }: { canManage: boolean }) {
   const token = () => useSessionStore.getState().accessToken ?? ''
   const query = useQuery({ queryKey, queryFn: () => systemCleanupSettingsApi.get(token()) })
   const document = query.data
+  const daysInvalid = days !== null && !(Number.isInteger(days) && days >= 0 && days <= 3650)
   useEffect(() => {
     if (document) setDays(document.value.access_logs_days)
   }, [document])
@@ -234,13 +235,16 @@ function RetentionCard({ canManage }: { canManage: boolean }) {
           {failure && <FeedbackWhen title={failure} />}
           <Space wrap>
             <label htmlFor="access-log-retention-days">{t('retention.label')}</label>
-            <InputNumber id="access-log-retention-days" min={0} max={3650} precision={0} value={days}
+            {/* A3-02: no min/max here — antd would clamp -3 to 0 (= keep forever) silently on blur. */}
+            <InputNumber id="access-log-retention-days" precision={0} value={days} status={daysInvalid ? 'error' : undefined}
+              aria-invalid={daysInvalid || undefined}
               disabled={!canManage || save.isPending} onChange={(value) => setDays(value)} />
             {canManage && (
-              <Button loading={save.isPending} disabled={days === null || days === document.value.access_logs_days}
-                onClick={() => days !== null && save.mutate(days)}>{t('retention.save')}</Button>
+              <Button loading={save.isPending} disabled={days === null || daysInvalid || days === document.value.access_logs_days}
+                onClick={() => days !== null && !daysInvalid && save.mutate(days)}>{t('retention.save')}</Button>
             )}
           </Space>
+          {daysInvalid && <Typography.Text type="danger" role="alert">{t('retention.invalid')}</Typography.Text>}
           <Typography.Text type="secondary">{t('retention.help')}</Typography.Text>
         </Space>
       )}

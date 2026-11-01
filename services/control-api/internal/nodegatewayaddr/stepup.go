@@ -47,7 +47,7 @@ type PlatformStepUp struct {
 }
 
 func (p PlatformStepUp) Consume(ctx context.Context, actor Actor, token, action string, binding [32]byte) error {
-	if p.Pool == nil || p.Consumer == nil || token == "" || actor.SessionID == uuid.Nil {
+	if p.Pool == nil || p.Consumer == nil || actor.SessionID == uuid.Nil {
 		return ErrStepUpRequired
 	}
 	requestID := "ngw-" + uuid.NewString()

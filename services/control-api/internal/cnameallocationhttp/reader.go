@@ -147,7 +147,7 @@ func (reader *PostgresReader) Diagnose(ctx context.Context, scopeID uuid.UUID, q
 			domain = *site.configuredDomain
 		}
 		// cname_domain '' is a CNAME without a domain: the default zone or a
-		// randomly drawn one (fix-cnamerand); the bound allocation says which.
+		// randomly drawn one; the bound allocation says which.
 		if domain == "" && site.boundDomain != nil {
 			domain = *site.boundDomain
 		}

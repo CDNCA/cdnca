@@ -29,6 +29,7 @@ import { ApiError, type Principal } from '../api/auth'
 import { createImpersonationWriteMetadata, impersonationApi } from '../api/impersonation'
 import { createMfaWriteMetadata, mfaApi } from '../api/mfa'
 import { MfaSetupButton } from '../components/MfaSetupButton'
+import { useMfaActive } from '../hooks/useMfaActive'
 import {
   createUserWriteMetadata,
   isPlatformAdministrator,
@@ -260,6 +261,11 @@ function errorMessage(error: unknown, t: TFunction<'users'>): string {
     case 'user_group_name_conflict':
     case 'user_group_in_use':
     case 'mfa_step_up_required':
+    // 重置密码先由管理员自己签发 step-up proof（/v1/account/mfa/step-up-proofs）；
+    // 未启用 MFA 或验证码不对时给出可操作的提示，而不是「请求失败」。
+    case 'mfa_not_active':
+    case 'mfa_invalid_code':
+    case 'mfa_code_replayed':
     case 'managed_password_reset_unavailable':
     case 'login_security_contact_required':
     case 'account_login_method_disabled':
@@ -878,6 +884,9 @@ function UserListContent({
   const queryClient = useQueryClient()
   const queryOwner = useRef(owner).current
   const queryPrefix = useMemo(() => ['managed-users', ...queryOwner] as const, [queryOwner])
+  // 未启用 MFA 的管理员：重置密码不要验证码，也不显示「管理身份验证器」。
+  const mfaActive = useMfaActive()
+  const requireMfaCode = mfaActive !== false
   const mutationKey = useMemo(() => ['managed-users-write', ...queryOwner] as const, [queryOwner])
   const passwordResetMutationKey = useMemo(
     () => ['managed-user-password-reset', ...queryOwner] as const,
@@ -1361,15 +1370,19 @@ function UserListContent({
     setPasswordResetPending(true)
     setPasswordResetError(null)
     try {
-      const proof = await mfaApi.createStepUpProof(token, {
-        tenant_id: target.tenant_id,
-        audience: 'identity.user.password.reset',
-        action: 'identity.user.password.reset',
-        authentication: { method: 'totp', code: values.code },
-        ttl_seconds: 300,
-        max_uses: 1,
-      }, createMfaWriteMetadata('step-up'))
-      if (proof.replayed) throw new ApiError(t('errors.invalid_response'), 502, 'invalid_response')
+      let stepUpToken = ''
+      if (requireMfaCode) {
+        const proof = await mfaApi.createStepUpProof(token, {
+          tenant_id: target.tenant_id,
+          audience: 'identity.user.password.reset',
+          action: 'identity.user.password.reset',
+          authentication: { method: 'totp', code: values.code },
+          ttl_seconds: 300,
+          max_uses: 1,
+        }, createMfaWriteMetadata('step-up'))
+        if (proof.replayed) throw new ApiError(t('errors.invalid_response'), 502, 'invalid_response')
+        stepUpToken = proof.token
+      }
       if (!currentSessionCanManage() || passwordResetTarget !== target) return
       const metadata = createUserWriteMetadata('reset-user-password')
       const attempt: PasswordResetAttempt = {
@@ -1381,7 +1394,7 @@ function UserListContent({
           tenant_scope_id: target.scope_id,
           expected_revision: target.revision,
           new_password: values.new_password,
-          step_up_token: proof.token,
+          step_up_token: stepUpToken,
         },
         metadata,
       }
@@ -1942,17 +1955,19 @@ function UserListContent({
           >
             <Input.Password autoComplete="new-password" />
           </Form.Item>
-          <Form.Item
-            name="code"
-            label={t('passwordReset.mfaCode')}
-            rules={[
-              { required: true, message: t('passwordReset.mfaCodeRequired') },
-              { pattern: /^\d{6}$/, message: t('passwordReset.mfaCodeInvalid') },
-            ]}
-          >
-            <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} />
-          </Form.Item>
-          <MfaSetupButton disabled={passwordResetBusy || passwordResetUncertain} />
+          {requireMfaCode ? <>
+            <Form.Item
+              name="code"
+              label={t('passwordReset.mfaCode')}
+              rules={[
+                { required: true, message: t('passwordReset.mfaCodeRequired') },
+                { pattern: /^\d{6}$/, message: t('passwordReset.mfaCodeInvalid') },
+              ]}
+            >
+              <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} />
+            </Form.Item>
+            <MfaSetupButton disabled={passwordResetBusy || passwordResetUncertain} />
+          </> : null}
         </Form>
       </Modal>
       </>}

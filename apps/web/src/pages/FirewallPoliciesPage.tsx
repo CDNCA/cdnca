@@ -17,6 +17,7 @@ import {
   Table,
   Tabs,
   Tag,
+  Typography,
 } from 'antd'
 import { List, Plus, RotateCcw, Save, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -176,13 +177,31 @@ function NumberControl({ label, value, unit, minimum = 0, maximum = 2_147_483_64
   onChange: (value: number) => void
   onCommit: (value: number) => void
 }) {
+  const { t } = useTranslation('firewall')
+  // A3-07: no min/max on the input (antd would snap -5 back on blur and the blur
+  // would then auto-save); keep the typed text, show why it is refused, never commit it.
+  const [text, setText] = useState<string | null>(null)
+  const parsed = text === null ? value : /^-?\d+$/u.test(text.trim()) ? Number(text.trim()) : Number.NaN
+  const invalid = !(Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum)
   return <div className="firewall-number-field">
     <label>{label}</label>
     <div className="firewall-unit-control">
-      <InputNumber aria-label={label} min={minimum} max={maximum} value={value} disabled={disabled}
-        onChange={(next) => onChange(next ?? minimum)} onBlur={() => onCommit(value)} />
+      <InputNumber<string> aria-label={label} stringMode value={text ?? String(value)} disabled={disabled}
+        status={invalid ? 'error' : undefined} aria-invalid={invalid || undefined}
+        onChange={(next) => {
+          const raw = next ?? ''
+          setText(raw)
+          const candidate = Number(raw)
+          if (/^-?\d+$/u.test(raw.trim()) && Number.isSafeInteger(candidate) && candidate >= minimum && candidate <= maximum) onChange(candidate)
+        }}
+        onBlur={() => {
+          if (invalid) return
+          setText(null)
+          onCommit(parsed)
+        }} />
       <span>{unit}</span>
     </div>
+    {invalid ? <Typography.Text type="danger" role="alert">{t('openresty.validation.integerRange', { minimum, maximum })}</Typography.Text> : null}
     {hint ? <p>{hint}</p> : null}
   </div>
 }
@@ -523,7 +542,7 @@ function WAFGlobalPanel({ draft, disabled, savePending, persist, setDraft }: {
   </div>
 }
 
-// EffectiveNodePanel (fix-fwregion): a platform node's effective auto switch
+// EffectiveNodePanel: a platform node's effective auto switch
 // and the layer it comes from (global / region / node).
 function EffectiveNodePanel({ ownerKey }: { ownerKey: string }) {
   const { t } = useTranslation('firewall')

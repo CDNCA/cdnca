@@ -19,6 +19,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}]
     get:
       operationId: getEscalateSite
+      x-summary-zh: "读取网站的攻击自动升级设置、生效阈值与当前状态"
       summary: Read a site's attack escalation settings, thresholds in force and state
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.read]
@@ -32,6 +33,7 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     put:
       operationId: putEscalateSite
+      x-summary-zh: "为网站开关攻击自动升级，并在套餐范围内设置阈值"
       summary: Switch attack escalation on or off for a site and set its thresholds inside the package ranges
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -52,6 +54,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}]
     get:
       operationId: listEscalateSiteEvents
+      x-summary-zh: "列出网站的等级变化历史，最新在前（100 条）"
       summary: List a site's level history, newest first (100 rows)
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.read]
@@ -66,6 +69,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}]
     post:
       operationId: confirmEscalateCNAMEChange
+      x-summary-zh: "确认网站域名已指向为自动升级拆出的 CNAME"
       summary: Confirm the site's domain now points at the CNAME split off for escalation
       description: >-
         A site on a package-mode (shared) CNAME gets a site-mode CNAME at its first escalation; until the
@@ -94,6 +98,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
     get:
       operationId: getAdminEscalateSite
+      x-summary-zh: "读取任意租户网站的攻击自动升级状态"
       summary: Read a site of any tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin]
@@ -109,6 +114,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
     get:
       operationId: listAdminEscalateSiteEvents
+      x-summary-zh: "列出任意租户网站的等级变化历史"
       summary: List the level history of a site of any tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin]
@@ -124,7 +130,7 @@ paths:
     post:
       operationId: lockEscalateSite
       summary: "Hold a site at a level (administrator lock) until unlocked"
-      x-summary-zh: Hold a site at a level (管理员锁定) until unlocked
+      x-summary-zh: "把网站锁定在某一级（管理员锁定），直到解锁"
       description: >-
         422 escalate_level_unavailable when the site's package cannot put the level in force (B/C without a line group,
         C via Cloudflare not bound and synced, D with the blackhole off, or no policy).
@@ -155,6 +161,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/SiteID'}, {$ref: '#/components/parameters/TenantScopeID'}]
     post:
       operationId: unlockEscalateSite
+      x-summary-zh: "解除网站锁定（恢复自动升降级）"
       summary: Release a site's lock (automatic levels resume)
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin]
@@ -173,7 +180,7 @@ paths:
     post:
       operationId: resetEscalateSite
       summary: "Send a site back to level A now (one-click switch back), unlocking it"
-      x-summary-zh: Send a site back to level A now (一键回切), unlocking it
+      x-summary-zh: "立即把网站切回 A 级（一键回切）并解锁"
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin]
       x-required-features: [module.escalate]
@@ -190,6 +197,7 @@ paths:
     parameters: [{name: product_id, in: path, required: true, schema: {type: string, format: uuid}}]
     get:
       operationId: getPackageEscalatePolicy
+      x-summary-zh: "读取套餐的攻击自动升级策略"
       summary: Read a package's attack escalation policy
       description: >-
         Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant
@@ -206,6 +214,7 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     put:
       operationId: putPackageEscalatePolicy
+      x-summary-zh: "写入套餐的 B/C 线路组、Cloudflare 与黑洞开关及阈值范围"
       summary: Write a package's B/C line groups, Cloudflare and blackhole switches and threshold ranges
       description: >-
         Requires packages.manage in the platform scope, or reseller.packages.manage in an active reseller tenant
@@ -231,6 +240,7 @@ paths:
   /v1/escalate/line-groups:
     get:
       operationId: listEscalateLineGroups
+      x-summary-zh: "列出会话范围可用于 B/C 级的线路组（自有与被授予）及等级"
       summary: List the line groups the session scope may use for B/C (own and granted) with their tier
       security: [{bearerAuth: []}]
       x-required-permissions: [node_scheduling.read]
@@ -253,7 +263,7 @@ paths:
     put:
       operationId: putEscalateLineGroupTier
       summary: "Mark one of the session scope's own line groups normal / high defence / unlimited defence"
-      x-summary-zh: Mark one of the session scope's own line groups 普通 / 高防 / 无限防
+      x-summary-zh: "把会话范围自有的一个线路组标为普通 / 高防 / 无限防"
       security: [{bearerAuth: []}]
       x-required-permissions: [node_scheduling.manage]
       x-required-features: [module.escalate]
@@ -286,6 +296,7 @@ paths:
   /v1/escalate/line-groups/grants:
     get:
       operationId: listEscalateLineGroupGrants
+      x-summary-zh: "会话范围做出的授予，最新在前，含已撤销"
       summary: The grants the session scope made, newest first, revoked ones included
       description: >-
         NODE-N05. Cursor paged by (created_at, id) descending; next_cursor is empty on the last page. Only the
@@ -313,6 +324,7 @@ paths:
         '503': {$ref: '#/components/responses/Error'}
     post:
       operationId: grantEscalateLineGroup
+      x-summary-zh: "把平台线路组授予在用代理商"
       summary: Grant a platform line group to an active reseller
       description: >-
         ADR 0018 §6. Only the platform grants, only its own line groups, and only to an active reseller
@@ -350,6 +362,7 @@ paths:
     parameters: [{name: grant_id, in: path, required: true, schema: {type: string, format: uuid}}]
     delete:
       operationId: revokeEscalateLineGroupGrant
+      x-summary-zh: "撤销授予；代理商使用该线路组的套餐会被下架并清空 B/C"
       summary: Revoke a grant; the reseller's packages using the line group are withdrawn and their B/C cleared
       description: >-
         ADR 0018 §6, user decision 10-24 Q5. In one transaction: the grant (and anything passed on) is revoked,
@@ -373,6 +386,7 @@ paths:
   /v1/escalate/grantees:
     get:
       operationId: listEscalateGrantees
+      x-summary-zh: "会话范围可授予线路组的在用代理商"
       summary: Active resellers the session scope may grant line groups to
       description: >-
         ADR 0018 §6. The platform gets the active resellers (an active tenant with an active reseller profile);

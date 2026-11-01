@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/certificate-assets",
    "summary": "List active certificate assets",
+   "summary_zh": "列出在用证书",
    "auth": [
     "bearer"
    ],
@@ -168,6 +169,7 @@
    "method": "POST",
    "path": "/v1/certificate-assets",
    "summary": "Upload a certificate and private key",
+   "summary_zh": "上传证书与私钥",
    "auth": [
     "bearer"
    ],
@@ -290,6 +292,7 @@
    "method": "GET",
    "path": "/v1/certificate-assets/{asset_id}",
    "summary": "Get a certificate asset and its public versions",
+   "summary_zh": "读取证书及其公开版本",
    "auth": [
     "bearer"
    ],
@@ -364,6 +367,7 @@
    "method": "DELETE",
    "path": "/v1/certificate-assets/{asset_id}",
    "summary": "Soft-delete an unreferenced certificate asset",
+   "summary_zh": "软删除未被引用的证书",
    "auth": [
     "bearer"
    ],
@@ -564,6 +568,7 @@
    "method": "PATCH",
    "path": "/v1/certificate-assets/{asset_id}/auto-renew",
    "summary": "Turn automatic renewal of an ACME certificate on or off",
+   "summary_zh": "开启或关闭 ACME 证书的自动续期",
    "auth": [
     "bearer"
    ],
@@ -770,6 +775,7 @@
    "method": "GET",
    "path": "/v1/certificate-assets/{asset_id}/bindings",
    "summary": "List current site bindings for one certificate asset",
+   "summary_zh": "列出一张证书当前绑定的网站",
    "auth": [
     "bearer"
    ],
@@ -838,6 +844,7 @@
    "method": "POST",
    "path": "/v1/certificate-assets/{asset_id}/bindings",
    "summary": "Bind an active version to a tenant site",
+   "summary_zh": "把证书的生效版本绑定到租户网站",
    "auth": [
     "bearer"
    ],
@@ -999,6 +1006,7 @@
    "method": "DELETE",
    "path": "/v1/certificate-assets/{asset_id}/bindings/{site_id}",
    "summary": "Append an immutable site unbind fact",
+   "summary_zh": "追加一条不可变的网站解绑记录",
    "auth": [
     "bearer"
    ],
@@ -1151,6 +1159,7 @@
    "method": "PATCH",
    "path": "/v1/certificate-assets/{asset_id}/disabled",
    "summary": "Disable or re-enable a certificate",
+   "summary_zh": "停用或重新启用证书",
    "auth": [
     "bearer"
    ],
@@ -1357,6 +1366,7 @@
    "method": "GET",
    "path": "/v1/certificate-assets/{asset_id}/download",
    "summary": "Download the current certificate version with its private key",
+   "summary_zh": "下载证书当前版本及私钥",
    "auth": [
     "bearer"
    ],
@@ -1429,6 +1439,7 @@
    "method": "POST",
    "path": "/v1/certificate-assets/{asset_id}/versions/{version_id}/activate",
    "summary": "Atomically activate one immutable certificate version",
+   "summary_zh": "原子启用证书的某个不可变版本",
    "auth": [
     "bearer"
    ],

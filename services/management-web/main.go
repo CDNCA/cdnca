@@ -309,7 +309,9 @@ func newHandlerWithOptions(staticRoot string, upstream *url.URL, options handler
 		// A missing Vite asset (an old tab asking for a chunk the upgrade removed)
 		// is a 404, not index.html: the page's chunk-load handler then reloads to
 		// the new build. Same as the portal's /console/assets/ and the nginx sites.
-		if strings.HasPrefix(cleanStaticPath(staticPath), "/assets/") {
+		// /downloads/ is the download tree, never an SPA route: a missing file is
+		// a 404 too (nginx-console: try_files $uri =404), not the operator shell.
+		if cleaned := cleanStaticPath(staticPath); strings.HasPrefix(cleaned, "/assets/") || cleaned == "/downloads" || strings.HasPrefix(cleaned, "/downloads/") {
 			http.NotFound(response, request)
 			return
 		}

@@ -2,6 +2,7 @@ paths:
   /v1/admin/system-backup-runs:
     get:
       operationId: listSystemBackupRuns
+      x-summary-zh: "读取主控备份运行历史"
       summary: Read persisted control-plane backup run history
       description: >-
         Reads only signed start and terminal facts persisted by the controlled

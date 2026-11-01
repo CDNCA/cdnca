@@ -27,7 +27,7 @@ type savePlatformDNSConfigRequest struct {
 type platformDNSZoneRequest struct {
 	Name   string `json:"name"`
 	Remark string `json:"remark"`
-	// RandomAllocation 参与随机分配 (fix-cnamerand); omitted keeps it.
+	// RandomAllocation 参与随机分配; omitted keeps it.
 	RandomAllocation *bool `json:"random_allocation"`
 }
 

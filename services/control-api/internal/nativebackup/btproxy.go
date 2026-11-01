@@ -11,7 +11,7 @@ import (
 
 // BaoTaProxyFile is the BaoTa site reverse proxy that install-control.sh
 // bt_report saves on a BaoTa host; a migration onto a BaoTa host writes the
-// same file (fix-btenv2) so the operator copies it into the BaoTa site.
+// same file so the operator copies it into the BaoTa site.
 const BaoTaProxyFile = ConfigDirectory + "/bt-proxy.conf"
 
 // BaoTaProxyConfig renders install-control.sh bt_proxy_config byte for byte

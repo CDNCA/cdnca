@@ -16,6 +16,7 @@ paths:
   /v1/dns/hub/domains:
     get:
       operationId: listTenantDNSHubDomains
+      x-summary-zh: "自有 DNS 账号及一页缓存的托管域名"
       summary: Own DNS accounts and one page of their cached hosted domains
       description: >-
         One item per (provider_id, apex), ordered by apex then provider_id. When the same apex is
@@ -43,6 +44,7 @@ paths:
   /v1/dns/hub/domains/refresh:
     post:
       operationId: refreshTenantDNSHubDomains
+      x-summary-zh: "重新拉取托管域名（每个账号每分钟最多一次）"
       summary: Re-list hosted domains (each account at most once a minute)
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-any-permission: [dns.manage, dns.records.manage]
@@ -76,6 +78,7 @@ paths:
   /v1/dns/hub/domains/{provider_id}/{apex}/records:
     get:
       operationId: listTenantDNSHubRecords
+      x-summary-zh: "托管域名实时的 A/AAAA/CNAME/TXT 记录"
       summary: Live A/AAAA/CNAME/TXT records of a hosted domain
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-permissions: [dns.read]
@@ -99,6 +102,7 @@ paths:
         '502': {$ref: '#/components/responses/Error'}
     post:
       operationId: createTenantDNSHubRecord
+      x-summary-zh: "创建记录并回读确认"
       summary: Create a record and read it back
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-any-permission: [dns.manage, dns.records.manage]
@@ -125,6 +129,7 @@ paths:
   /v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}:
     patch:
       operationId: updateTenantDNSHubRecord
+      x-summary-zh: "记录仍为预期值时修改它"
       summary: Change a record if it still holds expected
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-any-permission: [dns.manage, dns.records.manage]
@@ -154,6 +159,7 @@ paths:
         '502': {$ref: '#/components/responses/Error'}
     delete:
       operationId: deleteTenantDNSHubRecord
+      x-summary-zh: "记录仍为预期值时删除它"
       summary: Delete a record if it still holds expected
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-any-permission: [dns.manage, dns.records.manage]
@@ -187,6 +193,7 @@ paths:
   /v1/dns/hub/records/batch:
     post:
       operationId: batchTenantDNSHubRecords
+      x-summary-zh: "最多 50 条记录变更逐条执行（第 i 条用键 <Idempotency-Key>.<i>）"
       summary: Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-any-permission: [dns.manage, dns.records.manage]

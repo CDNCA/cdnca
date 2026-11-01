@@ -16,6 +16,7 @@ paths:
   /v1/security/autodefense/sites:
     get:
       operationId: listAutoDefenseSites
+      x-summary-zh: "网站列表：模式、基线成熟度、熔断、叠加设置与自动处置授权"
       summary: "Sites with mode, baseline maturity, circuit, overlay and the auto-mitigation grant"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -28,6 +29,7 @@ paths:
   /v1/admin/security/autodefense/sites:
     get:
       operationId: adminListAutoDefenseSites
+      x-summary-zh: "网站列表：模式、基线成熟度、熔断、叠加设置与自动处置授权"
       summary: "Sites with mode, baseline maturity, circuit, overlay and the auto-mitigation grant"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -40,7 +42,8 @@ paths:
   /v1/security/autodefense/sites/mode:
     post:
       operationId: setAutoDefenseSiteModes
-      summary: "Batch 开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台 (follow); protect needs module.autodefense.auto; one audit event per site"
+      summary: "Batch start learning / observe only / start protecting / off / follow the platform (follow); protect needs module.autodefense.auto; one audit event per site"
+      x-summary-zh: "批量设为开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台（follow）；开始防护需 module.autodefense.auto；每个网站记一条审计"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -53,7 +56,8 @@ paths:
   /v1/admin/security/autodefense/sites/mode:
     post:
       operationId: adminSetAutoDefenseSiteModes
-      summary: "Batch 开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台 (follow); protect needs module.autodefense.auto; one audit event per site"
+      summary: "Batch start learning / observe only / start protecting / off / follow the platform (follow); protect needs module.autodefense.auto; one audit event per site"
+      x-summary-zh: "批量设为开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台（follow）；开始防护需 module.autodefense.auto；每个网站记一条审计"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -66,6 +70,7 @@ paths:
   /v1/security/autodefense/sites/{site_id}:
     get:
       operationId: getAutoDefenseSite
+      x-summary-zh: "读取一个网站及其叠加设置"
       summary: "One site with its overlay"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -77,6 +82,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     patch:
       operationId: updateAutoDefenseSite
+      x-summary-zh: "修改敏感度与跨站联防（按版本防并发）"
       summary: "Sensitivity and cross-site federation (revision guarded)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -90,6 +96,7 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}:
     get:
       operationId: adminGetAutoDefenseSite
+      x-summary-zh: "读取一个网站及其叠加设置"
       summary: "One site with its overlay"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -101,6 +108,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     patch:
       operationId: adminUpdateAutoDefenseSite
+      x-summary-zh: "修改敏感度与跨站联防（按版本防并发）"
       summary: "Sensitivity and cross-site federation (revision guarded)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -114,7 +122,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/release:
     post:
       operationId: releaseAutoDefenseSite
-      summary: "一键解除: undo every automatic mitigation and hold the site in observe only (default 30 minutes)"
+      summary: "Release all: undo every automatic mitigation and hold the site in observe only (default 30 minutes)"
+      x-summary-zh: "一键解除：撤销全部自动处置，并让网站保持仅观察（默认 30 分钟）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -127,7 +136,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/release:
     post:
       operationId: adminReleaseAutoDefenseSite
-      summary: "一键解除: undo every automatic mitigation and hold the site in observe only (default 30 minutes)"
+      summary: "Release all: undo every automatic mitigation and hold the site in observe only (default 30 minutes)"
+      x-summary-zh: "一键解除：撤销全部自动处置，并让网站保持仅观察（默认 30 分钟）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -140,7 +150,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/drifts/confirm:
     post:
       operationId: confirmAutoDefenseSiteDrifts
-      summary: "确认基线漂移: confirm the site's pending baseline drifts (node baselines are not changed)"
+      summary: "Confirm baseline drift: confirm the site's pending baseline drifts (node baselines are not changed)"
+      x-summary-zh: "确认基线漂移：确认网站待处理的基线漂移（不改动节点基线）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -153,7 +164,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/drifts/confirm:
     post:
       operationId: adminConfirmAutoDefenseSiteDrifts
-      summary: "确认基线漂移: confirm the site's pending baseline drifts (node baselines are not changed)"
+      summary: "Confirm baseline drift: confirm the site's pending baseline drifts (node baselines are not changed)"
+      x-summary-zh: "确认基线漂移：确认网站待处理的基线漂移（不改动节点基线）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -166,7 +178,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/circuit/resume:
     post:
       operationId: resumeAutoDefenseSiteCircuit
-      summary: "恢复自动防护: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      summary: "Resume automatic protection: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      x-summary-zh: "恢复自动防护：关闭节点上报的网站熔断（24 小时内第二次熔断需人工处理）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -179,7 +192,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/circuit/resume:
     post:
       operationId: adminResumeAutoDefenseSiteCircuit
-      summary: "恢复自动防护: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      summary: "Resume automatic protection: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)"
+      x-summary-zh: "恢复自动防护：关闭节点上报的网站熔断（24 小时内第二次熔断需人工处理）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -192,7 +206,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/allows:
     get:
       operationId: listAutoDefenseSiteAllows
-      summary: "白名单: the site's allow list as the nodes get it (ACL allow rules = user, 解除并加白 = release, admin sign-in sources = admin_login); never mitigated"
+      summary: "Allow list: the site's allow list as the nodes get it (ACL allow rules = user, release and allow = release, admin sign-in sources = admin_login); never mitigated"
+      x-summary-zh: "白名单：节点拿到的网站白名单（ACL 放行规则 = user，解除并加白 = release，管理员登录来源 = admin_login），永不处置"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.read]
@@ -204,7 +219,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/allows/remove:
     post:
       operationId: removeAutoDefenseSiteAllow
-      summary: "移出白名单: remove one 解除并加白 entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)"
+      summary: "Remove from allow list: remove one release-and-allow entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)"
+      x-summary-zh: "移出白名单：删除一条\"解除并加白\"记录（ACL 放行在 ACL 策略里改，管理员登录来源会自动过期）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -217,7 +233,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/allows:
     get:
       operationId: adminListAutoDefenseSiteAllows
-      summary: "白名单: the site's allow list as the nodes get it (ACL allow rules = user, 解除并加白 = release, admin sign-in sources = admin_login); never mitigated"
+      summary: "Allow list: the site's allow list as the nodes get it (ACL allow rules = user, release and allow = release, admin sign-in sources = admin_login); never mitigated"
+      x-summary-zh: "白名单：节点拿到的网站白名单（ACL 放行规则 = user，解除并加白 = release，管理员登录来源 = admin_login），永不处置"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.read]
@@ -229,7 +246,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/allows/remove:
     post:
       operationId: adminRemoveAutoDefenseSiteAllow
-      summary: "移出白名单: remove one 解除并加白 entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)"
+      summary: "Remove from allow list: remove one release-and-allow entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)"
+      x-summary-zh: "移出白名单：删除一条\"解除并加白\"记录（ACL 放行在 ACL 策略里改，管理员登录来源会自动过期）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -242,7 +260,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/releases/status:
     get:
       operationId: getAutoDefenseReleaseStatus
-      summary: "解除状态: per node delivery of the site's single release of one target (已保存 → 待节点 → 全部节点已生效 / 部分失败)"
+      summary: "Release status: per node delivery of the site's single release of one target (saved → waiting for nodes → applied on all nodes / partly failed)"
+      x-summary-zh: "解除状态：某目标的单次解除在各节点的下发情况（已保存 → 待节点 → 全部节点已生效 / 部分失败）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.read]
@@ -254,7 +273,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/releases/retry:
     post:
       operationId: retryAutoDefenseRelease
-      summary: "重试: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)"
+      summary: "Retry: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)"
+      x-summary-zh: "重试：让每个服务节点重新执行并回报解除（重试次数加 1，最多 100 次；审计 release_retry）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -267,7 +287,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/releases/status:
     get:
       operationId: adminGetAutoDefenseReleaseStatus
-      summary: "解除状态: per node delivery of the site's single release of one target (已保存 → 待节点 → 全部节点已生效 / 部分失败)"
+      summary: "Release status: per node delivery of the site's single release of one target (saved → waiting for nodes → applied on all nodes / partly failed)"
+      x-summary-zh: "解除状态：某目标的单次解除在各节点的下发情况（已保存 → 待节点 → 全部节点已生效 / 部分失败）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.read]
@@ -279,7 +300,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/releases/retry:
     post:
       operationId: adminRetryAutoDefenseRelease
-      summary: "重试: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)"
+      summary: "Retry: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)"
+      x-summary-zh: "重试：让每个服务节点重新执行并回报解除（重试次数加 1，最多 100 次；审计 release_retry）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -292,7 +314,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules:
     get:
       operationId: listAutoDefenseSiteModules
-      summary: "Modules site (site.max_level), bot, cc, scan, waf with every item state 自动/人工"
+      summary: "Modules site (site.max_level), bot, cc, scan, waf with every item state automatic/manual"
+      x-summary-zh: "各模块：网站（site.max_level）、bot、cc、scan、waf，及每项的自动/人工状态"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.read]
@@ -304,7 +327,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules:
     get:
       operationId: adminListAutoDefenseSiteModules
-      summary: "Modules site (site.max_level), bot, cc, scan, waf with every item state 自动/人工"
+      summary: "Modules site (site.max_level), bot, cc, scan, waf with every item state automatic/manual"
+      x-summary-zh: "各模块：网站（site.max_level）、bot、cc、scan、waf，及每项的自动/人工状态"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.read]
@@ -316,6 +340,7 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules/{module}/mode:
     put:
       operationId: setAutoDefenseSiteModuleMode
+      x-summary-zh: "设置模式：人工 / 自动 / 仅建议；自动需 module.autodefense.auto"
       summary: "manual / auto / suggest; auto needs module.autodefense.auto"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -329,6 +354,7 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/mode:
     put:
       operationId: adminSetAutoDefenseSiteModuleMode
+      x-summary-zh: "设置模式：人工 / 自动 / 仅建议；自动需 module.autodefense.auto"
       summary: "manual / auto / suggest; auto needs module.autodefense.auto"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -342,7 +368,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules/{module}/resume:
     post:
       operationId: resumeAutoDefenseSiteModule
-      summary: "全部恢复自动: every manual item of the module returns to automatic"
+      summary: "Return all to automatic: every manual item of the module returns to automatic"
+      x-summary-zh: "全部恢复自动：该模块所有人工项恢复为自动"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -355,7 +382,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/resume:
     post:
       operationId: adminResumeAutoDefenseSiteModule
-      summary: "全部恢复自动: every manual item of the module returns to automatic"
+      summary: "Return all to automatic: every manual item of the module returns to automatic"
+      x-summary-zh: "全部恢复自动：该模块所有人工项恢复为自动"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -368,6 +396,7 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}:
     put:
       operationId: lockAutoDefenseSiteItem
+      x-summary-zh: "人工设置该项：改为人工，恢复自动前一直按此值运行"
       summary: "A person sets the item: it becomes manual and runs on this value until resumed (Q3)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -381,6 +410,7 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}:
     put:
       operationId: adminLockAutoDefenseSiteItem
+      x-summary-zh: "人工设置该项：改为人工，恢复自动前一直按此值运行"
       summary: "A person sets the item: it becomes manual and runs on this value until resumed (Q3)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -394,7 +424,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume:
     post:
       operationId: resumeAutoDefenseSiteItem
-      summary: "恢复自动 for one item"
+      summary: "Return one item to automatic"
+      x-summary-zh: "把单个项恢复为自动"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -407,7 +438,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume:
     post:
       operationId: adminResumeAutoDefenseSiteItem
-      summary: "恢复自动 for one item"
+      summary: "Return one item to automatic"
+      x-summary-zh: "把单个项恢复为自动"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -420,7 +452,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range:
     put:
       operationId: setAutoDefenseSiteItemRange
-      summary: "Narrow the item's automatic range (上下限); state and manual value unchanged"
+      summary: "Narrow the item's automatic range (lower and upper bound); state and manual value unchanged"
+      x-summary-zh: "收窄该项的自动调整范围（上下限）；状态与人工值不变"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -433,7 +466,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range:
     put:
       operationId: adminSetAutoDefenseSiteItemRange
-      summary: "Narrow the item's automatic range (上下限); state and manual value unchanged"
+      summary: "Narrow the item's automatic range (lower and upper bound); state and manual value unchanged"
+      x-summary-zh: "收窄该项的自动调整范围（上下限）；状态与人工值不变"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -446,6 +480,7 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules/{module}/values:
     get:
       operationId: listAutoDefenseSiteModuleValues
+      x-summary-zh: "每个节点各项的最新值（生效中或建议中）及原因"
       summary: "Each node's newest value of every item (in force or suggested) and its reason"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -458,6 +493,7 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/values:
     get:
       operationId: adminListAutoDefenseSiteModuleValues
+      x-summary-zh: "每个节点各项的最新值（生效中或建议中）及原因"
       summary: "Each node's newest value of every item (in force or suggested) and its reason"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -470,7 +506,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/modules/{module}/history:
     get:
       operationId: listAutoDefenseSiteModuleHistory
-      summary: "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits"
+      summary: "Item changes, newest first: node adjustments, manual locks, returns to automatic, range edits"
+      x-summary-zh: "各项变化记录，最新在前：节点调整、人工锁定、恢复自动、范围修改"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.read]
@@ -482,7 +519,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/modules/{module}/history:
     get:
       operationId: adminListAutoDefenseSiteModuleHistory
-      summary: "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits"
+      summary: "Item changes, newest first: node adjustments, manual locks, returns to automatic, range edits"
+      x-summary-zh: "各项变化记录，最新在前：节点调整、人工锁定、恢复自动、范围修改"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.read]
@@ -494,7 +532,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/waf-adapt:
     get:
       operationId: getAutoDefenseSiteWAFAdapt
-      summary: "Adaptive WAF (智能自动): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice"
+      summary: "Adaptive WAF (smart automatic): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice"
+      x-summary-zh: "WAF 自适应（智能自动）：按阶段的排除项及合并证据、参数类型、灰区挑战、规则建议"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [waf_adapt.read]
@@ -506,7 +545,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt:
     get:
       operationId: adminGetAutoDefenseSiteWAFAdapt
-      summary: "Adaptive WAF (智能自动): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice"
+      summary: "Adaptive WAF (smart automatic): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice"
+      x-summary-zh: "WAF 自适应（智能自动）：按阶段的排除项及合并证据、参数类型、灰区挑战、规则建议"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, waf_adapt.read]
@@ -518,7 +558,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge:
     put:
       operationId: setAutoDefenseSiteGreyChallenge
-      summary: "Grey zone challenge inherit / on / off (only 严格 / 极严格 tiers challenge)"
+      summary: "Grey zone challenge inherit / on / off (only the strict / very strict tiers challenge)"
+      x-summary-zh: "灰区挑战：继承 / 开 / 关（只有严格 / 极严格档位会挑战）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [waf_adapt.manage]
@@ -531,7 +572,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge:
     put:
       operationId: adminSetAutoDefenseSiteGreyChallenge
-      summary: "Grey zone challenge inherit / on / off (only 严格 / 极严格 tiers challenge)"
+      summary: "Grey zone challenge inherit / on / off (only the strict / very strict tiers challenge)"
+      x-summary-zh: "灰区挑战：继承 / 开 / 关（只有严格 / 极严格档位会挑战）"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, waf_adapt.manage]
@@ -544,6 +586,7 @@ paths:
   /v1/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat:
     put:
       operationId: setAutoDefenseSiteGreyRepeat
+      x-summary-zh: "网站的灰区来源重复阈值 / 时间窗（null 表示节点默认 20 次 / 60 秒）"
       summary: "Repeated grey zone source threshold / window of the site (null = node defaults 20 / 60 s)"
       description: Only nodes declaring CAPABILITY_NAME_WAF_REPEAT_SITE use the site value; other nodes keep the defaults.
       tags: [autodefense]
@@ -558,6 +601,7 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat:
     put:
       operationId: adminSetAutoDefenseSiteGreyRepeat
+      x-summary-zh: "网站的灰区来源重复阈值 / 时间窗（null 表示节点默认 20 次 / 60 秒）"
       summary: "Repeated grey zone source threshold / window of the site (null = node defaults 20 / 60 s)"
       description: Only nodes declaring CAPABILITY_NAME_WAF_REPEAT_SITE use the site value; other nodes keep the defaults.
       tags: [autodefense]
@@ -572,7 +616,8 @@ paths:
   /v1/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}:
     post:
       operationId: decideAutoDefenseSiteWAFExclusion
-      summary: "A person's decision: adopt (采纳, a manual exclusion), reject (驳回), revoke (撤销), manual (设为人工), resume (恢复自动); module.autodefense only"
+      summary: "A person's decision: adopt (a manual exclusion), reject, revoke, manual (set to manual), resume (return to automatic); module.autodefense only"
+      x-summary-zh: "人工决定：采纳（转为人工排除）、驳回、撤销、设为人工、恢复自动；仅需 module.autodefense"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [waf_adapt.manage]
@@ -585,7 +630,8 @@ paths:
   /v1/admin/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}:
     post:
       operationId: adminDecideAutoDefenseSiteWAFExclusion
-      summary: "A person's decision: adopt (采纳, a manual exclusion), reject (驳回), revoke (撤销), manual (设为人工), resume (恢复自动); module.autodefense only"
+      summary: "A person's decision: adopt (a manual exclusion), reject, revoke, manual (set to manual), resume (return to automatic); module.autodefense only"
+      x-summary-zh: "人工决定：采纳（转为人工排除）、驳回、撤销、设为人工、恢复自动；仅需 module.autodefense"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, waf_adapt.manage]
@@ -598,6 +644,7 @@ paths:
   /v1/security/autodefense/events:
     get:
       operationId: listAutoDefenseEvents
+      x-summary-zh: "攻击事件时间线，最新在前"
       summary: "Attack event timeline, newest first"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -610,6 +657,7 @@ paths:
   /v1/admin/security/autodefense/events:
     get:
       operationId: adminListAutoDefenseEvents
+      x-summary-zh: "攻击事件时间线，最新在前"
       summary: "Attack event timeline, newest first"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -622,6 +670,7 @@ paths:
   /v1/security/autodefense/verdicts:
     get:
       operationId: listAutoDefenseVerdicts
+      x-summary-zh: "最近的单次判定"
       summary: "Recent individual verdicts"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -634,6 +683,7 @@ paths:
   /v1/admin/security/autodefense/verdicts:
     get:
       operationId: adminListAutoDefenseVerdicts
+      x-summary-zh: "最近的单次判定"
       summary: "Recent individual verdicts"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -646,7 +696,8 @@ paths:
   /v1/security/autodefense/verdicts/{verdict_id}/release:
     post:
       operationId: releaseAutoDefenseVerdict
-      summary: "解除 / 解除并加白 / 标记误判"
+      summary: "Release / release and allow / mark as false positive"
+      x-summary-zh: "解除 / 解除并加白 / 标记误判"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -659,7 +710,8 @@ paths:
   /v1/admin/security/autodefense/verdicts/{verdict_id}/release:
     post:
       operationId: adminReleaseAutoDefenseVerdict
-      summary: "解除 / 解除并加白 / 标记误判"
+      summary: "Release / release and allow / mark as false positive"
+      x-summary-zh: "解除 / 解除并加白 / 标记误判"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -672,6 +724,7 @@ paths:
   /v1/security/autodefense/blocks:
     get:
       operationId: listAutoDefenseBlocks
+      x-summary-zh: "来源为自动防御的封禁列表"
       summary: "Ban list entries with source autodefense"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -684,6 +737,7 @@ paths:
   /v1/admin/security/autodefense/blocks:
     get:
       operationId: adminListAutoDefenseBlocks
+      x-summary-zh: "来源为自动防御的封禁列表"
       summary: "Ban list entries with source autodefense"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -696,6 +750,7 @@ paths:
   /v1/security/autodefense/blocks/{block_id}/release:
     post:
       operationId: releaseAutoDefenseBlock
+      x-summary-zh: "解除封禁（Lua 与内核），可同时加白并报告误判"
       summary: "Unblock (Lua and kernel), optionally whitelist and report a false positive"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -709,6 +764,7 @@ paths:
   /v1/admin/security/autodefense/blocks/{block_id}/release:
     post:
       operationId: adminReleaseAutoDefenseBlock
+      x-summary-zh: "解除封禁（Lua 与内核），可同时加白并报告误判"
       summary: "Unblock (Lua and kernel), optionally whitelist and report a false positive"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -722,6 +778,7 @@ paths:
   /v1/security/autodefense/signatures:
     get:
       operationId: listAutoDefenseSignatures
+      x-summary-zh: "自动规则（签名）"
       summary: "Automatic rules (signatures)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -734,6 +791,7 @@ paths:
   /v1/admin/security/autodefense/signatures:
     get:
       operationId: adminListAutoDefenseSignatures
+      x-summary-zh: "自动规则（签名）"
       summary: "Automatic rules (signatures)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -746,7 +804,8 @@ paths:
   /v1/security/autodefense/signatures/{signature_id}/solidify:
     post:
       operationId: solidifyAutoDefenseSignature
-      summary: "固化为我的规则: becomes a user WAF/CC rule and leaves automatic management"
+      summary: "Keep as my rule: becomes a user WAF/CC rule and leaves automatic management"
+      x-summary-zh: "固化为我的规则：转为用户自己的 WAF/CC 规则，不再自动管理"
       description: >-
         Writes the signature as the tenant's user-layer rule pack user/<tenant>/autodefense-<id> (one rule: waf block or
         cc JS challenge), enables it on the site and publishes the site's rule pack mounts with the three-layer conflict
@@ -765,7 +824,8 @@ paths:
   /v1/admin/security/autodefense/signatures/{signature_id}/solidify:
     post:
       operationId: adminSolidifyAutoDefenseSignature
-      summary: "固化为我的规则 is the tenant's own decision: platform administrators get 403 autodefense_permission_denied"
+      summary: "Keep as my rule is the tenant's own decision: platform administrators get 403 autodefense_permission_denied"
+      x-summary-zh: "\"固化为我的规则\"只能由租户自己决定：平台管理员调用返回 403 autodefense_permission_denied"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -778,7 +838,8 @@ paths:
   /v1/security/autodefense/signatures/{signature_id}/revoke:
     post:
       operationId: revokeAutoDefenseSignature
-      summary: "禁用此签名"
+      summary: "Disable this signature"
+      x-summary-zh: "禁用此签名"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -791,7 +852,8 @@ paths:
   /v1/admin/security/autodefense/signatures/{signature_id}/revoke:
     post:
       operationId: adminRevokeAutoDefenseSignature
-      summary: "禁用此签名"
+      summary: "Disable this signature"
+      x-summary-zh: "禁用此签名"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -804,6 +866,7 @@ paths:
   /v1/security/autodefense/false-positives:
     get:
       operationId: listAutoDefenseFalsePositives
+      x-summary-zh: "误判报告"
       summary: "False positive reports"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -815,6 +878,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     post:
       operationId: reportAutoDefenseFalsePositive
+      x-summary-zh: "把一次判定或一条签名报告为误判（签名立即撤回）"
       summary: "Report a verdict or signature as a false positive (the signature is withdrawn at once)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -828,6 +892,7 @@ paths:
   /v1/admin/security/autodefense/false-positives:
     get:
       operationId: adminListAutoDefenseFalsePositives
+      x-summary-zh: "误判报告"
       summary: "False positive reports"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -839,6 +904,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     post:
       operationId: adminReportAutoDefenseFalsePositive
+      x-summary-zh: "把一次判定或一条签名报告为误判（签名立即撤回）"
       summary: "Report a verdict or signature as a false positive (the signature is withdrawn at once)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -852,6 +918,7 @@ paths:
   /v1/security/autodefense/metrics:
     get:
       operationId: listAutoDefenseSiteMetrics
+      x-summary-zh: "各网站近 30 天的报表数据（处置次数、误判报告、攻击事件）"
       summary: "Per site report figures of the last 30 days (mitigations, false positive reports, attack events)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -864,6 +931,7 @@ paths:
   /v1/admin/security/autodefense/metrics:
     get:
       operationId: adminListAutoDefenseSiteMetrics
+      x-summary-zh: "各网站近 30 天的报表数据（处置次数、误判报告、攻击事件）"
       summary: "Per site report figures of the last 30 days (mitigations, false positive reports, attack events)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -876,6 +944,7 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups:
     get:
       operationId: listAutoDefensePortGroups
+      x-summary-zh: "主控为节点推导出的四层端口组（网站 TCP 端口，每条转发一个）"
       summary: "Layer 4 port groups the control plane derives for a node (website TCP ports, one per forward)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -888,6 +957,7 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules:
     get:
       operationId: listAutoDefensePortGroupModules
+      x-summary-zh: "一个节点端口组的四层叠加设置（仅平台）"
       summary: "Layer 4 overlay of one node port group (platform only)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -900,6 +970,7 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/mode:
     put:
       operationId: setAutoDefensePortGroupModuleMode
+      x-summary-zh: "设置四层模式：人工 / 自动 / 仅建议；自动需 module.autodefense.auto"
       summary: "manual / auto / suggest of l4; auto needs module.autodefense.auto"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -913,7 +984,8 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/resume:
     post:
       operationId: resumeAutoDefensePortGroupModule
-      summary: "全部恢复自动 of l4"
+      summary: "Return all l4 items to automatic"
+      x-summary-zh: "四层全部恢复自动"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -926,6 +998,7 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}:
     put:
       operationId: lockAutoDefensePortGroupItem
+      x-summary-zh: "人工设置一个四层项（恢复自动前一直按人工值）"
       summary: "A person sets an l4 item (manual until resumed)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -939,7 +1012,8 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/resume:
     post:
       operationId: resumeAutoDefensePortGroupItem
-      summary: "恢复自动 for one l4 item"
+      summary: "Return one l4 item to automatic"
+      x-summary-zh: "把单个四层项恢复为自动"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -952,7 +1026,8 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/range:
     put:
       operationId: setAutoDefensePortGroupItemRange
-      summary: "Narrow the item's automatic range (上下限); state and manual value unchanged"
+      summary: "Narrow the item's automatic range (lower and upper bound); state and manual value unchanged"
+      x-summary-zh: "收窄该项的自动调整范围（上下限）；状态与人工值不变"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -965,6 +1040,7 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/values:
     get:
       operationId: listAutoDefensePortGroupModuleValues
+      x-summary-zh: "每个节点各项的最新值（生效中或建议中）及原因"
       summary: "Each node's newest value of every item (in force or suggested) and its reason"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -977,7 +1053,8 @@ paths:
   /v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/history:
     get:
       operationId: listAutoDefensePortGroupModuleHistory
-      summary: "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits"
+      summary: "Item changes, newest first: node adjustments, manual locks, returns to automatic, range edits"
+      x-summary-zh: "各项变化记录，最新在前：节点调整、人工锁定、恢复自动、范围修改"
       tags: [autodefense]
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.read]
@@ -989,6 +1066,7 @@ paths:
   /v1/admin/security/autodefense/platform-settings:
     get:
       operationId: getAutoDefensePlatformSettings
+      x-summary-zh: "平台默认值、预算与熔断阈值（platform.admin）"
       summary: "Platform defaults, budgets and breaker thresholds (platform.admin)"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -1000,6 +1078,7 @@ paths:
         default: {$ref: '#/components/responses/Error'}
     put:
       operationId: putAutoDefensePlatformSettings
+      x-summary-zh: "替换平台设置（按版本防并发，platform.admin）；default_mode 为 protect 时需 module.autodefense.auto，并作用于之后的所有网站"
       summary: "Replace the platform settings (revision guarded, platform.admin); default_mode protect needs module.autodefense.auto and applies to every following site"
       tags: [autodefense]
       security: [{bearerAuth: []}]
@@ -1142,8 +1221,8 @@ components:
             additionalProperties: false
             description: Exactly one of cidr and ja4.
             properties:
-              cidr: {type: string, minLength: 1, maxLength: 64, description: The 解除并加白 entry (IP address or network).}
-              ja4: {type: string, minLength: 1, maxLength: 64, description: The 解除并加白 entry (JA4 fingerprint).}
+              cidr: {type: string, minLength: 1, maxLength: 64, description: "The release-and-allow entry (IP address or network).", x-description-zh: The 解除并加白 entry (IP address or network).}
+              ja4: {type: string, minLength: 1, maxLength: 64, description: "The release-and-allow entry (JA4 fingerprint).", x-description-zh: The 解除并加白 entry (JA4 fingerprint).}
     GreyChallenge:
       required: true
       content:
@@ -1232,11 +1311,12 @@ components:
             type: object
             additionalProperties: false
             properties:
-              whitelist: {type: boolean, description: 解除并加白 (IP, CIDR and JA4 targets).}
+              whitelist: {type: boolean, description: "Release and allow (IP, CIDR and JA4 targets).", x-description-zh: 解除并加白 (IP, CIDR and JA4 targets).}
               allow_until:
                 allOf: [{$ref: '#/components/schemas/Timestamp'}]
-                description: When the 解除并加白 entry expires (absent = permanent; only with whitelist; after now and within 365 days). An entry already listed keeps the longer expiry.
-              false_positive: {type: boolean, description: 标记误判; reason is then required and a false_positive_report is audited.}
+                description: "When the release-and-allow entry expires (absent = permanent; only with whitelist; after now and within 365 days). An entry already listed keeps the longer expiry."
+                x-description-zh: When the 解除并加白 entry expires (absent = permanent; only with whitelist; after now and within 365 days). An entry already listed keeps the longer expiry.
+              false_positive: {type: boolean, description: "Mark as false positive; reason is then required and a false_positive_report is audited.", x-description-zh: 标记误判; reason is then required and a false_positive_report is audited.}
               reason: {$ref: '#/components/schemas/Reason'}
     ModuleMode:
       required: true
@@ -1348,6 +1428,7 @@ components:
             required: [items, auto_mitigation_granted]
             properties:
               items: {type: array, items: {$ref: '#/components/schemas/Site'}}
+              entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}
               auto_mitigation_granted: {type: boolean}
     Site:
       description: One site.
@@ -1389,7 +1470,8 @@ components:
             required: [items, auto_mitigation_granted, overlay]
             properties:
               items: {type: array, items: {$ref: '#/components/schemas/Module'}}
-              auto_mitigation_granted: {type: boolean, description: false = the page shows 需开通自动处置 and every item runs on its manual value.}
+              entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}
+              auto_mitigation_granted: {type: boolean, description: "false = the page shows that automatic mitigation must be enabled and every item runs on its manual value.", x-description-zh: false = the page shows 需开通自动处置 and every item runs on its manual value.}
               overlay: {$ref: '#/components/schemas/OverlayState'}
     ModuleModeSet:
       description: The module mode now in force.
@@ -1427,6 +1509,7 @@ components:
             required: [items]
             properties:
               items: {type: array, items: {$ref: '#/components/schemas/PortGroup'}}
+              entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}
     NodeValueList:
       description: Each node's newest value per item.
       content:
@@ -1437,6 +1520,7 @@ components:
             required: [items]
             properties:
               items: {type: array, items: {$ref: '#/components/schemas/NodeValue'}}
+              entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}
     HistoryList:
       description: Item changes, newest first.
       content:
@@ -1447,26 +1531,27 @@ components:
             required: [items]
             properties:
               items: {type: array, items: {$ref: '#/components/schemas/HistoryEntry'}}
+              entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}
     EventList:
       description: Attack events.
       content:
         application/json:
-          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Event'}}}}
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Event'}}, entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}}}
     VerdictList:
       description: Verdicts.
       content:
         application/json:
-          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Verdict'}}}}
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Verdict'}}, entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}}}
     BlockList:
       description: Ban list entries with source autodefense.
       content:
         application/json:
-          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/BlockEntry'}}}}
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/BlockEntry'}}, entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}}}
     SignatureList:
       description: Automatic rules.
       content:
         application/json:
-          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Signature'}}}}
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/Signature'}}, entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}}}
     Signature:
       description: One automatic rule.
       content:
@@ -1476,7 +1561,7 @@ components:
       description: The site's allow list in CIDR order.
       content:
         application/json:
-          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/SiteAllow'}}}}
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/SiteAllow'}}, entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}}}
     SiteAllow:
       description: The removed allow list entry.
       content:
@@ -1491,12 +1576,12 @@ components:
       description: False positive reports.
       content:
         application/json:
-          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/FalsePositive'}}}}
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/FalsePositive'}}, entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}}}
     SiteMetricsList:
       description: Report figures per live site of the tenant (at most 500).
       content:
         application/json:
-          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/SiteMetrics'}}}}
+          schema: {type: object, additionalProperties: false, required: [items], properties: {items: {type: array, items: {$ref: '#/components/schemas/SiteMetrics'}}, entitlement_degraded: {type: boolean, description: 'true: the license check is degraded; items is empty and the page shows the degraded notice.'}}}
     FalsePositive:
       description: The recorded report.
       content:
@@ -1532,7 +1617,8 @@ components:
               type: string
               enum: [autodefense_authentication_required, autodefense_conflict, autodefense_invalid_request,
                 autodefense_method_not_allowed, autodefense_not_compilable, autodefense_not_found, autodefense_permission_denied,
-                autodefense_rule_conflict, autodefense_timeout, autodefense_unavailable, entitlement_feature_denied]
+                autodefense_rule_conflict, autodefense_timeout, autodefense_unavailable, entitlement_degraded,
+                entitlement_feature_denied]
             message: {type: string, description: Diagnostic English text; pages show translated text for code.}
             request_id: {type: string}
             capability:
@@ -1554,7 +1640,8 @@ components:
     StoredSiteMode:
       type: string
       enum: [off, learning, observe, protect, follow]
-      description: The site's own mode; follow = 跟随平台 (the site takes the platform default_mode and changes with it).
+      description: "The site's own mode; follow = follow the platform (the site takes the platform default_mode and changes with it)."
+      x-description-zh: The site's own mode; follow = 跟随平台 (the site takes the platform default_mode and changes with it).
     Sensitivity: {type: string, enum: [low, medium, high]}
     ModuleMode: {type: string, enum: [manual, auto, suggest]}
     Reason: {type: string, maxLength: 512, pattern: '^[^\r\n\u0000]*$'}
@@ -1596,7 +1683,7 @@ components:
         suggestion: {type: integer, description: suggest mode only.}
         locked_by: {type: string, description: 'user:<id> who locked the item (state manual).'}
         locked_at: {$ref: '#/components/schemas/Timestamp'}
-        resumed_by: {type: string, description: 'user:<id> who last chose 恢复自动 (state auto).'}
+        resumed_by: {type: string, description: "user:<id> who last chose return to automatic (state auto).", x-description-zh: 'user:<id> who last chose 恢复自动 (state auto).'}
         resumed_at: {$ref: '#/components/schemas/Timestamp'}
         frozen_until: {$ref: '#/components/schemas/Timestamp'}
     Module:
@@ -1861,7 +1948,7 @@ components:
         fpr_ppm: {type: integer}
         hits: {type: integer}
         reason: {type: string}
-        managed: {type: boolean, description: false after 固化为我的规则.}
+        managed: {type: boolean, description: "false after keep as my rule.", x-description-zh: false after 固化为我的规则.}
         solidified_kind: {type: string, enum: [waf, cc]}
         solidified_rule_id: {type: string, format: uuid}
         solidified_pack_id: {type: string, description: The user rule pack the signature became.}
@@ -1920,7 +2007,7 @@ components:
         released_targets: {type: array, items: {type: string}}
         shadowed_signatures: {type: array, items: {$ref: '#/components/schemas/SignatureID'}}
         whitelisted: {type: array, items: {type: string}}
-        allows: {type: array, description: The stored 解除并加白 entries with the expiry in force., items: {$ref: '#/components/schemas/SiteAllow'}}
+        allows: {type: array, description: "The stored release-and-allow entries with the expiry in force.", x-description-zh: The stored 解除并加白 entries with the expiry in force., items: {$ref: '#/components/schemas/SiteAllow'}}
         observe_until: {$ref: '#/components/schemas/Timestamp'}
         false_positive_id: {type: string, format: uuid}
     ReleaseStatus:
@@ -1933,7 +2020,7 @@ components:
         target: {type: string}
         released_at: {$ref: '#/components/schemas/Timestamp'}
         retry: {type: integer, minimum: 0, maximum: 100}
-        state: {type: string, enum: [pending, applied, partial_failed, no_nodes], description: "pending = 待节点, applied = 全部节点已生效, partial_failed = 部分失败"}
+        state: {type: string, enum: [pending, applied, partial_failed, no_nodes], description: "pending = waiting for nodes, applied = applied on all nodes, partial_failed = partly failed", x-description-zh: "pending = 待节点, applied = 全部节点已生效, partial_failed = 部分失败"}
         nodes:
           type: array
           items:
@@ -1946,6 +2033,10 @@ components:
               state: {type: string, enum: [pending, applied, failed]}
               error_code: {type: string, enum: [gate_write_failed, kernel_unban_failed]}
               reported_at: {$ref: '#/components/schemas/Timestamp'}
+              delivery: {type: string, enum: [sending, received], description: "Only while state is pending (fix-nrecovery2): sending = the node has not confirmed the snapshot carrying the release, the control plane publishes it again every 3 minutes; received = the node holds it and answers by itself."}
+              resends: {type: integer, minimum: 1, description: Automatic resends of that snapshot so far (sending only; omitted when none).}
+              next_resend_at: {$ref: '#/components/schemas/Timestamp', description: Next automatic resend (sending only; omitted before the first publication).}
+              last_seen_at: {$ref: '#/components/schemas/Timestamp', description: "The node's last heartbeat (pending only)."}
     PlatformSettingsInput:
       type: object
       additionalProperties: false
@@ -2044,7 +2135,8 @@ components:
               delivered: {type: boolean}
         rule_advice:
           type: array
-          description: Rules proposed on more than limits.site_rule_params parameters; only "站点级关闭该规则" is suggested.
+          description: "Rules proposed on more than limits.site_rule_params parameters; only \"turn this rule off for the site\" is suggested."
+          x-description-zh: Rules proposed on more than limits.site_rule_params parameters; only "站点级关闭该规则" is suggested.
           items:
             type: object
             additionalProperties: false
@@ -2085,7 +2177,7 @@ components:
         id: {type: string, pattern: '^[0-9a-f]{16}$'}
         rule: {type: integer, minimum: 900000, maximum: 999999}
         rule_set: {type: string, description: 'The site profile''s rule set of the rule, key without waf_set: (crs_sqli); "" when none.'}
-        rule_set_name: {type: string, description: The set's display name (SQL注入); "" when none.}
+        rule_set_name: {type: string, description: "The set's display name (for example SQL injection); \"\" when none.", x-description-zh: The set's display name (SQL注入); "" when none.}
         param:
           type: object
           additionalProperties: false

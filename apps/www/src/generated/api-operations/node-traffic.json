@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/node-traffic",
    "summary": "Read interval node traffic, not cumulative lifetime counters",
+   "summary_zh": "读取节点区间流量（不是累计计数）",
    "auth": [
     "bearer"
    ],

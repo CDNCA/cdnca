@@ -44,7 +44,7 @@ type dnsCommandAuditInput struct {
 	ExpectedRevision int64
 	ProviderRevision int64
 	// PlatformActor: the actor is not a member of the tenant scope, a
-	// platform administrator acting for the tenant (fix-regen2).
+	// platform administrator acting for the tenant.
 	PlatformActor bool
 }
 

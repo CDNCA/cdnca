@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// fix-nodeipgeo: the resolver writes the automatic IP 归属 of new and
+// node IP location: the resolver writes the automatic IP 归属 of new and
 // existing nodes, re-resolves on an address or library change, never
 // overwrites manual fields, is idempotent, and an update's
 // ip_location_manual marks and restores fields.

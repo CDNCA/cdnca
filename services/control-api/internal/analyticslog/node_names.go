@@ -9,7 +9,7 @@ import (
 )
 
 // NodeNameLookup names the nodes of one page of platform access rows
-// (fix-logfields): ClickHouse keeps node_id only; the page shows the node's
+//: ClickHouse keeps node_id only; the page shows the node's
 // name. A node that is unknown (deleted) maps to no entry.
 type NodeNameLookup interface {
 	Lookup(ctx context.Context, ids []string) map[string]string

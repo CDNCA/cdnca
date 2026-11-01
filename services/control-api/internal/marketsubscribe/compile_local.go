@@ -12,7 +12,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/site"
 )
 
-// The site's local rules compiled into the revision (fix-mktsiteconf):
+// The site's local rules compiled into the revision:
 // its effective cache policy, its ACL and CC policies, and its conditional
 // origins. A rule a siteconf block cannot express blocks the rollout with a
 // reason (Unsupported) instead of being dropped.

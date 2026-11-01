@@ -5,7 +5,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// The site's CC policy (fix-mktsiteconf3) carried whole as siteconf's cc
+// The site's CC policy carried whole as siteconf's cc
 // block, like the WAF: rules without IDs (challenges, counting keys, leaky
 // bucket and the other algorithms travel in the rule fields) and the CC
 // settings. A system-mode value was resolved from this platform's global CC

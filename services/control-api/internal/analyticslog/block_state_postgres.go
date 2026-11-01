@@ -46,7 +46,7 @@ type recoveryPayload struct {
 
 // blockEdgeProgressSQL counts the unlock candidate's nodes by their latest
 // deployment: an ignored old release (edgedeployment.SupersededDeploymentSQL)
-// is counted apart, not as failed (fix-cfgflow3).
+// is counted apart, not as failed.
 const blockEdgeProgressSQL = `
 		  SELECT count(*) FILTER (WHERE deployment.state='healthy')::int AS ready_nodes,
 		         count(*) FILTER (WHERE deployment.state IN ('failed','rollback_failed')

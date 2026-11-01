@@ -59,7 +59,7 @@ func TestSiteRuntimeV2CarriesDDoSProtectionWithNodeNetworks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// every limit off: the block stays for its node networks (fix-l2trust),
+	// every limit off: the block stays for its node networks,
 	// with nothing on
 	if document := decodeReceivedV2Document(t, receivedV2Bundle(t, fixture, result, second, secondKey)); document.System == nil ||
 		document.System.DDoS == nil || document.System.DDoS.Protection.Active() || !slices.Contains(document.System.DDoS.NodeNetworks, "203.0.113.40/32") {

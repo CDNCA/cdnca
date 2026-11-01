@@ -21,6 +21,7 @@ paths:
     get:
       tags: [Certificate publications]
       operationId: listCertificatePublicationStatuses
+      x-summary-zh: "列出当前证书发布状态"
       summary: List current certificate publication statuses
       x-required-permissions: [certificates.read]
       parameters:
@@ -45,6 +46,7 @@ paths:
     get:
       tags: [Certificate publications]
       operationId: getCertificatePublicationStatus
+      x-summary-zh: "读取一个绑定版本及其完整状态历史"
       summary: Get one binding revision and its complete state history
       x-required-permissions: [certificates.read]
       parameters:

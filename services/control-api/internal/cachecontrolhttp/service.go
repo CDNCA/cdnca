@@ -242,7 +242,7 @@ func (service *Service) Operation(
 }
 
 // TargetSites groups target URLs by the sites serving their hosts
-// (fix-cachedlg): the create dialog splits one batch into a task per site and
+//: the create dialog splits one batch into a task per site and
 // lists the URLs no site serves before it sends anything. A platform reader
 // without a target scope matches every tenant's sites.
 func (service *Service) TargetSites(
@@ -307,7 +307,7 @@ func (service *Service) CarryingNodes(
 	return view, nil
 }
 
-// WriteReceipt reads what the server did with a write sent with key (fix-cacheflow5).
+// WriteReceipt reads what the server did with a write sent with key.
 // Anything the actor may not see is ErrNotFound, like a key never received.
 func (service *Service) WriteReceipt(
 	ctx context.Context,

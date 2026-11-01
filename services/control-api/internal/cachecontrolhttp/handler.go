@@ -425,7 +425,7 @@ type targetSitesBody struct {
 	Targets    []string                `json:"targets"`
 }
 
-// targetSites: POST .../cache-operations/target-sites (fix-cachedlg), a read
+// targetSites: POST .../cache-operations/target-sites, a read
 // that writes nothing. The platform route's scope_id is optional: without it
 // the URLs match every tenant's sites.
 func (handler *Handler) targetSites(response http.ResponseWriter, request *http.Request, audience Audience) {
@@ -486,7 +486,7 @@ func (handler *Handler) carryingNodes(response http.ResponseWriter, request *htt
 }
 
 // writeReceipt: GET .../cache-operation-requests/{idempotency_key}?action=
-// [&operation_id=] (fix-cacheflow5), what the server did with a write whose
+// [&operation_id=], what the server did with a write whose
 // response was lost.
 func (handler *Handler) writeReceipt(response http.ResponseWriter, request *http.Request, audience Audience) {
 	if request.Method != http.MethodGet {

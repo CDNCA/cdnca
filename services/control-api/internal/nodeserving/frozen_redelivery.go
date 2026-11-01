@@ -10,7 +10,7 @@ import (
 )
 
 // FrozenRedeliveryAuditAction is written when the system republishes a scope
-// to a node that refused it while frozen (fix-stoppolicy2).
+// to a node that refused it while frozen.
 const FrozenRedeliveryAuditAction = "node.deployment.frozen_redeliver"
 
 // frozenRefusal is one node and scope with publications the node refused

@@ -8,6 +8,7 @@ paths:
   /v1/admin/brand-assets:
     get:
       operationId: listPlatformBrandAssets
+      x-summary-zh: "列出平台品牌素材"
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Asset metadata, content: {application/json: {schema: {$ref: '#/components/schemas/ListDocument'}}}}
@@ -17,6 +18,7 @@ paths:
     parameters: [{name: slot, in: path, required: true, schema: {$ref: '#/components/schemas/Slot'}}]
     get:
       operationId: getPlatformBrandAsset
+      x-summary-zh: "读取一个平台品牌素材位"
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Asset metadata, content: {application/json: {schema: {$ref: '#/components/schemas/Asset'}}}}
@@ -24,6 +26,7 @@ paths:
         '403': {description: Permission denied}
     put:
       operationId: uploadPlatformBrandAsset
+      x-summary-zh: "上传平台品牌素材"
       security: [{bearerAuth: []}]
       parameters:
         - {name: If-Match, in: header, required: true, schema: {type: string, pattern: '^"[0-9]+"$'}}
@@ -46,6 +49,7 @@ paths:
     parameters: [{name: slot, in: path, required: true, schema: {$ref: '#/components/schemas/Slot'}}]
     get:
       operationId: readPublicBrandAsset
+      x-summary-zh: "读取公开的品牌素材"
       description: 'Pages request only the slots listed in GET /v1/theme/current brand_assets, with v set to that slot''s revision.'
       security: []
       parameters:

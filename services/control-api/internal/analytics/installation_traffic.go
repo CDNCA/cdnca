@@ -7,7 +7,7 @@ import (
 )
 
 // installationTrafficSQL is the license monthly_traffic_bytes usage
-// (fix-usagereport): the package traffic basis (PackageMetric traffic_bytes
+//: the package traffic basis (PackageMetric traffic_bytes
 // + PackageL4Traffic, checkpoints included) summed over every subscription
 // of the installation.
 // Bytes not attributed to a package subscription are not in either fact

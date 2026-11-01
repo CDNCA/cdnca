@@ -808,7 +808,7 @@ describe('NodeRealtimePage', () => {
     expect(top).toHaveBeenLastCalledWith('node-realtime-token', expect.objectContaining({ externalOnly: false }))
   })
 
-  it('keeps the egress checkbox inline right after refresh with its hint behind a help tooltip (fix-nicinline)', async () => {
+  it('keeps the egress checkbox inline right after refresh with its hint behind a help tooltip', async () => {
     authenticate()
     vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [] })
     const user = userEvent.setup()
@@ -847,7 +847,7 @@ describe('NodeRealtimePage', () => {
     expect(nodeRealtimeCSS).toMatch(/\.node-realtime-egress-item\s*\{[\s\S]*?white-space:\s*nowrap;/)
   })
 
-  it('keeps the monitoring and traffic filter bars on one row with the NIC exclusion behind advanced filters (fix-nicinline2)', async () => {
+  it('keeps the monitoring and traffic filter bars on one row with the NIC exclusion behind advanced filters', async () => {
     authenticate()
     vi.spyOn(nodesApi, 'list').mockResolvedValue({ items: [node] })
     const user = userEvent.setup()

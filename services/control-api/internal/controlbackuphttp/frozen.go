@@ -1,6 +1,6 @@
 package controlbackuphttp
 
-// The frozen console (fix-migrollback) replaces control-api on its port while
+// The frozen console replaces control-api on its port while
 // a migration hold is in force, so the operator can still watch the migration,
 // stop it and roll back from the browser. It serves only:
 //

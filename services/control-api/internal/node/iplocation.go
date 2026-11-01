@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// IP 归属 (fix-nodeipgeo, migration 547): management_settings.ip_location is
+// IP 归属 (node IP location, migration 547): management_settings.ip_location is
 // what condition matching reads (L2 node conditions, market supply groups).
 // Each field is either automatic (the control plane's IP intelligence library
 // resolved it from the node's addresses, node_ip_location_resolutions) or

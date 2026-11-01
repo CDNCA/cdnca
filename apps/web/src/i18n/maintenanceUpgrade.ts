@@ -350,7 +350,7 @@ export function maintenanceUpgradeFormat(language: string, key: Key, values: Rec
   return i18n.getFixedT(language, 'maintenanceUpgrade')(key, values)
 }
 
-/** Node state of a gateway address change (fix-nodegw). */
+/** Node state of a gateway address change. */
 export function gatewayAddressStateMessage(language: string, state: string): string {
   const key = `gatewayAddressState_${state}`
   return Object.hasOwn(messages['zh-CN'], key) ? maintenanceUpgradeMessage(language, key as Key) : state

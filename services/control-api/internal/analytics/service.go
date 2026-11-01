@@ -146,7 +146,7 @@ func (service *Service) SetRuleNameLookup(lookup RuleNameLookup) { service.ruleN
 // leaves them unnamed (the key is still shown). Rows stay one per rule ID
 // (the drill-down filters by it); rows sharing a name get the first 8
 // characters of their rule ID appended so they can be told apart
-// (fix-wafname).
+//.
 func (service *Service) nameAttackTypes(ctx context.Context, scope Scope, items []WAFRankItem) {
 	if service.ruleNames == nil || len(items) == 0 {
 		return

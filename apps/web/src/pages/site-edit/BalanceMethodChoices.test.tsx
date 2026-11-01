@@ -8,7 +8,7 @@ import BalanceMethodChoices from './BalanceMethodChoices'
 const t = i18n.getFixedT('zh-CN', 'sites')
 const methods = ['round_robin', 'ip_hash', 'url_hash', 'least_conn', 'random', 'hash', 'sticky'] as const
 
-describe('BalanceMethodChoices (fix-lbtags)', () => {
+describe('BalanceMethodChoices', () => {
   it('shows every method as a card with its use case and full explanation', () => {
     render(<BalanceMethodChoices value="round_robin" onChange={() => undefined} />)
     const group = screen.getByRole('radiogroup', { name: '源站负载方式' })

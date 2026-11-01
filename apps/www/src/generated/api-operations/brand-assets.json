@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/brand-assets/{slot}",
    "summary": "",
+   "summary_zh": "读取公开的品牌素材",
    "auth": [
     "none"
    ],

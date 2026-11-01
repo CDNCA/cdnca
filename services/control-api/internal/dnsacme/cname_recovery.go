@@ -89,7 +89,7 @@ func RequeueCNAMEConfigFailures(ctx context.Context, tx pgx.Tx, scopeID uuid.UUI
 			return 0, err
 		}
 		// The site write advanced the scope's revision outside any site
-		// request (fix-autopub): an automatic scope publishes it.
+		// request: an automatic scope publishes it.
 		if _, err := edgeautopublish.EnqueueUnrequestedSiteRevisionTx(ctx, tx, scopeID, item.siteID, requestID); err != nil {
 			return 0, err
 		}

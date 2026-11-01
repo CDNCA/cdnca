@@ -12,7 +12,7 @@ import { formatDateTime } from '../i18n/formatters'
 import '../i18n/streamGuard'
 import '../i18n/originWeight'
 import { streamOriginShares } from './originWeightShare'
-import StreamPublicationModal from './StreamPublicationModal'
+import StreamPublicationModal, { streamPublicationFailure } from './StreamPublicationModal'
 import { dropWriteRecovery, useWriteRecovery } from './streamWriteRecovery'
 import StreamGroupSelect from './StreamGroupSelect'
 import { StreamClientAddressField, StreamDNSFields, StreamFollowPortField, StreamGeoFields, StreamGuardRulesFields, StreamListenPortEndField, StreamNewConnectionRateFields, StreamSessionLogField, StreamTLSPassthroughFields } from './StreamPolicyFields'
@@ -332,7 +332,9 @@ function StreamDetailContent({ id, scopeKind, scopeID, sessionEpoch, canManage }
               {/* L4-008：运营状态（人工状态 > 套餐不可用 > 启停，与列表同一取值）与配置同步并列。 */}
               <div><dt>{t('detail.operationStatus')}</dt><dd className={operationTone}>{operationLabel}</dd></div>
               <div><dt>{t('detail.syncStatus')}</dt><dd className={`stream-sync stream-sync--${item.sync_state}`}>{t(`syncState.${item.sync_state}`)}
-                {item.sync_state === 'failed' ? <Button type="link" size="small" className="stream-detail-publication-link" onClick={() => setPublicationOpen(true)}>{t('actions.publicationDetails')}</Button> : null}</dd></div>
+                {item.sync_state === 'failed' ? <Button type="link" size="small" className="stream-detail-publication-link" onClick={() => setPublicationOpen(true)}>{t('actions.publicationDetails')}</Button> : null}
+                {item.sync_state === 'failed' && item.publish_intent.state === 'failed'
+                  ? <span className="stream-detail-sync-failure">{t('publication.failureReason')}：{streamPublicationFailure(item.publish_intent, t)}</span> : null}</dd></div>
               <div><dt>{t('detail.createdAt')}</dt><dd>{date(item.created_at)}</dd></div>
               <div><dt>{t('columns.updatedAt')}</dt><dd>{date(item.updated_at)}</dd></div>
               <div className="stream-detail-fact-wide"><dt>{t('columns.cname')}</dt><dd>{item.cname || t('values.unavailable')}</dd></div>

@@ -16,7 +16,7 @@ import (
 )
 
 // DownloadPolicySource is the control plane's current upgrade download
-// endpoint, signed into every execution (fix-btenv3): a control plane moved
+// endpoint, signed into every execution: a control plane moved
 // to another host or between the plain and BaoTa layouts updates the
 // addresses, port and root its nodes dial on their next upgrade.
 type DownloadPolicySource struct {

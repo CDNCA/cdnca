@@ -1377,7 +1377,7 @@ func (fixture *publishFixture) createSiteResult(domain string, httpPorts, httpsP
 			VALUES ($1,1,'203.0.113.10',8080,1,true)`, item.ID); err != nil {
 			return err
 		}
-		// Only a site on a valid package is published (fix-nopkgpub): the
+		// Only a site on a valid package is published: the
 		// fixture's sites are on its subscription, as a tenant's would be.
 		if fixture.subscriptionID == uuid.Nil {
 			return nil

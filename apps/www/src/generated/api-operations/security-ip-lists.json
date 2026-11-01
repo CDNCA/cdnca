@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/security-ip-lists",
    "summary": "List named IP lists",
+   "summary_zh": "列出命名 IP 列表",
    "auth": [
     "apiKey",
     "bearer"
@@ -46,6 +47,7 @@
    "method": "POST",
    "path": "/v1/security-ip-lists",
    "summary": "Create a named IP list",
+   "summary_zh": "创建命名 IP 列表",
    "auth": [
     "apiKey",
     "bearer"
@@ -157,6 +159,7 @@
    "method": "PUT",
    "path": "/v1/security-ip-lists/{list_id}",
    "summary": "Replace a named IP list",
+   "summary_zh": "替换命名 IP 列表",
    "auth": [
     "apiKey",
     "bearer"
@@ -284,6 +287,7 @@
    "method": "DELETE",
    "path": "/v1/security-ip-lists/{list_id}",
    "summary": "Delete a named IP list",
+   "summary_zh": "删除命名 IP 列表",
    "auth": [
     "apiKey",
     "bearer"

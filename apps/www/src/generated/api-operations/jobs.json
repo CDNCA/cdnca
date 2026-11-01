@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/jobs",
    "summary": "Page through jobs in the authenticated tenant scope",
+   "summary_zh": "分页列出当前租户范围的任务",
    "auth": [
     "apiKey",
     "bearer"
@@ -133,6 +134,7 @@
    "method": "GET",
    "path": "/v1/jobs/kinds",
    "summary": "Read the integrated producer catalog as a tenant",
+   "summary_zh": "以租户身份读取已接入的任务类型目录",
    "auth": [
     "apiKey",
     "bearer"
@@ -184,6 +186,7 @@
    "method": "GET",
    "path": "/v1/jobs/{task_id}",
    "summary": "Read a job in the authenticated tenant scope",
+   "summary_zh": "读取当前租户范围的一个任务",
    "auth": [
     "apiKey",
     "bearer"
@@ -252,6 +255,7 @@
    "method": "GET",
    "path": "/v1/jobs/{task_id}/attempts",
    "summary": "Page through a tenant job's immutable attempt history",
+   "summary_zh": "分页读取租户任务不可变的执行历史",
    "auth": [
     "apiKey",
     "bearer"
@@ -335,6 +339,7 @@
    "method": "POST",
    "path": "/v1/jobs/{task_id}/cancel",
    "summary": "Cancel a queued or running job in the authenticated tenant",
+   "summary_zh": "取消当前租户排队中或运行中的任务",
    "auth": [
     "apiKey",
     "bearer"
@@ -436,6 +441,7 @@
    "method": "GET",
    "path": "/v1/jobs/{task_id}/dead-letters",
    "summary": "Page through dead letters in the authenticated tenant",
+   "summary_zh": "分页读取当前租户的死信",
    "auth": [
     "apiKey",
     "bearer"
@@ -519,6 +525,7 @@
    "method": "GET",
    "path": "/v1/jobs/{task_id}/receipts",
    "summary": "Page through immutable settlement receipts in the authenticated tenant",
+   "summary_zh": "分页读取当前租户不可变的结算回执",
    "auth": [
     "apiKey",
     "bearer"
@@ -602,6 +609,7 @@
    "method": "GET",
    "path": "/v1/jobs/{task_id}/results",
    "summary": "Page through current per-item and per-node result projections",
+   "summary_zh": "分页读取当前按条目与按节点的结果",
    "auth": [
     "apiKey",
     "bearer"
@@ -686,6 +694,7 @@
    "method": "POST",
    "path": "/v1/jobs/{task_id}/retry",
    "summary": "Retry failed items in a tenant job",
+   "summary_zh": "重试租户任务中的失败条目",
    "auth": [
     "apiKey",
     "bearer"

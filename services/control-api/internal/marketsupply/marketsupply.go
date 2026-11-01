@@ -72,7 +72,7 @@ type Service struct {
 	icp   ICPChecker
 	cache CachePolicies
 	purge CacheOperations
-	// access writes the site access settings (fix-mktsiteconf2).
+	// access writes the site access settings.
 	access SiteAccessSettings
 
 	policies    SecurityPolicies
@@ -81,12 +81,12 @@ type Service struct {
 	// (fix-mktsiteconf3, WithWAFExtras).
 	crs     SiteCRSApps
 	ipLists IPLists
-	// httpPolicies writes the site HTTP policy (fix-mktsiteconf3).
+	// httpPolicies writes the site HTTP policy.
 	httpPolicies SiteHTTPPolicies
-	// originAuth / boxSelf write the site origin auth (fix-mktsiteconf5).
+	// originAuth / boxSelf write the site origin auth.
 	originAuth SiteOriginAuth
 	boxSelf    func() (uuid.UUID, []byte)
-	// originAuthDelivery sends what originAuth wrote to the nodes (fix-mktsiteconf6).
+	// originAuthDelivery sends what originAuth wrote to the nodes.
 	originAuthDelivery OriginAuthDelivery
 	autoDefense        AutoDefenseStore
 

@@ -203,7 +203,7 @@ describe('节点管理 DNS配置 CNAME域名 tab', () => {
     expect(screen.getByText('beta.example.com')).toBeInTheDocument()
   })
 
-  it('marks a domain for random allocation from the list and keeps it when editing (fix-cnamerand)', async () => {
+  it('marks a domain for random allocation from the list and keeps it when editing', async () => {
     authenticate()
     const state = { zones: [zone(1, 'a.example.com'), zone(2, 'b.example.com', '', false, true)] }
     const fetchMock = mockAPI(state)

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/blocked-ip-count",
    "summary": "Count distinct client IPs blocked by the global firewall or CC auto-bans",
+   "summary_zh": "统计被全局防火墙或 CC 自动封禁拦截的去重客户端 IP 数",
    "auth": [
     "bearer"
    ],
@@ -98,6 +99,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/blocked-ip-trend",
    "summary": "Read the hourly distinct client IPs blocked by the global firewall",
+   "summary_zh": "读取被全局防火墙拦截的去重客户端 IP 小时趋势",
    "auth": [
     "bearer"
    ],
@@ -189,6 +191,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/connections/dead-letters",
    "summary": "List durable analytics connections dead-letter receipts",
+   "summary_zh": "列出连接统计的持久化死信回执",
    "auth": [
     "bearer"
    ],
@@ -267,6 +270,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/connections/dead-letters/{dead_letter_id}",
    "summary": "Read one durable analytics connections dead-letter receipt",
+   "summary_zh": "读取一条连接统计的持久化死信回执",
    "auth": [
     "bearer"
    ],
@@ -330,6 +334,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/connections/retention",
    "summary": "Read finalized connections retention facts for a tenant subscription",
+   "summary_zh": "读取某租户订阅已定稿的连接数据保留情况",
    "auth": [
     "bearer"
    ],
@@ -416,6 +421,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/hourly-trend",
    "summary": "Read a platform or explicitly selected tenant hourly trend",
+   "summary_zh": "读取全平台或指定租户的小时趋势",
    "auth": [
     "bearer"
    ],
@@ -511,6 +517,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/l4-realtime",
    "summary": "",
+   "summary_zh": "读取四层转发实时数据（平台）",
    "auth": [
     "bearer"
    ],
@@ -638,6 +645,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/access",
    "summary": "List access logs for one explicitly selected tenant",
+   "summary_zh": "列出指定租户的访问日志",
    "auth": [
     "bearer"
    ],
@@ -871,6 +879,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/access/exports",
    "summary": "List durable access-log exports owned by the calling account for the target tenant",
+   "summary_zh": "列出调用账号为目标租户创建的访问日志导出",
    "auth": [
     "bearer"
    ],
@@ -1078,6 +1087,7 @@
    "method": "POST",
    "path": "/v1/admin/analytics/logs/access/exports",
    "summary": "Create a snapshot-bound access-log export for one target tenant",
+   "summary_zh": "为目标租户创建绑定快照的访问日志导出",
    "auth": [
     "bearer"
    ],
@@ -1228,6 +1238,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/access/exports/{export_id}",
    "summary": "",
+   "summary_zh": "读取一次访问日志导出（平台）",
    "auth": [
     "bearer"
    ],
@@ -1364,6 +1375,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/access/exports/{export_id}/download",
    "summary": "",
+   "summary_zh": "下载访问日志导出文件（平台）",
    "auth": [
     "bearer"
    ],
@@ -1428,6 +1440,7 @@
    "method": "POST",
    "path": "/v1/admin/analytics/logs/access/exports/{export_id}/download-grants",
    "summary": "",
+   "summary_zh": "签发访问日志导出的下载授权（平台）",
    "auth": [
     "bearer"
    ],
@@ -1503,6 +1516,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/block-events",
    "summary": "List security block events for one explicitly selected tenant",
+   "summary_zh": "列出指定租户的安全拦截事件",
    "auth": [
     "bearer"
    ],
@@ -1696,6 +1710,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/blocks/current",
    "summary": "List current ACL blocks across the customer control plane",
+   "summary_zh": "列出全平台当前生效的 ACL 封禁",
    "auth": [
     "bearer"
    ],
@@ -1781,6 +1796,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/blocks/current-count",
    "summary": "Count current ACL blocks by site across the customer control plane",
+   "summary_zh": "按网站统计全平台当前生效的 ACL 封禁数",
    "auth": [
     "bearer"
    ],
@@ -1844,6 +1860,7 @@
    "method": "POST",
    "path": "/v1/admin/analytics/logs/blocks/current/{block_id}/unlock",
    "summary": "Unlock one current ACL block for an explicitly selected tenant",
+   "summary_zh": "为指定租户解除一条当前 ACL 封禁",
    "auth": [
     "bearer"
    ],
@@ -1953,6 +1970,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/blocks/history",
    "summary": "List audited unlock history across the customer control plane",
+   "summary_zh": "列出全平台带审计的解封历史",
    "auth": [
     "bearer"
    ],
@@ -2038,6 +2056,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/cc-coordination",
    "summary": "List cross-node CC coordination states of every tenant, optionally narrowed to one tenant or site",
+   "summary_zh": "列出所有租户的跨节点 CC 联动状态，可按租户或网站筛选",
    "auth": [
     "bearer"
    ],
@@ -2102,6 +2121,7 @@
    "method": "POST",
    "path": "/v1/admin/analytics/logs/cc-coordination/{state_id}/release",
    "summary": "Release one exact cross-node CC state after a false-positive decision",
+   "summary_zh": "确认误判后解除一条跨节点 CC 状态",
    "auth": [
     "bearer"
    ],
@@ -2207,6 +2227,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/logs/{kind}/geo-evidence/{event_id}",
    "summary": "Reconcile one tenant log fact against a verified GeoIP catalog",
+   "summary_zh": "用已校验的 GeoIP 库核对一条租户日志",
    "auth": [
     "bearer"
    ],
@@ -2323,6 +2344,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/market-security",
    "summary": "List relayed market supply attack log lines of any tenant",
+   "summary_zh": "列出任意租户经市场供给回传的攻击日志",
    "auth": [
     "bearer"
    ],
@@ -2420,6 +2442,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/site-monitoring",
    "summary": "Read one tenant's site monitoring as a platform administrator",
+   "summary_zh": "以平台管理员身份读取某租户的网站监控",
    "auth": [
     "bearer"
    ],
@@ -2577,6 +2600,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/site-quality-diagnostics",
    "summary": "Read one tenant's quality diagnostics from the platform scope",
+   "summary_zh": "以平台身份读取某租户的质量诊断",
    "auth": [
     "bearer"
    ],
@@ -2700,6 +2724,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/site-realtime",
    "summary": "Read platform-wide or one tenant's finalized site realtime facts",
+   "summary_zh": "读取全平台或某租户已定稿的网站实时数据",
    "auth": [
     "bearer"
    ],
@@ -2792,6 +2817,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/summary",
    "summary": "Read a platform or explicitly selected tenant analytics summary",
+   "summary_zh": "读取全平台或指定租户的统计汇总",
    "auth": [
     "bearer"
    ],
@@ -2887,6 +2913,7 @@
    "method": "GET",
    "path": "/v1/admin/analytics/top/{dimension}",
    "summary": "Page through a platform or explicitly selected tenant ranking",
+   "summary_zh": "分页读取全平台或指定租户的排行",
    "auth": [
     "bearer"
    ],

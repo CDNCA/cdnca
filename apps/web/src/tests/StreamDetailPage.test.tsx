@@ -605,6 +605,35 @@ describe('StreamDetailPage', () => {
     expect(within(dialog).getByText(stream.publish_intent.id)).toBeInTheDocument()
   })
 
+  it('A3-04 shows why the publication failed in configuration sync and the publication details', async () => {
+    authenticate()
+    reads({ ...stream, sync_state: 'failed', publish_intent: { ...stream.publish_intent, state: 'failed', failure_code: 'node_artifacts_syncing' } })
+    const user = userEvent.setup(); setup(); await loaded()
+    const facts = document.querySelector('.stream-detail-facts') as HTMLElement
+    expect(within(facts).getByText('配置同步').nextElementSibling).toHaveTextContent('失败原因：节点尚未加载 IP 库')
+    await user.click(within(facts).getByRole('button', { name: '发布详情' }))
+    const dialog = await screen.findByRole('dialog', { name: '发布详情' })
+    expect(within(dialog).getByText('失败原因')).toBeInTheDocument()
+    expect(within(dialog).getByText(/节点尚未加载 IP 库/)).toBeInTheDocument()
+    expect(within(dialog).getByText('node_artifacts_syncing')).toBeInTheDocument()
+  })
+
+  it('A3-04 shows an unknown failure code as is', async () => {
+    authenticate()
+    reads({ ...stream, sync_state: 'failed', publish_intent: { ...stream.publish_intent, state: 'failed', failure_code: 'future_reason_x' } })
+    setup(); await loaded()
+    const facts = document.querySelector('.stream-detail-facts') as HTMLElement
+    expect(within(facts).getByText('配置同步').nextElementSibling).toHaveTextContent('失败原因：future_reason_x')
+  })
+
+  it('A3-04 says a failed publication recorded no reason', async () => {
+    authenticate()
+    reads({ ...stream, sync_state: 'failed', publish_intent: { ...stream.publish_intent, state: 'failed', failure_code: null } })
+    setup(); await loaded()
+    const facts = document.querySelector('.stream-detail-facts') as HTMLElement
+    expect(within(facts).getByText('配置同步').nextElementSibling).toHaveTextContent('未记录失败原因')
+  })
+
   it('L4-008 hides the publication link while sync is done and shows a package problem as the operation status', async () => {
     authenticate(); reads({ ...stream, eligibility_state: 'ineligible' })
     setup(); await loaded()

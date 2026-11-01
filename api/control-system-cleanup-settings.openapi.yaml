@@ -13,6 +13,7 @@ paths:
     get:
       summary: Read platform cleanup and backup settings
       operationId: getPlatformSystemCleanupSettings
+      x-summary-zh: "读取平台清理与备份设置"
       x-required-permissions: [system_configuration.read]
       responses:
         '200': {description: Current retention and backup policy, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
@@ -23,6 +24,7 @@ paths:
     put:
       summary: Update platform cleanup and backup settings
       operationId: updatePlatformSystemCleanupSettings
+      x-summary-zh: "修改平台清理与备份设置"
       x-required-permissions: [system_configuration.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}

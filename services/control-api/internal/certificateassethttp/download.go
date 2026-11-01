@@ -12,7 +12,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/certificateasset"
 )
 
-// 下载证书（fix-certops）：zip 内 fullchain.pem（证书链）与 privkey.pem（PKCS#8）。
+// 下载证书：zip 内 fullchain.pem（证书链）与 privkey.pem（PKCS#8）。
 // 文件名取证书主域名（通配符 * 换成 _），其余字符不安全时用证书 ID。
 var downloadNamePattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,200}$`)
 

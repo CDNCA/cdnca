@@ -7,7 +7,7 @@ const ticket = (patch: Partial<NodeTicket> = {}): NodeTicket => ({
 })
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status })
 
-describe('node installation tickets (fix-stoppolicy2)', () => {
+describe('node installation tickets', () => {
   it('reads one exact batch in the requested order', async () => {
     const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ observed_at: '2026-10-21T00:00:00Z', items: [ticket()] }))
     await expect(nodeInstallationTicketsApi.get('token', [id])).resolves.toMatchObject({ items: [{ node_id: id, state: 'expired' }] })

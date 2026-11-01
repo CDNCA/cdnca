@@ -133,7 +133,7 @@ const zhCN = {
     },
     reinstalled: {
       title: '授权已用于重装',
-      body: '这份授权已在授权中心「我的授权 → 重装主控」中用于重新安装主控，本主控已退役，不再获取新授权。已在运行的网站和节点流量不受影响；当前授权到期后，新建、扩容和升级将不可用。',
+      body: '这份授权已在授权中心「我的授权 → 重装主控」中用于重新安装主控，本主控已退役，原授权凭证已随安装退役吊销，新建、扩容和升级不可用。已在运行的网站和节点流量不受影响。',
       action: '处理办法：请在新安装的主控上继续使用。重装主控不能撤销；如果这次重装不是你操作的，请立即修改授权中心账号密码并联系授权方。',
     },
   },
@@ -270,7 +270,7 @@ const enUS: typeof zhCN = {
     },
     reinstalled: {
       title: 'License used for a reinstall',
-      body: 'This license was used to reinstall the controller (license center: My licenses → Reinstall controller), so this controller is retired and no longer receives new licenses. Running websites and node traffic are not affected; once the current license expires, creating, scaling and upgrading become unavailable.',
+      body: 'This license was used to reinstall the controller (license center: My licenses → Reinstall controller), so this controller is retired and its license credentials were revoked with it; creating, scaling and upgrading are unavailable. Running websites and node traffic are not affected.',
       action: 'What to do: continue on the newly installed controller. A reinstall cannot be undone; if you did not do it, change your license center password now and contact your license provider.',
     },
   },

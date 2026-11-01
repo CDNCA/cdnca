@@ -42,7 +42,7 @@ const (
 	PermissionOperationsRead   = "sites.read"
 	PermissionOperationsManage = "sites.manage"
 	// PermissionAccountQuotaManage: setting an account's own daily limits is
-	// user management (fix-cachequota).
+	// user management.
 	PermissionAccountQuotaManage          = "identity.users.manage"
 	AudienceTenant               Audience = "tenant"
 	AudiencePlatform             Audience = "platform"
@@ -271,7 +271,7 @@ type WriteResult[T any] struct {
 // TargetRejection is a create refused for one target (ADD-10): the error
 // envelope carries it as details so the console can point at the line.
 // DailyLimitDetails is error.details of a daily_limit_exceeded refusal
-// (fix-cachequota): which account quota, its limit, today's use and the
+//: which account quota, its limit, today's use and the
 // targets the create asked for.
 type DailyLimitDetails struct {
 	Field     string `json:"field"`

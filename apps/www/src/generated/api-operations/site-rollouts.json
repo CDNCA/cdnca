@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/site-rollouts",
    "summary": "List rollouts in the authenticated tenant scope",
+   "summary_zh": "列出当前租户范围的灰度发布",
    "auth": [
     "apiKey",
     "bearer"
@@ -67,6 +68,7 @@
    "method": "GET",
    "path": "/v1/site-rollouts/{rollout_id}",
    "summary": "Get rollout progress in the authenticated tenant scope",
+   "summary_zh": "读取当前租户范围的灰度发布进度",
    "auth": [
     "apiKey",
     "bearer"
@@ -191,6 +193,7 @@
    "method": "GET",
    "path": "/v1/site-rollouts/{rollout_id}/deployments",
    "summary": "List deployment progress without node target metadata",
+   "summary_zh": "列出部署进度（不含节点目标信息）",
    "auth": [
     "apiKey",
     "bearer"

@@ -89,7 +89,7 @@ describe('L4 access log and live connections', () => {
     await user.click(within(await screen.findByRole('tooltip')).getByRole('button', { name: /确\s*定|OK/ }))
     await waitFor(() => expect(close).toHaveBeenCalledWith(expect.any(String), stream.id, nodeA, ['10.0.0.1|443|192.0.2.9|50000']))
     expect(await screen.findByText('已断开 1 个连接')).toBeInTheDocument()
-    // Filters only narrow; 端口 sits in 高级筛选 (fix-advfilter), its tag × queries without it again.
+    // Filters only narrow; 端口 sits in 高级筛选, its tag × queries without it again.
     await user.click(screen.getByRole('button', { name: '高级筛选' }))
     await user.type(screen.getByRole('textbox', { name: '端口' }), '443')
     await user.click(screen.getByRole('button', { name: '应用' }))

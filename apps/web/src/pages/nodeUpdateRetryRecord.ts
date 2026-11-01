@@ -55,7 +55,7 @@ function validNodeUpdateAttempt(value: unknown): value is NodeUpdateRequestAttem
   const settings = input.management_settings
   if (!keys(settings, ['schema_version', 'sort', 'node_type', 'cache_directory', 'cache_limit_gb', 'log_directory', 'ip_location', 'auto_disable', 'secondary_ips', 'external_probe'], ['schedule302_hostname', 'ip_location_manual']) ||
     (Object.hasOwn(settings, 'schedule302_hostname') && !isSchedule302Hostname(settings.schedule302_hostname)) ||
-    // fix-nodeipgeo: the corrected IP 归属 fields
+    // node IP location: the corrected IP 归属 fields
     (Object.hasOwn(settings, 'ip_location_manual') && (!Array.isArray(settings.ip_location_manual) ||
       new Set(settings.ip_location_manual).size !== settings.ip_location_manual.length ||
       !settings.ip_location_manual.every((field) => ['country', 'province', 'city', 'isp', 'country_code'].includes(String(field))))) ||

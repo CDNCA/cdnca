@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/system-mail-settings",
    "summary": "Read platform mail settings",
+   "summary_zh": "读取平台邮件设置",
    "auth": [
     "bearer"
    ],
@@ -76,6 +77,7 @@
    "method": "PUT",
    "path": "/v1/admin/system-mail-settings",
    "summary": "Update platform mail settings",
+   "summary_zh": "修改平台邮件设置",
    "auth": [
     "bearer"
    ],

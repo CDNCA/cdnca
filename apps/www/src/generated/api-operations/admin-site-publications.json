@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/site-publications",
    "summary": "List publications for one tenant scope",
+   "summary_zh": "列出某租户范围的发布记录",
    "auth": [
     "bearer"
    ],
@@ -90,6 +91,7 @@
    "method": "POST",
    "path": "/v1/admin/site-publications",
    "summary": "Publish the current Site/L4 revision to an immutable target snapshot",
+   "summary_zh": "把当前网站/四层版本发布为不可变的目标快照",
    "auth": [
     "bearer"
    ],
@@ -269,6 +271,7 @@
    "method": "GET",
    "path": "/v1/admin/site-publications/{publication_id}",
    "summary": "Get one publication in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内读取一次发布",
    "auth": [
     "bearer"
    ],
@@ -378,6 +381,7 @@
    "method": "POST",
    "path": "/v1/admin/site-publications/{publication_id}/rollback",
    "summary": "Roll selected nodes back to their direct previous published configuration",
+   "summary_zh": "把所选节点回滚到上一次发布的配置",
    "auth": [
     "bearer"
    ],

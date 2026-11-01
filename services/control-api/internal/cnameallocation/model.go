@@ -74,7 +74,7 @@ const (
 	FailureSiteAuthority      = "site_authority_unavailable"
 	FailureAllocationRejected = "allocation_rejected"
 	// The operator may not write the tenant's DNS: neither a tenant member
-	// nor a platform administrator (fix-regen2).
+	// nor a platform administrator.
 	FailureDNSPermissionDenied = "dns_permission_denied"
 	// Every generated label candidate (MaxLabelAttempts) is already claimed.
 	FailureLabelExhausted = "cname_label_exhausted"
@@ -250,7 +250,7 @@ type Store struct {
 	now         func() time.Time
 	auditor     *audit.Log
 	platformDNS PlatformDNS
-	// pick draws the zone index for a CNAME without a domain (fix-cnamerand);
+	// pick draws the zone index for a CNAME without a domain;
 	// nil is math/rand/v2 IntN. Tests inject a fixed source.
 	pick func(int) int
 }

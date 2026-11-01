@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/system-backup-runs",
    "summary": "Read persisted control-plane backup run history",
+   "summary_zh": "读取主控备份运行历史",
    "auth": [
     "bearer"
    ],

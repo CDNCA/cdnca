@@ -216,6 +216,8 @@ export interface StreamPublishIntent {
   automatic_request_id: string | null
   publication_id: string | null
   rollout_id: string | null
+  // A3-04：发布失败时自动发布请求的终止码（如 node_artifacts_syncing），其余状态为 null。
+  failure_code: string | null
   created_at: string
 }
 
@@ -521,9 +523,14 @@ function parsePublishIntent(
     !integer(intent.configuration_source_revision, 1) ||
     !['unknown', 'pending', 'leased', 'retrying', 'reconciling', 'succeeded', 'failed', 'superseded'].includes(String(intent.state)) ||
     ![intent.automatic_request_id, intent.publication_id, intent.rollout_id]
-      .every((id) => id === null || (typeof id === 'string' && uuidPattern.test(id))) || typeof intent.created_at !== 'string') return null
+      .every((id) => id === null || (typeof id === 'string' && uuidPattern.test(id))) || typeof intent.created_at !== 'string' ||
+    !(intent.failure_code === undefined || intent.failure_code === null ||
+      (typeof intent.failure_code === 'string' && /^[a-z0-9_]{1,128}$/.test(intent.failure_code)))) return null
   const parsedRuntime = parseRuntimeSpecV2(runtime, streamID, scopeID, intent.resource_revision as number, fields)
-  return parsedRuntime ? value as StreamPublishIntent : null
+  if (!parsedRuntime) return null
+  // 老版本主控不返回 failure_code，按 null 处理。
+  if (intent.failure_code === undefined) intent.failure_code = null
+  return value as StreamPublishIntent
 }
 
 function validOrigins(value: unknown): value is StreamOrigin[] {

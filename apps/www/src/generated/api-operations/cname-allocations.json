@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/cname-allocations",
    "summary": "List CNAME allocation authority in the active tenant scope",
+   "summary_zh": "列出当前租户范围内的 CNAME 分配",
    "auth": [
     "bearer"
    ],
@@ -81,6 +82,7 @@
    "method": "GET",
    "path": "/v1/cname-allocations/diagnose",
    "summary": "Diagnose CNAME authority for one site in the active tenant scope",
+   "summary_zh": "诊断当前租户范围内某网站的 CNAME 分配",
    "auth": [
     "bearer"
    ],
@@ -207,6 +209,7 @@
    "method": "GET",
    "path": "/v1/cname-allocations/{allocation_id}",
    "summary": "Get one CNAME allocation in the active tenant scope",
+   "summary_zh": "读取当前租户范围内的一条 CNAME 分配",
    "auth": [
     "bearer"
    ],

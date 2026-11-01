@@ -450,7 +450,7 @@ describe('NodeLineGroupsPage', () => {
     expect(listCalls.every(([input]) => String(input).includes(`target_scope_id=${platformScopeID}`))).toBe(true)
   })
 
-  it('lets a platform administrator set and unset the platform default line group (fix-nopkg)', async () => {
+  it('lets a platform administrator set and unset the platform default line group', async () => {
     const platformScopeID = '77777777-7777-4777-8777-777777777777'
     let items: NodeLineGroup[] = [{ ...group, tenant_scope_id: platformScopeID, name: '平台线路一', is_platform_default: false }]
     authenticate(['node_scheduling.read', 'node_scheduling.manage'], ['platform_admin'], {
@@ -483,7 +483,7 @@ describe('NodeLineGroupsPage', () => {
     await waitFor(() => expect(screen.queryByTestId('line-group-platform-default')).not.toBeInTheDocument())
   })
 
-  it('shows which address family is resolving to backup IPs and since when (fix-backupnotify)', async () => {
+  it('shows which address family is resolving to backup IPs and since when', async () => {
     authenticate(['node_scheduling.read', 'node_scheduling.manage'])
     useSessionStore.setState({ sessionEpoch: 1 })
     const active: NodeLineGroup = {
@@ -510,7 +510,7 @@ describe('NodeLineGroupsPage', () => {
     expect(within(normalRow).queryByTestId('line-group-backup-active')).not.toBeInTheDocument()
   })
 
-  it('accepts and rejects backup state shapes in the line group response (fix-backupnotify)', async () => {
+  it('accepts and rejects backup state shapes in the line group response', async () => {
     const { validateNodeLineGroupResponse } = await import('../api/nodeScheduling')
     const valid = { ...group, backup_states: [{ address_family: 6, state: 'backup_active', backup_addresses: ['2001:db8::20'], changed_at: '2026-10-27T06:00:00Z' }] }
     expect(validateNodeLineGroupResponse(valid).backup_states?.[0].address_family).toBe(6)
@@ -522,7 +522,7 @@ describe('NodeLineGroupsPage', () => {
     ]) expect(() => validateNodeLineGroupResponse({ ...group, backup_states: bad })).toThrow('Invalid line group response')
   })
 
-  it('does not offer the platform default action to a tenant (fix-nopkg)', async () => {
+  it('does not offer the platform default action to a tenant', async () => {
     authenticate(['node_scheduling.read', 'node_scheduling.manage'])
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(json({ items: [group] })))
     renderWithProviders(<NodeLineGroupsPage />)

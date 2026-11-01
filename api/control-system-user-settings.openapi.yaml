@@ -13,6 +13,7 @@ paths:
     get:
       summary: Read platform user-related settings
       operationId: getPlatformSystemUserSettings
+      x-summary-zh: "读取平台用户相关设置"
       x-required-permissions: [system_configuration.read]
       responses:
         '200': {description: Current user policy, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
@@ -23,6 +24,7 @@ paths:
     put:
       summary: Update platform user-related settings
       operationId: updatePlatformSystemUserSettings
+      x-summary-zh: "修改平台用户相关设置"
       x-required-permissions: [system_configuration.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}
@@ -92,7 +94,7 @@ components:
     Settings:
       type: object
       additionalProperties: false
-      required: [session_ttl_seconds, user_login_domains, admin_login_domains, email_code_login_enabled, sms_code_login_enabled, registration_enabled, registration_success_subject, registration_success_body, password_reset_subject, password_reset_body, verification_template_channel, verification_subject, verification_body, verification_sms_body, verification_sms_template_id, terms_title, terms_body, username_required, email_required, email_verification_required, phone_required, phone_verification_required, qq_required, login_failure_limit_per_hour, login_captcha_threshold_per_hour, session_region_check, email_anti_abuse_mode, sms_anti_abuse_mode, captcha_provider, captcha_secret_id_reference, captcha_secret_key_reference, captcha_app_id, captcha_app_secret_reference, identity_verification_method, enterprise_verification_enabled, enterprise_secret_id_reference, enterprise_secret_key_reference, wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, default_recharge_method, recharge_restriction, default_phone_country_code]
+      required: [session_ttl_seconds, user_login_domains, admin_login_domains, email_code_login_enabled, sms_code_login_enabled, registration_enabled, registration_success_subject, registration_success_body, password_reset_subject, password_reset_body, verification_template_channel, verification_subject, verification_body, verification_sms_body, verification_sms_template_id, terms_title, terms_body, username_required, email_required, email_verification_required, phone_required, phone_verification_required, qq_required, login_failure_limit_per_hour, login_captcha_threshold_per_hour, session_region_check, email_anti_abuse_mode, sms_anti_abuse_mode, captcha_provider, captcha_secret_id_reference, captcha_secret_key_reference, captcha_app_id, captcha_app_secret_reference, identity_verification_method, enterprise_verification_enabled, enterprise_secret_id_reference, enterprise_secret_key_reference, wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, usdt_payment_enabled, default_recharge_method, recharge_restriction, default_phone_country_code]
       properties:
         session_ttl_seconds: {type: integer, minimum: 300, maximum: 31536000, default: 86400}
         user_login_domains: {type: string, maxLength: 4096}
@@ -134,6 +136,7 @@ components:
         wechat_payment_enabled: {type: boolean}
         alipay_payment_enabled: {type: boolean}
         bank_transfer_enabled: {type: boolean}
-        default_recharge_method: {type: string, enum: [none, wechat, alipay, bank_transfer], description: A non-none default method must be enabled.}
+        usdt_payment_enabled: {type: boolean, default: false, description: Offer USDT recharge; users see it only with an enabled crypto payment channel and the module.payment.crypto licence too.}
+        default_recharge_method: {type: string, enum: [none, wechat, alipay, bank_transfer, usdt], description: A non-none default method must be enabled.}
         recharge_restriction: {type: string, enum: [none, individual_verified, enterprise_verified]}
         default_phone_country_code: {type: string, pattern: '^[1-9][0-9]{0,3}$', default: '86', description: Country/region calling code (digits only) used to complete phone numbers entered without one.}

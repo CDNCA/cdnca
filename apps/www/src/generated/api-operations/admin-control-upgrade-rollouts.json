@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/control-upgrade-rollouts",
    "summary": "List durable control upgrade rollouts",
+   "summary_zh": "列出主控升级发布任务",
    "auth": [
     "bearer"
    ],
@@ -89,6 +90,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-rollouts",
    "summary": "Create a durable control upgrade rollout",
+   "summary_zh": "创建主控升级发布任务",
    "auth": [
     "bearer"
    ],
@@ -200,6 +202,7 @@
    "method": "GET",
    "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}",
    "summary": "Get a durable control upgrade rollout",
+   "summary_zh": "读取一个主控升级发布任务",
    "auth": [
     "bearer"
    ],
@@ -258,6 +261,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/pause",
    "summary": "Pause a running control upgrade rollout",
+   "summary_zh": "暂停进行中的主控升级发布",
    "auth": [
     "bearer"
    ],
@@ -359,6 +363,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/resume",
    "summary": "Resume a paused control upgrade rollout",
+   "summary_zh": "继续已暂停的主控升级发布",
    "auth": [
     "bearer"
    ],
@@ -460,6 +465,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/rollback",
    "summary": "Roll back a control upgrade rollout",
+   "summary_zh": "回滚主控升级发布",
    "auth": [
     "bearer"
    ],
@@ -561,6 +567,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-rollouts/{rollout_id}/start",
    "summary": "Start a queued control upgrade rollout",
+   "summary_zh": "开始排队中的主控升级发布",
    "auth": [
     "bearer"
    ],

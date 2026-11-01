@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/tenant-scopes",
    "summary": "List tenant scope targets for platform administration",
+   "summary_zh": "列出可供平台管理的租户范围",
    "auth": [
     "bearer"
    ],
@@ -92,6 +93,7 @@
    "method": "PUT",
    "path": "/v1/admin/tenant-scopes/{scope_id}/parent",
    "summary": "Put a tenant under a reseller, or back to the platform",
+   "summary_zh": "把租户挂到某个代理商下，或挂回平台",
    "auth": [
     "bearer"
    ],

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Migration 568 (fix-smallfu): local replay guard for Tencent / GeeTest v4
+// Migration 568: local replay guard for Tencent / GeeTest v4
 // login CAPTCHA tickets. Placeholder number; the 554 predecessor is pinned by
 // checksum and is re-pinned to the actual head when merged.
 func TestAccountLoginCaptchaReplay568Contract(t *testing.T) {

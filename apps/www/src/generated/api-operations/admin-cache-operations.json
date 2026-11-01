@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/cache-operations",
    "summary": "List operations in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内列出缓存操作",
    "auth": [
     "bearer"
    ],
@@ -122,6 +123,7 @@
    "method": "POST",
    "path": "/v1/admin/cache-operations",
    "summary": "Persist an operation in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内提交缓存操作",
    "auth": [
     "bearer"
    ],
@@ -318,6 +320,7 @@
    "method": "GET",
    "path": "/v1/admin/cache-operations/daily-usage",
    "summary": "Today's cache operation quotas of a tenant account (UTC+8 day; system follow-ups not counted)",
+   "summary_zh": "某租户账号今天的缓存操作额度（按北京时间计日，系统自动跟进的不计）",
    "auth": [
     "bearer"
    ],
@@ -410,6 +413,7 @@
    "method": "PUT",
    "path": "/v1/admin/cache-operations/daily-usage",
    "summary": "Set a tenant account's own daily purge/prewarm limits (null follows the system setting default)",
+   "summary_zh": "设置某租户账号自己的每日刷新/预热上限（null 表示跟随系统设置默认值）",
    "auth": [
     "bearer"
    ],
@@ -535,6 +539,7 @@
    "method": "GET",
    "path": "/v1/admin/cache-operations/{operation_id}",
    "summary": "Get operation progress in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内读取缓存操作进度",
    "auth": [
     "bearer"
    ],
@@ -687,6 +692,7 @@
    "method": "POST",
    "path": "/v1/admin/cache-operations/{operation_id}/cancel",
    "summary": "Cancel an operation in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内取消缓存操作",
    "auth": [
     "bearer"
    ],
@@ -855,6 +861,7 @@
    "method": "POST",
    "path": "/v1/admin/cache-operations/{operation_id}/resubmit",
    "summary": "Re-submit an operation as a new one",
+   "summary_zh": "把一次缓存操作重新提交为新操作",
    "auth": [
     "bearer"
    ],
@@ -1028,6 +1035,7 @@
    "method": "POST",
    "path": "/v1/admin/cache-operations/{operation_id}/retry",
    "summary": "Retry an operation in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内重试缓存操作",
    "auth": [
     "bearer"
    ],

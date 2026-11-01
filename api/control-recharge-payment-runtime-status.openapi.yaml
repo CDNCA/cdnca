@@ -2,6 +2,7 @@ paths:
   /v1/admin/recharge-payment-runtime-status:
     get:
       operationId: getRechargePaymentRuntimeStatus
+      x-summary-zh: "读取充值支付运行状态（不含密钥）"
       summary: Read non-secret recharge payment runtime status
       description: Returns provider configuration/readiness state without credentials or endpoint details.
       security:

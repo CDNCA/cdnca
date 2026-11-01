@@ -14,7 +14,7 @@ import (
 )
 
 // HostPortsFile is the host port profile install-control.sh writes on a
-// BaoTa host (fix-btenv) before the dependency installer runs. It is a
+// BaoTa host before the dependency installer runs. It is a
 // property of the host, never archived: a restore keeps the target's own.
 const HostPortsFile = "/etc/cdnca-native-dependencies/runtime.env"
 

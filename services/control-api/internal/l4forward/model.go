@@ -271,7 +271,11 @@ type PublishIntent struct {
 	AutomaticRequestID          *uuid.UUID  `json:"automatic_request_id"`
 	PublicationID               *uuid.UUID  `json:"publication_id"`
 	RolloutID                   *uuid.UUID  `json:"rollout_id"`
-	CreatedAt                   time.Time   `json:"created_at"`
+	// FailureCode: why a failed publication ended (the automatic request's
+	// terminal code, e.g. node_artifacts_syncing, node_capability_unavailable,
+	// no_target_nodes); null unless state is failed.
+	FailureCode *string   `json:"failure_code"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Forward struct {

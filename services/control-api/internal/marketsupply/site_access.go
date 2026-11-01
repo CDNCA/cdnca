@@ -20,7 +20,7 @@ type SiteAccessSettings interface {
 	Update(ctx context.Context, actor siteaccess.Actor, request siteaccess.UpdateRequest) (siteaccess.State, error)
 }
 
-// WithSiteAccess lets market sites carry their access settings (fix-mktsiteconf2).
+// WithSiteAccess lets market sites carry their access settings.
 func (s *Service) WithSiteAccess(settings SiteAccessSettings) *Service {
 	s.access = settings
 	return s

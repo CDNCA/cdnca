@@ -155,6 +155,16 @@ func (service *Service) phoneCountryCode(ctx context.Context, input RegisterInpu
 }
 
 func normalizeRegistrationInput(input *RegisterInput, phoneCode string) error {
+	if len(input.ProofReference) < 22 || len(input.ProofReference) > 4096 ||
+		!registrationProofPattern.MatchString(input.ProofReference) || strings.TrimSpace(input.ProofReference) != input.ProofReference {
+		return ErrInvalidInput
+	}
+	return normalizeRegistrationFields(input, phoneCode)
+}
+
+// normalizeRegistrationFields checks everything but the proof reference; the
+// built-in CAPTCHA registration (builtin.go) has no proof reference.
+func normalizeRegistrationFields(input *RegisterInput, phoneCode string) error {
 	input.Username = strings.ToLower(strings.TrimSpace(input.Username))
 	input.DisplayName = strings.TrimSpace(input.DisplayName)
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
@@ -170,8 +180,6 @@ func normalizeRegistrationInput(input *RegisterInput, phoneCode string) error {
 		!input.TermsAccepted || !registrationMetadataPattern.MatchString(input.TermsVersion) ||
 		!registrationMetadataPattern.MatchString(input.IdempotencyKey) ||
 		!registrationMetadataPattern.MatchString(input.RequestID) ||
-		len(input.ProofReference) < 22 || len(input.ProofReference) > 4096 ||
-		!registrationProofPattern.MatchString(input.ProofReference) || strings.TrimSpace(input.ProofReference) != input.ProofReference ||
 		input.Source == "" || len(input.Source) > 256 ||
 		strings.IndexFunc(input.Source, func(value rune) bool { return unicode.IsControl(value) || unicode.IsSpace(value) }) >= 0 {
 		return ErrInvalidInput

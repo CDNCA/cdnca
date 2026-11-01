@@ -188,7 +188,7 @@ func (h *Handler) ready(writer http.ResponseWriter) bool {
 }
 
 func (h *Handler) stepUp(ctx context.Context, actor Actor, token, action string, binding [32]byte) error {
-	if h.StepUp == nil || token == "" {
+	if h.StepUp == nil {
 		return ErrStepUpRequired
 	}
 	if err := h.StepUp.Consume(ctx, actor, token, action, binding); err != nil {

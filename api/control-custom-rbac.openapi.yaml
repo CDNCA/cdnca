@@ -24,6 +24,7 @@ paths:
     get:
       tags: [Tenant custom RBAC]
       operationId: listTenantDelegablePermissions
+      x-summary-zh: "列出租户可下放的权限目录"
       summary: List the tenant-delegable permission catalog
       security: [{bearerAuth: []}]
       x-required-permissions: [identity.roles.manage]
@@ -40,6 +41,7 @@ paths:
     get:
       tags: [Tenant custom RBAC]
       operationId: listTenantCustomRoles
+      x-summary-zh: "分页列出当前租户范围的自定义角色"
       summary: Page through custom roles in the authenticated tenant scope
       description: >-
         The signed cursor is bound to the authenticated scope and include_deactivated filter,
@@ -66,6 +68,7 @@ paths:
     post:
       tags: [Tenant custom RBAC]
       operationId: createTenantCustomRole
+      x-summary-zh: "创建自定义角色及其第一个不可变版本"
       summary: Create a custom role and its first immutable revision
       security: [{bearerAuth: []}]
       x-required-permissions: [identity.roles.manage]
@@ -96,6 +99,7 @@ paths:
     get:
       tags: [Tenant custom RBAC]
       operationId: getTenantCustomRole
+      x-summary-zh: "读取当前租户范围的一个自定义角色"
       summary: Get a custom role in the authenticated tenant scope
       description: Unknown and cross-tenant role IDs return the same 404 response.
       security: [{bearerAuth: []}]
@@ -115,6 +119,7 @@ paths:
     post:
       tags: [Tenant custom RBAC]
       operationId: renameTenantCustomRole
+      x-summary-zh: "按版本 CAS 重命名自定义角色"
       summary: Rename a custom role with revision compare-and-swap
       security: [{bearerAuth: []}]
       x-required-permissions: [identity.roles.manage]
@@ -135,6 +140,7 @@ paths:
     post:
       tags: [Tenant custom RBAC]
       operationId: publishTenantCustomRoleRevision
+      x-summary-zh: "按 CAS 发布新的权限版本"
       summary: Publish a new permission revision with compare-and-swap
       security: [{bearerAuth: []}]
       x-required-permissions: [identity.roles.manage]
@@ -155,6 +161,7 @@ paths:
     post:
       tags: [Tenant custom RBAC]
       operationId: deactivateTenantCustomRole
+      x-summary-zh: "按 CAS 停用自定义角色"
       summary: Deactivate a custom role with compare-and-swap
       security: [{bearerAuth: []}]
       x-required-permissions: [identity.roles.manage]
@@ -170,6 +177,7 @@ paths:
     get:
       tags: [Tenant custom RBAC]
       operationId: listTenantCustomRoleGrants
+      x-summary-zh: "分页列出生效或已撤销的自定义角色授予"
       summary: Page through active or revoked custom-role grants
       description: >-
         The signed cursor freezes grant creation and revocation state at the durable
@@ -203,6 +211,7 @@ paths:
     post:
       tags: [Tenant custom RBAC]
       operationId: assignTenantCustomRole
+      x-summary-zh: "把角色当前版本授予另一位在用租户成员"
       summary: Assign the current role revision to another active tenant member
       security: [{bearerAuth: []}]
       x-required-permissions: [identity.roles.manage]
@@ -234,6 +243,7 @@ paths:
     post:
       tags: [Tenant custom RBAC]
       operationId: revokeTenantCustomRoleGrant
+      x-summary-zh: "追加一条自定义角色撤销记录"
       summary: Append a custom-role grant revocation fact
       security: [{bearerAuth: []}]
       x-required-permissions: [identity.roles.manage]

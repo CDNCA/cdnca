@@ -17,6 +17,8 @@ func init() {
 		e("api_key.authentication.denied", CategoryAuth, "使用 API 密钥访问被拒绝", "was denied when calling with an API key"),
 		e("mfa.step_up.issue", CategoryAuth, "发起二次验证", "started a step-up verification"),
 		e("mfa.step_up.consume", CategoryAuth, "通过二次验证", "passed a step-up verification"),
+		// MFA optional：操作者未启用 MFA，敏感操作免二次验证放行（payload.step_up_note=「操作者未启用 MFA」）。
+		e("mfa.step_up.waive", CategoryAuth, "执行敏感操作（操作者未启用 MFA，未做二次验证）", "performed a sensitive operation without step-up (MFA not enabled)"),
 		e("entitlement.guard.reject", CategoryAuth, "操作因授权限制被拒绝", "was refused by the license entitlement guard"),
 
 		// 用户本人账号

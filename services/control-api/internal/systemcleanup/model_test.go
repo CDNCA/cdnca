@@ -64,3 +64,19 @@ func TestSettingsChanges(t *testing.T) {
 		t.Fatalf("no-op save reported changes %+v", got)
 	}
 }
+
+// A3-02: a negative access log retention must be refused, never stored as 0 (= keep forever).
+func TestAccessLogsDaysRejectsNegative(t *testing.T) {
+	for _, days := range []int{-1, -3, 3651} {
+		value := DefaultSettings()
+		value.AccessLogsDays = days
+		if validSettings(value) {
+			t.Errorf("access_logs_days %d accepted", days)
+		}
+	}
+	value := DefaultSettings()
+	value.AccessLogsDays = 0
+	if !validSettings(value) {
+		t.Error("access_logs_days 0 refused")
+	}
+}

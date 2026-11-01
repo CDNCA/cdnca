@@ -16,7 +16,7 @@
 
 ## 以下是 466 时的原说明（留档）
 
-466 是占位号（BATCH 第 73 条：461 归 esc-gw，C 方案用 ≥466）。守卫暂时指向分支编号时集成头上的最高迁移 `459_tenant_system_role_grants`。在 460–465 进集成之前，加载器会报 `migration version gap: expected 460, found 466`（`internal/database` 的 `TestEmbeddedMigrationsAreContiguousAndPaired`），所以本分支不能单独上 PG 跑。
+466 是占位号（BATCH 第 73 条：461 归 esc-gw，C 方案用 ≥466）。守卫暂时指向 `459_tenant_system_role_grants`。在 460–465 进集成之前，加载器会报 `migration version gap: expected 460, found 466`（`internal/database` 的 `TestEmbeddedMigrationsAreContiguousAndPaired`），所以本分支不能单独上 PG 跑。
 
 ## 编号约定
 

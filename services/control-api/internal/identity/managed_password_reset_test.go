@@ -21,7 +21,6 @@ func TestManagedPasswordResetRejectsInvalidInputsBeforeDependencies(t *testing.T
 		"missing target scope": func(input *ResetManagedUserPasswordInput, _ *Actor) { input.TenantScopeID = uuid.Nil },
 		"missing revision":     func(input *ResetManagedUserPasswordInput, _ *Actor) { input.ExpectedRevision = 0 },
 		"short password":       func(input *ResetManagedUserPasswordInput, _ *Actor) { input.NewPassword = "short-1" },
-		"missing step up":      func(input *ResetManagedUserPasswordInput, _ *Actor) { input.StepUpToken = "" },
 		"invalid idempotency":  func(input *ResetManagedUserPasswordInput, _ *Actor) { input.IdempotencyKey = "has spaces" },
 		"missing request":      func(input *ResetManagedUserPasswordInput, _ *Actor) { input.RequestID = "" },
 	}

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/cache-policies/{site_id}",
    "summary": "Get a current policy in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内读取当前缓存策略",
    "auth": [
     "bearer"
    ],
@@ -117,6 +118,7 @@
    "method": "POST",
    "path": "/v1/admin/cache-policies/{site_id}",
    "summary": "Publish a policy in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内发布缓存策略",
    "auth": [
     "bearer"
    ],
@@ -275,6 +277,7 @@
    "method": "GET",
    "path": "/v1/admin/cache-policies/{site_id}/revisions",
    "summary": "List policy history in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内列出缓存策略历史",
    "auth": [
     "bearer"
    ],
@@ -360,6 +363,7 @@
    "method": "GET",
    "path": "/v1/admin/cache-policies/{site_id}/revisions/{revision}",
    "summary": "Get one policy revision in an explicit tenant scope",
+   "summary_zh": "在指定租户范围内读取一个缓存策略版本",
    "auth": [
     "bearer"
    ],

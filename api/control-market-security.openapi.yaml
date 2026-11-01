@@ -10,6 +10,7 @@ paths:
   /v1/analytics/market-security:
     get:
       operationId: listMarketSecurityLogs
+      x-summary-zh: "列出会话租户经市场供给回传的攻击日志"
       summary: List relayed market supply attack log lines of the session tenant
       security: [{bearerSession: []}]
       x-required-permissions: [sites.read]
@@ -31,6 +32,7 @@ paths:
   /v1/admin/analytics/market-security:
     get:
       operationId: listAdminMarketSecurityLogs
+      x-summary-zh: "列出任意租户经市场供给回传的攻击日志"
       summary: List relayed market supply attack log lines of any tenant
       security: [{bearerSession: []}]
       x-required-permissions: [platform.admin]

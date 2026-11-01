@@ -11,6 +11,7 @@ paths:
   /v1/admin/site-groups:
     get:
       operationId: listAdminSiteGroups
+      x-summary-zh: "平台管理员列出所有租户的网站分组"
       summary: List all tenant site groups for a platform administrator
       description: >-
         Requires a live platform identity and both permissions under shared IAM rules.
@@ -35,6 +36,7 @@ paths:
   /v1/site-groups:
     get:
       operationId: listSiteGroups
+      x-summary-zh: "列出网站分组"
       summary: List site groups
       x-required-permissions: [sites.read]
       parameters:
@@ -55,6 +57,7 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
       operationId: createSiteGroup
+      x-summary-zh: "创建网站分组"
       summary: Create a site group
       x-required-permissions: [sites.manage]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
@@ -77,6 +80,7 @@ paths:
       - {$ref: '#/components/parameters/ScopeID'}
     get:
       operationId: getSiteGroup
+      x-summary-zh: "在有权的租户范围内读取一个在用网站分组"
       summary: Read one exact active site group in an authorized tenant scope
       x-required-permissions: [sites.read]
       responses:
@@ -91,6 +95,7 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
     patch:
       operationId: renameSiteGroup
+      x-summary-zh: "重命名网站分组"
       summary: Rename a site group
       x-required-permissions: [sites.manage]
       parameters:
@@ -112,6 +117,7 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
     delete:
       operationId: deleteSiteGroup
+      x-summary-zh: "删除未使用的网站分组"
       summary: Delete an unused site group
       x-required-permissions: [sites.manage]
       parameters:

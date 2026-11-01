@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/gateway-settings",
    "summary": "Trusted CDN ranges and extra node entry points published to every Gateway",
+   "summary_zh": "下发给每个网关的可信 CDN 网段与额外节点接入地址",
    "auth": [
     "bearer"
    ],
@@ -46,6 +47,7 @@
    "method": "PUT",
    "path": "/v1/admin/gateway-settings",
    "summary": "Replace both lists (Gateways pick them up within a minute; audited)",
+   "summary_zh": "替换这两份列表（网关一分钟内生效；记审计）",
    "auth": [
     "bearer"
    ],

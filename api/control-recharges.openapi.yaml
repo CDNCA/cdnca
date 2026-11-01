@@ -13,6 +13,7 @@ paths:
   /v1/recharges/policy:
     get:
       operationId: getRechargePolicy
+      x-summary-zh: "读取对当前租户生效的平台充值策略"
       summary: Read the effective platform recharge policy for an authenticated tenant
       x-required-permissions: [billing.account.read, billing.recharges.create]
       description: |
@@ -35,6 +36,7 @@ paths:
   /v1/recharges/orders:
     post:
       operationId: createRechargeOrder
+      x-summary-zh: "为当前租户创建充值订单"
       summary: Create an authenticated tenant recharge order
       x-required-permissions: [billing.account.read, billing.recharges.create]
       parameters:
@@ -57,6 +59,7 @@ paths:
         '409': {$ref: '#/components/responses/Error'}
     get:
       operationId: listOwnRechargeOrders
+      x-summary-zh: "列出当前租户用户的充值订单"
       summary: List recharge orders owned by the authenticated tenant user
       parameters:
         - $ref: '#/components/parameters/RequestID'
@@ -114,6 +117,7 @@ paths:
   /v1/admin/recharges/orders:
     get:
       operationId: listAdminRechargeOrders
+      x-summary-zh: "列出已对账的充值订单"
       summary: List reconciled recharge order heads
       parameters:
         - $ref: '#/components/parameters/RequestID'
@@ -138,6 +142,7 @@ paths:
   /v1/admin/recharges/orders/{order_id}/reconciliation:
     get:
       operationId: getRechargeReconciliation
+      x-summary-zh: "读取订单、回调、流水与统计的对应关系"
       summary: Read exact order, callback, ledger and statistics identities
       parameters:
         - $ref: '#/components/parameters/RequestID'
@@ -158,6 +163,7 @@ paths:
   /v1/admin/recharges/statistics:
     get:
       operationId: listRechargeStatistics
+      x-summary-zh: "列出不可变的结算统计"
       summary: List immutable settlement statistics facts
       parameters:
         - $ref: '#/components/parameters/RequestID'
@@ -181,6 +187,7 @@ paths:
   /v1/admin/recharges/statistics.csv:
     get:
       operationId: exportRechargeStatistics
+      x-summary-zh: "把同一份结算快照导出为 CSV"
       summary: Export the same bounded settlement snapshot as CSV
       parameters:
         - $ref: '#/components/parameters/RequestID'
@@ -282,27 +289,34 @@ components:
       readOnly: true
     RechargeChannel:
       type: string
-      enum: [alipay, wechat, transfer]
+      enum: [alipay, wechat, transfer, usdt]
     RechargeState:
       type: string
       enum: [pending, paid, partially_refunded, refunded, voided, failed, canceled, reconcile_required]
     RechargePolicy:
       type: object
       additionalProperties: false
-      required: [wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, default_recharge_method, recharge_restriction, available_methods]
+      required: [wechat_payment_enabled, alipay_payment_enabled, bank_transfer_enabled, usdt_payment_enabled, default_recharge_method, recharge_restriction, available_methods]
       properties:
         wechat_payment_enabled: {type: boolean}
         alipay_payment_enabled: {type: boolean}
         bank_transfer_enabled: {type: boolean}
-        default_recharge_method: {type: string, enum: [none, wechat, alipay, bank_transfer]}
+        usdt_payment_enabled: {type: boolean}
+        default_recharge_method: {type: string, enum: [none, wechat, alipay, bank_transfer, usdt]}
         recharge_restriction: {type: string, enum: [none, individual_verified, enterprise_verified]}
         available_methods:
           type: array
           uniqueItems: true
           description: >-
-            Methods the customer can use now: the switch is on and, for wechat/alipay, an enabled payment
-            channel is configured. Empty means recharge is not offered and the balance page shows no recharge block.
-          items: {type: string, enum: [wechat, alipay, bank_transfer]}
+            Methods the customer can use now: the switch is on and, for wechat/alipay/usdt, an enabled payment
+            channel is configured (usdt also needs the module.payment.crypto licence). Empty means recharge is not
+            offered and the balance page shows no recharge block.
+          items: {type: string, enum: [wechat, alipay, usdt, bank_transfer]}
+        usdt_networks:
+          type: array
+          uniqueItems: true
+          description: Networks of the enabled USDT channels, TRC20 (tron) first; present only while usdt is available.
+          items: {type: string, enum: [tron, bsc, polygon, ethereum]}
     CreateRechargeOrder:
       type: object
       additionalProperties: false

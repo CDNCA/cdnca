@@ -88,10 +88,10 @@ func TestReleaseArtifactDirectoryRejectsHiddenAndNonVersionedPaths(t *testing.T)
 			response.Body.String() == "edge-package" {
 			t.Fatalf("%s served uploaded content: status=%d", target, response.Code)
 		}
-		// http.ServeFile answers ".." request paths with 400 before the index
-		// fallback; either way nothing from the upload tree is served.
-		if response.Code != http.StatusBadRequest && response.Body.String() != "<html>shell</html>" {
-			t.Fatalf("%s: status=%d body=%q, want index fallback", target, response.Code, response.Body.String())
+		// Missing downloads are 404 (fix-www-audit W-03: no SPA shell under
+		// /downloads/); either way nothing from the upload tree is served.
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("%s: status=%d body=%q, want 404", target, response.Code, response.Body.String())
 		}
 	}
 }

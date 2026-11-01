@@ -359,7 +359,7 @@ type telemetryAccessEvent struct {
 	// logs (edgeconfig.TelemetryClientBrowsers / TelemetryClientOSes).
 	ClientBrowser string `json:"client_browser,omitempty"`
 	ClientOS      string `json:"client_os,omitempty"`
-	// UpstreamAddr (fix-upstreamaddr): the origin address(es) the node sent
+	// UpstreamAddr: the origin address(es) the node sent
 	// the request to, at most 64 bytes; upstream_result stays the diagnostic code.
 	UpstreamAddr string `json:"upstream_addr,omitempty"`
 }

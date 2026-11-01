@@ -16,7 +16,7 @@ import (
 // publication records per site (migration 295) is the site's, for a
 // subscribed site, a site recovering from package_expired in this
 // publication; a site without a subscription is not published at all
-// (fix-nopkgpub), so it has no binding.
+//, so it has no binding.
 func TestSiteRuntimeV2TelemetrySubscriptions(t *testing.T) {
 	fixture := newL4V2ContractFixture(t)
 	subscribed := fixture.createSite(t, "telemetry-subscribed.example.com", 18081, false).Site

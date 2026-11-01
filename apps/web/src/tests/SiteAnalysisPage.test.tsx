@@ -528,7 +528,7 @@ describe('SiteAnalysisPage', () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       if (isSummary(input)) return Promise.resolve(rankResponse(input))
       rankReads += 1
-      // The page retries a network failure once by itself (fix-ipdisplay2).
+      // The page retries a network failure once by itself.
       if (rankReads <= 2) return Promise.reject(new Error('private ClickHouse host'))
       retryInput = input
       return new Promise((resolve) => { resolveRetry = resolve })
@@ -633,7 +633,7 @@ describe('SiteAnalysisPage', () => {
     expect(Date.parse(window.from!) % 60_000).toBe(0)
     expect(screen.getByText('独立 IP：2')).toBeInTheDocument()
   })
-  it('ends the quick ranges at the current minute, not the previous whole hour (fix-logfields)', async () => {
+  it('ends the quick ranges at the current minute, not the previous whole hour', async () => {
     // 73 实机 10-27：16:56 打开“近 30 分钟”，页面请求的是 15:30–16:00，近 56 分钟的请求全部落在窗口外。
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-26T16:56:42.123Z') })
     try {
@@ -647,7 +647,7 @@ describe('SiteAnalysisPage', () => {
       const user = userEvent.setup()
       renderWithProviders(<SiteAnalysisPage />)
       await waitFor(() => expect(windows.some(({ path }) => path.includes('/top/'))).toBe(true))
-      // 初始“今天”（fix-rangecompact）：[当天 00:00, 16:57)，含刚刚这一分钟
+      // 初始“今天”：[当天 00:00, 16:57)，含刚刚这一分钟
       const midnight = new Date('2026-10-26T16:56:00.000Z')
       midnight.setHours(0, 0, 0, 0)
       expect(windows.find(({ path }) => path.includes('/top/'))).toMatchObject({ from: midnight.toISOString(), to: '2026-10-26T16:57:00.000Z' })

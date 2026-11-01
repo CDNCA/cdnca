@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/admin-access-policy",
    "summary": "Read the platform administration access allowlist",
+   "summary_zh": "读取平台管理后台访问白名单",
    "auth": [
     "bearer"
    ],
@@ -60,6 +61,7 @@
    "method": "PUT",
    "path": "/v1/admin/admin-access-policy",
    "summary": "Save the platform administration access allowlist",
+   "summary_zh": "保存平台管理后台访问白名单",
    "auth": [
     "bearer"
    ],

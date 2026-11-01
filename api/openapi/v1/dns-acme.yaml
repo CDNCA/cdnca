@@ -21,6 +21,7 @@ paths:
   /v1/dns/providers:
     get:
       operationId: listDNSProviders
+      x-summary-zh: "列出 DNS 服务商配置"
       summary: List DNS provider configurations
       description: >-
         A tenant scope lists only the accounts it entered (managed_by=tenant);
@@ -44,6 +45,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
       operationId: createDNSProvider
+      x-summary-zh: "加密保存 DNS 服务商配置"
       summary: Store an encrypted DNS provider configuration
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -117,6 +119,7 @@ paths:
       - $ref: '#/components/parameters/ResourceID'
     patch:
       operationId: updateDNSProvider
+      x-summary-zh: "修改服务商元数据或替换加密凭据"
       summary: Update provider metadata or replace encrypted credentials
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -139,6 +142,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     delete:
       operationId: deleteDNSProvider
+      x-summary-zh: "删除未被引用的 DNS 服务商配置"
       summary: Delete an unreferenced DNS provider configuration
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -490,6 +494,7 @@ paths:
   /v1/dns/zones:
     get:
       operationId: listDNSZones
+      x-summary-zh: "列出 DNS 区域"
       summary: List DNS zones
       responses:
         '200':
@@ -501,6 +506,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
       operationId: createDNSZone
+      x-summary-zh: "创建 DNS 区域草稿"
       summary: Create a draft DNS zone
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -523,6 +529,7 @@ paths:
   /v1/dns/zones/{id}:
     delete:
       operationId: deleteDNSZone
+      x-summary-zh: "删除未被引用的 DNS 区域草稿"
       summary: Delete an unreferenced draft DNS zone
       parameters:
         - $ref: '#/components/parameters/ResourceID'
@@ -538,6 +545,7 @@ paths:
   /v1/dns/records:
     get:
       operationId: listDNSRecords
+      x-summary-zh: "列出某个区域的结构化记录"
       summary: List structured records in a zone
       parameters:
         - name: zone_id
@@ -555,6 +563,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
       operationId: createDNSRecord
+      x-summary-zh: "创建已校验的 DNS 记录草稿"
       summary: Create a validated draft DNS record
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -579,6 +588,7 @@ paths:
       - $ref: '#/components/parameters/ResourceID'
     patch:
       operationId: updateDNSRecord
+      x-summary-zh: "修改已校验的 DNS 记录草稿"
       summary: Update a validated draft DNS record
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -600,6 +610,7 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
     delete:
       operationId: deleteDNSRecord
+      x-summary-zh: "删除 DNS 记录草稿"
       summary: Delete a draft DNS record
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -871,6 +882,7 @@ paths:
   /v1/certificate-defaults:
     get:
       operationId: getCertificateDefaults
+      x-summary-zh: "读取用户的证书申请默认设置"
       summary: Read a user's certificate request defaults
       description: >-
         The default certificate type, DNS provider and CA prefilled into a new
@@ -900,6 +912,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     patch:
       operationId: updateCertificateDefaults
+      x-summary-zh: "保存用户的证书申请默认设置"
       summary: Save a user's certificate request defaults
       description: >-
         Compare-and-set on expected_revision (version_conflict when stale).
@@ -937,6 +950,7 @@ paths:
   /v1/certificate-issuers:
     get:
       operationId: listCertificateIssuers
+      x-summary-zh: "列出新申请证书可选的 CA"
       summary: List the CAs a new certificate request may name
       description: >-
         lets_encrypt and each EAB CA (zerossl, google_trust) whose platform
@@ -959,6 +973,7 @@ paths:
   /v1/certificate-orders:
     get:
       operationId: listCertificateOrders
+      x-summary-zh: "列出证书申请单"
       summary: List certificate orders
       x-required-permissions: [certificates.read]
       responses:
@@ -971,6 +986,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
       operationId: createCertificateOrder
+      x-summary-zh: "提交一张待处理的证书申请单"
       summary: Queue a pending certificate order
       x-required-permissions: [certificates.manage]
       x-audit-action: certificate.order.create

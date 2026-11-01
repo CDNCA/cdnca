@@ -1070,7 +1070,7 @@ func (store *Store) ensurePlatformDNS(ctx context.Context, scopeID uuid.UUID) er
 }
 
 // usableZone is a zone allocation may write into: not failed, on an enabled
-// DNS provider. Any provider of the scope qualifies (fix-cnamerand).
+// DNS provider. Any provider of the scope qualifies.
 const usableZone = `SELECT zone.provider_id,zone.id,zone.name,zone.revision
 	FROM dns_zones AS zone
 	JOIN dns_providers AS provider ON provider.scope_id=zone.scope_id AND provider.id=zone.provider_id

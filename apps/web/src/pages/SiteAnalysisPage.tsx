@@ -39,6 +39,7 @@ import {
   type JA4BlockWriteMetadata,
 } from '../api/ja4Blocks'
 import { useSessionStore } from '../auth/session'
+import { useMfaActive } from '../hooks/useMfaActive'
 import { formatBytes, formatDateTime, formatNumber } from '../i18n/formatters'
 import '../i18n/ipIntel'
 import { rankItemLabel } from './analyticsRankLabels'
@@ -269,6 +270,8 @@ export default function SiteAnalysisPage() {
   const [pageCursors, setPageCursors] = useState<Array<string | undefined>>([undefined])
   const [queryGeneration, setQueryGeneration] = useState(0)
   const [ja4Target, setJA4Target] = useState<JA4Target | null>(null)
+  // 未启用 MFA：不要二次验证凭据；只在打开封禁表单后才读 MFA 状态。
+  const requireMfaCode = useMfaActive(ja4Target !== null) !== false
   const [ja4Duration, setJA4Duration] = useState<number | null>(3600)
   const [ja4Reason, setJA4Reason] = useState('manual_security_review')
   const [ja4StepUp, setJA4StepUp] = useState('')
@@ -622,7 +625,7 @@ export default function SiteAnalysisPage() {
       setJA4FormError('validation.reason')
       return
     }
-    if (!ja4StepUp) {
+    if (requireMfaCode && !ja4StepUp) {
       setJA4FormError('validation.stepUp')
       return
     }
@@ -641,7 +644,7 @@ export default function SiteAnalysisPage() {
       audience,
       target: ja4Target,
       input,
-      metadata: Object.freeze(createJA4BlockWriteMetadata(ja4StepUp)),
+      metadata: Object.freeze(createJA4BlockWriteMetadata(requireMfaCode ? ja4StepUp : '')),
     })
     setJA4FormError(null)
     setJA4StepUp('')
@@ -955,9 +958,9 @@ export default function SiteAnalysisPage() {
                 <Form.Item label={tJA4('fields.reason')}>
                   <Input aria-label={tJA4('fields.reason')} value={ja4Reason} onChange={(event) => setJA4Reason(event.target.value)} />
                 </Form.Item>
-                <Form.Item label={tJA4('fields.stepUp')}>
+                {requireMfaCode ? <Form.Item label={tJA4('fields.stepUp')}>
                   <Input.Password aria-label={tJA4('fields.stepUp')} value={ja4StepUp} onChange={(event) => setJA4StepUp(event.target.value)} />
-                </Form.Item>
+                </Form.Item> : null}
                 {ja4FormError ? <Alert type="error" showIcon message={tJA4(ja4FormError)} /> : null}
               </Form>
             ) : null}

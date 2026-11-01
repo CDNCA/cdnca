@@ -19,6 +19,7 @@ paths:
   /v1/admin/analytics/logs/access:
     get:
       operationId: listPlatformAccessLogs
+      x-summary-zh: "列出指定租户的访问日志"
       summary: List access logs for one explicitly selected tenant
       description: >-
         Requires a platform-scoped identity. tenant_id is mandatory; this API
@@ -70,6 +71,7 @@ paths:
   /v1/analytics/logs/access:
     get:
       operationId: listTenantAccessLogs
+      x-summary-zh: "列出当前租户的访问日志"
       summary: List access logs for the authenticated tenant
       description: >-
         Scope comes only from the authenticated tenant identity. Supplying
@@ -119,6 +121,7 @@ paths:
   /v1/admin/analytics/logs/access/exports:
     get:
       operationId: listPlatformAccessLogExports
+      x-summary-zh: "列出调用账号为目标租户创建的访问日志导出"
       summary: List durable access-log exports owned by the calling account for the target tenant
       description: >-
         Without query filters, lists up to 50 exports owned by the calling account
@@ -168,6 +171,7 @@ paths:
         '504': {$ref: '#/components/responses/GatewayTimeout'}
     post:
       operationId: createPlatformAccessLogExport
+      x-summary-zh: "为目标租户创建绑定快照的访问日志导出"
       summary: Create a snapshot-bound access-log export for one target tenant
       description: >-
         Idempotent per account (user + access scope) and normalized query scope,
@@ -196,6 +200,7 @@ paths:
   /v1/analytics/logs/access/exports:
     get:
       operationId: listTenantAccessLogExports
+      x-summary-zh: "列出调用账号创建的访问日志导出"
       summary: List durable access-log exports owned by the calling tenant account
       description: >-
         Without query filters, lists up to 50 exports owned by the calling account
@@ -244,6 +249,7 @@ paths:
         '504': {$ref: '#/components/responses/GatewayTimeout'}
     post:
       operationId: createTenantAccessLogExport
+      x-summary-zh: "为当前租户创建绑定快照的访问日志导出"
       summary: Create a snapshot-bound access-log export for the current tenant
       description: >-
         Idempotent per account (user + access scope) and normalized query scope,
@@ -270,6 +276,7 @@ paths:
   /v1/admin/analytics/logs/access/exports/{export_id}:
     get:
       operationId: getPlatformAccessLogExport
+      x-summary-zh: "读取一次访问日志导出（平台）"
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
       parameters: [{$ref: '#/components/parameters/RequiredTenantID'}, {$ref: '#/components/parameters/ExportID'}]
@@ -284,6 +291,7 @@ paths:
   /v1/analytics/logs/access/exports/{export_id}:
     get:
       operationId: getTenantAccessLogExport
+      x-summary-zh: "读取一次访问日志导出"
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
       parameters: [{$ref: '#/components/parameters/ExportID'}]
@@ -298,6 +306,7 @@ paths:
   /v1/admin/analytics/logs/access/exports/{export_id}/download-grants:
     post:
       operationId: grantPlatformAccessLogExportDownload
+      x-summary-zh: "签发访问日志导出的下载授权（平台）"
       description: Returns a short-lived one-time token bound to the current platform session, target tenant and export. Any session of the owning account may request a grant; a token from another session is rejected. Only its SHA-256 digest is stored.
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -313,6 +322,7 @@ paths:
   /v1/analytics/logs/access/exports/{export_id}/download-grants:
     post:
       operationId: grantTenantAccessLogExportDownload
+      x-summary-zh: "签发访问日志导出的下载授权"
       description: Returns a short-lived one-time token bound to the current tenant session and export. Any session of the owning account may request a grant; a token from another session is rejected. API keys are rejected.
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -328,6 +338,7 @@ paths:
   /v1/admin/analytics/logs/access/exports/{export_id}/download:
     get:
       operationId: downloadPlatformAccessLogExport
+      x-summary-zh: "下载访问日志导出文件（平台）"
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
       parameters: [{$ref: '#/components/parameters/RequiredTenantID'}, {$ref: '#/components/parameters/ExportID'}, {$ref: '#/components/parameters/ExportDownloadToken'}]
@@ -342,6 +353,7 @@ paths:
   /v1/analytics/logs/access/exports/{export_id}/download:
     get:
       operationId: downloadTenantAccessLogExport
+      x-summary-zh: "下载访问日志导出文件"
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
       parameters: [{$ref: '#/components/parameters/ExportID'}, {$ref: '#/components/parameters/ExportDownloadToken'}]
@@ -356,6 +368,7 @@ paths:
   /v1/admin/analytics/logs/block-events:
     get:
       operationId: listPlatformBlockEvents
+      x-summary-zh: "列出指定租户的安全拦截事件"
       summary: List security block events for one explicitly selected tenant
       description: >-
         Requires a platform-scoped identity and an explicit tenant_id. Returns
@@ -449,6 +462,7 @@ paths:
   /v1/analytics/logs/block-events:
     get:
       operationId: listTenantBlockEvents
+      x-summary-zh: "列出当前租户的安全拦截事件"
       summary: List security block events for the authenticated tenant
       description: >-
         Scope comes only from the authenticated tenant identity. Returns the
@@ -491,6 +505,7 @@ paths:
   /v1/admin/analytics/logs/blocks/current:
     get:
       operationId: listPlatformCurrentBlocks
+      x-summary-zh: "列出全平台当前生效的 ACL 封禁"
       summary: List current ACL blocks across the customer control plane
       description: >-
         Returns only CIDRs present in the active site ACL policy. A newer
@@ -515,6 +530,7 @@ paths:
   /v1/analytics/logs/blocks/current:
     get:
       operationId: listTenantCurrentBlocks
+      x-summary-zh: "列出当前租户生效中的 ACL 封禁"
       summary: List current ACL blocks for the authenticated tenant
       description: >-
         Scope comes only from the authenticated tenant identity. Supplying a
@@ -536,6 +552,7 @@ paths:
   /v1/admin/analytics/logs/blocks/history:
     get:
       operationId: listPlatformBlockHistory
+      x-summary-zh: "列出全平台带审计的解封历史"
       summary: List audited unlock history across the customer control plane
       description: >-
         Returns append-only cidr_unlock activation audit facts and their latest
@@ -559,6 +576,7 @@ paths:
   /v1/analytics/logs/blocks/history:
     get:
       operationId: listTenantBlockHistory
+      x-summary-zh: "列出当前租户带审计的解封历史"
       summary: List audited unlock history for the authenticated tenant
       description: >-
         Scope comes only from the authenticated tenant identity. Raw security
@@ -580,6 +598,7 @@ paths:
   /v1/admin/analytics/logs/blocks/current-count:
     get:
       operationId: countPlatformCurrentBlocksBySite
+      x-summary-zh: "按网站统计全平台当前生效的 ACL 封禁数"
       summary: Count current ACL blocks by site across the customer control plane
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -595,6 +614,7 @@ paths:
   /v1/analytics/logs/blocks/current-count:
     get:
       operationId: countTenantCurrentBlocksBySite
+      x-summary-zh: "按网站统计当前租户生效中的 ACL 封禁数"
       summary: Count current ACL blocks by site for the authenticated tenant
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-permissions: [sites.read]
@@ -608,6 +628,7 @@ paths:
   /v1/admin/analytics/logs/blocks/current/{block_id}/unlock:
     post:
       operationId: unlockPlatformCurrentBlock
+      x-summary-zh: "为指定租户解除一条当前 ACL 封禁"
       summary: Unlock one current ACL block for an explicitly selected tenant
       description: >-
         Removes exactly one CIDR from a new ACL policy revision, then starts a
@@ -638,6 +659,7 @@ paths:
   /v1/analytics/logs/blocks/current/{block_id}/unlock:
     post:
       operationId: unlockTenantCurrentBlock
+      x-summary-zh: "为当前租户解除一条 ACL 封禁"
       summary: Unlock one current ACL block for the authenticated tenant
       description: >-
         Uses only the authenticated tenant scope and the same policy revision,
@@ -664,6 +686,7 @@ paths:
   /v1/admin/analytics/logs/cc-coordination:
     get:
       operationId: listPlatformCCCoordinationStates
+      x-summary-zh: "列出所有租户的跨节点 CC 联动状态，可按租户或网站筛选"
       summary: List cross-node CC coordination states of every tenant, optionally narrowed to one tenant or site
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -681,6 +704,7 @@ paths:
   /v1/analytics/logs/cc-coordination:
     get:
       operationId: listTenantCCCoordinationStates
+      x-summary-zh: "列出当前租户的跨节点 CC 联动状态，可按网站筛选"
       summary: List cross-node CC coordination states of the authenticated tenant, optionally narrowed to one site
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-permissions: [sites.read]
@@ -697,6 +721,7 @@ paths:
   /v1/admin/analytics/logs/cc-coordination/{state_id}/release:
     post:
       operationId: releasePlatformCCCoordinationState
+      x-summary-zh: "确认误判后解除一条跨节点 CC 状态"
       summary: Release one exact cross-node CC state after a false-positive decision
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -720,6 +745,7 @@ paths:
   /v1/analytics/logs/cc-coordination/{state_id}/release:
     post:
       operationId: releaseTenantCCCoordinationState
+      x-summary-zh: "为当前租户解除一条跨节点 CC 状态"
       summary: Release one exact cross-node CC state for the authenticated tenant
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       x-required-permissions: [security_policies.manage]

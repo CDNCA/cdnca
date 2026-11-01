@@ -778,7 +778,9 @@ func (s *Service) verifyStepUp(
 	if !required {
 		return StepUpEvidence{}, nil
 	}
-	if !validText(proof.Token, 1, 512) {
+	// Empty token: the MFA service waives the step-up for an operator without
+	// active MFA and refuses it otherwise.
+	if proof.Token != "" && !validText(proof.Token, 1, 512) {
 		return StepUpEvidence{}, ErrStepUpRequired
 	}
 	check.Actor = actor
@@ -794,7 +796,8 @@ func (s *Service) verifyStepUp(
 	now := storeTime(s.now())
 	verifiedAt := storeTime(evidence.VerifiedAt)
 	if evidence.ProofID == uuid.Nil ||
-		(evidence.Method != "totp" && evidence.Method != "recovery_code" && evidence.Method != "webauthn") ||
+		(evidence.Method != "totp" && evidence.Method != "recovery_code" && evidence.Method != "webauthn" &&
+			evidence.Method != "none") ||
 		verifiedAt.After(now) || verifiedAt.Before(now.Add(-StepUpMaxAge)) {
 		return StepUpEvidence{}, ErrStepUpRequired
 	}

@@ -49,7 +49,7 @@ func TestScanForwardUsesUnknownWithoutImmutablePublicationBinding(t *testing.T) 
 		nil, false, ACLActionAllow, nil, AdminStatusNormal, nil, nil, nil, nil, nil,
 		BalanceWayRoundRobin, true, int64(1), now, now, "owner", nil,
 		uuid.New(), int64(1), "create", "enabled", int64(1), int64(41), runtimeJSON, now,
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, "", nil, "", nil, "", "pending", nil,
 	})
 	if err != nil {
@@ -78,7 +78,7 @@ func TestScanForwardProjectsExactAutomaticPublicationState(t *testing.T) {
 		nil, false, ACLActionAllow, nil, AdminStatusNormal, nil, nil, nil, nil, nil,
 		BalanceWayRoundRobin, true, int64(1), now, now, "owner", nil,
 		uuid.New(), int64(1), "create", "enabled", int64(1), int64(41), runtimeJSON, now,
-		&requestID, &internalState, &publicationID, &rolloutID, nil, &expiresAt, nil,
+		&requestID, &internalState, &publicationID, &rolloutID, nil, nil, &expiresAt, nil,
 		nil, "", nil, "", nil, "", "pending", nil,
 	})
 	if err != nil {
@@ -204,7 +204,7 @@ func TestRuntimeSpecCanonicalJSONDigestAndReplayRetention(t *testing.T) {
 		nil, false, ACLActionAllow, nil, AdminStatusNormal, nil, nil, nil, nil, nil,
 		BalanceWayIPHash, true, int64(1), now, now, "owner", nil,
 		uuid.New(), int64(1), "create", "enabled", int64(1), int64(41), []byte(want), now,
-		nil, nil, nil, nil, nil, nil, nil,
+		nil, nil, nil, nil, nil, nil, nil, nil,
 		nil, "", nil, "", nil, "", "pending", nil,
 	})
 	if err != nil {
@@ -299,4 +299,64 @@ func TestListWhereUpstreamFilterMatchesEveryPoolOrigin(t *testing.T) {
 
 func uuidPointer(value uuid.UUID) *uuid.UUID {
 	return &value
+}
+
+// A3-04: only a failed publication names its terminal code.
+func TestPublicationFailureCode(t *testing.T) {
+	code := "node_artifacts_syncing"
+	empty := ""
+	for _, test := range []struct {
+		state    string
+		terminal *string
+		want     string
+	}{
+		{PublicationStateFailed, &code, code},
+		{PublicationStateFailed, nil, ""},
+		{PublicationStateFailed, &empty, ""},
+		{PublicationStateSucceeded, &code, ""},
+		{PublicationStateSuperseded, &code, ""},
+		{PublicationStateRetrying, nil, ""},
+	} {
+		got := publicationFailureCode(test.state, test.terminal)
+		if (got == nil) != (test.want == "") || (got != nil && *got != test.want) {
+			t.Errorf("publicationFailureCode(%s, %v) = %v want %q", test.state, test.terminal, got, test.want)
+		}
+	}
+	intent := PublishIntent{State: PublicationStateFailed, FailureCode: &code}
+	markPublicationUnknown(&intent)
+	if intent.FailureCode != nil {
+		t.Fatal("markPublicationUnknown kept the failure code")
+	}
+}
+
+// A3-04: a failed automatic request's terminal code (scanned after
+// rollout_id) is the intent's failure_code.
+func TestScanForwardProjectsPublicationFailureCode(t *testing.T) {
+	now := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	runtimeJSON, err := json.Marshal(RuntimeSpec{SchemaVersion: RuntimeSchemaV2, Listener: RuntimeListener{Protocol: ProtocolTCP, Address: "*", Port: 18080}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	requestID := uuid.New()
+	internalState, terminal := "failed", "node_artifacts_syncing"
+	item, err := scanForward(valuesScanner{
+		uuid.New(), "1", uuid.New(), nil, nil, nil, nil, uuid.New(), uuid.New(), "edge stream", "", ProtocolTCP, "*", uint16(18080),
+		"192.0.2.10", "", uint16(8080), []byte(`{}`), []byte(`{}`), 1000, 30000, 100, false, false, false, []string(nil), 0, 0, 0, false, false, uint16(0), false, nil,
+		nil, false, ACLActionAllow, nil, AdminStatusNormal, nil, nil, nil, nil, nil,
+		BalanceWayRoundRobin, true, int64(1), now, now, "owner", nil,
+		uuid.New(), int64(1), "create", "enabled", int64(1), int64(41), runtimeJSON, now,
+		&requestID, &internalState, nil, nil, &terminal, nil, nil, nil,
+		nil, "", nil, "", nil, "", "failed", nil,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if item.PublishIntent.State != PublicationStateFailed || item.PublishIntent.FailureCode == nil ||
+		*item.PublishIntent.FailureCode != terminal || item.PublishIntent.PublicationID != nil {
+		t.Fatalf("failed publication projection=%+v", item.PublishIntent)
+	}
+	encoded, err := json.Marshal(item.PublishIntent)
+	if err != nil || !strings.Contains(string(encoded), `"failure_code":"node_artifacts_syncing"`) {
+		t.Fatalf("publish intent JSON=%s err=%v", encoded, err)
+	}
 }

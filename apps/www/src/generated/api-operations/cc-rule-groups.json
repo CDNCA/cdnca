@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/cc-rule-groups",
    "summary": "",
+   "summary_zh": "列出 CC 规则组（供 OpenResty 安全配置选择）",
    "auth": [
     "bearer"
    ],
@@ -33,6 +34,7 @@
    "method": "GET",
    "path": "/v1/cc-rule-groups/summary",
    "summary": "CC rule group pill counts over every group",
+   "summary_zh": "全部 CC 规则组的分类计数",
    "auth": [
     "bearer"
    ],

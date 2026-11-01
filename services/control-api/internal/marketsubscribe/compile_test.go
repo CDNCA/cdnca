@@ -63,7 +63,7 @@ func TestCompileSiteHTTPSOffDropsHTTPSPortsAndHTTP3(t *testing.T) {
 }
 
 // The site's own settings are compiled into the revision instead of
-// blocking it (fix-mktsiteconf); only a disabled site still blocks.
+// blocking it; only a disabled site still blocks.
 func TestCompileSiteCarriesSiteOptions(t *testing.T) {
 	s := baseSite()
 	off := false

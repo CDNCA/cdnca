@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/tenant/members",
    "summary": "List the members of the caller's tenant scope",
+   "summary_zh": "列出调用者租户范围的成员",
    "auth": [
     "bearer"
    ],

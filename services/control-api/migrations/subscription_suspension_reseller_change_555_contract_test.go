@@ -8,7 +8,7 @@ import (
 )
 
 // Migration 555 (bb03, ADR 0019 §5) is a placeholder number on top of 554
-// (fix-cnamerand): the merge renumbers it and re-pins its guard.
+//: the merge renumbers it and re-pins its guard.
 // Everything that changes with the number is here.
 const (
 	migration555Version         = 555

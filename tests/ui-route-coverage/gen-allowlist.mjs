@@ -103,7 +103,7 @@ const RULES = [
   ['table4', /^web \/finance\/billing-admin$/, '平台账务管理页无菜单项', '待派 web 菜单'],
   ['table4', /./, '待分诊', '待分诊'],
   // ---- 表⑤ ----
-  ['table5', /mock_client web createMockClient/, '自动防御 8 个页签全部是内存假数据（仅节点下发/签名两项接真接口），用户看到的统计、判定、拉黑、误伤报表、平台设置均为假', '待派 ad-web-http（AD-11 后端已在集成头）'],
+  ['table5', /mock_client web createMockClient/, '自动防御 8 个页签全部是内存假数据（仅节点下发/签名两项接真接口），用户看到的统计、判定、拉黑、误伤报表、平台设置均为假', '待实现'],
   ['table5', /not_implemented operator-console/, '运营后台插件市场该操作前端硬编码 501，不发请求；对应代理行已 forwarded（routes.go:130-139），按钮点击必失败', 'ml-29 / 待派 operator 市场'],
   ['table5', /disabled_placeholder operator-console mp\.(lockNamespace|rescan|revokeLicense)/, '运营后台插件市场按钮常驻禁用（"后端未提供"），但代理行已 forwarded（routes.go:135-139），应接真接口', 'ml-29 / 待派 operator 市场'],
   ['table5', /./, '待分诊', '待分诊'],

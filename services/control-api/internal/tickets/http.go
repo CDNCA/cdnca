@@ -219,7 +219,7 @@ func (handler *Handler) create(response http.ResponseWriter, request *http.Reque
 	writeResult(response, http.StatusCreated, detail, err)
 }
 
-// staffCreate (fix-ticket2): staff open a ticket for a chosen user.
+// staffCreate: staff open a ticket for a chosen user.
 func (handler *Handler) staffCreate(response http.ResponseWriter, request *http.Request, call call) {
 	key, ok := idempotencyKey(response, request)
 	if !ok {

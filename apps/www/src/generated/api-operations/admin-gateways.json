@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/gateways",
    "summary": "List standalone Agent Gateways (platform session, system.gateway.manage)",
+   "summary_zh": "列出独立部署的 Agent 网关（平台会话，需 system.gateway.manage）",
    "auth": [
     "bearer"
    ],
@@ -50,6 +51,7 @@
    "method": "POST",
    "path": "/v1/admin/gateways",
    "summary": "Add a Gateway and issue its one-time binding token (1 hour, single use, only the SHA-256 is stored)",
+   "summary_zh": "添加网关并签发一次性绑定令牌（1 小时内单次有效，只保存 SHA-256）",
    "auth": [
     "bearer"
    ],
@@ -119,6 +121,7 @@
    "method": "DELETE",
    "path": "/v1/admin/gateways/{id}",
    "summary": "Delete a Gateway; every certificate it was issued is revoked",
+   "summary_zh": "删除网关，并吊销签发给它的全部证书",
    "auth": [
     "bearer"
    ],
@@ -146,6 +149,7 @@
    "method": "PUT",
    "path": "/v1/admin/gateways/{id}/allowed-ips",
    "summary": "Replace the addresses a bound Gateway may connect from (IPv4/IPv6, 1–16, audited)",
+   "summary_zh": "替换已绑定网关允许连接的来源地址（IPv4/IPv6，1–16 个，记审计）",
    "auth": [
     "bearer"
    ],
@@ -201,6 +205,7 @@
    "method": "POST",
    "path": "/v1/admin/gateways/{id}/binding-token",
    "summary": "Replace the binding token of a pending Gateway (the previous token stops working)",
+   "summary_zh": "为待绑定网关更换绑定令牌（旧令牌立即失效）",
    "auth": [
     "bearer"
    ],
@@ -249,6 +254,7 @@
    "method": "POST",
    "path": "/v1/admin/gateways/{id}/disable",
    "summary": "Disable a bound Gateway; its ControlInternal calls are refused",
+   "summary_zh": "停用已绑定网关，其 ControlInternal 调用将被拒绝",
    "auth": [
     "bearer"
    ],
@@ -280,6 +286,7 @@
    "method": "POST",
    "path": "/v1/admin/gateways/{id}/enable",
    "summary": "Re-enable a disabled Gateway",
+   "summary_zh": "重新启用已停用的网关",
    "auth": [
     "bearer"
    ],

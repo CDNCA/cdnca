@@ -1263,6 +1263,8 @@ PROGRESS_WAIT_NEXT=0
 PROGRESS_HEARTBEAT=''
 # 安装器知道版本后设置（失败行与安装日志带上版本）。
 PROGRESS_VERSION=''
+# 预期的非零结束（不是失败）时由安装器设置，见 progress_on_exit。
+PROGRESS_EXIT_NOTICE=''
 
 progress_clock() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
 
@@ -1370,10 +1372,17 @@ progress_done() {
 
 # 由安装器的 EXIT 清理调用：中途失败时标出失败阶段、版本与日志位置。原因与下一步
 # 就是上方安装器自己的 error 行，这里不另编文案。始终返回 0。
+# PROGRESS_EXIT_NOTICE 非空：本次非零退出是预期结果（如节点待主控初始化），
+# 用提示色显示该文案，不标成失败。
 progress_on_exit() {
   local status=$1 name
   progress_stop_heartbeat
-  if [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ]; then
+  if [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ] && [ -n "$PROGRESS_EXIT_NOTICE" ]; then
+    IFS='|' read -r name _ <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
+    name=$(progress_name "$name")
+    progress_line "! [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} ${PROGRESS_EXIT_NOTICE}${PROGRESS_LOG:+$(msg "（安装日志：${PROGRESS_LOG}）" " (install log: ${PROGRESS_LOG})")}" 33
+    PROGRESS_CURRENT=0
+  elif [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ]; then
     IFS='|' read -r name _ <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
     name=$(progress_name "$name")
     progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" "failed (${PROGRESS_VERSION:+version ${PROGRESS_VERSION}, }$(progress_clock $((SECONDS - PROGRESS_STAGE_START))) in this step, exit ${status}). The cause and fix are in the error line above${PROGRESS_LOG:+; full output: ${PROGRESS_LOG}}")" 31
@@ -3414,10 +3423,76 @@ node_next_steps() {
   printf '%s\n  1) %s\n  2) %s\n  3) %s\n  4) %s\n' "$(msg '下一步：' 'Next steps:')" \
     "$(msg '主控「节点列表 → 待初始化」找到本机，点「初始化」（第一次装主控时还需先建「区域」）' 'console Nodes -> Pending initialization: find this host and click Initialize (on a new console create a Region first)')" \
     "$(msg '把本机加入线路组（「线路组」→ 新建或编辑，端点选本机 80 端口），站点才会解析到本机' 'add this host to a line group (Line groups -> new or edit, endpoint this host port 80) so sites resolve to it')" \
-    "$(msg '原安装命令末尾加 --resume 重新自检（本机已有身份，无需重新取注册密钥；直接 bash <安装器> ... --resume </dev/null 也可）' 'rerun the original install command with --resume (this host already has its identity, no need to fetch the registration key again; bash <installer> ... --resume </dev/null works too)')" \
-    "$(msg "全部完成后核对：${INSTALLER_COPY} check（应全部 OK）" "when done verify: ${INSTALLER_COPY} check (every item must be OK)")" >&2
+    "$(msg '（可选，只用于复核）初始化后在原安装命令末尾加 --resume 重新自检（本机已有身份，无需重新取注册密钥；直接 bash <安装器> ... --resume </dev/null 也可）；不执行也不影响节点开放' '(optional, re-check only) after initializing rerun the original install command with --resume (this host already has its identity, no need to fetch the registration key again; bash <installer> ... --resume </dev/null works too); the node opens without it')" \
+    "$(msg "复核通过后可随时核对：${INSTALLER_COPY} check（应全部 OK）" "after the re-check verify any time: ${INSTALLER_COPY} check (every item must be OK)")" >&2
 }
-# Edge kernel baseline. Each entry is
+# Set by register_node from this run's registration response (node.admin_state).
+# A node registered as pending gets no ticket before it is initialized (tickets
+# go to active nodes only), so waiting would always time out (main session
+# 10-26 07:2x): report installed_pending_initialization at once instead.
+# A definite current state in the state file (resume_failed, banned, ticket
+# expired) wins over that registration snapshot (INSTALL-P2-02): the node was
+# initialized meanwhile and the real cause is the current one.
+REGISTERED_ADMIN_STATE=''
+wait_first_ticket() {
+  local status='' state cause deadline=$((SECONDS + FIRST_TICKET_WAIT_SECONDS))
+  local resume
+  resume="$(msg 'Agent 服务保持运行，凭据送达后节点自动开放（无需重装）；处理后在原安装命令末尾加 --resume 重新自检，自检通过才算安装完成' 'the Agent service keeps running and the node opens once the credential arrives (no reinstall needed); afterwards append --resume to the original install command to rerun the self-check; the installation is complete only when it passes')"
+  if [ "$REGISTERED_ADMIN_STATE" = pending ]; then
+    status=$(installation_ban_status)
+    case "$status" in
+      # Already decided: report it below without waiting.
+      serving|resume_failed|banned|service_ticket_expired) deadline=$SECONDS ;;
+      *)
+      # Expected outcome, not a failure: shown in the notice
+      # color instead of the red failed-stage line; the exit code stays
+      # FIRST_TICKET_EXIT_CODE because SSH install jobs (nodesshinstall),
+      # fresh-install e2e and the user docs read it with the install-state line.
+      INSTALL_KEEP=true
+      PROGRESS_EXIT_NOTICE="$(msg "安装完成，待主控初始化（退出码 ${FIRST_TICKET_EXIT_CODE} 表示此状态，不是失败）" "installed, waiting for initialization in the console (exit ${FIRST_TICKET_EXIT_CODE} means this state, not a failure)")"
+      printf '[cdnca-edge] install-state: %s\n' installed_pending_initialization
+      printf '[cdnca-edge] %s\n  %s\n' "$(msg "安装完成，待主控初始化：节点已连上主控，初始化前暂不对外服务（所有站点 503、四层关闭）。
+  请到主控「节点列表 → 待初始化」找到本机并点「初始化」：初始化后主控自动下发授权签名凭据，节点自动开放" "installed, waiting for initialization: the node is connected to the control plane and does not serve until it is initialized (every site 503, layer 4 closed).
+  Find this host under Nodes -> Pending initialization in the console and click Initialize: the control plane then delivers the license credential and the node opens by itself")" \
+        "$(msg 'Agent 服务保持运行，无需重装，也不必再执行安装命令；--resume 只用来复核，不是必须执行' 'the Agent service keeps running; no reinstall and no further install command is needed; --resume only re-checks and is optional')" >&2
+      node_next_steps
+      exit "$FIRST_TICKET_EXIT_CODE" ;;
+    esac
+  fi
+  while :; do
+    status=$(installation_ban_status)
+    if [ "$status" = serving ]; then
+      log 'first license service ticket received; the node serves traffic'
+      log 'install-state: serving'
+      return 0
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || break
+    progress_tick "$(msg ' 首张授权签名凭据' ' the first license credential')" "$FIRST_TICKET_WAIT_SECONDS"
+    sleep 3
+  done
+  case "$status" in
+    banned) state=installed_banned
+      cause="$(msg '本主控安装已被授权方停用：节点不对外服务（所有站点 503、四层关闭）。请联系授权方处理，解除后节点自动恢复' 'this control installation was suspended by the licensor: the node does not serve (every site 503, layer 4 closed). Contact the licensor; the node recovers by itself once lifted')" ;;
+    resume_failed) state=installed_resume_failed
+      cause="$(msg "授权签名凭据已生效，但节点恢复对外服务失败，仍不对外服务（所有站点 503、四层关闭）。Agent 每分钟自动重试；请查看 journalctl -u ${SERVICE_NAME} 中 installation ban 的报错（多为 OpenResty 配置重载失败）" "the license credential is in effect but the node failed to resume serving and still does not serve (every site 503, layer 4 closed). The Agent retries every minute; check the installation ban errors in journalctl -u ${SERVICE_NAME} (usually an OpenResty reload failure)")" ;;
+    service_ticket_expired) state=installed_ticket_expired
+      cause="$(msg '节点持有的授权签名凭据已过期：节点不对外服务（所有站点 503、四层关闭）。请确认主控能连上授权端、客户与许可证有效' 'the license credential held by the node expired: the node does not serve (every site 503, layer 4 closed). Make sure the control plane reaches the licensing server and the customer and license are valid')" ;;
+    *) state=installed_pending_ticket
+      cause="$(msg "节点已安装，${FIRST_TICKET_WAIT_SECONDS} 秒内授权签名凭据仍未生效，暂不对外服务（所有站点 503、四层关闭）。
+  请依次检查：1) 本机 journalctl -u ${SERVICE_NAME} 中 installation ban 的报错（凭据下发或应用失败，多为节点磁盘或目录权限问题）；
+  2) 主控能连上授权端、客户与许可证有效（主控「授权」页）；
+  3) 若本机还在「节点列表 → 待初始化」中，先点「初始化」，主控只给已初始化的节点下发凭据" "the node is installed but the license credential did not take effect within ${FIRST_TICKET_WAIT_SECONDS} s, so it does not serve yet (every site 503, layer 4 closed).
+  Check in order: 1) installation ban errors in journalctl -u ${SERVICE_NAME} on this host (delivery or apply failure, usually node disk or directory permissions);
+  2) the control plane reaches the licensing server and the customer and license are valid (License page of the console);
+  3) if this host is still under Nodes -> Pending initialization, click Initialize first; only initialized nodes get credentials")" ;;
+  esac
+  INSTALL_KEEP=true
+  printf '[cdnca-edge] install-state: %s\n' "$state"
+  printf '[cdnca-edge] error: %s\n  %s\n' "$cause" "$resume" >&2
+  exit "$FIRST_TICKET_EXIT_CODE"
+}
+
+# Edge kernel baseline (GoEdge parity G6 item 13). Each entry is
 # name:direction:value; "min" raises a smaller value, "max" lowers a larger
 # one. ip_local_port_range is deliberately left alone: widening it downwards
 # would let ephemeral ports collide with tenant L4 listener ports. A value the operator already set beyond the baseline is kept, and a

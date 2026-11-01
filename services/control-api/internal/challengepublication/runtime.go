@@ -117,7 +117,7 @@ type RolloutStatus struct {
 	Failed          int       `json:"failed"`
 	Cancelled       int       `json:"cancelled"`
 	// Superseded: nodes that ignored the secret as an old release
-	// (edgedeployment.DeploymentSuperseded); not failed (fix-cfgflow3).
+	// (edgedeployment.DeploymentSuperseded); not failed.
 	Superseded int `json:"superseded"`
 }
 

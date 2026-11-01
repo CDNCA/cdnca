@@ -17,7 +17,7 @@ type OwnMessageQuery struct {
 	Type      string
 	SiteID    string
 	PackageID string
-	// Site and Package match by domain/name or exact display ID (fix-livefilter2).
+	// Site and Package match by domain/name or exact display ID.
 	Site, Package string
 	Limit         string
 	Offset        string

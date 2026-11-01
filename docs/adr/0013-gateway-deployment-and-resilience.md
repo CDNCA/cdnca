@@ -4,7 +4,7 @@
 - 需求与决定要点见 §1。
 - 关联：[ADR 0004](0004-signer-revocation-bootstrap-checkpoint.md)（离线 checkpoint）、[ADR 0010](0010-auto-defense.md) §1（节点自治）。
 - PoC：[`tests/gateway-cdn-poc/`](../../tests/gateway-cdn-poc/)，结果见 §4.7。
-- 行号基于集成头 `d7babee27`（第一版）与 `e43c78cef`（第二、三版新增的安装器事实，§2.1）。
+- 行号基于 `d7babee27`（第一版）与 `e43c78cef`（第二、三版新增的安装器事实，§2.1）。
 
 各版变化：
 
@@ -497,7 +497,7 @@ N 个网关同时在线（主动-主动），共享主控侧的 Redis 与 NATS�
 
 按第三版默认重排：网关自己的端口同时承载 gRPC 与隧道（GW-03）、端口选择与下发（GW-04）、真实 IP（GW-05）是 1.0.35 的最小闭环——`all` 模式节点只填 `--control-plane` 就能直连网关，网关名套 CDN 也能用。独立网关、多网关在后。原 GW-12"可选直连加速"删除：直连就是默认。
 
-迁移号：control-api 加载器要求连号（`database/migrate.go:239-245`），各任务本地按集成头 +1 占位、守卫写前一版，合入时统一改号。新能力号（`proto/agent/v1/types.proto`）待分配：`CAP-GW-TUNNEL`（节点支持同端口隧道）、`CAP-GW-ENDPOINTS`（多端点列表）、`CAP-GW-RECOVER`（自助恢复，gw-01 已用）。
+迁移号：control-api 加载器要求连号（`database/migrate.go:239-245`），各任务本地按当前头 +1 占位、守卫写前一版，合入时统一改号。新能力号（`proto/agent/v1/types.proto`）待分配：`CAP-GW-TUNNEL`（节点支持同端口隧道）、`CAP-GW-ENDPOINTS`（多端点列表）、`CAP-GW-RECOVER`（自助恢复，gw-01 已用）。
 
 | ID | 内容 | 依赖 | 文件范围 | 迁移 | 验收 |
 |---|---|---|---|---|---|

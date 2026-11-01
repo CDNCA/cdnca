@@ -18,7 +18,7 @@ import (
 )
 
 // documentNames is built from siteobject.RuntimeCapabilityNames, the table
-// the edge agent also reads (fix-l4cap), so a name written here is always one
+// the edge agent also reads, so a name written here is always one
 // the agent accepts.
 var documentNames = buildDocumentNames()
 
@@ -94,16 +94,16 @@ var nodeOnlyCapabilities = map[agentv1.CapabilityName]bool{
 	// document carries the node's region code (fz-x12).
 	agentv1.CapabilityName_CAPABILITY_NAME_NODE_REGION: true,
 	// NODE_STORAGE is declared per node; the per-node site object key
-	// document carries the node's cache and log directories (fix-nodesettings).
+	// document carries the node's cache and log directories.
 	agentv1.CapabilityName_CAPABILITY_NAME_NODE_STORAGE: true,
-	// BAN_CIDR gates network bans in the security ban list (fix-cidrban),
+	// BAN_CIDR gates network bans in the security ban list,
 	// not a site runtime document.
 	agentv1.CapabilityName_CAPABILITY_NAME_BAN_CIDR: true,
 	// AGGREGATED_EDGE_PROBE gates the probe method and headers of aggregated
-	// edge host targets (fix-aephase1), a probe command feature.
+	// edge host targets, a probe command feature.
 	agentv1.CapabilityName_CAPABILITY_NAME_AGGREGATED_EDGE_PROBE: true,
 	// GATEWAY_ADDRESS_CHANGE gates the signed Gateway address change command
-	// (fix-nodegw), a node command feature.
+	//, a node command feature.
 	agentv1.CapabilityName_CAPABILITY_NAME_GATEWAY_ADDRESS_CHANGE: true,
 	// SSH_ACCESS gates the "only the controller may SSH" command
 	//, a node command feature.

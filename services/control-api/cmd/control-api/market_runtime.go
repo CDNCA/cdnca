@@ -437,7 +437,7 @@ func wireMarketSecurity(runtime *marketruntime.Runtime, pool *pgxpool.Pool, acti
 }
 
 // wireMarketOriginAuthDelivery sends the origin auth a leaf wrote for a
-// market site to the nodes by itself (fix-mktsiteconf6): right after the
+// market site to the nodes by itself: right after the
 // commit and every 30 seconds after, as a system secret rollout of the same
 // generator the tenant's manual publication uses.
 func wireMarketOriginAuthDelivery(runtime *marketruntime.Runtime, pool *pgxpool.Pool, deployments *edgedeployment.Store,
@@ -463,7 +463,7 @@ func wireMarketOriginAuthDelivery(runtime *marketruntime.Runtime, pool *pgxpool.
 	return nil
 }
 
-// wireMarketOriginAuth lets market sites carry origin auth (fix-mktsiteconf5)
+// wireMarketOriginAuth lets market sites carry origin auth
 // once the keyring-backed service exists: as a subscriber, credentials are
 // sealed to each leaf's card box key; as a leaf, its own box is opened with
 // the market identity's box key. Without origin auth both sides block.

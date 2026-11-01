@@ -394,7 +394,7 @@ describe('SiteBlockLogPage', () => {
     expect(unlockSpy).not.toHaveBeenCalled()
   })
 
-  it('shows the unlock edge progress in place: failed and ignored-old-release nodes (fix-tails1028)', async () => {
+  it('shows the unlock edge progress in place: failed and ignored-old-release nodes', async () => {
     const actor = principal({ permissions: ['sites.read', 'security_policies.manage'] })
     useSessionStore.getState().setSession(authResponse(actor), actor)
     const candidateId = '018f0000-0000-7000-8000-000000000063'

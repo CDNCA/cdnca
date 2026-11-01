@@ -225,7 +225,7 @@ type RolloutProgressView struct {
 	// one); not a failure (fix-cfgflow2 §1).
 	Superseded int `json:"superseded"`
 	// Frozen: nodes that refused it while frozen (expired service ticket),
-	// waiting for redelivery; not a failure (fix-stoppolicy2).
+	// waiting for redelivery; not a failure.
 	Frozen int `json:"frozen"`
 }
 

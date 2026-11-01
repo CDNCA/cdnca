@@ -78,6 +78,20 @@ const positiveDisplayID = /^[1-9][0-9]{0,18}$/
 const staleRead = new Error('error page owner changed during request')
 const emptyDraft: OverrideDraft = { scopeKind: 'node', target: '', items: [], contents: {} }
 
+/** A3-10: libs/themepack TemplateMarkers — the server refuses any page carrying one (nodes do no substitution). */
+const templateMarkers = ['{{', '}}', '{%', '%}', '<%', '%>', '${', '<!--#'] as const
+
+function templateMarkerIn(content: string): string | undefined {
+  return templateMarkers.find((marker) => content.includes(marker))
+}
+
+/** Save errors are i18n keys; a template-marker refusal carries its marker. */
+function saveErrorText(t: (key: string, options?: Record<string, string>) => string, saveError: string): string {
+  return saveError.startsWith('templateMarker:')
+    ? t('legacy.validation.templateMarker', { marker: saveError.slice('templateMarker:'.length) })
+    : t(saveError)
+}
+
 function ownerFor(principal: Principal, sessionEpoch: number): Owner | null {
   if (principal.scope_kind !== 'platform' || principal.tenant_id !== null || !principal.scope_id || !principal.user_id || sessionEpoch < 1) return null
   return ['platform', principal.scope_id, principal.user_id, sessionEpoch]
@@ -256,6 +270,11 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
   }
 
   const save = async () => {
+    const marker = pendingSave ? undefined : templateMarkerIn(draftContent)
+    if (marker) {
+      setSaveError(`templateMarker:${marker}`)
+      return
+    }
     const attempt = pendingSave ?? await buildSaveAttempt()
     if (!attempt) {
       setSaveError('legacy.validation.required')
@@ -317,7 +336,7 @@ function GlobalErrorPagePanel({ owner, ownerKey, manageable }: { owner: Owner; o
           action={<Link to="/site/publications">{t('legacy.actions.viewPublications')}</Link>} /> : null}
         {saveError ? (pendingSave ? <OutcomeUnknown className="error-page-global-alert" title={t('legacy.errors.unknown')}
           action={<Space><Button size="small" onClick={() => void save()}>{t('actions.exactRetry')}</Button><Button size="small" onClick={() => { setPendingSave(undefined); setSaveError(undefined); void slot.refetch() }}>{t('actions.abandon')}</Button></Space>} />
-          : <FeedbackWhen title={t(saveError)} onClose={() => setSaveError(undefined)} />) : null}
+          : <FeedbackWhen title={saveErrorText(t, saveError)} onClose={() => setSaveError(undefined)} />) : null}
       </div>
     </div>
     <Modal open={preview} title={t('legacy.actions.preview')} width={760} footer={null} onCancel={() => setPreview(false)} destroyOnHidden>
@@ -481,6 +500,11 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
   }
 
   const save = async () => {
+    const marker = pendingSave ? undefined : draft.items.map((key) => templateMarkerIn(draft.contents[key] ?? '')).find(Boolean)
+    if (marker) {
+      setSaveError(`templateMarker:${marker}`)
+      return
+    }
     const attempt = pendingSave ?? await buildSaveAttempt()
     if (!attempt) {
       setSaveError('regional.validation.required')
@@ -661,7 +685,7 @@ function RegionalOverridesPanel({ owner, ownerKey, manageable }: { owner: Owner;
             className="error-page-override-error"
             type={pendingSave ? 'warning' : 'error'}
             showIcon
-            message={t(pendingSave ? 'regional.errors.unknown' : saveError)}
+            message={pendingSave ? t('regional.errors.unknown') : saveErrorText(t, saveError)}
             action={pendingSave ? <Space><Button size="small" onClick={() => void save()}>{t('actions.exactRetry')}</Button><Button size="small" onClick={() => { setPendingSave(undefined); setSaveError(undefined); void overrides.refetch() }}>{t('actions.abandon')}</Button></Space> : undefined}
           /> : null}
         </div>

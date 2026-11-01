@@ -24,7 +24,7 @@ import (
 // internal/licensing/usage_quota_observation_v2.go): every round carries all
 // thirteen quota codes in strict lexical order, signed by the installation
 // key over the current lease serial. It has no "not counted" value, so a
-// round whose counts cannot all be read is not sent (fix-usagereport).
+// round whose counts cannot all be read is not sent.
 const (
 	UsageReportSchema            = "cdnca.entitlement.usage-report/v2"
 	usageReportProofDomain       = "cdnca-entitlement-usage-report-proof/v2"

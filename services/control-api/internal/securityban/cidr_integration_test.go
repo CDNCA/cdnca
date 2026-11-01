@@ -43,7 +43,7 @@ func declareCapabilities(t *testing.T, pool *pgxpool.Pool, nodeID uuid.UUID, epo
 	}
 }
 
-// TestSecurityBanNetworks (fix-cidrban): a manual network ban is stored
+// TestSecurityBanNetworks: a manual network ban is stored
 // masked, listed and filtered as "<network>/<bits>"; a node without BAN_CIDR
 // gets the addresses only, and the network (then its release) once its latest
 // session declares BAN_CIDR.

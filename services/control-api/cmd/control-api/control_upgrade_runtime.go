@@ -53,7 +53,7 @@ const (
 	controlUpgradeArtifactCacheDirEnv             = "CONTROL_UPGRADE_ARTIFACT_CACHE_DIR"
 	controlUpgradeArtifactBaseURLEnv              = "CONTROL_UPGRADE_ARTIFACT_BASE_URL"
 	// Optional: the private root that verifies the artifact base URL, signed
-	// into executions with the current addresses (fix-btenv3). Unset: "system".
+	// into executions with the current addresses. Unset: "system".
 	controlUpgradeDownloadRootCAFileEnv = "CONTROL_UPGRADE_DOWNLOAD_ROOT_CA_FILE"
 
 	controlUpgradeCommandStream      = "AGENT_COMMANDS"

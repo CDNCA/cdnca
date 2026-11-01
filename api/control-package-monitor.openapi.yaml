@@ -22,6 +22,7 @@ paths:
   /v1/package-monitor/policies:
     get:
       operationId: listTenantPackageMonitorPolicies
+      x-summary-zh: "列出当前租户用户的套餐监控策略"
       summary: List the current package-monitor policies owned by the tenant user
       description: Tenant scope and owner are derived from the current server-side session. Requires package_subscriptions.read.
       parameters:
@@ -31,6 +32,7 @@ paths:
   /v1/package-monitor/alerts:
     get:
       operationId: listTenantPackageMonitorAlerts
+      x-summary-zh: "列出当前租户用户的套餐监控告警"
       summary: List the current package-monitor alert heads owned by the tenant user
       description: Tenant scope and owner are derived from the current server-side session. Requires package_subscriptions.read.
       parameters:
@@ -66,6 +68,7 @@ paths:
   /v1/package-monitor/alerts/{alert_id}/transitions:
     get:
       operationId: listTenantPackageMonitorTransitions
+      x-summary-zh: "列出自有告警不可变的状态变化"
       summary: List immutable transition facts for a tenant-owned alert
       description: >-
         Tenant scope and owner are derived from the current server-side session.
@@ -80,6 +83,7 @@ paths:
   /v1/package-monitor/alerts/{alert_id}/transitions/{revision}:
     get:
       operationId: getTenantPackageMonitorTransition
+      x-summary-zh: "读取自有告警的一条不可变状态变化"
       summary: Get one immutable transition fact for a tenant-owned alert
       description: Tenant scope and owner are derived from the current server-side session.
       parameters:
@@ -89,6 +93,7 @@ paths:
   /v1/admin/package-monitor/policies:
     get:
       operationId: listAdminPackageMonitorPolicies
+      x-summary-zh: "在指定租户范围内列出当前套餐监控策略"
       summary: List current package-monitor policies in an explicit tenant scope
       description: Platform callers must provide scope_id explicitly and require billing.adjustments.manage or platform.admin.
       parameters:
@@ -107,6 +112,7 @@ paths:
   /v1/admin/package-monitor/alerts:
     get:
       operationId: listAdminPackageMonitorAlerts
+      x-summary-zh: "在指定租户范围内列出当前套餐监控告警"
       summary: List current package-monitor alert heads in an explicit tenant scope
       description: Platform callers must provide scope_id explicitly and require billing.adjustments.manage or platform.admin.
       parameters:
@@ -144,6 +150,7 @@ paths:
   /v1/admin/package-monitor/alerts/{alert_id}/transitions:
     get:
       operationId: listAdminPackageMonitorTransitions
+      x-summary-zh: "在指定租户范围内列出不可变的告警状态变化"
       summary: List immutable transition facts in an explicit tenant scope
       description: >-
         Platform callers must provide scope_id explicitly. The first page
@@ -159,6 +166,7 @@ paths:
   /v1/admin/package-monitor/alerts/{alert_id}/transitions/{revision}:
     get:
       operationId: getAdminPackageMonitorTransition
+      x-summary-zh: "在指定租户范围内读取一条不可变的告警状态变化"
       summary: Get one immutable transition fact in an explicit tenant scope
       description: Platform callers must provide scope_id explicitly.
       parameters:

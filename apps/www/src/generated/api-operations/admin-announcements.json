@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements",
    "summary": "List tenant announcements",
+   "summary_zh": "列出租户公告",
    "auth": [
     "bearer"
    ],
@@ -66,6 +67,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements",
    "summary": "Create an announcement draft",
+   "summary_zh": "创建公告草稿",
    "auth": [
     "bearer"
    ],
@@ -312,6 +314,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements/audience-directory",
    "summary": "Search the current tenant's users or roles by name for an announcement audience",
+   "summary_zh": "按名称搜索当前租户的用户或角色，用作公告接收范围",
    "auth": [
     "bearer"
    ],
@@ -376,6 +379,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements/global",
    "summary": "List platform global announcements",
+   "summary_zh": "列出平台全局公告",
    "auth": [
     "bearer"
    ],
@@ -435,6 +439,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/global",
    "summary": "Create a platform global announcement draft",
+   "summary_zh": "创建平台全局公告草稿",
    "auth": [
     "bearer"
    ],
@@ -682,6 +687,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements/global/audience-directory",
    "summary": "Search tenants, or one tenant's roles and users, by name for a platform global announcement audience",
+   "summary_zh": "按名称搜索租户或某租户的角色与用户，用作全局公告接收范围",
    "auth": [
     "bearer"
    ],
@@ -752,6 +758,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements/global/{id}",
    "summary": "Get a platform global announcement",
+   "summary_zh": "读取一条平台全局公告",
    "auth": [
     "bearer"
    ],
@@ -918,6 +925,7 @@
    "method": "PATCH",
    "path": "/v1/admin/announcements/global/{id}",
    "summary": "Update a platform global announcement draft",
+   "summary_zh": "修改平台全局公告草稿",
    "auth": [
     "bearer"
    ],
@@ -1186,6 +1194,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/global/{id}/archive",
    "summary": "Archive a global announcement in management; published messages remain available",
+   "summary_zh": "在管理列表中归档全局公告；已发布的消息仍可查看",
    "auth": [
     "bearer"
    ],
@@ -1385,6 +1394,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements/global/{id}/audience/count",
    "summary": "Count the recipients a platform global announcement would be delivered to now",
+   "summary_zh": "统计全局公告此刻发布会送达的人数",
    "auth": [
     "bearer"
    ],
@@ -1446,6 +1456,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/global/{id}/publish",
    "summary": "Publish a platform global announcement and freeze recipients",
+   "summary_zh": "发布平台全局公告并锁定接收人",
    "auth": [
     "bearer"
    ],
@@ -1649,6 +1660,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/global/{id}/restore",
    "summary": "Restore a global announcement to management",
+   "summary_zh": "把全局公告恢复到管理列表",
    "auth": [
     "bearer"
    ],
@@ -1848,6 +1860,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/global/{id}/withdraw",
    "summary": "Withdraw a platform global announcement",
+   "summary_zh": "撤回平台全局公告",
    "auth": [
     "bearer"
    ],
@@ -2047,6 +2060,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements/{id}",
    "summary": "Get the current announcement version",
+   "summary_zh": "读取公告的当前版本",
    "auth": [
     "bearer"
    ],
@@ -2217,6 +2231,7 @@
    "method": "PATCH",
    "path": "/v1/admin/announcements/{id}",
    "summary": "Update an announcement draft",
+   "summary_zh": "修改公告草稿",
    "auth": [
     "bearer"
    ],
@@ -2489,6 +2504,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/{id}/archive",
    "summary": "Archive a tenant announcement for reversible deletion",
+   "summary_zh": "归档租户公告（可恢复的删除）",
    "auth": [
     "bearer"
    ],
@@ -2692,6 +2708,7 @@
    "method": "GET",
    "path": "/v1/admin/announcements/{id}/audience/count",
    "summary": "Count the recipients the head version of an announcement would be delivered to now",
+   "summary_zh": "统计公告最新版本此刻发布会送达的人数",
    "auth": [
     "bearer"
    ],
@@ -2753,6 +2770,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/{id}/publish",
    "summary": "Publish an announcement",
+   "summary_zh": "发布公告",
    "auth": [
     "bearer"
    ],
@@ -2961,6 +2979,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/{id}/restore",
    "summary": "Restore an archived tenant announcement",
+   "summary_zh": "恢复已归档的租户公告",
    "auth": [
     "bearer"
    ],
@@ -3164,6 +3183,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/{id}/revise",
    "summary": "Create a revised announcement draft",
+   "summary_zh": "基于已发布公告创建修订草稿",
    "auth": [
     "bearer"
    ],
@@ -3431,6 +3451,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/{id}/schedule",
    "summary": "Schedule an announcement",
+   "summary_zh": "定时发布公告",
    "auth": [
     "bearer"
    ],
@@ -3644,6 +3665,7 @@
    "method": "POST",
    "path": "/v1/admin/announcements/{id}/withdraw",
    "summary": "Withdraw an announcement",
+   "summary_zh": "撤回公告",
    "auth": [
     "bearer"
    ],

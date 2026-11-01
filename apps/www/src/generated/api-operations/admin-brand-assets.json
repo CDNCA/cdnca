@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/brand-assets",
    "summary": "",
+   "summary_zh": "列出平台品牌素材",
    "auth": [
     "bearer"
    ],
@@ -42,6 +43,7 @@
    "method": "GET",
    "path": "/v1/admin/brand-assets/{slot}",
    "summary": "",
+   "summary_zh": "读取一个平台品牌素材位",
    "auth": [
     "bearer"
    ],
@@ -110,6 +112,7 @@
    "method": "PUT",
    "path": "/v1/admin/brand-assets/{slot}",
    "summary": "",
+   "summary_zh": "上传平台品牌素材",
    "auth": [
     "bearer"
    ],

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/system-other-settings",
    "summary": "Read platform other settings",
+   "summary_zh": "读取平台其他设置",
    "auth": [
     "bearer"
    ],
@@ -62,6 +63,7 @@
    "method": "PUT",
    "path": "/v1/admin/system-other-settings",
    "summary": "Update platform other settings",
+   "summary_zh": "修改平台其他设置",
    "auth": [
     "bearer"
    ],

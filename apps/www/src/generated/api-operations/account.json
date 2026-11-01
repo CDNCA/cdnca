@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/account/api-keys",
    "summary": "List API keys owned by the current tenant user",
+   "summary_zh": "列出当前租户用户自己的 API 密钥",
    "auth": [
     "bearer"
    ],
@@ -105,6 +106,7 @@
    "method": "POST",
    "path": "/v1/account/api-keys",
    "summary": "Create and activate an API key for the current tenant user",
+   "summary_zh": "为当前租户用户创建并启用 API 密钥",
    "auth": [
     "bearer"
    ],
@@ -210,6 +212,7 @@
    "method": "GET",
    "path": "/v1/account/api-keys/{key_id}",
    "summary": "Get API key metadata owned by the current tenant user",
+   "summary_zh": "读取当前租户用户自己的 API 密钥元数据",
    "auth": [
     "bearer"
    ],
@@ -366,6 +369,7 @@
    "method": "PATCH",
    "path": "/v1/account/api-keys/{key_id}",
    "summary": "Update API key metadata",
+   "summary_zh": "修改 API 密钥元数据",
    "auth": [
     "bearer"
    ],
@@ -571,6 +575,7 @@
    "method": "POST",
    "path": "/v1/account/api-keys/{key_id}/activate",
    "summary": "Activate a pending API key and issue its secret",
+   "summary_zh": "启用待激活的 API 密钥并签发密钥原文",
    "auth": [
     "bearer"
    ],
@@ -672,6 +677,7 @@
    "method": "POST",
    "path": "/v1/account/api-keys/{key_id}/revoke",
    "summary": "Revoke an API key",
+   "summary_zh": "吊销 API 密钥",
    "auth": [
     "bearer"
    ],
@@ -868,6 +874,7 @@
    "method": "POST",
    "path": "/v1/account/api-keys/{key_id}/rotate",
    "summary": "Rotate an active API key secret",
+   "summary_zh": "轮换已启用 API 密钥的密钥原文",
    "auth": [
     "bearer"
    ],
@@ -969,7 +976,7 @@
    "method": "GET",
    "path": "/v1/account/inbox",
    "summary": "List the tenant member's in-app messages, newest first",
-   "summary_zh": "List the tenant member's in-app messages (站内信), newest first",
+   "summary_zh": "列出租户成员的站内信，最新在前",
    "auth": [
     "bearer"
    ],
@@ -1045,6 +1052,7 @@
    "method": "POST",
    "path": "/v1/account/inbox/read-all",
    "summary": "Mark all the caller's in-app messages read (audited admin.inbox.read_all); read messages older than 180 days are pruned",
+   "summary_zh": "把调用者的站内信全部标为已读（审计 admin.inbox.read_all）；超过 180 天的已读消息会被清理",
    "auth": [
     "bearer"
    ],
@@ -1067,6 +1075,7 @@
    "method": "GET",
    "path": "/v1/account/inbox/unread-count",
    "summary": "Unread message count for the header badge",
+   "summary_zh": "页头角标用的未读消息数",
    "auth": [
     "bearer"
    ],
@@ -1094,6 +1103,7 @@
    "method": "POST",
    "path": "/v1/account/inbox/{message_id}/read",
    "summary": "Mark one message read",
+   "summary_zh": "把一条消息标为已读",
    "auth": [
     "bearer"
    ],
@@ -1121,6 +1131,7 @@
    "method": "GET",
    "path": "/v1/account/messages",
    "summary": "List the current user's in-app messages",
+   "summary_zh": "列出当前用户的站内消息",
    "auth": [
     "bearer"
    ],
@@ -1191,6 +1202,7 @@
    "method": "POST",
    "path": "/v1/account/messages/{event_id}/delivered",
    "summary": "Mark an in-app message delivered",
+   "summary_zh": "把一条站内消息标为已送达",
    "auth": [
     "bearer"
    ],
@@ -1291,6 +1303,7 @@
    "method": "POST",
    "path": "/v1/account/messages/{event_id}/read",
    "summary": "Mark an in-app message read",
+   "summary_zh": "把一条站内消息标为已读",
    "auth": [
     "bearer"
    ],
@@ -1391,6 +1404,7 @@
    "method": "GET",
    "path": "/v1/account/mfa",
    "summary": "Read the authenticated account's current MFA state",
+   "summary_zh": "读取当前账号的两步验证状态",
    "auth": [
     "bearer"
    ],
@@ -1450,6 +1464,7 @@
    "method": "POST",
    "path": "/v1/account/mfa/disable",
    "summary": "Disable active MFA after strong reauthentication",
+   "summary_zh": "强身份复核后关闭两步验证",
    "auth": [
     "bearer"
    ],
@@ -1528,6 +1543,7 @@
    "method": "POST",
    "path": "/v1/account/mfa/enrollments",
    "summary": "Begin TOTP enrollment",
+   "summary_zh": "开始绑定 TOTP 验证器",
    "auth": [
     "bearer"
    ],
@@ -1662,6 +1678,7 @@
    "method": "POST",
    "path": "/v1/account/mfa/enrollments/{credential_id}/activate",
    "summary": "Activate a pending TOTP credential",
+   "summary_zh": "启用待绑定的 TOTP 凭据",
    "auth": [
     "bearer"
    ],
@@ -1805,6 +1822,7 @@
    "method": "POST",
    "path": "/v1/account/mfa/reset",
    "summary": "Reset active MFA after strong reauthentication",
+   "summary_zh": "强身份复核后重置两步验证",
    "auth": [
     "bearer"
    ],
@@ -1833,6 +1851,7 @@
    "method": "POST",
    "path": "/v1/account/mfa/step-up-proofs",
    "summary": "Create a short-lived bound step-up proof",
+   "summary_zh": "签发短时有效、绑定会话的二次验证凭证",
    "auth": [
     "bearer"
    ],
@@ -2008,6 +2027,7 @@
    "method": "GET",
    "path": "/v1/account/notification-messages",
    "summary": "List the current user's own event messages",
+   "summary_zh": "列出当前用户自己的事件消息",
    "auth": [
     "bearer"
    ],
@@ -2100,6 +2120,7 @@
    "method": "GET",
    "path": "/v1/account/notification-subscriptions/{event_type}",
    "summary": "Read the current user's event subscription",
+   "summary_zh": "读取当前用户对某类事件的订阅",
    "auth": [
     "bearer"
    ],
@@ -2201,6 +2222,7 @@
    "method": "PUT",
    "path": "/v1/account/notification-subscriptions/{event_type}",
    "summary": "Update the current user's event subscription",
+   "summary_zh": "修改当前用户对某类事件的订阅",
    "auth": [
     "bearer"
    ],
@@ -2345,6 +2367,7 @@
    "method": "POST",
    "path": "/v1/account/password",
    "summary": "Re-authenticate and change the current tenant user's password",
+   "summary_zh": "复核身份后修改当前租户用户的密码",
    "auth": [
     "bearer"
    ],
@@ -2405,6 +2428,7 @@
    "method": "GET",
    "path": "/v1/account/profile",
    "summary": "Get the current tenant user's profile",
+   "summary_zh": "读取当前租户用户的个人资料",
    "auth": [
     "bearer"
    ],
@@ -2477,6 +2501,7 @@
    "method": "PATCH",
    "path": "/v1/account/profile",
    "summary": "Update the current tenant user's profile",
+   "summary_zh": "修改当前租户用户的个人资料",
    "auth": [
     "bearer"
    ],

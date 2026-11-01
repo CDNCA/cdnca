@@ -11,7 +11,7 @@ export interface BalanceMethodChoicesProps {
   onChange: (value: OriginBalanceMethod) => void
 }
 
-// BalanceMethodChoices: 负载方式 as option cards (fix-lbtags). Each card shows
+// BalanceMethodChoices: 负载方式 as option cards. Each card shows
 // the name and a one-line use case; hovering or focusing it opens the full
 // explanation, which screen readers get through aria-describedby.
 export default function BalanceMethodChoices({ value, disabled = false, onChange }: BalanceMethodChoicesProps) {

@@ -5,7 +5,7 @@ import { vi } from 'vitest'
 import AccountQuotaPanel from '../pages/users/AccountQuotaPanel'
 import { renderWithProviders } from '../test/render'
 
-// 用户编辑「刷新预热额度」页签（fix-cachequota）：GET/PUT /v1/admin/cache-operations/daily-usage?scope_id=。
+// 用户编辑「刷新预热额度」页签：GET/PUT /v1/admin/cache-operations/daily-usage?scope_id=。
 const tenantScope = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const quotaPath = `/v1/admin/cache-operations/daily-usage?scope_id=${tenantScope}`
 

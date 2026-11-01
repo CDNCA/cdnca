@@ -21,6 +21,7 @@ paths:
     get:
       tags: [Certificate assets]
       operationId: listCertificateAssets
+      x-summary-zh: "列出在用证书"
       summary: List active certificate assets
       description: >-
         Tenant sessions target their own scope. Platform sessions retain their
@@ -58,6 +59,7 @@ paths:
     post:
       tags: [Certificate assets]
       operationId: uploadCertificateAsset
+      x-summary-zh: "上传证书与私钥"
       summary: Upload a certificate and private key
       description: >-
         Requires certificates.manage. The private key crosses this request
@@ -97,6 +99,7 @@ paths:
     get:
       tags: [Certificate assets]
       operationId: getCertificateAsset
+      x-summary-zh: "读取证书及其公开版本"
       summary: Get a certificate asset and its public versions
       description: Private-key plaintext, ciphertext and envelope metadata are never returned.
       x-required-permissions: [certificates.read]
@@ -114,6 +117,7 @@ paths:
     delete:
       tags: [Certificate assets]
       operationId: deleteCertificateAsset
+      x-summary-zh: "软删除未被引用的证书"
       summary: Soft-delete an unreferenced certificate asset
       x-required-permissions: [certificates.manage]
       parameters:
@@ -142,6 +146,7 @@ paths:
     patch:
       tags: [Certificate assets]
       operationId: setCertificateAssetAutoRenew
+      x-summary-zh: "开启或关闭 ACME 证书的自动续期"
       summary: Turn automatic renewal of an ACME certificate on or off
       description: >-
         Renewal intent lives on the certificate asset (migration 540); the issuing order's auto_renew
@@ -174,6 +179,7 @@ paths:
     patch:
       tags: [Certificate assets]
       operationId: setCertificateAssetDisabled
+      x-summary-zh: "停用或重新启用证书"
       summary: Disable or re-enable a certificate
       description: >-
         A disabled certificate cannot be bound to a site and is not auto-renewed (migration 552).
@@ -206,6 +212,7 @@ paths:
     get:
       tags: [Certificate assets]
       operationId: downloadCertificateAsset
+      x-summary-zh: "下载证书当前版本及私钥"
       summary: Download the current certificate version with its private key
       description: "Download certificate. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the latest activated version. Requires certificates.manage; a tenant downloads only its own certificates. Audited as certificate.asset.download in the same transaction before the key is returned. A revoked current version returns 409 certificate_asset_download_unavailable."
       x-description-zh: >-
@@ -240,6 +247,7 @@ paths:
     post:
       tags: [Certificate assets]
       operationId: activateCertificateAssetVersion
+      x-summary-zh: "原子启用证书的某个不可变版本"
       summary: Atomically activate one immutable certificate version
       x-required-permissions: [certificates.manage]
       parameters:
@@ -268,6 +276,7 @@ paths:
     get:
       tags: [Certificate assets]
       operationId: listCertificateAssetBindings
+      x-summary-zh: "列出一张证书当前绑定的网站"
       summary: List current site bindings for one certificate asset
       x-required-permissions: [certificates.read]
       parameters:
@@ -284,6 +293,7 @@ paths:
     post:
       tags: [Certificate assets]
       operationId: bindCertificateAsset
+      x-summary-zh: "把证书的生效版本绑定到租户网站"
       summary: Bind an active version to a tenant site
       x-required-permissions: [certificates.manage]
       parameters:
@@ -313,6 +323,7 @@ paths:
     delete:
       tags: [Certificate assets]
       operationId: unbindCertificateAsset
+      x-summary-zh: "追加一条不可变的网站解绑记录"
       summary: Append an immutable site unbind fact
       x-required-permissions: [certificates.manage]
       parameters:
@@ -341,6 +352,7 @@ paths:
     get:
       tags: [Certificate assets]
       operationId: getCertificateSiteBinding
+      x-summary-zh: "读取一个网站当前生效的证书绑定"
       summary: Get the active certificate binding for one site
       description: >-
         Returns the current bound fact and its active immutable certificate

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/site-groups",
    "summary": "List all tenant site groups for a platform administrator",
+   "summary_zh": "平台管理员列出所有租户的网站分组",
    "auth": [
     "bearer"
    ],

@@ -63,7 +63,7 @@ function fakeTurnstile() {
 
 function renderRegistration(turnstile = fakeTurnstile()) {
   renderWithProviders(
-    <RegisterPage turnstileAdapter={turnstile.adapter} turnstileSiteKey="test-site-key" />,
+    <RegisterPage turnstileAdapter={turnstile.adapter} turnstileSiteKey="test-site-key" registrationMode="verified" />,
     ['/register'],
   )
   return turnstile
@@ -140,6 +140,7 @@ describe('RegisterPage', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('注册请求已受理')
     expect(useSessionStore.getState().status).not.toBe('authenticated')
+    expect(screen.getByRole('link', { name: '前往登录' })).toHaveAttribute('href', '/login')
     expect(fetchSpy).toHaveBeenCalledTimes(3)
     expect(fetchSpy.mock.calls.map((call) => call[0])).toEqual([
       '/v1/auth/registration-challenges',
@@ -288,6 +289,71 @@ describe('RegisterPage', () => {
     renderRegistration()
     expect(screen.getByRole('form', { name: title })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: sendCode })).toBeInTheDocument()
+  })
+
+  // builtin registration: a fresh install has no Turnstile site key or registration
+  // verification service; the page used to show "人机验证暂不可用" at once and
+  // could never register. It now follows registration_mode "builtin".
+  it('registers with the built-in image CAPTCHA when the server has no Turnstile service', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ data: { registration_enabled: true, registration_mode: 'builtin', email_enabled: false,
+        sms_enabled: false, email_anti_abuse_mode: '', sms_anti_abuse_mode: '', captcha_provider: '', captcha_app_id: '' } }, 200))
+      .mockResolvedValueOnce(json({ id: '33333333-3333-4333-8333-333333333333', image: 'data:image/png;base64,iVBORw0KGgo=',
+        expires_at: '2099-01-01T00:00:00Z' }, 201))
+      .mockResolvedValueOnce(json({ accepted: true, replayed: false }, 202))
+    const user = userEvent.setup()
+    renderWithProviders(<RegisterPage turnstileSiteKey="" />, ['/register'])
+
+    expect(await screen.findByAltText('图形验证码图片')).toBeInTheDocument()
+    expect(screen.queryByText('人机验证暂不可用，请刷新后重试。')).not.toBeInTheDocument()
+    expect(screen.queryByText('请先完成人机验证')).not.toBeInTheDocument()
+    await fillRegistration(user)
+    await user.type(screen.getByLabelText('图形验证码'), 'ab2cd')
+    await user.click(screen.getByRole('button', { name: '注册' }))
+
+    expect(await screen.findByText('注册请求已受理。')).toBeInTheDocument()
+    expect(screen.queryByText('人机验证暂不可用，请刷新后重试。')).not.toBeInTheDocument()
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toMatch(/\/v1\/auth\/login-methods$/)
+    expect(String(fetchSpy.mock.calls[1]?.[0])).toMatch(/\/v1\/auth\/login-captchas$/)
+    expect(String(fetchSpy.mock.calls[2]?.[0])).toMatch(/\/v1\/auth\/register$/)
+    expect(JSON.parse(String(fetchSpy.mock.calls[2]?.[1]?.body))).toEqual({
+      username: 'alice', password: 'correct-horse-battery-staple', display_name: 'Alice',
+      email: 'alice@example.com', phone: '+8613812345678', terms_accepted: true,
+      terms_version: 'terms-2026-08', verification_channel: 'email',
+      captcha: { id: '33333333-3333-4333-8333-333333333333', answer: 'ab2cd' },
+    })
+    expect(headersAt(fetchSpy.mock.calls[2]!).get('Idempotency-Key')).toMatch(/^registration-/)
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
+  })
+
+  it('says registration is closed instead of a human verification error when 开放注册 is off', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(json({ data: { registration_enabled: false, registration_mode: 'builtin',
+      email_enabled: false, sms_enabled: false, email_anti_abuse_mode: '', sms_anti_abuse_mode: '', captcha_provider: '', captcha_app_id: '' } }, 200))
+    renderWithProviders(<RegisterPage turnstileSiteKey="" />, ['/register'])
+    expect(await screen.findByText('当前未开放注册。')).toBeInTheDocument()
+    expect(screen.queryByText('人机验证暂不可用，请刷新后重试。')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '注册' })).not.toBeInTheDocument()
+    // The closed state is a page of its own with a way back to sign-in.
+    expect(screen.getByRole('heading', { level: 1, name: '暂未开放注册' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: '返回登录' })).toHaveAttribute('href', '/login')
+    expect(screen.queryByRole('form', { name: '注册账号' })).not.toBeInTheDocument()
+  })
+
+  it('shows a new image CAPTCHA after a rejected answer', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(json({ id: '33333333-3333-4333-8333-333333333333', image: 'data:image/png;base64,iVBORw0KGgo=',
+        expires_at: '2099-01-01T00:00:00Z' }, 201))
+      .mockResolvedValueOnce(json({ error: { code: 'account_registration_captcha_invalid', message: 'x', request_id: 'r' } }, 422))
+      .mockResolvedValueOnce(json({ id: '44444444-4444-4444-8444-444444444444', image: 'data:image/png;base64,iVBORw0KGgo=',
+        expires_at: '2099-01-01T00:00:00Z' }, 201))
+    const user = userEvent.setup()
+    renderWithProviders(<RegisterPage registrationMode="builtin" />, ['/register'])
+    await screen.findByAltText('图形验证码图片')
+    await fillRegistration(user)
+    await user.type(screen.getByLabelText('图形验证码'), 'wrong')
+    await user.click(screen.getByRole('button', { name: '注册' }))
+    expect(await screen.findByText('图形验证码不正确或已过期，请输入新的验证码。')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('图形验证码')).toHaveValue(''))
   })
 
   it('mounts anonymously at /register and redirects an authenticated principal', async () => {

@@ -14,6 +14,7 @@ paths:
   /v1/streams:
     get:
       operationId: listStreams
+      x-summary-zh: "列出四层转发规则"
       summary: List layer-four forwarding rules
       description: >-
         Tenant principals see only rules owned by their current user and tenant.
@@ -125,6 +126,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createStream
+      x-summary-zh: "创建转发规则及不可变的发布意图"
       summary: Create a forwarding rule and immutable publication intent
       description: >-
         Tenant principals are fixed to their current scope and user. Platform
@@ -162,7 +164,7 @@ paths:
     post:
       operationId: batchCreateStreams
       summary: "Bulk add forwarding rules, one per line"
-      x-summary-zh: 批量添加 forwarding rules, one per line
+      x-summary-zh: "批量添加转发规则，每行一条"
       description: "Each line is \"listen ports|IP|origin port\", e.g. \"88 99/udp|1.2.3.4|8080\": the first port (default tcp, \"/udp\" or \"/tcp\" suffix) is the primary listener, the others additional listeners; the origin is an IP address or a domain name. template holds the fields every line shares (package, remark, timeouts, DNS policy for domain origins, …); its listen and origin fields are ignored. Lines are validated and written in order. With ignore_errors a failed line is skipped and the others are committed (200). Without it the batch is atomic: one failed line and nothing is written (422, the failed line says why, the rest are skipped). The idempotency key covers the whole batch."
       x-description-zh: >-
         Each line is "监听端口|IP|回源端口", e.g. "88 99/udp|1.2.3.4|8080": the first
@@ -212,7 +214,7 @@ paths:
     post:
       operationId: batchStreamAction
       summary: "More actions on selected forwarding rules (platform)"
-      x-summary-zh: 更多操作 on selected forwarding rules (platform)
+      x-summary-zh: "对所选转发规则执行更多操作（平台）"
       description: "Platform principals only. set_status sets admin_status; a status other than normal takes the stream off the nodes until it is normal again. cname_domain (change CNAME domain), cname_mode (change CNAME mode) and line_group (change line group: region_id, node_group_id, backup_node_group_id) set the stream's own overrides; \"\" / an omitted id clears one, so the stream follows its package. A stream's line group (its own, else its package's) adds its nodes to the scope's publication targets. Each item carries its own expected_revision and is applied alone: a missing or stale item fails with its code (stream_not_found, version_conflict, and for cname_regenerate stream_cname_not_overridden / stream_cname_not_failed) and the others are applied."
       x-description-zh: >-
         Platform principals only. set_status (设置状态) sets admin_status; a
@@ -256,6 +258,7 @@ paths:
   /v1/streams/{id}:
     get:
       operationId: getStream
+      x-summary-zh: "读取一条四层转发规则"
       summary: Get one layer-four forwarding rule
       description: Returns the current rule and its latest exact publication intent projection.
       security:
@@ -281,6 +284,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     patch:
       operationId: updateStream
+      x-summary-zh: "替换规则并创建不可变的发布意图"
       summary: Replace a rule and create an immutable publication intent
       description: >-
         If-Match and expected_revision must contain the same quoted positive
@@ -318,6 +322,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     delete:
       operationId: deleteStream
+      x-summary-zh: "软删除规则并创建删除发布意图"
       summary: Soft-delete a rule and create a deletion publication intent
       security:
         - bearerAuth: []
@@ -343,6 +348,7 @@ paths:
   /v1/stream-groups:
     get:
       operationId: listStreamGroups
+      x-summary-zh: "列出四层转发分组"
       summary: List layer-four forwarding groups
       description: >-
         Tenant principals see only groups owned by their current user and tenant.
@@ -376,6 +382,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createStreamGroup
+      x-summary-zh: "创建四层转发分组"
       summary: Create a layer-four forwarding group
       description: >-
         Tenant principals are fixed to their current scope and user. Platform
@@ -411,6 +418,7 @@ paths:
   /v1/stream-groups/{id}:
     patch:
       operationId: updateStreamGroup
+      x-summary-zh: "重命名四层转发分组"
       summary: Rename a layer-four forwarding group
       security:
         - bearerAuth: []
@@ -444,6 +452,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     delete:
       operationId: deleteStreamGroup
+      x-summary-zh: "删除未被引用的四层转发分组"
       summary: Delete an unreferenced layer-four forwarding group
       security:
         - bearerAuth: []
@@ -468,6 +477,7 @@ paths:
   /v1/user-configs:
     get:
       operationId: listUserConfigs
+      x-summary-zh: "列出按用户的四层转发默认值"
       summary: List per-user stream defaults
       description: >-
         type must be stream. Tenant principals see only their own rows; platform
@@ -505,6 +515,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createUserConfig
+      x-summary-zh: "创建一项按用户的四层转发默认值"
       summary: Create a per-user stream default
       description: >-
         The scope is global, or a forwarding group that must exist in the same
@@ -538,6 +549,7 @@ paths:
   /v1/user-configs/effective:
     get:
       operationId: getEffectiveUserConfigs
+      x-summary-zh: "解析新建转发草稿预填的默认值"
       summary: Resolve the stream defaults a new forward draft is prefilled with
       description: >-
         type must be stream. The same resolution as creating a forward: the
@@ -583,6 +595,7 @@ paths:
   /v1/user-configs/{id}:
     delete:
       operationId: deleteUserConfig
+      x-summary-zh: "删除一项按用户的四层转发默认值"
       summary: Delete a per-user stream default
       security:
         - bearerAuth: []
@@ -1735,7 +1748,7 @@ components:
     StreamPublishIntent:
       type: object
       additionalProperties: false
-      required: [id, version, operation, desired_state, resource_revision, configuration_source_revision, runtime_spec, state, automatic_request_id, publication_id, rollout_id, created_at]
+      required: [id, version, operation, desired_state, resource_revision, configuration_source_revision, runtime_spec, state, automatic_request_id, publication_id, rollout_id, failure_code, created_at]
       properties:
         id: {type: string, format: uuid}
         version: {type: integer, format: int64, minimum: 1}
@@ -1756,6 +1769,19 @@ components:
         rollout_id:
           oneOf:
             - {type: string, format: uuid}
+            - {type: 'null'}
+        failure_code:
+          description: >-
+            Why a failed publication ended, the automatic publication request's
+            terminal code: no_target_nodes, node_capability_unavailable,
+            node_artifacts_syncing (e.g. the target nodes have not loaded the
+            verified IP library a geo guard rule needs), node_scope_conflict,
+            site_config_invalid, rbac_revoked, deployment_failed,
+            apply_reverted, rollback_failed, rollback_unexpected_state,
+            cancelled or request_deadline_expired. Clients show an unknown
+            code as is. null unless state is failed.
+          oneOf:
+            - {type: string, pattern: '^[a-z0-9_]{1,128}$'}
             - {type: 'null'}
         created_at: {type: string, format: date-time}
       description: >-

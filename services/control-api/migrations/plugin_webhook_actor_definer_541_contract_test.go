@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Migration 541 (fix-finalgaps2): restores 084's SECURITY DEFINER and
+// Migration 541: restores 084's SECURITY DEFINER and
 // search_path on validate_plugin_webhook_actor_target_084, which 532 up's
 // CREATE OR REPLACE dropped. Its predecessor is 540 (access_log_fields),
 // pinned by checksum; checksums in the guard.

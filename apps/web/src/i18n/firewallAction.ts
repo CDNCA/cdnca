@@ -39,6 +39,7 @@ export const zhCNFirewallAction = {
     columns: { domain: '网站', owner: '所属用户', action: '操作' },
   },
   notices: { saved: '动作策略候选已保存', recovered: '已从最近稳定版本创建恢复候选', inherited: '已恢复继承默认设置' },
+  validation: { blockNetworks: '以下网段不是合法 CIDR：{{networks}}', recoverThreshold: '恢复阈值须小于触发阈值（{{engage}}）' },
   errors: { save: '动作策略保存失败', recover: '稳定版本恢复失败', inherit: '恢复继承失败', forbidden: '当前账号无权查看防火墙动作策略' },
 } as const
 
@@ -81,6 +82,7 @@ export const enUSFirewallAction = {
     columns: { domain: 'Site', owner: 'Owner', action: 'Action' },
   },
   notices: { saved: 'Action policy candidate saved', recovered: 'Recovery candidate created from the LKG', inherited: 'The default settings apply again' },
+  validation: { blockNetworks: 'Not a valid CIDR: {{networks}}', recoverThreshold: 'The recover threshold must be below the engage threshold ({{engage}})' },
   errors: { save: 'Failed to save action policy', recover: 'Failed to restore the LKG', inherit: 'Failed to restore the default', forbidden: 'Firewall action access denied' },
 } as const
 

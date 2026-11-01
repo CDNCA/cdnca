@@ -58,7 +58,7 @@ export class AccountRegistrationApiError extends ApiError {
 }
 
 const metadataPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const rfc3339Pattern = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])T(?:[01]\d|2[0-3]):[0-5]\d:(?:[0-5]\d|60)(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$/
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
@@ -240,7 +240,53 @@ async function register(
   return parseRegistrationResult(await response.json().catch(() => null))
 }
 
+export interface AccountRegistrationCaptcha {
+  id: string
+  answer: string
+}
+
+export type AccountRegistrationMode = 'builtin' | 'verified' | 'closed'
+
+function serializeBuiltIn(input: AccountRegistrationRequest, captcha: AccountRegistrationCaptcha): string {
+  return JSON.stringify({ ...JSON.parse(serialize(input)) as Record<string, unknown>, captcha: { id: captcha.id, answer: captcha.answer } })
+}
+
+/**
+ * builtin registration: a control plane without the Turnstile registration service
+ * (fresh install) registers with the built-in image CAPTCHA. The server says
+ * which flow applies through GET /v1/auth/login-methods registration_mode.
+ */
+async function registrationMode(signal?: AbortSignal): Promise<AccountRegistrationMode> {
+  try {
+    const response = await fetch(`${apiRoot}/v1/auth/login-methods`, { method: 'GET', credentials: 'omit', cache: 'no-store', signal })
+    if (!response.ok) return 'verified'
+    const body: unknown = await response.json().catch(() => null)
+    const data = body && typeof body === 'object' ? (body as { data?: unknown }).data : null
+    if (!data || typeof data !== 'object') return 'verified'
+    const value = data as Record<string, unknown>
+    if (value.registration_enabled !== true) return 'closed'
+    return value.registration_mode === 'builtin' ? 'builtin' : 'verified'
+  } catch {
+    return 'verified'
+  }
+}
+
+async function registerBuiltIn(
+  input: AccountRegistrationRequest,
+  captcha: AccountRegistrationCaptcha,
+  metadata: AccountRegistrationRequestMetadata,
+): Promise<AccountRegistrationResult> {
+  const body = serializeBuiltIn(input, captcha)
+  const response = await post('/v1/auth/register', metadata, body, body)
+  if (response.status !== 202 || response.headers.get('Content-Type')?.split(';', 1)[0] !== 'application/json') {
+    throw invalidResponse()
+  }
+  return parseRegistrationResult(await response.json().catch(() => null))
+}
+
 export const accountRegistrationApi = {
+  registrationMode,
+  registerBuiltIn,
   createChallenge,
   verifyChallenge,
   register,

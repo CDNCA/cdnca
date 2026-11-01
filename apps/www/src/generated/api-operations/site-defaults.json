@@ -7,7 +7,7 @@
    "method": "GET",
    "path": "/v1/site-defaults",
    "summary": "Website list > Default settings (the caller's defaults for new sites)",
-   "summary_zh": "网站列表 > 默认设置 (the caller's defaults for new sites)",
+   "summary_zh": "网站列表 > 默认设置（调用者新建网站的默认值）",
    "auth": [
     "bearer"
    ],
@@ -84,6 +84,7 @@
    "method": "POST",
    "path": "/v1/site-defaults",
    "summary": "Add a site default",
+   "summary_zh": "添加一项网站默认设置",
    "auth": [
     "bearer"
    ],
@@ -236,6 +237,7 @@
    "method": "PATCH",
    "path": "/v1/site-defaults/{id}",
    "summary": "Change a site default's value or enable / disable it",
+   "summary_zh": "修改网站默认设置的值或启用 / 停用",
    "auth": [
     "bearer"
    ],
@@ -381,6 +383,7 @@
    "method": "DELETE",
    "path": "/v1/site-defaults/{id}",
    "summary": "Delete a site default",
+   "summary_zh": "删除一项网站默认设置",
    "auth": [
     "bearer"
    ],

@@ -18,7 +18,7 @@ import (
 
 // BlockerHTTP3Unavailable (advisory, OK reply): the supply's nodes do not
 // declare SITE_QUIC, so the leaf serves the site over HTTP/2 instead of
-// refusing it (fix-mktsiteconf).
+// refusing it.
 const BlockerHTTP3Unavailable = "http3_unavailable"
 
 // supplyServesHTTP3 reports whether every serving node of the grant's line

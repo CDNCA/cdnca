@@ -226,7 +226,7 @@ describe('node monitoring batch API', function nodeMonitoringAPIContract() {
     })
   })
 
-  describe('peer probe history (fix-probe)', () => {
+  describe('peer probe history', () => {
     const query = { from: '2026-10-27T00:00:00Z', to: '2026-10-27T01:00:00Z', page: 1, limit: 10 }
     const page = { schema_version: 1, source: 'peer', node_id: id, from: query.from, to: query.to, page: 1, limit: 10, total: 1,
       items: [{ observed_at: query.to, address: '198.51.100.7', port: 443, failed: true, controller_ok: false as boolean | null,

@@ -16,7 +16,7 @@ import (
 )
 
 // newEntitlementUsageReporter reports the thirteen quota values to the license
-// service on each new lease and at least hourly (fix-usagereport).
+// service on each new lease and at least hourly.
 func newEntitlementUsageReporter(cfg config.Config, pool *pgxpool.Pool, analyticsRuntime *analyticsQueryRuntime,
 	policyState *platformpolicy.State,
 ) (*entitlementsync.UsageReporter, error) {

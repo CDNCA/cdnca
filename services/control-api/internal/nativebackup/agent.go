@@ -107,7 +107,7 @@ const (
 	RequestDelete  RequestKind = "delete"
 	RequestMigrate RequestKind = "migrate"
 	// RequestRollback ends the migration hold on this host: the writers are
-	// re-enabled and started again (fix-migrollback).
+	// re-enabled and started again.
 	RequestRollback RequestKind = "rollback"
 )
 
@@ -120,7 +120,7 @@ type MigrationTarget struct {
 	HostKeySHA256 string `json:"host_key_sha256"`
 	Password      string `json:"password,omitempty"`
 	PrivateKey    string `json:"private_key,omitempty"`
-	// Env is the target environment (fix-btenv): auto (default, detect the
+	// Env is the target environment: auto (default, detect the
 	// BaoTa panel), bt (coexist with BaoTa) or plain (dedicated host).
 	Env string `json:"env,omitempty"`
 	// GatewayHost is how nodes reach the new host's Gateway.
@@ -198,7 +198,7 @@ type Run struct {
 	Target      string      `json:"target,omitempty"`
 	// TargetEnv is the detected environment of a migration target (bt or
 	// plain); on bt the console tells the operator to configure the BaoTa
-	// reverse proxy on the new host (fix-btenv2).
+	// reverse proxy on the new host.
 	TargetEnv string            `json:"target_env,omitempty"`
 	Phase     string            `json:"phase,omitempty"`
 	Error     string            `json:"error,omitempty"`

@@ -192,7 +192,7 @@ type CreateInput struct {
 	AttachmentIDs []string `json:"attachment_ids,omitempty"`
 }
 
-// StaffCreateInput (fix-ticket2) is a ticket staff open on a user's behalf;
+// StaffCreateInput is a ticket staff open on a user's behalf;
 // Body is the first staff message, AssigneeUserID an optional handler
 // (defaults to the creating staff member).
 type StaffCreateInput struct {

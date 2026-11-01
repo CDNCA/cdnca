@@ -114,7 +114,7 @@ function apiKeyItems(namePrefix: string, scopeID = activeKey.scope_id) {
   }))
 }
 
-// 高级密钥管理默认收起（fix-apikeysimple）；需要表格/创建按钮的用例先展开。
+// 高级密钥管理默认收起；需要表格/创建按钮的用例先展开。
 async function openAdvanced() {
   const header = await screen.findByRole('button', { name: /高级密钥管理|Advanced key management/ })
   if (header.getAttribute('aria-expanded') !== 'true') fireEvent.click(header)

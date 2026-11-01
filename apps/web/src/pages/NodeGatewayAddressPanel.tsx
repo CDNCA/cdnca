@@ -4,11 +4,13 @@ import { Alert, App as AntApp, Button, Collapse, Form, Input, Radio, Select, Spa
 import { useTranslation } from 'react-i18next'
 
 import { ApiError } from '../api/auth'
+import { useMfaActive } from '../hooks/useMfaActive'
 import { nodesApi } from '../api/nodes'
 import {
   createGatewayAddressStepUp, gatewayAddressChangeComplete, nodeGatewayAddressApi, validGatewayAddress, validServerName,
   type GatewayAddressChange, type GatewayAddressNodeStatus, type GatewayAddressTargetKind,
 } from '../api/nodeGatewayAddress'
+import { mfaStepUpErrorText } from '../i18n/apiError'
 import { formatDateTime } from '../i18n/formatters'
 import {
   gatewayAddressErrorMessage, gatewayAddressRequestMessage, gatewayAddressStateMessage, maintenanceUpgradeFormat,
@@ -31,7 +33,7 @@ const stateColor: Record<string, string> = {
 const totpPattern = /^[0-9]{6}$/
 
 function requestError(error: unknown, language: string): string {
-  return gatewayAddressRequestMessage(language, error instanceof ApiError ? error.code : '')
+  return mfaStepUpErrorText(error) ?? gatewayAddressRequestMessage(language, error instanceof ApiError ? error.code : '')
 }
 
 // 维护升级 → 节点设置「更换主控连接地址」(fix-nodegw): the form sends one
@@ -50,6 +52,8 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
   const [form] = Form.useForm<FormValues>()
   const targetKind = Form.useWatch('target_kind', form) ?? 'all'
   const [retryCodes, setRetryCodes] = useState<Record<string, string>>({})
+  // 未启用 MFA：不要验证码。
+  const requireMfaCode = useMfaActive() !== false
 
   const changesQuery = useQuery({
     queryKey: ['node-gateway-address-changes', accessToken],
@@ -73,7 +77,7 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['node-gateway-address-changes'] })
   const create = useMutation({
     mutationFn: async (values: FormValues) => {
-      const stepUp = await createGatewayAddressStepUp(accessToken, values.code)
+      const stepUp = requireMfaCode ? await createGatewayAddressStepUp(accessToken, values.code) : ''
       return nodeGatewayAddressApi.create(accessToken, {
         address: values.address.trim(), server_name: (values.server_name ?? '').trim(), target_kind: values.target_kind,
         ...(values.target_kind === 'region' ? { region: values.region } : {}),
@@ -89,7 +93,7 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
   })
   const retry = useMutation({
     mutationFn: async ({ id, code }: { id: string; code: string }) =>
-      nodeGatewayAddressApi.retry(accessToken, id, await createGatewayAddressStepUp(accessToken, code)),
+      nodeGatewayAddressApi.retry(accessToken, id, requireMfaCode ? await createGatewayAddressStepUp(accessToken, code) : ''),
     onSuccess: (result, { id }) => {
       message.success(maintenanceUpgradeFormat(language, 'gatewayAddressRetried', { count: result.retried }))
       setRetryCodes((codes) => ({ ...codes, [id]: '' }))
@@ -139,10 +143,10 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
           options={nodes.map((node) => ({ value: node.id, label: `${node.display_id} ${node.name}${node.region ? ` · ${node.region}` : ''}` }))} />
       </Form.Item>}
       <div className="maintenance-gateway-address-submit">
-        <Form.Item name="code" label={mt('gatewayAddressCode')} extra={mt('gatewayAddressCodeHelp')}
+        {requireMfaCode && <Form.Item name="code" label={mt('gatewayAddressCode')} extra={mt('gatewayAddressCodeHelp')}
           rules={[{ pattern: totpPattern, required: true, message: mt('gatewayAddressCodeInvalid') }]}>
           <Input inputMode="numeric" autoComplete="one-time-code" maxLength={6} />
-        </Form.Item>
+        </Form.Item>}
         <Button type="primary" htmlType="submit" loading={create.isPending}>{mt('gatewayAddressSubmit')}</Button>
       </div>
     </Form> : <Typography.Paragraph type="secondary">{mt('gatewayAddressReadOnly')}</Typography.Paragraph>}
@@ -153,7 +157,7 @@ export default function NodeGatewayAddressPanel({ accessToken, canRead, canManag
         : <Collapse className="maintenance-gateway-address-history" items={changes.map((change) => ({
           key: change.id,
           label: <ChangeSummary change={change} language={language} />,
-          children: <ChangeNodes accessToken={accessToken} change={change} language={language} canManage={canManage}
+          children: <ChangeNodes accessToken={accessToken} change={change} language={language} canManage={canManage} requireMfaCode={requireMfaCode}
             code={retryCodes[change.id] ?? ''} onCode={(code) => setRetryCodes((codes) => ({ ...codes, [change.id]: code }))}
             retrying={retry.isPending && retry.variables?.id === change.id}
             onRetry={() => retry.mutate({ id: change.id, code: retryCodes[change.id] ?? '' })} />,
@@ -177,8 +181,9 @@ function ChangeSummary({ change, language }: { change: GatewayAddressChange; lan
   </span>
 }
 
-function ChangeNodes({ accessToken, change, language, canManage, code, onCode, retrying, onRetry }: {
+function ChangeNodes({ accessToken, change, language, canManage, requireMfaCode, code, onCode, retrying, onRetry }: {
   accessToken: string
+  requireMfaCode: boolean
   change: GatewayAddressChange
   language: string
   canManage: boolean
@@ -197,9 +202,9 @@ function ChangeNodes({ accessToken, change, language, canManage, code, onCode, r
   if (detail.isError) return <Alert type="error" showIcon message={requestError(detail.error, language)} />
   return <>
     {canManage && change.counts.failed > 0 && <Space className="maintenance-gateway-address-retry" wrap>
-      <Input aria-label={mt('gatewayAddressRetryCode')} placeholder={mt('gatewayAddressRetryCode')} inputMode="numeric"
-        autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => onCode(event.target.value)} />
-      <Button onClick={onRetry} loading={retrying} disabled={!totpPattern.test(code)}>{mt('gatewayAddressRetry')}</Button>
+      {requireMfaCode && <Input aria-label={mt('gatewayAddressRetryCode')} placeholder={mt('gatewayAddressRetryCode')} inputMode="numeric"
+        autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => onCode(event.target.value)} />}
+      <Button onClick={onRetry} loading={retrying} disabled={requireMfaCode && !totpPattern.test(code)}>{mt('gatewayAddressRetry')}</Button>
     </Space>}
     <Table<GatewayAddressNodeStatus> size="small" rowKey="node_id" scroll={{ x: 720 }} loading={detail.isLoading} pagination={{ pageSize: 20, hideOnSinglePage: true }}
       dataSource={detail.data?.nodes ?? []} columns={[

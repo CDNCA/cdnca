@@ -21,7 +21,7 @@ const nameFieldCodes = new Set(['dns_zone_not_hosted', 'dns_resource_conflict', 
 
 // CNAME域名: the domains site CNAMEs are allocated under (dns_zones copies in
 // every tenant; the first one is the default allocation zone). 参与随机分配
-// (fix-cnamerand): new sites without a CNAME domain draw one of the checked
+//: new sites without a CNAME domain draw one of the checked
 // domains; with none checked they use the default zone.
 export default function CnameDomainPanel({ accessToken, owner, canManage }: { accessToken: string; owner: string[]; canManage: boolean }) {
   const { t } = useTranslation('dnsConfig')

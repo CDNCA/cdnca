@@ -233,6 +233,14 @@ const zhSettings = {
       loadBalancing: { round_robin: '轮循', ip_hash: '定源', url_hash: 'URL 哈希', least_conn: '最少连接', random: '随机' },
     },
   },
+  fieldValidation: {
+    ports: '端口范围为 1–65535',
+    byteSize: '请输入 {{minimum}} 到 {{maximum}} 的大小（可带 k/m/g/t 单位）',
+    duration: '请输入 {{minimum}} 到 {{maximum}} 的时长（可带 ms/s/m/h/d 单位）',
+    headerBuffers: '格式为「数量 大小」，如 4 8k（数量 1–128，大小不超过 1m）',
+    cacheContent: '请填写匹配内容',
+    headerValue: '请填写请求头值',
+  },
   actions: {
     ...zhCN.systemConfiguration.actions,
     delete: '删除',
@@ -482,6 +490,14 @@ const enSettings = {
       wafModules: { sqli: 'SQL injection', xss: 'XSS', upload: 'File upload', fi: 'File inclusion', cmdi: 'Command injection', java: 'Java code injection', jdeser: 'Java deserialization', php: 'PHP code injection', phpdeser: 'PHP deserialization', ssti: 'SSTI template injection' },
       loadBalancing: { round_robin: 'Round robin', ip_hash: 'IP hash', url_hash: 'URL hash', least_conn: 'Least connections', random: 'Random' },
     },
+  },
+  fieldValidation: {
+    ports: 'Ports must be from 1 to 65535',
+    byteSize: 'Enter a size from {{minimum}} to {{maximum}} (k/m/g/t units allowed)',
+    duration: 'Enter a duration from {{minimum}} to {{maximum}} (ms/s/m/h/d units allowed)',
+    headerBuffers: 'Use "count size", for example 4 8k (count 1–128, size up to 1m)',
+    cacheContent: 'Enter the match content',
+    headerValue: 'Enter the header value',
   },
   actions: {
     ...enUS.systemConfiguration.actions,

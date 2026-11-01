@@ -1,6 +1,6 @@
 import i18n from './index'
 
-// 网站更换所属用户弹窗（fix-transfer）。
+// 网站更换所属用户弹窗。
 const zhCN = {
   action: '更换用户',
   owner: '所属用户',

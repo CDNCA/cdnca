@@ -30,7 +30,22 @@ func TestMissingHashedAssetIsNotFoundInsteadOfIndex(t *testing.T) {
 	}
 }
 
-// fix-cfl-c：授权端 management-web 直接监听 443，前面没有 nginx，
+// /downloads/ 下不存在的文件是 404，不落到运营后台 SPA 空壳（原来 200 白屏）。
+func TestMissingDownloadIsNotFoundInsteadOfIndex(t *testing.T) {
+	upstream, _ := url.Parse("http://127.0.0.1:8080")
+	handler, err := newHandler(testStaticRoot(t), upstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []string{"/downloads", "/downloads/", "/downloads/ce", "/downloads/no-such-xyz", "/operator/downloads/ce", "/downloads/edge-agent/1.0.35/x.tar.gz"} {
+		response := serve(handler, http.MethodGet, target, "203.0.113.9:1", nil)
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404 (body %q)", target, response.Code, response.Body.String())
+		}
+	}
+}
+
+// 授权端 management-web 直接监听 443，前面没有 nginx，
 // 页面与接口响应都要带基本安全响应头；上游已给的值不被覆盖或重复。
 func TestSecurityHeadersOnStaticAndProxiedResponses(t *testing.T) {
 	upstreamServer := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {

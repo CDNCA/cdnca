@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/base32"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -593,8 +594,11 @@ func (s *Service) consumeStepUpTx(
 	if tx == nil || validateConsumeStepUp(actor, request) != nil {
 		return Evidence{}, nil, ErrInvalidInput
 	}
-	tokenDigest := sha256.Sum256([]byte(request.Token))
 	now := storeTime(s.now())
+	if request.Token == "" {
+		return s.waiveStepUpTx(ctx, tx, actor, request, now)
+	}
+	tokenDigest := sha256.Sum256([]byte(request.Token))
 	var result Evidence
 	var outcome error
 	proof, err := lockProofByToken(ctx, tx, tokenDigest[:])
@@ -685,6 +689,62 @@ func (s *Service) consumeStepUpTx(
 	}
 	result = evidenceForProof(proof, ordinal, request.ResourceBindingDigest)
 	return result, nil, nil
+}
+
+// waiveStepUpTx handles a consume without a proof: an
+// operator without an active MFA credential is let through (MFA is optional,
+// there is no platform-wide enforcement setting) and the waiver is audited;
+// an operator with active MFA is refused as before (missing proof).
+func (s *Service) waiveStepUpTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	actor Actor,
+	request ConsumeStepUpRequest,
+	now time.Time,
+) (Evidence, error, error) {
+	principal, err := s.lockPrincipal(ctx, tx, actor, now)
+	if err != nil {
+		return Evidence{}, nil, err
+	}
+	if err := validateProofScopeBinding(ctx, tx, principal, request.PlatformScope, request.TenantID); err != nil {
+		return Evidence{}, nil, err
+	}
+	if err := lockPrincipalMFA(ctx, tx, actor); err != nil {
+		return Evidence{}, nil, err
+	}
+	active, err := hasActiveCredential(ctx, tx, actor)
+	if err != nil {
+		return Evidence{}, nil, err
+	}
+	extra := map[string]any{"audience": request.Audience, "requested_action": request.Action,
+		"resource_bound": len(request.ResourceBindingDigest) != 0}
+	if active {
+		outcome := ErrInvalidProof
+		return Evidence{}, outcome, s.appendAudit(ctx, tx, actor, actor.UserID, request.Context,
+			"mfa.step_up.consume", "denied", errorCode(outcome), extra)
+	}
+	waiverID, err := uuid.NewV7()
+	if err != nil {
+		return Evidence{}, nil, fmt.Errorf("generate step-up waiver ID: %w", err)
+	}
+	extra["mfa_enabled"] = false
+	extra["step_up_note"] = StepUpWaivedNote
+	// Database authority checks (migration 618 billing adjustments) match the
+	// waiver to the write by tenant and resource binding.
+	if request.TenantID != uuid.Nil {
+		extra["tenant_id"] = request.TenantID.String()
+	}
+	if len(request.ResourceBindingDigest) != 0 {
+		extra["resource_binding_sha256"] = hex.EncodeToString(request.ResourceBindingDigest)
+	}
+	if err := s.appendAudit(ctx, tx, actor, waiverID, request.Context,
+		"mfa.step_up.waive", "success", "", extra); err != nil {
+		return Evidence{}, nil, err
+	}
+	return Evidence{ProofID: waiverID, ActorUserID: actor.UserID, ActorScopeID: actor.ScopeID, SessionID: actor.SessionID,
+		TenantID: request.TenantID, PlatformScope: request.PlatformScope, Method: MethodNone,
+		Audience: request.Audience, Action: request.Action, VerifiedAt: now, ExpiresAt: now.Add(MaxStepUpTTL),
+		UseOrdinal: 1, ResourceBindingDigest: append([]byte(nil), request.ResourceBindingDigest...), Waived: true}, nil, nil
 }
 
 func (s *Service) Disable(ctx context.Context, actor Actor, request DeactivateRequest) error {
@@ -1359,7 +1419,9 @@ func validRequestContext(request RequestContext) bool {
 }
 
 func validateConsumeStepUp(actor Actor, request ConsumeStepUpRequest) error {
-	if !validActor(actor) || !validProofScope(request.PlatformScope, request.TenantID) || !validProofToken(request.Token) ||
+	// An empty token asks for a waiver (operator without active MFA).
+	if !validActor(actor) || !validProofScope(request.PlatformScope, request.TenantID) ||
+		(request.Token != "" && !validProofToken(request.Token)) ||
 		!validText(request.Audience, 1, 128) || !validText(request.Action, 1, 128) ||
 		!validRequestContext(request.Context) ||
 		(len(request.ResourceBindingDigest) != 0 && len(request.ResourceBindingDigest) != sha256.Size) {

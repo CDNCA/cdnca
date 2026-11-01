@@ -104,6 +104,27 @@ describe('access log fields settings', () => {
     })
   })
 
+  it('refuses a negative retention instead of saving it as 0 (A3-02)', async () => {
+    authenticate(['system_configuration.read', 'system_configuration.manage'])
+    const puts: unknown[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (init?.method === 'PUT') puts.push(url)
+      if (url.endsWith('/v1/admin/system-cleanup-settings')) return json(cleanup)
+      return json(documentBody(defaultAccessLogFields, 0, 'draft', 0))
+    })
+    renderWithProviders(<AccessLogFieldsSettingsPage />)
+    const days = await screen.findByLabelText('网站访问日志保留（天）')
+    fireEvent.change(days, { target: { value: '-3' } })
+    fireEvent.blur(days)
+    expect(await screen.findByText('保留天数须为 0–3650 的整数（0 表示永久保留）')).toBeInTheDocument()
+    expect(days).toHaveValue('-3')
+    const save = screen.getByRole('button', { name: '保存保留天数' })
+    expect(save).toBeDisabled()
+    fireEvent.click(save)
+    expect(puts).toHaveLength(0)
+  })
+
   it('is read-only without manage permission', async () => {
     authenticate(['system_configuration.read'])
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => String(input).includes('system-cleanup-settings')

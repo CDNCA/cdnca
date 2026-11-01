@@ -12,6 +12,7 @@ paths:
   /v1/admin/control-backup:
     get:
       operationId: getControlBackupStatus
+      x-summary-zh: "签名者指纹、冻结状态、备份包、最近运行与脱敏后的设置"
       summary: Signer fingerprint, freeze state, bundles, recent runs and redacted settings
       security: [{bearerAuth: []}]
       responses:
@@ -21,6 +22,7 @@ paths:
   /v1/admin/control-backup/settings:
     put:
       operationId: putControlBackupSettings
+      x-summary-zh: "替换备份计划、保留策略与异地目标"
       summary: Replace schedule, retention and off-host targets
       description: >-
         expected_revision must equal settings.revision of the status read (409
@@ -40,6 +42,7 @@ paths:
   /v1/admin/control-backup/backups:
     post:
       operationId: requestControlBackup
+      x-summary-zh: "立即排队一次备份"
       summary: Queue an immediate backup
       security: [{bearerAuth: []}]
       responses:
@@ -48,6 +51,7 @@ paths:
   /v1/admin/control-backup/backups/{backup_id}:
     delete:
       operationId: deleteControlBackup
+      x-summary-zh: "排队删除一个备份包及其远端副本；请求体 confirm 必须等于 backup_id"
       summary: Queue deletion of a bundle and its remote copies; body confirm must equal backup_id
       security: [{bearerAuth: []}]
       parameters: [{name: backup_id, in: path, required: true, schema: {type: string}}]
@@ -57,6 +61,7 @@ paths:
   /v1/admin/control-backup/backups/{backup_id}/restore-commands:
     get:
       operationId: getControlBackupRestoreCommands
+      x-summary-zh: "把备份包恢复到空主机的命令文本（不执行任何操作）"
       summary: Text commands to restore a bundle onto an empty host (nothing is executed)
       security: [{bearerAuth: []}]
       parameters: [{name: backup_id, in: path, required: true, schema: {type: string}}]
@@ -65,6 +70,7 @@ paths:
   /v1/admin/control-backup/runs/{run_id}:
     get:
       operationId: getControlBackupRun
+      x-summary-zh: "读取一次代理运行及其脱敏日志"
       summary: One agent run with its redacted log
       security: [{bearerAuth: []}]
       parameters: [{name: run_id, in: path, required: true, schema: {type: string}}]
@@ -74,6 +80,7 @@ paths:
   /v1/admin/control-backup/targets/probe:
     post:
       operationId: probeControlBackupTarget
+      x-summary-zh: "按页面填写的目标写入、回读并删除一个探测对象（不保存任何设置）"
       summary: Write, read back and delete a probe object on the target as on screen (nothing is saved)
       description: >-
         Body {expected_revision, target}. target is merged over the stored
@@ -87,6 +94,7 @@ paths:
   /v1/admin/control-backup/host-key:
     post:
       operationId: fetchControlBackupHostKey
+      x-summary-zh: "迁移前读取并固定目标主机的 SSH 主机密钥指纹"
       summary: Read an SSH host key fingerprint to pin before a migration
       security: [{bearerAuth: []}]
       responses:
@@ -95,6 +103,7 @@ paths:
   /v1/admin/control-backup/migrations:
     post:
       operationId: requestControlMigration
+      x-summary-zh: "排队迁移到一台空的新主机；confirm 必须等于主机地址，迁移成功后本主控保持冻结"
       summary: Queue a migration to an empty new host; confirm must equal host. This control plane stays frozen after success.
       security: [{bearerAuth: []}]
       responses:
@@ -104,6 +113,7 @@ paths:
   /v1/admin/control-backup/recovery-kit:
     post:
       operationId: exportControlBackupRecoveryKit
+      x-summary-zh: "下载用于异地灾备的备份身份；口令为空（默认）时原样保存，否则用口令加密（scrypt）"
       summary: Download the backup identity for off-host disaster recovery; an empty passphrase (default) stores it as is, otherwise it is sealed with the passphrase (scrypt)
       security: [{bearerAuth: []}]
       responses:

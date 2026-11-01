@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/gateway-bindings/complete",
    "summary": "Gateway installer completes a binding with its one-time token (public, rate limited per source)",
+   "summary_zh": "网关安装器用一次性令牌完成绑定（公开接口，按来源限速）",
    "auth": [
     "none"
    ],

@@ -19,7 +19,7 @@ type Store struct {
 	enveloper PrivateKeyEnveloper
 	now       Clock
 	// cancelRenewal cancels an in-flight renewal delivery a user's binding
-	// change supersedes (fix-dnscert4).
+	// change supersedes.
 	cancelRenewal RenewalDeliveryCanceller
 }
 

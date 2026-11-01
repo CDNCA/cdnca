@@ -17,6 +17,7 @@ paths:
   /v1/admin/site-publications:
     get:
       operationId: listAdminSitePublications
+      x-summary-zh: "列出某租户范围的发布记录"
       summary: List publications for one tenant scope
       description: >-
         Requires a platform-scoped principal with edge_publications.read. The
@@ -36,6 +37,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: publishSiteConfiguration
+      x-summary-zh: "把当前网站/四层版本发布为不可变的目标快照"
       summary: Publish the current Site/L4 revision to an immutable target snapshot
       description: >-
         Requires a platform-scoped principal with edge_publications.manage.
@@ -78,6 +80,7 @@ paths:
   /v1/admin/site-publications/{publication_id}:
     get:
       operationId: getAdminSitePublication
+      x-summary-zh: "在指定租户范围内读取一次发布"
       summary: Get one publication in an explicit tenant scope
       security:
         - bearerAuth: []
@@ -95,6 +98,7 @@ paths:
   /v1/admin/site-publications/{publication_id}/rollback:
     post:
       operationId: rollbackSitePublication
+      x-summary-zh: "把所选节点回滚到上一次发布的配置"
       summary: Roll selected nodes back to their direct previous published configuration
       description: >-
         Creates a rollback rollout for the immutable configuration referenced by
@@ -129,6 +133,7 @@ paths:
   /v1/admin/site-rollouts:
     get:
       operationId: listAdminSiteRollouts
+      x-summary-zh: "列出某租户范围的灰度发布"
       summary: List rollouts for one tenant scope
       security:
         - bearerAuth: []
@@ -146,6 +151,7 @@ paths:
   /v1/admin/site-rollouts/{rollout_id}:
     get:
       operationId: getAdminSiteRollout
+      x-summary-zh: "读取某租户范围一次灰度发布的进度"
       summary: Get deterministic rollout progress for one tenant scope
       security:
         - bearerAuth: []
@@ -163,6 +169,7 @@ paths:
   /v1/admin/site-rollouts/{rollout_id}/deployments:
     get:
       operationId: listAdminSiteRolloutDeployments
+      x-summary-zh: "列出各节点最近一次部署尝试"
       summary: List latest per-node deployment attempts
       security:
         - bearerAuth: []
@@ -182,6 +189,7 @@ paths:
   /v1/admin/site-rollouts/{rollout_id}/start:
     post:
       operationId: startSiteRollout
+      x-summary-zh: "开始暂缓中的渐进式发布"
       summary: Start a held progressive rollout
       description: >-
         Releases only frozen cohort zero. Target membership and cohort assignment
@@ -215,6 +223,7 @@ paths:
   /v1/admin/site-rollouts/{rollout_id}/pause:
     post:
       operationId: pauseSiteRollout
+      x-summary-zh: "暂停进行中的渐进式发布"
       summary: Pause a running progressive rollout
       description: >-
         Re-holds commands in the released cohort that have not been claimed.
@@ -247,6 +256,7 @@ paths:
   /v1/admin/site-rollouts/{rollout_id}/resume:
     post:
       operationId: resumeSiteRollout
+      x-summary-zh: "继续已暂停的渐进式发布"
       summary: Resume a paused progressive rollout
       description: >-
         Recomputes the current cohort under the rollout lock. If it is terminal,
@@ -279,6 +289,7 @@ paths:
   /v1/admin/site-rollouts/{rollout_id}/cancel:
     post:
       operationId: cancelSiteRollout
+      x-summary-zh: "取消灰度发布中排队的工作"
       summary: Cancel queued work in a rollout
       description: >-
         Progressive cancellation marks held or unclaimed commands and their
@@ -312,6 +323,7 @@ paths:
   /v1/admin/site-rollouts/{rollout_id}/retry-failed:
     post:
       operationId: retryFailedSiteRolloutDeployments
+      x-summary-zh: "为可重试的失败部署追加尝试"
       summary: Append attempts for retryable failed deployments
       description: >-
         Only failed or rollback_failed latest attempts below max_attempts are
@@ -345,6 +357,7 @@ paths:
   /v1/admin/site-rollouts/reconciliations:
     post:
       operationId: reconcileAdminNodeConfiguration
+      x-summary-zh: "部署结果不确定时，记录已确认生效的配置"
       summary: Record the configuration proven to be active after an uncertain deployment result
       description: >-
         Clears the rollback_failed reconciliation gate only when the named node,
@@ -390,6 +403,7 @@ paths:
   /v1/site-publications:
     get:
       operationId: listTenantSitePublications
+      x-summary-zh: "列出当前租户范围的发布记录"
       summary: List publications in the authenticated tenant scope
       description: >-
         Requires a tenant-scoped principal with sites.read. scope_id is not
@@ -410,6 +424,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: publishTenantSiteConfiguration
+      x-summary-zh: "发布当前租户范围的配置"
       summary: Publish the authenticated tenant scope
       description: >-
         Requires a tenant session with sites.manage. configuration_scope_id
@@ -448,6 +463,7 @@ paths:
   /v1/site-publications/{publication_id}:
     get:
       operationId: getTenantSitePublication
+      x-summary-zh: "读取当前租户范围的一次发布"
       summary: Get one publication in the authenticated tenant scope
       security:
         - bearerAuth: []
@@ -465,6 +481,7 @@ paths:
   /v1/site-publications/security-activations:
     get:
       operationId: getSecurityPolicyActivationStatus
+      x-summary-zh: "读取权威的安全策略绑定与最新激活候选"
       summary: Get the authoritative security binding and latest activation candidate
       description: >-
         Requires security_policies.read in the authenticated tenant scope, or a
@@ -492,6 +509,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: createSecurityPolicyActivation
+      x-summary-zh: "暂存安全策略候选并开始灰度发布"
       summary: Stage a security policy candidate and start its canary rollout
       description: >-
         Requires security_policies.manage in the authenticated tenant scope. A
@@ -534,6 +552,7 @@ paths:
   /v1/site-publications/security-activations/rebind-status:
     get:
       operationId: getSecurityPolicyRebindStatus
+      x-summary-zh: "统计仍落后于 WAF/CC 规则库版本的已绑定网站，以及套餐未授权的网站"
       summary: Count bound sites still behind their WAF/CC library and those the package does not entitle
       description: >-
         Requires security_policies.read in the authenticated tenant scope; a
@@ -566,6 +585,7 @@ paths:
   /v1/site-publications/security-activations/{candidate_id}:
     get:
       operationId: getSecurityPolicyActivation
+      x-summary-zh: "读取一个安全策略激活候选"
       summary: Get a security policy activation candidate
       security:
         - bearerAuth: []
@@ -587,6 +607,7 @@ paths:
   /v1/site-publications/security-activations/{candidate_id}/reconcile:
     post:
       operationId: reconcileSecurityPolicyActivation
+      x-summary-zh: "推进灰度、扩量、恢复与晋升"
       summary: Reconcile canary, expansion, recovery, and promotion
       description: >-
         Reuses the candidate config and artifact digest for every phase.
@@ -630,6 +651,7 @@ paths:
   /v1/site-publications/security-activations/{candidate_id}/rollback:
     post:
       operationId: rollbackSecurityPolicyActivation
+      x-summary-zh: "把旧策略复制为单调递增的新版本并暂存"
       summary: Clone an old policy into a new monotonic version and stage it
       security:
         - bearerAuth: []
@@ -664,6 +686,7 @@ paths:
   /v1/site-rollouts:
     get:
       operationId: listTenantSiteRollouts
+      x-summary-zh: "列出当前租户范围的灰度发布"
       summary: List rollouts in the authenticated tenant scope
       security:
         - bearerAuth: []
@@ -681,6 +704,7 @@ paths:
   /v1/site-rollouts/{rollout_id}:
     get:
       operationId: getTenantSiteRollout
+      x-summary-zh: "读取当前租户范围的灰度发布进度"
       summary: Get rollout progress in the authenticated tenant scope
       security:
         - bearerAuth: []
@@ -698,6 +722,7 @@ paths:
   /v1/site-rollouts/{rollout_id}/deployments:
     get:
       operationId: listTenantSiteRolloutDeployments
+      x-summary-zh: "列出部署进度（不含节点目标信息）"
       summary: List deployment progress without node target metadata
       security:
         - bearerAuth: []

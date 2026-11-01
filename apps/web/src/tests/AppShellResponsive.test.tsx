@@ -236,7 +236,7 @@ describe('responsive application shell', () => {
     expect(logos[0]).toHaveAttribute('src', '/dashboard/logo.png')
   })
 
-  it('uses the dark logo on the dark chrome of dark mode (fix-brandkit)', () => {
+  it('uses the dark logo on the dark chrome of dark mode', () => {
     installMatchMedia(false)
     window.localStorage.setItem('cdnca.ui.theme', 'dark')
     try {

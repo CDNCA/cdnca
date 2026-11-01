@@ -7,7 +7,7 @@ import { ApiError, networkApiError } from './auth'
 // certificate (control-api internal/marketsubscribehttp).
 const apiRoot = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
 
-/** 节点供货资格（fix-sellerqual）：由所属授权客户的节点供应商入驻审核决定，不看授权功能码。
+/** 节点供货资格：由所属授权客户的节点供应商入驻审核决定，不看授权功能码。
  *  status：none 未申请 / awaiting_payment 待付开通费 / pending_review 审核中 / rejected 被驳回 /
  *  suspended 已停用 / terminated 已终止 / active 已开通；can_sell 为 true 才显示供货管理。
  *  apply_url：无资格时去卖方站点申请的地址（卖方站点未配置时缺省）。 */
@@ -24,7 +24,7 @@ export interface MarketMember {
   offers_used?: number
   /** 旧市场版本不返回；缺省时按 features 是否含 market.sell 判断。 */
   supplier?: MarketSupplierQualification
-  /** 卖家站地址（fix-sellersite）；市场未配置卖家站时缺省。 */
+  /** 卖家站地址；市场未配置卖家站时缺省。 */
   seller_site_url?: string
 }
 // MARKET-03: one published agreement (latest version with its markdown text); unpublished kinds are absent.
@@ -728,7 +728,7 @@ export function marketUnavailable(error: unknown): boolean {
 }
 
 // marketForbidden: the licence lease or the role lacks this market function (403);
-// pages explain it in place instead of an error dialog (fix-mktui).
+// pages explain it in place instead of an error dialog.
 export function marketForbidden(error: unknown): boolean {
   return error instanceof ApiError && error.status === 403
 }

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/certificate-publications",
    "summary": "List current certificate publication statuses",
+   "summary_zh": "列出当前证书发布状态",
    "auth": [
     "bearer"
    ],
@@ -100,6 +101,7 @@
    "method": "GET",
    "path": "/v1/certificate-publications/{site_id}/revisions/{revision}",
    "summary": "Get one binding revision and its complete state history",
+   "summary_zh": "读取一个绑定版本及其完整状态历史",
    "auth": [
     "bearer"
    ],

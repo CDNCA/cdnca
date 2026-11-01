@@ -4,7 +4,7 @@
 - 兼容基线：1.0.35（不兼容 1.0.34 及更早；新节点能力按能力协商门控，节点不具备直接拒绝发布并列出节点，能力到位后自动重新发布）。
 - 用户原话：“第三方插件也要能下发到节点”。
 - 修订：ADR 0007 §3 边界“第三方代码不进入控制面和边缘请求路径”在边缘一侧被本文修订（控制面一侧不变），PA-03 删除的节点插件机制不恢复（能力 30 仍 reserved，本文用新号）。
-- 代码核对基于集成头 `10c7eecc1`。路径前缀：节点 `agents/edge-agent/`，规则包 `libs/rulepack/`，市场 `services/market-service/`，授权端 `services/license-service/`，主控 `services/control-api/`。
+- 代码核对基于 `10c7eecc1`。路径前缀：节点 `agents/edge-agent/`，规则包 `libs/rulepack/`，市场 `services/market-service/`，授权端 `services/license-service/`，主控 `services/control-api/`。
 - PoC：`tests/node-plugin-poc/run.sh`（提交 `691a41b0e`），结果见 §6。
 
 ## 1. 结论（先看这里）
@@ -18,7 +18,7 @@
 
 ## 2. 现状：开发者规则包已经是“第三方内容下发到节点”
 
-链路（全部已实现，集成头可用）：
+链路（全部已实现）：
 
 | 环节 | 依据 | 做了什么 |
 |---|---|---|

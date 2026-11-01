@@ -13,6 +13,7 @@ import TenantScopeSelect from '../components/TenantScopeSelect'
 import '../i18n/firewallAction'
 import { DataTable, FormGrid, PageSection, StatusTag, TableToolbar, useFeedback } from '@cdnca/ui'
 import './FirewallActionPoliciesPage.css'
+import { validCIDR } from './streamForm'
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const pageSize = 20
@@ -24,8 +25,18 @@ type FirewallActionDraft = Omit<FirewallActionPolicyInput, 'engage_threshold' | 
   return_page: Omit<FirewallActionPolicyInput['return_page'], 'status'> & { status: number | null }
 }
 
+/** A3-03: what the server refuses (firewallactioncontrol.normalizePolicy) and the user must see before saving. */
+function invalidBlockNetworks(draft: FirewallActionDraft): string[] {
+  return draft.block_networks.filter((network) => !validCIDR(network))
+}
+
+function recoverNotBelowEngage(draft: FirewallActionDraft): boolean {
+  return draft.engage_threshold !== null && draft.recover_threshold !== null && draft.recover_threshold >= draft.engage_threshold
+}
+
 function completePolicy(draft: FirewallActionDraft): FirewallActionPolicyInput | null {
   if (draft.engage_threshold === null || draft.recover_threshold === null || draft.recovery_windows === null || draft.return_page.status === null) return null
+  if (invalidBlockNetworks(draft).length > 0 || recoverNotBelowEngage(draft)) return null
   return {
     ...draft,
     engage_threshold: draft.engage_threshold,
@@ -47,11 +58,12 @@ function lines(value: string): string[] {
  * A labelled field in the shared horizontal form row of the site edit pages
  * (label column, then the control with its help line; stacks at ≤720px).
  */
-function Field({ label, help, htmlFor, children }: { label: string; help?: string; htmlFor?: string; children: ReactNode }) {
+function Field({ label, help, error, htmlFor, children }: { label: string; help?: string; error?: string; htmlFor?: string; children: ReactNode }) {
   return <div className="site-form-row">
     <div className="site-form-row-label"><label htmlFor={htmlFor}>{label}</label></div>
     <div className="site-form-row-control">
       {children}
+      {error ? <Typography.Text type="danger" role="alert">{error}</Typography.Text> : null}
       {help ? <p className="site-form-row-help">{help}</p> : null}
     </div>
   </div>
@@ -330,8 +342,12 @@ function PolicyFields({ draft, setDraft, canManage, showEscalation }: {
   const updateCrawler = (index: number, patch: Partial<FirewallActionPolicyInput['trusted_crawlers'][number]>) => setDraft({ ...draft,
     trusted_crawlers: draft.trusted_crawlers.map((crawler, candidate) => candidate === index ? { ...crawler, ...patch } : crawler),
   })
+  const badNetworks = invalidBlockNetworks(draft)
+  const recoverInvalid = recoverNotBelowEngage(draft)
   const inputNumber = (field: 'engage_threshold' | 'recover_threshold' | 'recovery_windows', min: number, max?: number) =>
     <InputNumber id={`firewall-action-${field}`} style={{ width: '100%' }}
+      status={field === 'recover_threshold' && recoverInvalid ? 'error' : undefined}
+      aria-invalid={field === 'recover_threshold' && recoverInvalid ? true : undefined}
       aria-label={t(field === 'engage_threshold' ? 'engageThreshold' : field === 'recover_threshold' ? 'recoverThreshold' : 'recoveryWindows')}
       min={min} max={max} value={draft[field]} disabled={!canManage} onChange={(value) => setDraft({ ...draft, [field]: value })} />
   return <>
@@ -350,14 +366,17 @@ function PolicyFields({ draft, setDraft, canManage, showEscalation }: {
     </FormGrid>
     <FormGrid columns={3}>
       <Field label={t('engageThreshold')} help={t('help.engageThreshold')} htmlFor="firewall-action-engage_threshold">{inputNumber('engage_threshold', 1)}</Field>
-      <Field label={t('recoverThreshold')} help={t('help.recoverThreshold')} htmlFor="firewall-action-recover_threshold">{inputNumber('recover_threshold', 0)}</Field>
+      <Field label={t('recoverThreshold')} help={t('help.recoverThreshold')}
+        error={recoverInvalid ? t('validation.recoverThreshold', { engage: draft.engage_threshold }) : undefined} htmlFor="firewall-action-recover_threshold">{inputNumber('recover_threshold', 0)}</Field>
       <Field label={t('recoveryWindows')} help={t('help.recoveryWindows')} htmlFor="firewall-action-recovery_windows">{inputNumber('recovery_windows', 1, 60)}</Field>
     </FormGrid>
   </Card>
   <Card size="small" title={t('sections.networks')}>
     <FormGrid columns={2}>
-      <Field label={t('blockNetworks')} help={t('help.blockNetworks')} htmlFor="firewall-action-block">
-        <Input.TextArea id="firewall-action-block" aria-label={t('blockNetworks')} value={draft.block_networks.join('\n')} autoSize={{ minRows: 3, maxRows: 8 }} disabled={!canManage}
+      <Field label={t('blockNetworks')} help={t('help.blockNetworks')} htmlFor="firewall-action-block"
+        error={badNetworks.length > 0 ? t('validation.blockNetworks', { networks: badNetworks.join('、') }) : undefined}>
+        <Input.TextArea id="firewall-action-block" aria-label={t('blockNetworks')}
+          status={badNetworks.length > 0 ? 'error' : undefined} aria-invalid={badNetworks.length > 0 || undefined} value={draft.block_networks.join('\n')} autoSize={{ minRows: 3, maxRows: 8 }} disabled={!canManage}
           onChange={(event) => setDraft({ ...draft, block_networks: lines(event.target.value) })} />
       </Field>
       <Field label={t('trustedProxies')} help={t('help.trustedProxies')} htmlFor="firewall-action-proxies">

@@ -42,7 +42,7 @@ func (store *Store) configSyncCandidates(ctx context.Context) ([]configSyncCandi
 	rows, err := tx.Query(ctx, `WITH latest AS (
 			SELECT DISTINCT ON (deployment.node_id,deployment.configuration_scope_id)
 			       deployment.node_id,deployment.configuration_scope_id,deployment.action,deployment.deadline_at,
-			       -- A frozen node's refusal (fix-stoppolicy2) is no failed sync: the
+			       -- A frozen node's refusal is no failed sync: the
 			       -- node keeps serving and gets the scope again once it unfreezes.
 			       CASE WHEN EXISTS (SELECT 1 FROM node_deployment_frozen_refusals frozen_refusal
 			           WHERE frozen_refusal.deployment_id=deployment.id AND frozen_refusal.attempt=deployment.attempt)

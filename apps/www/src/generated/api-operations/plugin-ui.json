@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/plugin-ui/pages",
    "summary": "List the ui_page plugin pages this principal may open",
+   "summary_zh": "列出当前身份可打开的插件页面（ui_page）",
    "auth": [
     "bearer"
    ],
@@ -39,6 +40,7 @@
    "method": "GET",
    "path": "/v1/plugin-ui/signing-key",
    "summary": "The installation public key plugin backends verify proxied calls with",
+   "summary_zh": "插件后端用来校验代理调用的本安装公钥",
    "auth": [
     "bearer"
    ],
@@ -93,10 +95,278 @@
    ]
   },
   {
+   "operation_id": "getPluginIdentity",
+   "method": "GET",
+   "path": "/v1/plugin-ui/{plugin_id}/identity",
+   "summary": "One-click plugin identity status of this tenant",
+   "summary_zh": "本租户的插件一键授权状态",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Tenant session that may open a user page of this enabled ui_page plugin with an api_base_url. Lists the permissions the identity would carry (the installation's approved scopes that an API key may hold, minus platform.*), which of them the caller holds, and the current identity (who authorized it, when). Never returns key material.",
+   "params": [
+    {
+     "name": "plugin_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The plugin identity status (never the secret).",
+     "fields": [
+      {
+       "name": "plugin_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "authorization_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "required_scopes",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "granted_scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "required_scopes the caller holds (what an authorization grants)"
+      },
+      {
+       "name": "missing_scopes",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "can_authorize",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "identity",
+       "type": "null | object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "permission_denied (platform session)"
+    },
+    {
+     "status": "404",
+     "description": "plugin_ui_not_found"
+    },
+    {
+     "status": "409",
+     "description": "plugin_installation_unavailable"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "authorizePluginIdentity",
+   "method": "POST",
+   "path": "/v1/plugin-ui/{plugin_id}/identity",
+   "summary": "Authorize the plugin; the control plane issues its identity and hands it to the plugin backend",
+   "summary_zh": "授权插件：主控签发插件身份并交给插件后端",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires api_keys.self.manage (same rule as POST /v1/account/api-keys; refused while impersonating). The control plane issues an API key bound to this tenant's installation with the scopes of GET .../identity granted_scopes, and delivers it only to the plugin backend: PUT {api_base_url}/plugin-identity signed like the proxy (X-Cdnca-Plugin-*; context delivery \"plugin_identity\") with body {api_key, api_key_id, scopes, issued_by_user_id, issued_by_display_name, issued_at}. Once delivered, older identities of the installation in this tenant are revoked at once; a failed delivery revokes the new key (502 plugin_identity_delivery_failed). An identity another member authorized can be replaced only with plugin_installations.manage. Audited as plugin.identity.grant and api_key.plugin_identity.revoke.",
+   "params": [
+    {
+     "name": "plugin_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The plugin identity status (never the secret).",
+     "fields": [
+      {
+       "name": "plugin_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "authorization_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "required_scopes",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "granted_scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "required_scopes the caller holds (what an authorization grants)"
+      },
+      {
+       "name": "missing_scopes",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "can_authorize",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "identity",
+       "type": "null | object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "The request body or parameters are invalid.",
+     "description_zh": "请求体或参数不合法。"
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "permission_denied, plugin_identity_held_by_other, api_key_disabled"
+    },
+    {
+     "status": "404",
+     "description": "plugin_ui_not_found"
+    },
+    {
+     "status": "409",
+     "description": "plugin_installation_unavailable, idempotency_conflict (that attempt already ended; retry with a new key)"
+    },
+    {
+     "status": "502",
+     "description": "plugin_identity_delivery_failed"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
+   "operation_id": "revokePluginIdentity",
+   "method": "DELETE",
+   "path": "/v1/plugin-ui/{plugin_id}/identity",
+   "summary": "Revoke the plugin's authorization in this tenant",
+   "summary_zh": "撤销插件在本租户的授权",
+   "auth": [
+    "bearer"
+   ],
+   "description": "Requires api_keys.self.manage; revoking an identity another member authorized needs plugin_installations.manage. Revocation is immediate (the next plugin call is 401); the plugin backend is then told with a signed DELETE {api_base_url}/plugin-identity (best effort). Audited as plugin.identity.revoke.",
+   "params": [
+    {
+     "name": "plugin_id",
+     "in": "path",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "The plugin identity status (never the secret).",
+     "fields": [
+      {
+       "name": "plugin_id",
+       "type": "string",
+       "required": true
+      },
+      {
+       "name": "authorization_id",
+       "type": "string(uuid)",
+       "required": true
+      },
+      {
+       "name": "required_scopes",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "granted_scopes",
+       "type": "array<string>",
+       "required": true,
+       "description": "required_scopes the caller holds (what an authorization grants)"
+      },
+      {
+       "name": "missing_scopes",
+       "type": "array<string>",
+       "required": true
+      },
+      {
+       "name": "can_authorize",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "identity",
+       "type": "null | object",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "401",
+     "description": "Authentication failed or the session is invalid.",
+     "description_zh": "认证失败或会话已失效。"
+    },
+    {
+     "status": "403",
+     "description": "permission_denied, plugin_identity_held_by_other"
+    },
+    {
+     "status": "404",
+     "description": "plugin_ui_not_found"
+    },
+    {
+     "status": "409",
+     "description": "plugin_installation_unavailable"
+    },
+    {
+     "status": "503",
+     "description": "A required dependency is unavailable."
+    }
+   ]
+  },
+  {
    "operation_id": "proxyPluginUIRequest",
    "method": "POST",
    "path": "/v1/plugin-ui/{plugin_id}/proxy",
    "summary": "Call a ui_page plugin's own backend on behalf of one of its pages",
+   "summary_zh": "代插件页面调用该插件自己的后端",
    "auth": [
     "bearer"
    ],

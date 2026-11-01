@@ -37,7 +37,7 @@ type commandJobSnapshot struct {
 // producerOwnedCommandKinds: kinds whose producer keeps its own projection
 // of the job (CACHE-ADD-05: a cache operation's cache_operations/node rows,
 // cancel outbox and retry scheduling). Service.Command routes their
-// cancel/retry to the registered ProducerCommandRouter (fix-cacheflow2); the
+// cancel/retry to the registered ProducerCommandRouter; the
 // generic cancel/retry only moves background_jobs, so when no router is
 // registered (cache control disabled) and for replay it is refused here.
 var producerOwnedCommandKinds = map[string]bool{"cache.operation": true}

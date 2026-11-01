@@ -175,6 +175,24 @@ describe('ErrorPagesPage', () => {
     expect(screen.getByRole('link', { name: '查看发布记录' })).toHaveAttribute('href', '/site/publications')
   })
 
+  // A3-10: template markers are refused before any upload (the server rejects them anyway).
+  it('refuses template markers before uploading a global page', async () => {
+    vi.mocked(errorPagesApi.getSlot).mockResolvedValue({
+      binding: { key: 'blacklist', asset_id: assetID, revision: 2 },
+      content: '<html>old</html>', source: 'override', delivery: 'theme',
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<ErrorPagesPage />)
+    const content = await screen.findByRole('textbox', { name: '页面内容' })
+    await waitFor(() => expect(content).toBeEnabled())
+    for (const [body, marker] of [['<h1>{{ip}}</h1>', '{{'], ['<p>${host}</p>', '${'], ['<% x %>', '<%']] as const) {
+      fireEvent.change(content, { target: { value: body } })
+      await user.click(screen.getByRole('button', { name: '保存' }))
+      expect(await screen.findByText(`页面内容含模板标记「${marker}」，节点不做变量替换，请删除后再保存`)).toBeInTheDocument()
+    }
+    expect(errorPagesApi.initiateAsset).not.toHaveBeenCalled()
+  })
+
   it('restores the system default by unbinding the override with its revision', async () => {
     vi.mocked(errorPagesApi.getSlot).mockResolvedValue({
       binding: { key: 'blacklist', asset_id: assetID, revision: 4 }, content: '<html>mine</html>', source: 'override', delivery: 'none',
@@ -271,6 +289,18 @@ describe('ErrorPagesPage', () => {
       [{ key: 'http_400', asset_id: assetID }],
       expect.stringMatching(/^error-page-override-create-/),
     )
+  })
+
+  it('refuses template markers in a regional override before uploading', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<ErrorPagesPage />)
+    const dialog = await openCreateDialog(user)
+    await selectOption(within(dialog).getByRole('combobox', { name: '节点选择' }), '41 节点A')
+    await selectOption(within(dialog).getByRole('combobox', { name: '配置项' }), '400错误')
+    fireEvent.change(within(dialog).getByRole('textbox', { name: '400错误' }), { target: { value: '<h1>{{ip}}</h1>' } })
+    await user.click(within(dialog).getByRole('button', { name: '确定' }))
+    expect(await screen.findByText('页面内容含模板标记「{{」，节点不做变量替换，请删除后再保存')).toBeInTheDocument()
+    expect(errorPagesApi.initiateAsset).not.toHaveBeenCalled()
   })
 
   it('does not list nodes or regions without nodes.read and names the missing permission', async () => {

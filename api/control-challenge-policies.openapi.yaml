@@ -31,6 +31,7 @@ paths:
     get:
       tags: [Challenge policies]
       operationId: listChallengePolicies
+      x-summary-zh: "列出某租户范围的在用挑战策略"
       security: [{bearerAuth: []}]
       summary: List active challenge policies in one tenant scope
       description: >-
@@ -62,6 +63,7 @@ paths:
     post:
       tags: [Challenge policies]
       operationId: createChallengePolicy
+      x-summary-zh: "为租户自有网站与主机名创建挑战策略"
       security: [{bearerAuth: []}]
       summary: Create a challenge policy for a tenant-owned site and host
       description: >-
@@ -101,6 +103,7 @@ paths:
     get:
       tags: [Challenge policies]
       operationId: getChallengePolicy
+      x-summary-zh: "读取一个挑战策略"
       security: [{bearerAuth: []}]
       summary: Read one challenge policy
       description: >-
@@ -118,6 +121,7 @@ paths:
     patch:
       tags: [Challenge policies]
       operationId: updateChallengePolicy
+      x-summary-zh: "追加挑战策略的新配置版本"
       security: [{bearerAuth: []}]
       summary: Append a new challenge policy configuration revision
       description: >-
@@ -147,6 +151,7 @@ paths:
     delete:
       tags: [Challenge policies]
       operationId: deleteChallengePolicy
+      x-summary-zh: "追加删除标记版本，软删除挑战策略"
       security: [{bearerAuth: []}]
       summary: Soft-delete a challenge policy by appending a tombstone revision
       description: >-
@@ -179,6 +184,7 @@ paths:
     post:
       tags: [Challenge policies]
       operationId: enableChallengePolicy
+      x-summary-zh: "按版本 CAS 启用挑战策略"
       security: [{bearerAuth: []}]
       summary: Enable a challenge policy with revision CAS
       description: >-
@@ -209,6 +215,7 @@ paths:
     post:
       tags: [Challenge policies]
       operationId: disableChallengePolicy
+      x-summary-zh: "按版本 CAS 停用挑战策略"
       security: [{bearerAuth: []}]
       summary: Disable a challenge policy with revision CAS
       description: >-
@@ -240,6 +247,7 @@ paths:
     post:
       tags: [Challenge policies]
       operationId: publishChallengePolicy
+      x-summary-zh: "把一个已启用的挑战策略版本发布到边缘节点"
       security: [{bearerAuth: []}]
       summary: Publish one exact enabled challenge policy revision to Edge nodes
       description: >-
@@ -271,6 +279,7 @@ paths:
     get:
       tags: [Challenge policies]
       operationId: getChallengePolicyPublication
+      x-summary-zh: "读取某策略制品的灰度状态"
       security: [{bearerAuth: []}]
       summary: Read the bounded rollout state for an exact policy artifact
       description: >-
@@ -299,6 +308,7 @@ paths:
     post:
       tags: [Challenge policies]
       operationId: promoteChallengePolicyPublication
+      x-summary-zh: "把健康的挑战灰度晋升到边缘配置"
       security: [{bearerAuth: []}]
       summary: Promote an exact healthy challenge rollout into Edge configuration
       description: >-

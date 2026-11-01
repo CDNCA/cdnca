@@ -25,6 +25,7 @@ paths:
     get:
       tags: [Account MFA]
       operationId: getMyMFAStatus
+      x-summary-zh: "读取当前账号的两步验证状态"
       summary: Read the authenticated account's current MFA state
       description: >-
         Returns only inactive, enrollment_pending, or active plus non-sensitive credential metadata.
@@ -46,6 +47,7 @@ paths:
     post:
       tags: [Account MFA]
       operationId: beginMyMFAEnrollment
+      x-summary-zh: "开始绑定 TOTP 验证器"
       summary: Begin TOTP enrollment
       description: >-
         A first successful response contains the seed and provisioning URI. A same-payload
@@ -77,6 +79,7 @@ paths:
     post:
       tags: [Account MFA]
       operationId: activateMyMFAEnrollment
+      x-summary-zh: "启用待绑定的 TOTP 凭据"
       summary: Activate a pending TOTP credential
       description: >-
         Recovery codes are returned only by the first successful activation. They are omitted
@@ -110,6 +113,7 @@ paths:
     post:
       tags: [Account MFA]
       operationId: createMyMFAStepUpProof
+      x-summary-zh: "签发短时有效、绑定会话的二次验证凭证"
       summary: Create a short-lived bound step-up proof
       description: >-
         The proof is bound server-side to the authenticated user, scope, session, live permissions,
@@ -141,6 +145,7 @@ paths:
     post:
       tags: [Account MFA]
       operationId: disableMyMFA
+      x-summary-zh: "强身份复核后关闭两步验证"
       summary: Disable active MFA after strong reauthentication
       description: >-
         A TOTP or unused recovery code is consumed in the same transaction as the immutable
@@ -170,6 +175,7 @@ paths:
     post:
       tags: [Account MFA]
       operationId: resetMyMFA
+      x-summary-zh: "强身份复核后重置两步验证"
       summary: Reset active MFA after strong reauthentication
       description: >-
         Reset has the same atomic authentication, terminal-fact, audit, idempotency, and unknown

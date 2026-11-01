@@ -27,7 +27,7 @@ type zeroSSLEABEmailRequest struct {
 	Email            string `json:"email"`
 }
 
-// handleFetchZeroSSLEAB (fix-certops): POST /v1/admin/acme-ca-credentials/zerossl/eab-from-email
+// handleFetchZeroSSLEAB: POST /v1/admin/acme-ca-credentials/zerossl/eab-from-email
 // asks ZeroSSL for EAB credentials of an email and stores them like a manual
 // save (sealed, audited as acme.ca_credential.update). The HMAC key is never
 // returned.

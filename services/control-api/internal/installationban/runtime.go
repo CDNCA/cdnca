@@ -62,7 +62,7 @@ type Runtime struct {
 }
 
 // CodeMasterIPRebound is the license service refusal for a controller whose
-// license was rebound to another server's IP (fix-ipswitch).
+// license was rebound to another server's IP.
 const CodeMasterIPRebound = "master_ip_rebound"
 
 // RetiredReasonReinstall: the license holder used 重装主控;

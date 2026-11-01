@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/security/cc-stats",
    "summary": "Read the CC rule statistics of a site of the session tenant",
+   "summary_zh": "读取会话租户网站的 CC 规则统计",
    "auth": [
     "bearer"
    ],
@@ -116,6 +117,7 @@
    "method": "POST",
    "path": "/v1/security/ja4-blocks",
    "summary": "Create a tenant-scoped JA4 block from one authoritative ranking snapshot",
+   "summary_zh": "基于一份权威排行快照创建租户范围的 JA4 封禁",
    "auth": [
     "bearer"
    ],
@@ -311,6 +313,7 @@
    "method": "GET",
    "path": "/v1/security/ja4-blocks/{workflow_id}",
    "summary": "Get fixed JA4 block policy, binding, publication, and rollout state",
+   "summary_zh": "读取固定的 JA4 封禁策略、绑定、发布与灰度状态",
    "auth": [
     "bearer"
    ],

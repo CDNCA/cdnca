@@ -79,6 +79,19 @@ type ArrayControlProps<T> = {
 
 type PortRange = { from: number; to: number }
 
+/**
+ * A3-05/A3-06: text the user typed that does not parse. It stays in the form
+ * value (instead of the control silently dropping it or snapping back to the
+ * last valid value) so the field's rule reports it and blocks the save.
+ */
+class InvalidInput {
+  constructor(readonly raw: string) {}
+}
+
+function rejectInvalidInput(message: string): FormRule {
+  return { validator: (_rule, value) => value instanceof InvalidInput ? Promise.reject(new Error(message)) : Promise.resolve() }
+}
+
 const staleSystemSettingsAttempt = new Error('stale system settings attempt')
 const recommendedCipherSuites = 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305'
 const legacyTls12CipherSuites = `${recommendedCipherSuites}:ECDHE-ECDSA-AES128-SHA256:ECDHE-RSA-AES128-SHA256:ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-ECDSA-AES128-SHA:ECDHE-RSA-AES128-SHA:ECDHE-ECDSA-AES256-SHA:ECDHE-RSA-AES256-SHA:AES128-GCM-SHA256:AES256-GCM-SHA384:AES128-SHA256:AES256-SHA256:AES128-SHA:AES256-SHA`
@@ -250,19 +263,21 @@ function NumberField({ name, label, t, minimum = 0, maximum = Number.MAX_SAFE_IN
 function parseIntegerDirective(value: string, minimum: number, maximum: number, allowAuto: boolean): number | null {
   const normalized = value.trim().toLowerCase()
   if (allowAuto && normalized === 'auto') return 0
+  // Number('') is 0: an emptied box must be refused, not read as 0 / auto.
+  if (!/^\d+$/u.test(normalized)) return null
   const parsed = Number(normalized)
   return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : null
 }
 
 function DirectiveTextControl<T>({ value, disabled, onChange, label, format, parse }: {
-  value?: T
+  value?: T | InvalidInput
   disabled?: boolean
-  onChange?: (value: T) => void
+  onChange?: (value: T | InvalidInput) => void
   label: string
   format: (value: T) => string
   parse: (value: string) => T | null
 }) {
-  const formatted = value === undefined ? '' : format(value)
+  const formatted = value === undefined ? '' : value instanceof InvalidInput ? value.raw : format(value)
   const [draft, setDraft] = useState(formatted)
   const [editing, setEditing] = useState(false)
   useEffect(() => {
@@ -272,13 +287,14 @@ function DirectiveTextControl<T>({ value, disabled, onChange, label, format, par
     setEditing(true)
     setDraft(next)
     const parsed = parse(next)
-    if (parsed !== null) onChange?.(parsed)
+    onChange?.(parsed ?? new InvalidInput(next))
   }
   const commit = () => {
     const parsed = parse(draft)
     setEditing(false)
     if (parsed === null) {
-      setDraft(formatted)
+      // Keep what the user typed; the field rule shows why it is refused.
+      onChange?.(new InvalidInput(draft))
       return
     }
     onChange?.(parsed)
@@ -287,14 +303,15 @@ function DirectiveTextControl<T>({ value, disabled, onChange, label, format, par
   return <Input aria-label={label} value={draft} disabled={disabled} onChange={(event) => updateDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
 }
 
-function DirectiveField<T>({ name, label, format, parse, extra }: {
+function DirectiveField<T>({ name, label, format, parse, invalidMessage, extra }: {
   name: FieldName
   label: string
   format: (value: T) => string
   parse: (value: string) => T | null
+  invalidMessage: string
   extra?: ReactNode
 }) {
-  return <Form.Item className="configuration-field" name={name} label={label} rules={[{ required: true }]} extra={extra}>
+  return <Form.Item className="configuration-field" name={name} label={label} rules={[{ required: true }, rejectInvalidInput(invalidMessage)]} extra={extra}>
     <DirectiveTextControl label={label} format={format} parse={parse} />
   </Form.Item>
 }
@@ -306,28 +323,38 @@ function NginxIntegerField({ name, label, minimum = 0, maximum = Number.MAX_SAFE
   maximum?: number
   allowAuto?: boolean
 }) {
+  const { t } = useTranslation('systemSettings')
   return <DirectiveField<number>
     name={name}
     label={label}
     format={(value) => allowAuto && value === 0 ? 'auto' : String(value)}
     parse={(value) => parseIntegerDirective(value, minimum, maximum, allowAuto)}
+    invalidMessage={t('validation.integerRange', { minimum, maximum })}
   />
 }
 
 function NginxDurationField({ name, label, minimum, maximum }: { name: FieldName; label: string; minimum: number; maximum: number }) {
-  return <DirectiveField<number> name={name} label={label} format={formatDuration} parse={(value) => parseDuration(value, minimum, maximum)} />
+  const { t } = useTranslation('systemSettings')
+  return <DirectiveField<number> name={name} label={label} format={formatDuration} parse={(value) => parseDuration(value, minimum, maximum)}
+    invalidMessage={t('fieldValidation.duration', { minimum: formatDuration(minimum), maximum: formatDuration(maximum) })} />
 }
 
 function NginxByteSizeField({ name, label, minimum = 0, maximum, extra }: { name: FieldName; label: string; minimum?: number; maximum: number; extra?: ReactNode }) {
-  return <DirectiveField<number> name={name} label={label} format={formatByteSize} parse={(value) => parseByteSize(value, minimum, maximum)} extra={extra} />
+  const { t } = useTranslation('systemSettings')
+  return <DirectiveField<number> name={name} label={label} format={formatByteSize} parse={(value) => parseByteSize(value, minimum, maximum)} extra={extra}
+    invalidMessage={t('fieldValidation.byteSize', { minimum: formatByteSize(minimum), maximum: formatByteSize(maximum) })} />
 }
 
 function NginxHeaderBuffersField({ name, label }: { name: FieldName; label: string }) {
-  return <DirectiveField<{ count: number; size_bytes: number }> name={name} label={label} format={formatHeaderBuffers} parse={parseHeaderBuffers} />
+  const { t } = useTranslation('systemSettings')
+  return <DirectiveField<{ count: number; size_bytes: number }> name={name} label={label} format={formatHeaderBuffers} parse={parseHeaderBuffers}
+    invalidMessage={t('fieldValidation.headerBuffers')} />
 }
 
-function TextField({ name, label, extra, maxLength = 4096, required = true }: { name: FieldName; label: string; extra?: ReactNode; maxLength?: number; required?: boolean }) {
-  return <Form.Item className="configuration-field" name={name} label={label} rules={[{ required, whitespace: required, max: maxLength }]} extra={extra}>
+function TextField({ name, label, extra, maxLength = 4096, required = true, requiredMessage }: {
+  name: FieldName; label: string; extra?: ReactNode; maxLength?: number; required?: boolean; requiredMessage?: string
+}) {
+  return <Form.Item className="configuration-field" name={name} label={label} rules={[{ required, whitespace: required, max: maxLength, ...(requiredMessage ? { message: requiredMessage } : {}) }]} extra={extra}>
     <Input aria-label={label} maxLength={maxLength} />
   </Form.Item>
 }
@@ -431,14 +458,18 @@ function StringListField({ name, label }: { name: FieldName; label: string }) {
   </Form.Item>
 }
 
-function NumberListControl({ value = [], disabled, onChange, 'aria-label': ariaLabel }: ArrayControlProps<number[]>) {
-  const [draft, setDraft] = useState(() => value.join(', '))
-  useEffect(() => setDraft(value.join(', ')), [value])
+function NumberListControl({ value = [], disabled, onChange, 'aria-label': ariaLabel }: ArrayControlProps<number[] | InvalidInput>) {
+  const format = (current: number[] | InvalidInput) => current instanceof InvalidInput ? current.raw : current.join(', ')
+  const [draft, setDraft] = useState(() => format(value))
+  useEffect(() => setDraft(format(value)), [value])
   const commit = () => {
     const parsed = draft.split(/[\s,]+/).filter(Boolean).map(Number)
     if (parsed.length > 0 && parsed.every((item) => Number.isInteger(item) && item >= 1 && item <= 65_535)) {
       onChange?.([...new Set(parsed)])
+      return
     }
+    // A3-05: an out-of-range port (e.g. 70000) used to be dropped silently; keep it so the rule refuses it.
+    onChange?.(new InvalidInput(draft))
   }
   return <Input aria-label={ariaLabel} value={draft} disabled={disabled} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onPressEnter={commit} />
 }
@@ -465,7 +496,8 @@ function PortRangesControl({ value = [], disabled, onChange, 'aria-label': ariaL
 }
 
 function NumberListField({ name, label, extra }: { name: FieldName; label: string; extra?: ReactNode }) {
-  return <Form.Item className="configuration-field" name={name} label={label} rules={[{ required: true, type: 'array', min: 1 }]} extra={extra}>
+  const { t } = useTranslation('systemSettings')
+  return <Form.Item className="configuration-field" name={name} label={label} rules={[rejectInvalidInput(t('fieldValidation.ports'))]} extra={extra}>
     <NumberListControl aria-label={label} />
   </Form.Item>
 }
@@ -688,7 +720,7 @@ function CacheRulesEditor({ t }: { t: TFunction<'systemSettings'> }) {
               <div className="configuration-field-columns">
                 <TextField name={[field.name, 'id']} label={t('parity.defaults.fields.ruleId')} maxLength={32} />
                 <TextField name={[field.name, 'match']} label={t('parity.defaults.fields.match')} maxLength={64} />
-                <TextField name={[field.name, 'content']} label={t('parity.defaults.fields.content')} maxLength={2_048} required={false} />
+                <TextField name={[field.name, 'content']} label={t('parity.defaults.fields.content')} maxLength={2_048} requiredMessage={t('fieldValidation.cacheContent')} />
                 <NumberField name={[field.name, 'ttl_seconds']} label={t('parity.defaults.fields.ttl')} t={t} minimum={0} maximum={31_536_000} suffix={t('parity.units.seconds')} />
                 <SwitchField name={[field.name, 'ignore_query']} label={t('parity.defaults.fields.ignoreQuery')} />
                 <SwitchField name={[field.name, 'force_cache']} label={t('parity.defaults.fields.forceCache')} />
@@ -748,7 +780,16 @@ function OriginHeadersEditor({ t }: { t: TFunction<'systemSettings'> }) {
               <div className="configuration-field-columns">
                 <TextField name={[field.name, 'id']} label={t('parity.defaults.fields.ruleId')} maxLength={32} />
                 <TextField name={[field.name, 'name']} label={t('parity.defaults.fields.headerName')} maxLength={256} />
-                <TextField name={[field.name, 'value']} label={t('parity.defaults.fields.headerValue')} maxLength={4_096} required={false} />
+                {/* A3-12: set/append need a value; delete carries none (normalizeWriteValue sends null). */}
+                <Form.Item className="configuration-field" name={[field.name, 'value']} label={t('parity.defaults.fields.headerValue')}
+                  dependencies={[['defaults', 'website', 'origin_request_headers', field.name, 'action']]}
+                  rules={[{ max: 4_096 }, ({ getFieldValue }) => ({
+                    validator: (_rule, value: string | null | undefined) =>
+                      getFieldValue(['defaults', 'website', 'origin_request_headers', field.name, 'action']) === 'delete' || value?.trim()
+                        ? Promise.resolve() : Promise.reject(new Error(t('fieldValidation.headerValue'))),
+                  })]}>
+                  <Input aria-label={t('parity.defaults.fields.headerValue')} maxLength={4_096} />
+                </Form.Item>
                 <SelectField name={[field.name, 'action']} label={t('parity.defaults.fields.action')} options={['set', 'append', 'delete'].map((value) => ({ value, label: t(`parity.defaults.headerActions.${value}`) }))} />
                 <SwitchField name={[field.name, 'allow_duplicate']} label={t('parity.defaults.fields.allowDuplicate')} />
                 <SwitchField name={[field.name, 'enabled']} label={t('parity.defaults.fields.enabled')} />

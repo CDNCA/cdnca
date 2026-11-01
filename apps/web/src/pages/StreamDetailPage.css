@@ -77,6 +77,7 @@
 .stream-detail-facts .stream-sync { font-size: 14px; color: var(--cdnca-color-text); }
 .stream-detail-facts .stream-sync--failed { color: var(--cdnca-color-error); }
 .stream-detail-publication-link { height: auto; padding: 0 0 0 8px; }
+.stream-detail-sync-failure { display: block; margin-top: 4px; font-size: 12px; color: var(--cdnca-color-text-secondary); }
 @media (max-width: 720px) {
   /* 窄屏按源站逐行堆叠：地址占整行，权重/状态/占比/删除在下一行，列名用 data-label 显示。 */
   .stream-origin-table thead { display: none; }

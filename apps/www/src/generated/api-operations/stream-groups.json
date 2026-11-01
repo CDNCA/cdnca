@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/stream-groups",
    "summary": "List layer-four forwarding groups",
+   "summary_zh": "列出四层转发分组",
    "auth": [
     "apiKey",
     "bearer"
@@ -88,6 +89,7 @@
    "method": "POST",
    "path": "/v1/stream-groups",
    "summary": "Create a layer-four forwarding group",
+   "summary_zh": "创建四层转发分组",
    "auth": [
     "apiKey",
     "bearer"
@@ -226,6 +228,7 @@
    "method": "PATCH",
    "path": "/v1/stream-groups/{id}",
    "summary": "Rename a layer-four forwarding group",
+   "summary_zh": "重命名四层转发分组",
    "auth": [
     "apiKey",
     "bearer"
@@ -377,6 +380,7 @@
    "method": "DELETE",
    "path": "/v1/stream-groups/{id}",
    "summary": "Delete an unreferenced layer-four forwarding group",
+   "summary_zh": "删除未被引用的四层转发分组",
    "auth": [
     "apiKey",
     "bearer"

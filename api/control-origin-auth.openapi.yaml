@@ -31,6 +31,7 @@ paths:
     get:
       tags: [Origin credentials]
       operationId: listOriginAuthCredentials
+      x-summary-zh: "列出某租户脱敏后的凭据"
       summary: List redacted credential heads in one tenant
       x-required-permissions: [origin_auth.read]
       parameters:
@@ -49,6 +50,7 @@ paths:
     post:
       tags: [Origin credentials]
       operationId: createOriginAuthCredential
+      x-summary-zh: "加密并追加凭据第 1 版"
       summary: Encrypt and append credential revision 1
       description: >-
         Requires origin_auth.manage and a valid sites.manage entitlement.
@@ -81,6 +83,7 @@ paths:
     get:
       tags: [Origin credentials]
       operationId: getOriginAuthCredential
+      x-summary-zh: "读取一条脱敏后的凭据"
       summary: Read one redacted credential head
       x-required-permissions: [origin_auth.read]
       responses:
@@ -94,6 +97,7 @@ paths:
     delete:
       tags: [Origin credentials]
       operationId: deleteOriginAuthCredential
+      x-summary-zh: "追加凭据删除标记版本"
       summary: Append a credential tombstone revision
       description: >-
         The body must be exactly an empty JSON object. A credential referenced
@@ -126,6 +130,7 @@ paths:
     post:
       tags: [Origin credentials]
       operationId: replaceOriginAuthCredential
+      x-summary-zh: "用当前信封密钥加密替换后的凭据"
       summary: Encrypt replacement material with the active envelope key
       x-required-permissions: [origin_auth.manage]
       requestBody:
@@ -155,6 +160,7 @@ paths:
     post:
       tags: [Origin credentials]
       operationId: verifyOriginAuthCredential
+      x-summary-zh: "调用校验器并追加已校验版本"
       summary: Invoke the injected verifier and append a verified revision
       description: >-
         The body must be exactly an empty JSON object. If no real verifier is
@@ -185,6 +191,7 @@ paths:
     post:
       tags: [Origin credentials]
       operationId: disableOriginAuthCredential
+      x-summary-zh: "追加凭据停用版本"
       summary: Append a disabled credential revision
       description: >-
         The body must be exactly an empty JSON object. A credential referenced
@@ -209,6 +216,7 @@ paths:
     get:
       tags: [Origin rules]
       operationId: listOriginAuthRules
+      x-summary-zh: "列出规则当前版本"
       summary: List current rule revisions
       x-required-permissions: [origin_auth.read]
       parameters:
@@ -227,6 +235,7 @@ paths:
     post:
       tags: [Origin rules]
       operationId: createOriginAuthRule
+      x-summary-zh: "创建绑定租户、网站与来源的规则"
       summary: Create a tenant, site, and source-bound rule
       description: >-
         The source must be an HTTPS port 443 source in the same tenant and its
@@ -260,6 +269,7 @@ paths:
     get:
       tags: [Origin rules]
       operationId: getOriginAuthRule
+      x-summary-zh: "读取一条规则的当前版本"
       summary: Read one current rule revision
       x-required-permissions: [origin_auth.read]
       responses:
@@ -273,6 +283,7 @@ paths:
     patch:
       tags: [Origin rules]
       operationId: updateOriginAuthRule
+      x-summary-zh: "追加规则配置版本"
       summary: Append a rule configuration revision
       x-required-permissions: [origin_auth.manage]
       parameters:
@@ -297,6 +308,7 @@ paths:
     delete:
       tags: [Origin rules]
       operationId: deleteOriginAuthRule
+      x-summary-zh: "追加规则删除标记版本"
       summary: Append a rule tombstone revision
       x-required-permissions: [origin_auth.manage]
       parameters:
@@ -324,6 +336,7 @@ paths:
     post:
       tags: [Origin rules]
       operationId: enableOriginAuthRule
+      x-summary-zh: "凭据校验通过后启用规则"
       summary: Enable a rule after verified credential gates pass
       x-required-permissions: [origin_auth.manage]
       requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
@@ -349,6 +362,7 @@ paths:
     post:
       tags: [Origin rules]
       operationId: disableOriginAuthRule
+      x-summary-zh: "按版本 CAS 停用规则"
       summary: Disable a rule by revision CAS
       x-required-permissions: [origin_auth.manage]
       requestBody: {$ref: '#/components/requestBodies/EmptyObject'}
@@ -373,6 +387,7 @@ paths:
     post:
       tags: [Origin rules]
       operationId: rotateOriginAuthRuleCredential
+      x-summary-zh: "安排新旧凭据切换"
       summary: Schedule current and previous credential cutover
       description: >-
         The new current and prior current revisions must be distinct, verified,
@@ -403,6 +418,7 @@ paths:
     get:
       tags: [Origin publications]
       operationId: getLatestOriginAuthPublication
+      x-summary-zh: "读取最新的确定性快照（不含密钥）"
       summary: Read the latest deterministic secret-free snapshot
       x-required-permissions: [origin_auth.read]
       responses:
@@ -416,6 +432,7 @@ paths:
     post:
       tags: [Origin publications]
       operationId: createOriginAuthPublication
+      x-summary-zh: "追加下一个租户发布快照"
       summary: Append the next tenant publication snapshot
       description: >-
         If-Match is the current publication revision and may be "0" for the

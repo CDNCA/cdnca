@@ -9,6 +9,7 @@ import { ApiError, type Principal } from '../api/auth'
 import { customRbacApi } from '../api/customRbac'
 import { tenantMembersApi } from '../api/tenantMembers'
 import { useSessionStore } from '../auth/session'
+import { useMfaActive } from '../hooks/useMfaActive'
 import { DataState } from '../components/DataState'
 import '../i18n/customRolesPage'
 import { permissionName } from '../i18n/permissionNames'
@@ -101,6 +102,8 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([])
   const [subjectUserID, setSubjectUserID] = useState('')
   const [stepUpProof, setStepUpProof] = useState('')
+  // 未启用 MFA：不显示二次验证凭据输入。
+  const requireMfaCode = useMfaActive() !== false
   const [formError, setFormError] = useState<string>()
   const [pendingWrite, setPendingWrite] = useState<PendingWrite>()
   const [writing, setWriting] = useState(false)
@@ -180,7 +183,7 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
       if (!token) throw staleOwner
       return token
     }
-    const proof = stepUpProof.trim()
+    const proof = requireMfaCode ? stepUpProof.trim() : ''
     let operation: PendingWrite
     if (editor.kind === 'create') {
       if (!name.trim() || selectedPermissions.length === 0) { setFormError('errors.validation'); return }
@@ -292,7 +295,7 @@ function CustomRolesContent({ owner, ownerKey }: { owner: Owner; ownerKey: strin
                 }))} />
             </Form.Item>
         ) : null}
-        {editor ? <Form.Item label={t('fields.stepUpProof')}><Input.Password autoComplete="off" aria-label={t('fields.stepUpProof')} value={stepUpProof} onChange={(event) => setStepUpProof(event.target.value)} /></Form.Item> : null}
+        {editor && requireMfaCode ? <Form.Item label={t('fields.stepUpProof')}><Input.Password autoComplete="off" aria-label={t('fields.stepUpProof')} value={stepUpProof} onChange={(event) => setStepUpProof(event.target.value)} /></Form.Item> : null}
         {formError ? <Alert type="error" showIcon message={t(formError)} /> : null}
       </Form>
     </Modal>

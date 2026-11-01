@@ -14,7 +14,8 @@ paths:
   /v1/admin/recharge-payment-approvals:
     post:
       operationId: proposeRechargePaymentApproval
-      summary: 创建充值退款或撤销审批提议
+      summary: "Create a recharge refund or reversal approval proposal"
+      x-summary-zh: 创建充值退款或撤销审批提议
       x-required-permissions: [billing.recharges.compensate]
       parameters:
         - {$ref: '#/components/parameters/RequestID'}
@@ -25,14 +26,15 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/ProposalRequest'}
       responses:
-        '201': {description: 新提议或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '201': {description: "New proposal, or an exact replay", x-description-zh: 新提议或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
         '409': {$ref: '#/components/responses/Error'}
     get:
       operationId: listRechargePaymentApprovals
-      summary: 稳定快照分页读取充值审批
+      summary: "Page through recharge approvals from a stable snapshot"
+      x-summary-zh: 稳定快照分页读取充值审批
       x-required-permissions: [billing.recharges.read]
       parameters:
         - {$ref: '#/components/parameters/RequestID'}
@@ -42,20 +44,21 @@ paths:
         - {name: state, in: query, required: false, schema: {type: string, enum: [pending, approved, rejected, expired]}}
         - {name: snapshot_at, in: query, required: false, schema: {type: string, format: date-time}}
       responses:
-        '200': {description: 稳定快照分页, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalPage'}}}}
+        '200': {description: "Page from a stable snapshot", x-description-zh: 稳定快照分页, content: {application/json: {schema: {$ref: '#/components/schemas/ApprovalPage'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
   /v1/admin/recharge-payment-approvals/{approval_id}:
     get:
       operationId: getRechargePaymentApproval
-      summary: 读取单条充值审批事实
+      summary: "Read one recharge approval"
+      x-summary-zh: 读取单条充值审批事实
       x-required-permissions: [billing.recharges.read]
       parameters:
         - {$ref: '#/components/parameters/ApprovalID'}
         - {$ref: '#/components/parameters/RequestID'}
       responses:
-        '200': {description: 充值审批事实, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '200': {description: "Recharge approval", x-description-zh: 充值审批事实, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
@@ -64,7 +67,8 @@ paths:
   /v1/admin/recharge-payment-approvals/{approval_id}/approve:
     post:
       operationId: approveRechargePaymentApproval
-      summary: 由不同 operator 批准充值补偿
+      summary: "Approve a recharge compensation by a different operator"
+      x-summary-zh: 由另一位管理员批准充值补偿
       x-required-permissions: [billing.recharges.approve]
       parameters:
         - {$ref: '#/components/parameters/ApprovalID'}
@@ -76,7 +80,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/DecisionRequest'}
       responses:
-        '200': {description: 批准或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '200': {description: "Approved, or an exact replay", x-description-zh: 批准或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
@@ -84,7 +88,8 @@ paths:
   /v1/admin/recharge-payment-approvals/{approval_id}/reject:
     post:
       operationId: rejectRechargePaymentApproval
-      summary: 拒绝充值补偿提议
+      summary: "Reject a recharge compensation proposal"
+      x-summary-zh: 拒绝充值补偿提议
       x-required-permissions: [billing.recharges.approve]
       parameters:
         - {$ref: '#/components/parameters/ApprovalID'}
@@ -96,7 +101,7 @@ paths:
           application/json:
             schema: {$ref: '#/components/schemas/DecisionRequest'}
       responses:
-        '200': {description: 拒绝或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
+        '200': {description: "Rejected, or an exact replay", x-description-zh: 拒绝或精确重放, content: {application/json: {schema: {$ref: '#/components/schemas/Approval'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
@@ -104,7 +109,8 @@ paths:
   /v1/admin/recharge-payment-approvals/statistics:
     get:
       operationId: rechargePaymentApprovalStatistics
-      summary: 读取充值审批金额统计
+      summary: "Read recharge approval amount totals"
+      x-summary-zh: 读取充值审批金额统计
       x-required-permissions: [billing.recharges.read]
       parameters:
         - {$ref: '#/components/parameters/RequestID'}
@@ -112,14 +118,15 @@ paths:
         - {name: state, in: query, required: false, schema: {type: string, enum: [pending, approved, rejected, expired]}}
         - {name: snapshot_at, in: query, required: false, schema: {type: string, format: date-time}}
       responses:
-        '200': {description: 稳定快照统计, content: {application/json: {schema: {$ref: '#/components/schemas/Statistics'}}}}
+        '200': {description: "Totals from a stable snapshot", x-description-zh: 稳定快照统计, content: {application/json: {schema: {$ref: '#/components/schemas/Statistics'}}}}
         '400': {$ref: '#/components/responses/Error'}
         '401': {$ref: '#/components/responses/Error'}
         '403': {$ref: '#/components/responses/Error'}
   /v1/admin/recharge-payment-approvals/export:
     get:
       operationId: exportRechargePaymentApprovals
-      summary: 导出充值审批 CSV
+      summary: "Export recharge approvals as CSV"
+      x-summary-zh: 导出充值审批 CSV
       x-required-permissions: [billing.recharges.read]
       parameters:
         - {$ref: '#/components/parameters/RequestID'}
@@ -152,7 +159,8 @@ components:
       schema: {$ref: '#/components/schemas/UUID'}
   responses:
     Error:
-      description: 稳定错误码
+      description: "Stable error code"
+      x-description-zh: 稳定错误码
       content:
         application/json:
           schema: {$ref: '#/components/schemas/ErrorEnvelope'}

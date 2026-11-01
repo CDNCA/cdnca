@@ -41,6 +41,17 @@ describe('开放接口目录', () => {
     expect(c.groups.flatMap((g) => g.operations).some((o) => o.path.startsWith('/v1/internal/'))).toBe(false)
   })
 
+  // W-04：中文页接口表“摘要”列取契约 x-summary-zh；每个接口都要有，且不是英文句子夹几个中文词。
+  it('每个接口都有中文摘要（x-summary-zh），不是中英混排的英文句子', () => {
+    for (const o of c.groups.flatMap((g) => g.operations)) {
+      expect(o.summary_zh, `${o.method} ${o.path}`).toMatch(/[一-鿿]/)
+      // 只允许夹带代码标识符：去掉带 ._:=/<> 的标识符与大写开头的专名后，剩下的小写词只能是接口取值。
+      const values = new Set(['null', 'confirm', 'follow', 'user', 'release', 'bot', 'cc', 'scan', 'waf', 'scrypt', 'protect', 'repair', 'cleanup', 'disabled', 'active', 'resume'])
+      const rest = o.summary_zh!.replace(/[\w.-]*[._:=/<>][\w.<>-]*|\b[A-Z][\w-]*/g, '').match(/[a-z]{2,}/g) ?? []
+      expect(rest.filter((w) => !values.has(w)), `${o.method} ${o.path}: ${o.summary_zh}`).toEqual([])
+    }
+  })
+
   it('索引页列出全部分组并链到分组页', () => {
     render(<App pathname="/developers/api" />)
     const nav = screen.getByRole('navigation', { name: '接口分组' })

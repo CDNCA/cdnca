@@ -13,6 +13,7 @@ import {
   type JA4BlockWriteMetadata,
 } from '../api/ja4Blocks'
 import { useSessionStore } from '../auth/session'
+import { useMfaActive } from '../hooks/useMfaActive'
 import { DataState } from '../components/DataState'
 import '../i18n/ja4Blocks'
 import { FeedbackWhen, OutcomeUnknown } from '@cdnca/ui'
@@ -88,6 +89,8 @@ function JA4BlockWorkflowsContent({ owner, ownerKey }: { owner: Owner; ownerKey:
   const [durationSeconds, setDurationSeconds] = useState<number | null>(3600)
   const [reason, setReason] = useState('')
   const [stepUp, setStepUp] = useState('')
+  // 未启用 MFA：不要二次验证凭据。
+  const requireMfaCode = useMfaActive() !== false
   const [formError, setFormError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState<CreateAttempt | null>(null)
   const [writeError, setWriteError] = useState<unknown>(null)
@@ -176,7 +179,7 @@ function JA4BlockWorkflowsContent({ owner, ownerKey }: { owner: Owner; ownerKey:
       return
     }
     if (!reasonPattern.test(reason)) { setFormError('validation.reason'); return }
-    if (!stepUp) { setFormError('validation.stepUp'); return }
+    if (requireMfaCode && !stepUp) { setFormError('validation.stepUp'); return }
     const tenantInput = Object.freeze({
       site_id: siteID,
       ja4,
@@ -189,7 +192,7 @@ function JA4BlockWorkflowsContent({ owner, ownerKey }: { owner: Owner; ownerKey:
       admin,
       scopeID,
       input,
-      metadata: Object.freeze(createJA4BlockWriteMetadata(stepUp)),
+      metadata: Object.freeze(createJA4BlockWriteMetadata(requireMfaCode ? stepUp : '')),
     })
     setAttempt(nextAttempt)
     setDialogOpen(false)
@@ -313,9 +316,9 @@ function JA4BlockWorkflowsContent({ owner, ownerKey }: { owner: Owner; ownerKey:
           <Form.Item label={t('fields.reason')}>
             <Input aria-label={t('fields.reason')} value={reason} onChange={(event) => setReason(event.target.value)} />
           </Form.Item>
-          <Form.Item label={t('fields.stepUp')}>
+          {requireMfaCode ? <Form.Item label={t('fields.stepUp')}>
             <Input.Password aria-label={t('fields.stepUp')} value={stepUp} onChange={(event) => setStepUp(event.target.value)} />
-          </Form.Item>
+          </Form.Item> : null}
           {formError ? <Alert type="error" showIcon message={t(formError)} /> : null}
         </Form>
       </Modal>

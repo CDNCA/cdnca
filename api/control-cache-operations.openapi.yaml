@@ -17,6 +17,7 @@ paths:
   /v1/cache-policies/{site_id}:
     get:
       operationId: getTenantCurrentCachePolicy
+      x-summary-zh: "读取租户网站的当前缓存策略"
       summary: Get the current cache policy for a tenant site
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -33,6 +34,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: publishTenantCachePolicy
+      x-summary-zh: "按 CAS 发布不可变的缓存策略新版本"
       summary: Publish an immutable cache-policy revision with CAS
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.manage]
@@ -54,6 +56,7 @@ paths:
   /v1/cache-policies/{site_id}/revisions:
     get:
       operationId: listTenantCachePolicyRevisions
+      x-summary-zh: "列出租户范围内不可变的缓存策略历史"
       summary: List immutable policy history in the tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -73,6 +76,7 @@ paths:
   /v1/cache-policies/{site_id}/revisions/{revision}:
     get:
       operationId: getTenantCachePolicyRevision
+      x-summary-zh: "读取租户范围内一个不可变的缓存策略版本"
       summary: Get one immutable policy revision in the tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -91,6 +95,7 @@ paths:
   /v1/cache-operations:
     get:
       operationId: listTenantCacheOperations
+      x-summary-zh: "在稳定的租户快照中列出缓存操作"
       summary: List cache operations in a stable tenant snapshot
       description: >-
         The cursor freezes the set of operations whose committed creation audit
@@ -117,6 +122,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: createTenantCacheOperation
+      x-summary-zh: "提交一次缓存刷新或预热"
       summary: Persist a purge or prewarm operation
       description: >-
         Returns 202 after the operation and node/target projections are
@@ -140,6 +146,7 @@ paths:
   /v1/cache-operations/daily-usage:
     get:
       operationId: getTenantCacheDailyUsage
+      x-summary-zh: "调用者账号今天的缓存操作额度（按北京时间计日，系统自动跟进的不计）"
       summary: Today's cache operation quotas of the caller's account (UTC+8 day; system follow-ups not counted)
       description: >-
         Quotas count per account (tenant scope): the owner and its members share
@@ -219,6 +226,7 @@ paths:
   /v1/cache-operations/{operation_id}:
     get:
       operationId: getTenantCacheOperation
+      x-summary-zh: "读取脱敏后的各节点操作进度"
       summary: Get sanitized per-node operation progress
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -236,6 +244,7 @@ paths:
   /v1/cache-operations/{operation_id}/retry:
     post:
       operationId: retryTenantCacheOperation
+      x-summary-zh: "只把可重试的失败项重新排队"
       summary: Requeue retryable failed projections only
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.manage]
@@ -256,6 +265,7 @@ paths:
   /v1/cache-operations/{operation_id}/cancel:
     post:
       operationId: cancelTenantCacheOperation
+      x-summary-zh: "取消排队中或运行中的缓存操作"
       summary: Cancel a queued or running cache operation
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.manage]
@@ -276,6 +286,7 @@ paths:
   /v1/cache-operations/{operation_id}/resubmit:
     post:
       operationId: resubmitTenantCacheOperation
+      x-summary-zh: "把一次缓存操作重新提交为新操作"
       summary: Re-submit an operation as a new one
       description: >-
         Creates a new operation with the original's site, action, target type,
@@ -305,6 +316,7 @@ paths:
   /v1/cache-operation-requests/{idempotency_key}:
     get:
       operationId: getTenantCacheWriteReceipt
+      x-summary-zh: "查询带此 Idempotency-Key 的缓存写请求的处理结果"
       summary: What the server did with a cache write sent with this Idempotency-Key
       description: >-
         For a write whose response was lost (network, timeout, 5xx): accepted
@@ -339,6 +351,7 @@ paths:
   /v1/admin/cache-policies/{site_id}:
     get:
       operationId: getAdminCurrentCachePolicy
+      x-summary-zh: "在指定租户范围内读取当前缓存策略"
       summary: Get a current policy in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -356,6 +369,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: publishAdminCachePolicy
+      x-summary-zh: "在指定租户范围内发布缓存策略"
       summary: Publish a policy in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.manage]
@@ -378,6 +392,7 @@ paths:
   /v1/admin/cache-policies/{site_id}/revisions:
     get:
       operationId: listAdminCachePolicyRevisions
+      x-summary-zh: "在指定租户范围内列出缓存策略历史"
       summary: List policy history in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -398,6 +413,7 @@ paths:
   /v1/admin/cache-policies/{site_id}/revisions/{revision}:
     get:
       operationId: getAdminCachePolicyRevision
+      x-summary-zh: "在指定租户范围内读取一个缓存策略版本"
       summary: Get one policy revision in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -417,6 +433,7 @@ paths:
   /v1/admin/cache-operations:
     get:
       operationId: listAdminCacheOperations
+      x-summary-zh: "在指定租户范围内列出缓存操作"
       summary: List operations in an explicit tenant scope
       description: >-
         The cursor freezes the set of operations whose committed creation audit
@@ -444,6 +461,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: createAdminCacheOperation
+      x-summary-zh: "在指定租户范围内提交缓存操作"
       summary: Persist an operation in an explicit tenant scope
       description: queued means persisted, not dispatched.
       security: [{bearerAuth: []}]
@@ -465,6 +483,7 @@ paths:
   /v1/admin/cache-operations/daily-usage:
     get:
       operationId: getAdminCacheDailyUsage
+      x-summary-zh: "某租户账号今天的缓存操作额度（按北京时间计日，系统自动跟进的不计）"
       summary: Today's cache operation quotas of a tenant account (UTC+8 day; system follow-ups not counted)
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -487,6 +506,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     put:
       operationId: setAdminCacheAccountLimits
+      x-summary-zh: "设置某租户账号自己的每日刷新/预热上限（null 表示跟随系统设置默认值）"
       summary: Set a tenant account's own daily purge/prewarm limits (null follows the system setting default)
       description: >-
         Audited as cache.account_quota.update. Every key is required; a stale
@@ -571,6 +591,7 @@ paths:
   /v1/admin/cache-operations/{operation_id}:
     get:
       operationId: getAdminCacheOperation
+      x-summary-zh: "在指定租户范围内读取缓存操作进度"
       summary: Get operation progress in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -589,6 +610,7 @@ paths:
   /v1/admin/cache-operations/{operation_id}/retry:
     post:
       operationId: retryAdminCacheOperation
+      x-summary-zh: "在指定租户范围内重试缓存操作"
       summary: Retry an operation in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.manage]
@@ -610,6 +632,7 @@ paths:
   /v1/admin/cache-operations/{operation_id}/cancel:
     post:
       operationId: cancelAdminCacheOperation
+      x-summary-zh: "在指定租户范围内取消缓存操作"
       summary: Cancel an operation in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.manage]
@@ -631,6 +654,7 @@ paths:
   /v1/admin/cache-operations/{operation_id}/resubmit:
     post:
       operationId: resubmitAdminCacheOperation
+      x-summary-zh: "把一次缓存操作重新提交为新操作"
       summary: Re-submit an operation as a new one
       description: >-
         Creates a new operation with the original's site, action, target type,
@@ -661,6 +685,7 @@ paths:
   /v1/admin/cache-operation-requests/{idempotency_key}:
     get:
       operationId: getPlatformCacheWriteReceipt
+      x-summary-zh: "查询带此 Idempotency-Key 的缓存写请求的处理结果"
       summary: What the server did with a cache write sent with this Idempotency-Key
       description: >-
         For a write whose response was lost (network, timeout, 5xx): accepted

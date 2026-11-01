@@ -28,7 +28,7 @@ function errorText(error: unknown, t: (key: string) => string): string {
 }
 
 /**
- * 用户编辑「刷新预热额度」页签（fix-cachequota）：该账号今日三项已用/上限，「刷新」读最新，
+ * 用户编辑「刷新预热额度」页签：该账号今日三项已用/上限，「刷新」读最新，
  * 可单独设置三项上限（留空 = 跟随系统设置默认值）。与代理商页签一样独立保存，不随用户资料的「确定」提交。
  */
 export default function AccountQuotaPanel({ scopeID, accessToken, canManage }: {

@@ -14,6 +14,7 @@ paths:
   /v1/recharge-identity-policy:
     get:
       operationId: getTenantRechargeIdentityPolicy
+      x-summary-zh: "读取当前租户的充值实名策略"
       summary: Read the current tenant recharge identity policy
       security: [{bearerSession: []}]
       x-session-only: true
@@ -29,6 +30,7 @@ paths:
         '503': {$ref: '#/components/responses/ErrorResponse'}
     put:
       operationId: updateTenantRechargeIdentityPolicy
+      x-summary-zh: "按 CAS 修改当前租户的充值实名策略"
       summary: CAS update the current tenant recharge identity policy
       security: [{bearerSession: []}]
       x-session-only: true
@@ -48,6 +50,7 @@ paths:
   /v1/admin/recharge-identity-policy/{tenant_scope_id}:
     get:
       operationId: getPlatformRechargeIdentityPolicy
+      x-summary-zh: "以平台管理员身份读取租户充值实名策略"
       summary: Read a tenant recharge identity policy as a platform administrator
       security: [{bearerSession: []}]
       x-session-only: true
@@ -58,6 +61,7 @@ paths:
       responses: *policyResponses
     put:
       operationId: updatePlatformRechargeIdentityPolicy
+      x-summary-zh: "以平台管理员身份按 CAS 修改租户充值实名策略"
       summary: CAS update a tenant recharge identity policy as a platform administrator
       security: [{bearerSession: []}]
       x-session-only: true

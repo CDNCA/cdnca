@@ -1680,7 +1680,7 @@ func compileSecurityRuleMatchesFor(domains []string, port uint16, conditions []s
 				return nil, ErrUnsupportedSecurityPolicy
 			}
 			for index := range matches {
-				// not_in: WAFMatch.NotJA4, needs WAF_JA4_NEGATION (fix-ja4rule).
+				// not_in: WAFMatch.NotJA4, needs WAF_JA4_NEGATION.
 				if condition.Operator == "not_in" {
 					matches[index].NotJA4 = values
 				} else {

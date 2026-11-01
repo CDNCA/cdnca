@@ -27,7 +27,7 @@ const zhCN = {
     publishing: '已保存，正在发布：错误页发布修订 {{revision}}，已为 {{count}} 个租户排队重新发布。',
     previewTitle: '错误页预览',
     actions: { preview: '预览', restore: '恢复系统默认', restoreConfirm: '删除修改，恢复为系统默认内容？', viewPublications: '查看发布记录' },
-    validation: { required: '请输入页面内容后再保存' },
+    validation: { required: '请输入页面内容后再保存', templateMarker: '页面内容含模板标记「{{marker}}」，节点不做变量替换，请删除后再保存' },
     errors: { unknown: '操作结果尚未确认' },
     notices: { saved: '全局错误页已保存', savedPublishing: '已保存，正在发布', restored: '已恢复系统默认', restoredPublishing: '已恢复系统默认，正在发布' },
     options: {
@@ -130,7 +130,7 @@ const enUS: typeof zhCN = {
     publishing: 'Saved and publishing: error page publication revision {{revision}}; {{count}} tenants queued for republication.',
     previewTitle: 'Error page preview',
     actions: { preview: 'Preview', restore: 'Restore system default', restoreConfirm: 'Discard the changes and restore the system default?', viewPublications: 'View publications' },
-    validation: { required: 'Enter page content before saving' },
+    validation: { required: 'Enter page content before saving', templateMarker: 'The page contains the template marker "{{marker}}". Nodes do no substitution; remove it before saving.' },
     errors: { unknown: 'The operation result is not confirmed yet' },
     notices: { saved: 'Global error page saved', savedPublishing: 'Saved, publishing', restored: 'System default restored', restoredPublishing: 'System default restored, publishing' },
     options: {

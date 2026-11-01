@@ -282,7 +282,7 @@ FORMAT JSONEachRow`
 // (observed) and temporary_ban (the node's WAF auto block); allow is not a hit.
 // wafActionsAddUp reports whether the per-action counts (block, challenge,
 // log, temporary_ban) add up to the attack total, as the action-scoped
-// queries guarantee (fix-waflogdetail2): the page shows no number that the
+// queries guarantee: the page shows no number that the
 // action cards cannot account for.
 func wafActionsAddUp(attacks, blocked, challenged, observed, autoBlocked uint64) bool {
 	sum := blocked + challenged

@@ -140,7 +140,7 @@ func StaleNodeNginxScopesTx(ctx context.Context, tx pgx.Tx) ([]uuid.UUID, error)
 }
 
 // NodeLocationsDigestTx digests every live node's IP 归属 as L2 node
-// conditions match it (country code, ISP, province, city; fix-nodeipgeo).
+// conditions match it (country code, ISP, province, city; node IP location).
 func NodeLocationsDigestTx(ctx context.Context, tx pgx.Tx) ([]byte, error) {
 	if ctx == nil || tx == nil {
 		return nil, ErrInvalidInput

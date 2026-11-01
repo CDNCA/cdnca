@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// Migration 547 (fix-nodeipgeo): automatic node IP 归属 resolutions, the
+// Migration 547: automatic node IP 归属 resolutions, the
 // manual field list and the node locations mark. Its guard pins 546's
-// checksums (fix-ticket2); everything that changes with the number is here.
+// checksums; everything that changes with the number is here.
 const (
 	migration547Version         = 547
 	migration547PreviousVersion = 546

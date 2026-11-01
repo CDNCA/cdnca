@@ -10,6 +10,7 @@ paths:
   /v1/security/cc-stats:
     get:
       operationId: getSiteCCStats
+      x-summary-zh: "读取会话租户网站的 CC 规则统计"
       summary: Read the CC rule statistics of a site of the session tenant
       security: [{bearerSession: []}]
       x-required-permissions: [security_policies.read]
@@ -27,6 +28,7 @@ paths:
   /v1/admin/security/cc-stats:
     get:
       operationId: getAdminSiteCCStats
+      x-summary-zh: "读取任意租户网站的 CC 规则统计"
       summary: Read the CC rule statistics of a site of any tenant scope
       security: [{bearerSession: []}]
       x-required-permissions: [platform.admin, security_policies.read]

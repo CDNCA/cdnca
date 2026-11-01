@@ -27,6 +27,7 @@ paths:
     post:
       tags: [Account recovery]
       operationId: requestAccountRecovery
+      x-summary-zh: "申请密码找回链接"
       security: []
       summary: Request a password recovery link
       description: >-
@@ -56,6 +57,7 @@ paths:
     post:
       tags: [Account recovery]
       operationId: confirmAccountRecovery
+      x-summary-zh: "用收到的找回链接重设密码"
       security: []
       summary: Replace a password with a delivered recovery link
       description: >-

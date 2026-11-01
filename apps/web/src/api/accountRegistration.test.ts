@@ -86,6 +86,21 @@ describe('accountRegistrationApi', () => {
     expectAnonymousPost(fetchSpy.mock.calls[0], '/v1/auth/registration-challenges', challenge)
   })
 
+  // 后端 challenge_id 由 uuid.NewV7() 生成，版本位是 7。
+  it('accepts a UUIDv7 challenge id issued by the backend', async () => {
+    const v7 = '019a3f2e-8c41-7b2d-9e5f-0a1b2c3d4e5f'
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(json({ data: {
+      accepted: true,
+      challenge_id: v7,
+      expires_at: '2026-08-08T09:10:00Z',
+      replayed: false,
+    } }, 202))
+
+    await expect(accountRegistrationApi.createChallenge(challenge, metadata)).resolves.toMatchObject({
+      challenge_id: v7,
+    })
+  })
+
   it('verifies the OTP through a cookie-bearing 204 request', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, {
       status: 204,

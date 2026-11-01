@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/monitor/node/realtime",
    "summary": "Read per-interface or per-resource metric series",
+   "summary_zh": "读取按网卡或按资源的指标序列",
    "auth": [
     "bearer"
    ],
@@ -96,6 +97,7 @@
    "method": "GET",
    "path": "/v1/monitor/node/top",
    "summary": "Rank node resource metrics",
+   "summary_zh": "节点资源指标排行",
    "auth": [
     "bearer"
    ],

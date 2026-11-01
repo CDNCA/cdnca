@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/dns/hub/domains",
    "summary": "Own DNS accounts and one page of their cached hosted domains",
+   "summary_zh": "自有 DNS 账号及一页缓存的托管域名",
    "auth": [
     "apiKey",
     "bearer"
@@ -88,6 +89,7 @@
    "method": "POST",
    "path": "/v1/dns/hub/domains/refresh",
    "summary": "Re-list hosted domains (each account at most once a minute)",
+   "summary_zh": "重新拉取托管域名（每个账号每分钟最多一次）",
    "auth": [
     "apiKey",
     "bearer"
@@ -150,6 +152,7 @@
    "method": "GET",
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
    "summary": "Live A/AAAA/CNAME/TXT records of a hosted domain",
+   "summary_zh": "托管域名实时的 A/AAAA/CNAME/TXT 记录",
    "auth": [
     "apiKey",
     "bearer"
@@ -246,6 +249,7 @@
    "method": "POST",
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
    "summary": "Create a record and read it back",
+   "summary_zh": "创建记录并回读确认",
    "auth": [
     "apiKey",
     "bearer"
@@ -403,6 +407,7 @@
    "method": "PATCH",
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
    "summary": "Change a record if it still holds expected",
+   "summary_zh": "记录仍为预期值时修改它",
    "auth": [
     "apiKey",
     "bearer"
@@ -567,6 +572,7 @@
    "method": "DELETE",
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
    "summary": "Delete a record if it still holds expected",
+   "summary_zh": "记录仍为预期值时删除它",
    "auth": [
     "apiKey",
     "bearer"
@@ -702,6 +708,7 @@
    "method": "POST",
    "path": "/v1/dns/hub/records/batch",
    "summary": "Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)",
+   "summary_zh": "最多 50 条记录变更逐条执行（第 i 条用键 <Idempotency-Key>.<i>）",
    "auth": [
     "apiKey",
     "bearer"
@@ -767,7 +774,7 @@
    "method": "GET",
    "path": "/v1/dns/platform-config",
    "summary": "Read the installation-wide DNS configuration (Node management > DNS settings, platform administrator)",
-   "summary_zh": "Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)",
+   "summary_zh": "读取全安装共用的 DNS 配置（节点管理 > DNS 配置，平台管理员）",
    "auth": [
     "bearer"
    ],
@@ -845,6 +852,7 @@
    "method": "PUT",
    "path": "/v1/dns/platform-config",
    "summary": "Save the installation-wide DNS configuration and synchronise every tenant copy",
+   "summary_zh": "保存全安装共用的 DNS 配置并同步到每个租户副本",
    "auth": [
     "bearer"
    ],
@@ -979,7 +987,7 @@
    "method": "POST",
    "path": "/v1/dns/platform-config/connection-test",
    "summary": "Connection test - verify DNS credentials and the CNAME domains they host (read-only)",
-   "summary_zh": "连接测试 - verify DNS credentials and the CNAME domains they host (read-only)",
+   "summary_zh": "连接测试：校验 DNS 凭据及其托管的 CNAME 域名（只读）",
    "auth": [
     "bearer"
    ],
@@ -1060,7 +1068,7 @@
    "method": "POST",
    "path": "/v1/dns/platform-config/{kind}",
    "summary": "Start record repair (repair) or remove non-CDN records (cleanup) as background jobs",
-   "summary_zh": "Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs",
+   "summary_zh": "以后台任务开始记录修复（repair）或清除 CDN 无关解析（cleanup）",
    "auth": [
     "bearer"
    ],
@@ -1133,7 +1141,7 @@
    "method": "GET",
    "path": "/v1/dns/platform-zones",
    "summary": "List the CNAME domains",
-   "summary_zh": "List the CNAME domains (CNAME域名)",
+   "summary_zh": "列出 CNAME 域名",
    "auth": [
     "bearer"
    ],
@@ -1193,6 +1201,7 @@
    "method": "POST",
    "path": "/v1/dns/platform-zones",
    "summary": "Add a CNAME domain (copied into every tenant; the first is the default allocation zone)",
+   "summary_zh": "添加 CNAME 域名（复制到每个租户；第一个为默认分配域名）",
    "auth": [
     "bearer"
    ],
@@ -1310,6 +1319,7 @@
    "method": "PATCH",
    "path": "/v1/dns/platform-zones/{id}",
    "summary": "Edit a CNAME domain; renaming one with allocated CNAMEs is refused (dns_zone_in_use)",
+   "summary_zh": "编辑 CNAME 域名；已分配 CNAME 的域名不能改名（dns_zone_in_use）",
    "auth": [
     "bearer"
    ],
@@ -1444,6 +1454,7 @@
    "method": "DELETE",
    "path": "/v1/dns/platform-zones/{id}",
    "summary": "Delete a CNAME domain and its tenant copies; refused while sites use it (dns_zone_in_use)",
+   "summary_zh": "删除 CNAME 域名及其租户副本；仍有网站使用时拒绝（dns_zone_in_use）",
    "auth": [
     "bearer"
    ],
@@ -1504,6 +1515,7 @@
    "method": "GET",
    "path": "/v1/dns/providers",
    "summary": "List DNS provider configurations",
+   "summary_zh": "列出 DNS 服务商配置",
    "auth": [
     "bearer"
    ],
@@ -1552,6 +1564,7 @@
    "method": "POST",
    "path": "/v1/dns/providers",
    "summary": "Store an encrypted DNS provider configuration",
+   "summary_zh": "加密保存 DNS 服务商配置",
    "auth": [
     "bearer"
    ],
@@ -1677,6 +1690,7 @@
    "method": "PATCH",
    "path": "/v1/dns/providers/{id}",
    "summary": "Update provider metadata or replace encrypted credentials",
+   "summary_zh": "修改服务商元数据或替换加密凭据",
    "auth": [
     "bearer"
    ],
@@ -1824,6 +1838,7 @@
    "method": "DELETE",
    "path": "/v1/dns/providers/{id}",
    "summary": "Delete an unreferenced DNS provider configuration",
+   "summary_zh": "删除未被引用的 DNS 服务商配置",
    "auth": [
     "bearer"
    ],
@@ -1880,6 +1895,7 @@
    "method": "POST",
    "path": "/v1/dns/providers/{id}/verify",
    "summary": "Verify a DNS provider credential against its upstream API",
+   "summary_zh": "向上游接口校验 DNS 服务商凭据",
    "auth": [
     "bearer"
    ],
@@ -2020,6 +2036,7 @@
    "method": "GET",
    "path": "/v1/dns/records",
    "summary": "List structured records in a zone",
+   "summary_zh": "列出某个区域的结构化记录",
    "auth": [
     "bearer"
    ],
@@ -2062,6 +2079,7 @@
    "method": "POST",
    "path": "/v1/dns/records",
    "summary": "Create a validated draft DNS record",
+   "summary_zh": "创建已校验的 DNS 记录草稿",
    "auth": [
     "bearer"
    ],
@@ -2199,6 +2217,7 @@
    "method": "PATCH",
    "path": "/v1/dns/records/{id}",
    "summary": "Update a validated draft DNS record",
+   "summary_zh": "修改已校验的 DNS 记录草稿",
    "auth": [
     "bearer"
    ],
@@ -2338,6 +2357,7 @@
    "method": "DELETE",
    "path": "/v1/dns/records/{id}",
    "summary": "Delete a draft DNS record",
+   "summary_zh": "删除 DNS 记录草稿",
    "auth": [
     "bearer"
    ],
@@ -2394,6 +2414,7 @@
    "method": "GET",
    "path": "/v1/dns/settings",
    "summary": "Read the DNS settings for the active tenant scope",
+   "summary_zh": "读取当前租户范围的 DNS 设置",
    "auth": [
     "bearer"
    ],
@@ -2447,6 +2468,7 @@
    "method": "PATCH",
    "path": "/v1/dns/settings",
    "summary": "Update the compatibility DNS TTL with compare-and-swap semantics",
+   "summary_zh": "按 CAS 修改兼容的 DNS TTL",
    "auth": [
     "bearer"
    ],
@@ -2537,6 +2559,7 @@
    "method": "GET",
    "path": "/v1/dns/settings/operations/{operation_id}",
    "summary": "Read a DNS DNS operation status",
+   "summary_zh": "读取一次 DNS 操作的状态",
    "auth": [
     "bearer"
    ],
@@ -2646,6 +2669,7 @@
    "method": "POST",
    "path": "/v1/dns/settings/{kind}",
    "summary": "Enqueue record repair or CDN-unrelated record cleanup",
+   "summary_zh": "排队执行记录修复或清除 CDN 无关解析",
    "auth": [
     "bearer"
    ],
@@ -2720,6 +2744,7 @@
    "method": "GET",
    "path": "/v1/dns/zones",
    "summary": "List DNS zones",
+   "summary_zh": "列出 DNS 区域",
    "auth": [
     "bearer"
    ],
@@ -2750,6 +2775,7 @@
    "method": "POST",
    "path": "/v1/dns/zones",
    "summary": "Create a draft DNS zone",
+   "summary_zh": "创建 DNS 区域草稿",
    "auth": [
     "bearer"
    ],
@@ -2857,6 +2883,7 @@
    "method": "DELETE",
    "path": "/v1/dns/zones/{id}",
    "summary": "Delete an unreferenced draft DNS zone",
+   "summary_zh": "删除未被引用的 DNS 区域草稿",
    "auth": [
     "bearer"
    ],

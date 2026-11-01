@@ -67,6 +67,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: purchasePackageSubscription
+      x-summary-zh: "为当前租户用户购买套餐"
       summary: Purchase a package subscription for the authenticated tenant user
       description: >-
         Requires a tenant principal with package_subscriptions.manage. Tenant and
@@ -100,6 +101,7 @@ paths:
     get:
       tags: [Tenant package commerce]
       operationId: listMyPackageOrders
+      x-summary-zh: "列出当前租户用户的套餐订单"
       summary: List the authenticated tenant user's package orders
       description: >-
         Requires package_subscriptions.read. Results are constrained by both
@@ -125,6 +127,7 @@ paths:
     get:
       tags: [Tenant package commerce]
       operationId: getMyPackageOrder
+      x-summary-zh: "读取一个可见的套餐订单"
       summary: Get one visible package order
       description: >-
         A foreign-tenant or different-owner order returns the same 404 as an
@@ -147,6 +150,7 @@ paths:
     get:
       tags: [Tenant package commerce]
       operationId: listMyPackageOrderEvents
+      x-summary-zh: "按版本顺序列出脱敏后的订单状态事件"
       summary: List sanitized order state events in revision order
       description: >-
         Event payload, actor, request/trace IDs, approval IDs, ledger IDs, holds,
@@ -171,6 +175,7 @@ paths:
     get:
       tags: [Tenant package commerce]
       operationId: listMySoldPackageSubscriptions
+      x-summary-zh: "列出当前用户生效中的已售订阅"
       summary: List effective sold-subscription projections owned by the current user
       description: >-
         Uses a fixed-time effective entitlement projection. Future scheduled
@@ -206,6 +211,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: renewPackageSubscription
+      x-summary-zh: "续费生效中的套餐订阅"
       summary: Renew an active package subscription
       description: >-
         If-Match is the quoted current package_subscriptions revision and is
@@ -240,6 +246,7 @@ paths:
     get:
       tags: [Tenant package commerce]
       operationId: resellerListCustomerOrders
+      x-summary-zh: "代理商列出自己某个客户的套餐订单"
       summary: A reseller lists one of its customers' package orders
       description: >-
         ADR 0018 RS-05. Reseller tenant session with reseller.customers.read or reseller.customers.manage; the customer
@@ -267,6 +274,7 @@ paths:
     get:
       tags: [Tenant package commerce]
       operationId: resellerListCustomerSubscriptions
+      x-summary-zh: "代理商列出自己某个客户的套餐订阅"
       summary: A reseller lists one of its customers' package subscriptions
       description: >-
         ADR 0018 RS-05. Same snapshot and paging rules as /v1/package-commerce/subscriptions, over the whole customer
@@ -298,6 +306,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: resellerPurchaseForCustomer
+      x-summary-zh: "代理商为自己的客户购买自己的套餐"
       summary: A reseller buys one of its packages for its own customer
       description: >-
         ADR 0018 RS-03. The caller is a reseller tenant session with reseller.customers.manage; the customer must be
@@ -341,6 +350,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: resellerRenewForCustomer
+      x-summary-zh: "代理商为客户续订自己的套餐"
       summary: A reseller renews its customer's subscription to one of its packages
       description: >-
         ADR 0018 RS-03. Same rules as the reseller purchase: only W is charged. If-Match is the quoted current
@@ -381,6 +391,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: resellerUpgradeForCustomer
+      x-summary-zh: "代理商把客户的订阅升级为自己的另一个套餐"
       summary: A reseller upgrades its customer's subscription to another of its packages
       description: >-
         ADR 0019 §5 / Q2 a (bb03). Only between the reseller's own packages, immediately. The customer pays
@@ -427,6 +438,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: resellerDowngradeForCustomer
+      x-summary-zh: "代理商把客户的订阅降级为自己的另一个套餐"
       summary: A reseller downgrades its customer's subscription to another of its packages
       description: >-
         ADR 0019 §5 / Q2 a (bb03). Only between the reseller's own packages, immediately. The customer pays
@@ -473,6 +485,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: resellerCancelCustomerSubscription
+      x-summary-zh: "代理商取消客户的订阅"
       summary: A reseller cancels its customer's subscription
       description: >-
         ADR 0019 §5 (bb03). Same behavior as the platform's cancel (the sites stop, no refund or ledger entry).
@@ -502,6 +515,7 @@ paths:
   /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/suspend:
     post:
       operationId: resellerSuspendCustomerSubscription
+      x-summary-zh: "以客户所属代理商身份暂停一个套餐订阅"
       summary: Suspend one package subscription as the customer's reseller
       description: >-
         ADR 0019 §5 (bb03, migration 551). Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
@@ -528,6 +542,7 @@ paths:
   /v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/unsuspend:
     post:
       operationId: resellerUnsuspendCustomerSubscription
+      x-summary-zh: "以客户所属代理商身份恢复一个套餐订阅"
       summary: Unsuspend one package subscription as the customer's reseller
       description: >-
         ADR 0019 §5 (bb03, migration 551). Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
@@ -555,6 +570,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: upgradePackageSubscription
+      x-summary-zh: "立即或下个周期升级套餐"
       summary: Upgrade a package immediately or at the next cycle
       security: [{bearerAuth: []}]
       x-required-permissions: [package_subscriptions.manage]
@@ -586,6 +602,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: downgradePackageSubscription
+      x-summary-zh: "立即或下个周期降级套餐"
       summary: Downgrade a package immediately or at the next cycle
       security: [{bearerAuth: []}]
       x-required-permissions: [package_subscriptions.manage]
@@ -617,6 +634,7 @@ paths:
     post:
       tags: [Tenant package commerce]
       operationId: purchaseTrafficPackage
+      x-summary-zh: "按带版本的快照购买流量包"
       summary: Purchase a versioned traffic package snapshot
       security: [{bearerAuth: []}]
       x-required-permissions: [package_subscriptions.manage]
@@ -645,6 +663,7 @@ paths:
     get:
       tags: [Tenant package commerce]
       operationId: getMyTrafficPackagePurchase
+      x-summary-zh: "读取脱敏后的流量包购买订单与发放结果"
       summary: Get a sanitized traffic-purchase order and grant result
       security: [{bearerAuth: []}]
       x-required-permissions: [package_subscriptions.read]
@@ -664,6 +683,7 @@ paths:
     get:
       tags: [Platform package commerce]
       operationId: listTenantPackageOrdersAsPlatform
+      x-summary-zh: "列出指定租户的全部套餐订单"
       summary: List all package orders for one explicit tenant
       security: [{bearerAuth: []}]
       x-required-permissions: [billing.adjustments.manage]
@@ -688,6 +708,7 @@ paths:
     get:
       tags: [Platform package commerce]
       operationId: getTenantPackageOrderAsPlatform
+      x-summary-zh: "在指定租户范围内读取一个订单"
       summary: Get one order in an explicit tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [billing.adjustments.manage]
@@ -708,6 +729,7 @@ paths:
     get:
       tags: [Platform package commerce]
       operationId: listTenantPackageOrderEventsAsPlatform
+      x-summary-zh: "列出租户订单的脱敏事件"
       summary: List sanitized events for one tenant order
       security: [{bearerAuth: []}]
       x-required-permissions: [billing.adjustments.manage]
@@ -730,6 +752,7 @@ paths:
     get:
       tags: [Platform package commerce]
       operationId: listSoldPackageSubscriptionsAsPlatform
+      x-summary-zh: "列出指定租户生效中的已售订阅"
       summary: List effective sold subscriptions for one explicit tenant
       description: >-
         Uses the fixed-time effective entitlement projection. The first page
@@ -760,6 +783,7 @@ paths:
     post:
       tags: [Platform package commerce]
       operationId: openPackageSubscriptionAsPlatform
+      x-summary-zh: "不经订单为在用租户成员开通套餐订阅"
       summary: Open a package subscription for an active tenant member without an order
       description: >-
         Creates the subscription, immutable revision-one state, and active
@@ -864,6 +888,7 @@ paths:
     get:
       tags: [Platform package commerce]
       operationId: getTenantTrafficPackagePurchaseAsPlatform
+      x-summary-zh: "读取指定租户一次流量包购买的脱敏结果"
       summary: Get one sanitized traffic-purchase result for an explicit tenant
       description: >-
         The platform principal must name the target tenant. A purchase outside
@@ -887,6 +912,7 @@ paths:
     post:
       tags: [Platform package commerce]
       operationId: refundPackageOrder
+      x-summary-zh: "执行已审批的部分或累计退款"
       summary: Apply an approved partial or cumulative refund
       description: >-
         Requires a platform principal with billing.adjustments.manage and an
@@ -921,6 +947,7 @@ paths:
     post:
       tags: [Platform package commerce]
       operationId: voidPackageOrder
+      x-summary-zh: "凭一次性审批作废符合条件的订单"
       summary: Void an eligible order using a one-time approval fact
       description: >-
         Requires billing.adjustments.manage and an explicit tenant_id. The
@@ -953,6 +980,7 @@ paths:
     post:
       tags: [Payment provider callbacks]
       operationId: applyVerifiedPaymentProviderCallback
+      x-summary-zh: "校验并处理一条支付服务商原始回调"
       summary: Authenticate and apply one raw payment-provider callback
       description: >-
         No bearer identity is accepted as proof. All four callback headers must
@@ -1051,6 +1079,7 @@ paths:
   /v1/admin/package-commerce/subscriptions/{subscription_id}/cancel:
     post:
       operationId: cancelPackageSubscriptionAsPlatform
+      x-summary-zh: "以管理员身份取消租户订阅"
       summary: Cancel a tenant subscription as administrator
       description: Physical deletion is not supported by cancellation. Use sold package commands for independent enable/disable and audited deletion.
       security: [{bearerAuth: []}]
@@ -1076,6 +1105,7 @@ paths:
   /v1/admin/package-commerce/subscriptions/{subscription_id}/suspend:
     post:
       operationId: suspendPackageSubscriptionAsPlatform
+      x-summary-zh: "以管理员身份暂停一个套餐订阅"
       summary: Suspend one package subscription as an administrator
       description: >-
         ADR 0019 §5 (bb03, migration 551). Stops publishing the subscription's sites and forwards (configuration kept) and republishes the scope at once. The term keeps running. Only this subscription is affected. Suspending an already suspended subscription succeeds without a change. reason is required.
@@ -1101,6 +1131,7 @@ paths:
   /v1/admin/package-commerce/subscriptions/{subscription_id}/unsuspend:
     post:
       operationId: unsuspendPackageSubscriptionAsPlatform
+      x-summary-zh: "以管理员身份恢复一个套餐订阅"
       summary: Unsuspend one package subscription as an administrator
       description: >-
         ADR 0019 §5 (bb03, migration 551). Publishes the subscription's sites and forwards again at once. Unsuspending a subscription that is not suspended succeeds without a change.
@@ -1532,7 +1563,11 @@ components:
         - cycle_policy
         - traffic_factor
       properties:
-        tenant_id: {$ref: '#/components/schemas/CanonicalUUID'}
+        tenant_id:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          description: The tenant's access scope ID (tenant_scope_id, as in subscription and user responses), not tenants.id. A UUID that is no tenant access scope answers 404 tenant_scope_not_found.
         owner_user_id: {$ref: '#/components/schemas/CanonicalUUID'}
         product_id: {$ref: '#/components/schemas/CanonicalUUID'}
         product_revision: {type: integer, format: int64, minimum: 1}
@@ -1692,6 +1727,8 @@ components:
         websocket: {type: boolean}
         http3: {type: boolean}
         l2_origin: {type: boolean}
+        aggregated_edge: {type: boolean, description: "租户可接入自有第三方 CDN（ADR 0020，需 module.aggregated_edge；缺省 false）"}
+        aggregated_edge_accounts: {type: integer, minimum: -1, maximum: 1000, description: "可绑定的自有第三方 CDN 账号数，-1 不限（缺省 0）"}
     PackageCatalogPrices:
       type: object
       additionalProperties: false
@@ -2048,6 +2085,7 @@ components:
                 - permission_denied
                 - package_commerce_validation_error
                 - package_commerce_not_found
+                - tenant_scope_not_found
                 - revision_conflict
                 - idempotency_conflict
                 - provider_event_conflict
@@ -2060,6 +2098,7 @@ components:
                 - reseller_prepaid_insufficient
                 - reseller_wholesale_unpriced
                 - traffic_package_product_disabled
+                - package_offer_unavailable
                 - promotion_unavailable
                 - commerce_amount_out_of_range
                 - commerce_fulfillment_unavailable

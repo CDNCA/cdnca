@@ -344,7 +344,7 @@ func (site siteDescriptor) servesHost(host string) bool {
 }
 
 // SiteServesHost is servesHost over a site's active names: the cache
-// operation target-site resolver (fix-cachedlg) matches URLs to sites by the
+// operation target-site resolver matches URLs to sites by the
 // same rule a create checks them against.
 func SiteServesHost(names []string, host string) bool {
 	for _, name := range names {

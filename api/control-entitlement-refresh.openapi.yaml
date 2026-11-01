@@ -9,6 +9,7 @@ paths:
     post:
       tags: [Entitlements]
       operationId: refreshAdminEntitlement
+      x-summary-zh: "刷新本地已校验的授权租约"
       summary: Refresh the locally verified entitlement lease
       description: >-
         Requires a live platform administrator session. The control plane

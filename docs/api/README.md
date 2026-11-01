@@ -5,7 +5,7 @@
 <!-- generated:openapi-counts:begin -->
 | 文件 | 版本 | operation 数 | 范围 |
 | --- | --- | ---: | --- |
-| [`control.yaml`](../../api/openapi/v1/control.yaml) | 0.1.0 | 609 | 客户主控身份、账户、账务、套餐商业、节点、分析、任务、站点发布、缓存与安全 |
+| [`control.yaml`](../../api/openapi/v1/control.yaml) | 0.1.0 | 612 | 客户主控身份、账户、账务、套餐商业、节点、分析、任务、站点发布、缓存与安全 |
 | [`dns-acme.yaml`](../../api/openapi/v1/dns-acme.yaml) | 0.1.0 | 41 | DNS provider、zone、record 和证书订单基础契约 |
 | [`license.yaml`](../../api/openapi/v1/license.yaml) | 0.8.0 | 210 | Operator、许可证、发布、插件供应链、签名者撤销、平台策略和安装接口 |
 | [`sites.yaml`](../../api/openapi/v1/sites.yaml) | 0.1.0 | 22 | 网站、源站、锁定和批量动作 |

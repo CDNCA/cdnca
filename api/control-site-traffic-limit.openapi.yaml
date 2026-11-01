@@ -25,6 +25,7 @@ paths:
         schema: {type: string, format: uuid}
     get:
       operationId: getSiteTrafficLimit
+      x-summary-zh: "读取网站的流量上限及执行情况（sites.read）"
       tags: [Site traffic limit]
       summary: Read a website's traffic caps and their enforcement (sites.read)
       responses:
@@ -40,6 +41,7 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
     put:
       operationId: putSiteTrafficLimit
+      x-summary-zh: "替换网站的流量上限（sites.manage）"
       tags: [Site traffic limit]
       summary: Replace a website's traffic caps (sites.manage)
       parameters:

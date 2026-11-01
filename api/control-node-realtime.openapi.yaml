@@ -9,6 +9,7 @@ paths:
   /v1/monitor/node/top:
     get:
       operationId: getNodeRealtimeTop
+      x-summary-zh: "节点资源指标排行"
       summary: Rank node resource metrics
       description: Requires nodes.read or platform.admin in a platform scope. Filters precede the limit. No metrics are invented for unknown samples.
       parameters:
@@ -53,6 +54,7 @@ paths:
   /v1/monitor/node/realtime:
     get:
       operationId: getNodeRealtimeSeries
+      x-summary-zh: "读取按网卡或按资源的指标序列"
       summary: Read per-interface or per-resource metric series
       description: Requires nodes.read or platform.admin in a platform scope. Node ownership is checked server-side. Unknown automatic selections produce no bandwidth points, never aggregate fallback values.
       parameters:
@@ -100,6 +102,7 @@ paths:
   /v1/node-traffic:
     get:
       operationId: getNodeTraffic
+      x-summary-zh: "读取节点区间流量（不是累计计数）"
       summary: Read interval node traffic, not cumulative lifetime counters
       description: >-
         Requires nodes.read or platform.admin in a platform scope. external_only

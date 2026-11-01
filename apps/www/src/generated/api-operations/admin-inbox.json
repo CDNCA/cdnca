@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/inbox",
    "summary": "List the platform administrator's messages, newest first",
+   "summary_zh": "列出平台管理员的消息，最新在前",
    "auth": [
     "bearer"
    ],
@@ -82,6 +83,7 @@
    "method": "POST",
    "path": "/v1/admin/inbox/read-all",
    "summary": "Mark all the caller's messages read (audited admin.inbox.read_all); read messages older than 180 days are pruned",
+   "summary_zh": "把调用者的消息全部标为已读（审计 admin.inbox.read_all）；超过 180 天的已读消息会被清理",
    "auth": [
     "bearer"
    ],
@@ -104,6 +106,7 @@
    "method": "GET",
    "path": "/v1/admin/inbox/unread-count",
    "summary": "Unread message count for the header badge",
+   "summary_zh": "页头角标用的未读消息数",
    "auth": [
     "bearer"
    ],
@@ -131,6 +134,7 @@
    "method": "POST",
    "path": "/v1/admin/inbox/{message_id}/read",
    "summary": "Mark one message read",
+   "summary_zh": "把一条消息标为已读",
    "auth": [
     "bearer"
    ],

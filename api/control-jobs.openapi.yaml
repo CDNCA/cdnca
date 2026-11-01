@@ -17,6 +17,7 @@ paths:
   /v1/admin/jobs:
     get:
       operationId: listPlatformJobs
+      x-summary-zh: "分页列出全平台的任务"
       summary: Page through jobs across the customer control plane
       description: >-
         Requires a platform-scoped identity with jobs.read_all or
@@ -49,6 +50,7 @@ paths:
   /v1/admin/jobs/kinds:
     get:
       operationId: listPlatformJobKinds
+      x-summary-zh: "读取已接入的任务类型目录（与是否有任务无关）"
       summary: Read the integrated producer kind catalog independently of job rows
       description: >-
         Requires jobs.read_all or platform.admin. Accepts no query parameters.
@@ -67,6 +69,7 @@ paths:
   /v1/admin/jobs/{task_id}:
     get:
       operationId: getPlatformJob
+      x-summary-zh: "读取平台管理员可见的一个任务"
       summary: Read a job visible to the platform administrator
       security: [{bearerAuth: []}]
       x-required-any-permission: [jobs.read_all, platform.admin]
@@ -84,6 +87,7 @@ paths:
   /v1/admin/jobs/{task_id}/attempts:
     get:
       operationId: listPlatformJobAttempts
+      x-summary-zh: "分页读取任务不可变的执行历史"
       summary: Page through a job's immutable attempt history
       security: [{bearerAuth: []}]
       x-required-any-permission: [jobs.read_all, platform.admin]
@@ -104,6 +108,7 @@ paths:
   /v1/admin/jobs/{task_id}/results:
     get:
       operationId: listPlatformJobResults
+      x-summary-zh: "分页读取当前按条目与按节点的结果"
       summary: Page through current per-item and per-node result projections
       security: [{bearerAuth: []}]
       x-required-any-permission: [jobs.read_all, platform.admin]
@@ -124,6 +129,7 @@ paths:
   /v1/admin/jobs/{task_id}/receipts:
     get:
       operationId: listPlatformJobSettlementReceipts
+      x-summary-zh: "分页读取每次执行不可变的结算回执"
       summary: Page through immutable per-attempt settlement receipts
       security: [{bearerAuth: []}]
       x-required-any-permission: [jobs.read_all, platform.admin]
@@ -144,6 +150,7 @@ paths:
   /v1/admin/jobs/{task_id}/dead-letters:
     get:
       operationId: listPlatformJobDeadLetters
+      x-summary-zh: "分页读取只追加的终态死信"
       summary: Page through append-only terminal-attempt dead letters
       security: [{bearerAuth: []}]
       x-required-any-permission: [jobs.read_all, platform.admin]
@@ -164,6 +171,7 @@ paths:
   /v1/admin/jobs/{task_id}/cancel:
     post:
       operationId: cancelPlatformJob
+      x-summary-zh: "取消排队中或运行中的任务"
       summary: Cancel a queued or running job
       description: >-
         Requires jobs.manage_all or platform.admin. The state transition, audit,
@@ -196,6 +204,7 @@ paths:
   /v1/admin/jobs/{task_id}/retry:
     post:
       operationId: retryPlatformJob
+      x-summary-zh: "重试失败或部分失败任务中的失败条目"
       summary: Retry failed items in a failed or partially failed job
       description: >-
         Requires jobs.manage_all or platform.admin and an available attempt. The
@@ -228,6 +237,7 @@ paths:
   /v1/admin/jobs/{task_id}/replay:
     post:
       operationId: replayPlatformDeadLetteredJob
+      x-summary-zh: "为最近进入死信的任务追加一次执行并重放"
       summary: Add one attempt and replay the latest dead-lettered job
       description: >-
         Requires jobs.manage_all or platform.admin. The state transition, audit,
@@ -260,6 +270,7 @@ paths:
   /v1/jobs:
     get:
       operationId: listTenantJobs
+      x-summary-zh: "分页列出当前租户范围的任务"
       summary: Page through jobs in the authenticated tenant scope
       description: >-
         Requires a tenant-scoped identity with jobs.read. Scope is derived only
@@ -291,6 +302,7 @@ paths:
   /v1/jobs/kinds:
     get:
       operationId: listTenantJobKinds
+      x-summary-zh: "以租户身份读取已接入的任务类型目录"
       summary: Read the integrated producer catalog as a tenant
       description: >-
         Requires a tenant-scoped identity with jobs.read. Accepts no query
@@ -309,6 +321,7 @@ paths:
   /v1/jobs/{task_id}:
     get:
       operationId: getTenantJob
+      x-summary-zh: "读取当前租户范围的一个任务"
       summary: Read a job in the authenticated tenant scope
       description: A missing or cross-tenant task_id returns the same 404 response.
       security:
@@ -329,6 +342,7 @@ paths:
   /v1/jobs/{task_id}/attempts:
     get:
       operationId: listTenantJobAttempts
+      x-summary-zh: "分页读取租户任务不可变的执行历史"
       summary: Page through a tenant job's immutable attempt history
       security:
         - bearerAuth: []
@@ -351,6 +365,7 @@ paths:
   /v1/jobs/{task_id}/results:
     get:
       operationId: listTenantJobResults
+      x-summary-zh: "分页读取当前按条目与按节点的结果"
       summary: Page through current per-item and per-node result projections
       description: >-
         node_id, failure_code, and completed_at are omitted when the underlying
@@ -376,6 +391,7 @@ paths:
   /v1/jobs/{task_id}/receipts:
     get:
       operationId: listTenantJobSettlementReceipts
+      x-summary-zh: "分页读取当前租户不可变的结算回执"
       summary: Page through immutable settlement receipts in the authenticated tenant
       security:
         - bearerAuth: []
@@ -398,6 +414,7 @@ paths:
   /v1/jobs/{task_id}/dead-letters:
     get:
       operationId: listTenantJobDeadLetters
+      x-summary-zh: "分页读取当前租户的死信"
       summary: Page through dead letters in the authenticated tenant
       security:
         - bearerAuth: []
@@ -420,6 +437,7 @@ paths:
   /v1/jobs/{task_id}/cancel:
     post:
       operationId: cancelTenantJob
+      x-summary-zh: "取消当前租户排队中或运行中的任务"
       summary: Cancel a queued or running job in the authenticated tenant
       description: >-
         Requires jobs.manage. Scope is derived only from the authenticated
@@ -454,6 +472,7 @@ paths:
   /v1/jobs/{task_id}/retry:
     post:
       operationId: retryTenantJob
+      x-summary-zh: "重试租户任务中的失败条目"
       summary: Retry failed items in a tenant job
       description: >-
         Requires jobs.manage, a failed or partially failed state, and an available

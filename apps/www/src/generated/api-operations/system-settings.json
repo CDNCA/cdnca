@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/system-settings/csp-hosts",
    "summary": "Read the global JavaScript report hosts for the web container CSP",
+   "summary_zh": "读取 Web 容器 CSP 的全局 JavaScript 上报域名",
    "auth": [
     "none"
    ],
@@ -35,6 +36,7 @@
    "method": "GET",
    "path": "/v1/system-settings/public",
    "summary": "Read the display subset of platform settings",
+   "summary_zh": "读取平台设置中用于展示的部分",
    "auth": [
     "bearer",
     "none"

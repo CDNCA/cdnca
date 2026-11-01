@@ -21,6 +21,7 @@ paths:
     get:
       tags: [Account login challenge]
       operationId: getAccountLoginMethods
+      x-summary-zh: "读取已启用的邮箱与短信登录方式"
       security: []
       summary: Read enabled email and SMS login methods
       responses:
@@ -37,6 +38,7 @@ paths:
     post:
       tags: [Account login challenge]
       operationId: createAccountLoginChallenge
+      x-summary-zh: "发送登录验证码，或密码验证后要求的附加验证码"
       security: []
       summary: Queue a login code or the additional code required after password verification
       parameters:
@@ -68,6 +70,7 @@ paths:
     post:
       tags: [Account login challenge]
       operationId: verifyAccountLoginChallenge
+      x-summary-zh: "核销一个验证码并创建登录会话"
       security: []
       summary: Consume one verification code and create a login session
       description: >-
@@ -158,6 +161,13 @@ components:
             registration_enabled:
               type: boolean
               description: The registration switch is on and registration is available; the sign-in page shows the sign-up link only when true.
+            registration_mode:
+              type: string
+              enum: ['', builtin]
+              description: >-
+                builtin when registration uses the built-in image CAPTCHA because
+                the registration verification runtime is not mounted (the fresh
+                install default); empty otherwise.
             email_enabled: {type: boolean}
             sms_enabled: {type: boolean}
             email_anti_abuse_mode: {$ref: '#/components/schemas/AntiAbuseMode'}

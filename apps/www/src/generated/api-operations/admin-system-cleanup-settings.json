@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/system-cleanup-settings",
    "summary": "Read platform cleanup and backup settings",
+   "summary_zh": "读取平台清理与备份设置",
    "auth": [
     "bearer"
    ],
@@ -62,6 +63,7 @@
    "method": "PUT",
    "path": "/v1/admin/system-cleanup-settings",
    "summary": "Update platform cleanup and backup settings",
+   "summary_zh": "修改平台清理与备份设置",
    "auth": [
     "bearer"
    ],

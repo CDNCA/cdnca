@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/control-upgrade-plan",
    "summary": "Read native standalone publication and matching execution status",
+   "summary_zh": "读取原生单机主控的升级计划发布与执行状态",
    "auth": [
     "bearer"
    ],
@@ -80,6 +81,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-plan",
    "summary": "Publish a verified signed control-plane upgrade bundle",
+   "summary_zh": "发布已校验签名的主控升级包",
    "auth": [
     "bearer"
    ],
@@ -371,6 +373,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-plan/issue",
    "summary": "Have the License service issue a signed plan and publish it",
+   "summary_zh": "请授权服务签发升级计划并发布",
    "auth": [
     "bearer"
    ],
@@ -663,6 +666,7 @@
    "method": "GET",
    "path": "/v1/admin/control-upgrade-plan/options",
    "summary": "List the versions the master may upgrade to (version picker)",
+   "summary_zh": "列出主控可升级到的版本（版本选择器）",
    "auth": [
     "bearer"
    ],
@@ -715,6 +719,7 @@
    "method": "GET",
    "path": "/v1/admin/control-upgrade-plan/run-log",
    "summary": "Read the native master upgrade script log and service-log tail",
+   "summary_zh": "读取原生主控升级脚本日志与服务日志末尾",
    "auth": [
     "bearer"
    ],

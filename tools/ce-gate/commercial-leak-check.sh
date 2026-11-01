@@ -8,6 +8,8 @@ cd "$(git rev-parse --show-toplevel)"
 BASE=56cdfd92
 BROAD='entitlementroot|trust[-_]?anchor|VerifyPins|anchorEntitlementTrust|anchorUpgradeTrust|\bgarble\b|licredund|commercial[-_]?(trust[-_]?)?anchor'
 STRICT='entitlementroot|VerifyPins|anchorEntitlementTrust|anchorUpgradeTrust|CDNCA_GARBLE|\bgarble\b|licredund|entitlement-trust-anchor|ENTITLEMENT_TRUST_ANCHOR_FILE|CONTROL_UPGRADE_TRUST_ANCHOR_FILE|commercial_trust_anchor|commercial_anchor|commercial-trust-anchor|embedded = "cdnca-offline-root/'
+# 内部开发痕迹：只查相对基线新增的行（迁移 SQL 等 golden 文件里基线就有，不拦）。
+INTERNAL='USER-DECISIONS|主会话|主调度|集成头'
 EXCLUDE=(-- . ':!CE-PROGRESS.md' ':!tools/ce-gate')
 fail=0
 strict=$(git grep -niE "$STRICT" "${EXCLUDE[@]}" | grep -viE 'garbled' || true)
@@ -22,5 +24,9 @@ if [ -n "$added" ]; then printf '相对基线 %s 新增的命中行:\n%s\n' "$BA
 { git grep -hiE -- '--.*(recheck|redundan|anchor)' -- 'services/control-api/migrations/*.sql' || true; } | sort -u >"$tmp/mig"
 mig_added=$(comm -23 "$tmp/mig" tools/ce-gate/baseline-migration-comment-hits.txt)
 if [ -n "$mig_added" ]; then printf '迁移注释里新增的敏感词:\n%s\n' "$mig_added"; fail=1; fi
+# 内部开发痕迹：只查相对基线 diff 新增的行（排除迁移 SQL 和 tools/ce-gate）。
+internal_added=$(git diff "$BASE" HEAD -- . ':!CE-PROGRESS.md' ':!tools/ce-gate' ':!services/control-api/migrations/*.sql' |
+  grep -E '^\+[^+]' | grep -iE "$INTERNAL" || true)
+if [ -n "$internal_added" ]; then printf '新增行含内部开发痕迹:\n%s\n' "$internal_added"; fail=1; fi
 [ $fail = 0 ] && { echo "commercial-leak-check: PASS"; exit 0; }
 echo "commercial-leak-check: FAIL" >&2; exit 1

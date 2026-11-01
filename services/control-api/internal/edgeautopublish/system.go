@@ -141,7 +141,7 @@ func RequestRepublicationTx(ctx context.Context, tx pgx.Tx, request RepublishReq
 				Reason: ReasonResourceMutation, Permission: PermissionSitesManage, SourceRequestID: sourceRequestID,
 			})
 		case edgepublish.SystemTriggerOriginFailover, edgepublish.SystemTriggerMarketLimits,
-			// A renewed certificate switched the site's binding (fix-dnscert3).
+			// A renewed certificate switched the site's binding.
 			edgepublish.SystemTriggerCertificateRenewal:
 			// The site's active origin level moved: published as the policy
 			// actor's site.update, as EnqueueSiteSettingTx does.
@@ -226,7 +226,7 @@ func EnqueueSiteSettingTx(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.U
 // the scope's source revision outside any request (the CNAME projection,
 // 335 trigger): an automatic scope whose current revision no request covers
 // gets the site's site.update as its policy's actor. Without it the write
-// stayed unpublished once the scope's last request had published (fix-autopub).
+// stayed unpublished once the scope's last request had published.
 // A covered revision (the caller's transaction already enqueued, or a newer
 // request exists) and a manual scope are left alone.
 func EnqueueUnrequestedSiteRevisionTx(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID, requestID string) (bool, error) {
@@ -342,7 +342,7 @@ func (LineGroupPublisher) EnqueueUnrequestedScopeRevisionTx(
 // publicationNodeIDs is the policy's explicit nodes plus every node serving a
 // current line group the scope's live sites use (their own or their package's
 // primary/backup group) and the members of their L2 configurations
-// (fix-autol2b), restricted to nodes this scope may publish to: active and
+//, restricted to nodes this scope may publish to: active and
 // either owned by the scope or a platform node.
 func publicationNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, policyNodes []uuid.UUID) ([]uuid.UUID, error) {
 	return lineGroupNodeIDs(ctx, tx, scopeID, nil, policyNodes)
@@ -449,7 +449,7 @@ func lineGroupNodeIDs(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID, siteID 
 }
 
 // FrozenRepublisher redelivers a scope to a node that refused it while frozen
-// (fix-stoppolicy2), through the same node_sync channel as a failed-sync
+//, through the same node_sync channel as a failed-sync
 // retry: the scope's last publication goes out again, automatic or not.
 type FrozenRepublisher struct{}
 

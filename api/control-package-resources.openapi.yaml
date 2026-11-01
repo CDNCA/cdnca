@@ -8,6 +8,7 @@ paths:
   /v1/admin/package-resource-options:
     get:
       operationId: listPackageResourceOptions
+      x-summary-zh: "列出当前平台套餐目录可用的命名资源"
       summary: List named resources available to the current platform package catalog
       description: >-
         Requires packages.manage in the authenticated platform scope. No query parameters

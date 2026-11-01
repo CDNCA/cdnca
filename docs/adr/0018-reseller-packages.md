@@ -4,7 +4,7 @@
 - 兼容基线：1.0.35（PATROL A4：不考虑向前兼容，不迁移旧数据，测试机上线时全部重装）。
 - 编号说明：派单写 0015，但 `0015-market-direct-seller-payments.md` 已占用（现有最大 0017），本 ADR 用 0018。
 - 需求："线路组「授权给下级」——1.0.35 本版就做「代理商自建套餐」，让线路组授权真正生效"（取代此前"代理自建套餐属后续"的安排）。语义依据（A/B/C 由套餐所有者设置；平台/顶级代理建线路组标等级、决定授权哪些给下级；中间代理只能在上级授权的线路组里挑并可继续授权下级；最下级同样；站长不能改 A/B/C）。
-- 代码核对基于集成头 `773f63db6`。路径前缀：主控 `services/control-api/`，前端 `apps/web/src/`。
+- 代码核对基于 `773f63db6`。路径前缀：主控 `services/control-api/`，前端 `apps/web/src/`。
 
 ## 1. 问题
 
@@ -188,7 +188,7 @@
 
 ## 7. 数据模型与改动点
 
-迁移号占位（开工时集成头 `478_security_activation_rule_pack_waits`，479 预留给 cname-exhaust；RS-01 用 480，本地放 `479_placeholder_cname_exhaust` 占位保持连号，合入时删除占位并统一改号）。RS-02/RS-03 依次取下一个号。
+迁移号占位（开工时 `478_security_activation_rule_pack_waits`，479 预留给 cname-exhaust；RS-01 用 480，本地放 `479_placeholder_cname_exhaust` 占位保持连号，合入时删除占位并统一改号）。RS-02/RS-03 依次取下一个号。
 
 | 迁移 | 内容 |
 |---|---|

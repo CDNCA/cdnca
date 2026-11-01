@@ -18,7 +18,7 @@ const initial: PlatformSystemSettingsDocument = {
   },
 }
 
-describe('SystemGlobalSettingsPage brand asset upload (fix-feedbackui2)', () => {
+describe('SystemGlobalSettingsPage brand asset upload', () => {
   it('says a wrong file type in that asset card, not in a dialog, and uploads nothing', async () => {
     const actor = principal({
       scope_kind: 'platform', tenant_id: null, roles: ['platform_owner'],

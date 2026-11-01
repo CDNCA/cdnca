@@ -36,8 +36,8 @@ type Unsupported struct {
 // CompileSite maps a saved site onto siteconf v1: domains, ports, enabled
 // origins (level, weight, port, connection limit), scheme, balance and its
 // key, timeouts, WebSocket, HTTP/3, forced HTTPS, client certificates, the
-// origin forwarding options (fix-mktsiteconf), the HTTPS profile, IPv6, the
-// cache switches and the L2 mode (fix-mktsiteconf2). What still cannot be
+// origin forwarding options, the HTTPS profile, IPv6, the
+// cache switches and the L2 mode. What still cannot be
 // carried is listed in the second result; the local rules (cache, security
 // policies, conditional origins) are compiled by PlanSite.
 func CompileSite(s site.Site) (siteconf.Config, []Unsupported) {

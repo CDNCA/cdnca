@@ -25,7 +25,7 @@ type WAF struct {
 	Rules         []securitypolicy.Rule       `json:"rules"`
 	WAFSettings   *securitypolicy.WAFSettings `json:"waf_settings,omitempty"`
 	QuickBlock    *securitypolicy.QuickBlock  `json:"quick_block,omitempty"`
-	// IPLists (fix-mktsiteconf3) are the published contents of the IP lists
+	// IPLists are the published contents of the IP lists
 	// the rules' ip_list conditions name, by this platform's list ID; the
 	// leaf writes them as its own lists and points the rules at those.
 	IPLists map[string]WAFIPList `json:"ip_lists,omitempty"`

@@ -23,6 +23,7 @@ paths:
     get:
       tags: [Plugin webhooks]
       operationId: listPluginWebhookSubscriptions
+      x-summary-zh: "列出 Webhook 订阅"
       summary: List webhook subscriptions
       x-required-permissions: [plugin_webhooks.read]
       parameters:
@@ -38,6 +39,7 @@ paths:
     post:
       tags: [Plugin webhooks]
       operationId: createPluginWebhookSubscription
+      x-summary-zh: "创建 Webhook 订阅及一次性密钥"
       summary: Create a webhook subscription and one-time secret
       description: >-
         The secret is returned only through the encrypted receipt window and
@@ -67,6 +69,7 @@ paths:
     get:
       tags: [Plugin webhooks]
       operationId: getPluginWebhookSubscription
+      x-summary-zh: "读取一个 Webhook 订阅"
       summary: Get a webhook subscription
       x-required-permissions: [plugin_webhooks.read]
       responses:
@@ -82,6 +85,7 @@ paths:
     post:
       tags: [Plugin webhooks]
       operationId: createPluginWebhookTestDelivery
+      x-summary-zh: "排队发送一次带签名的 CloudEvents 测试投递"
       summary: Queue a signed CloudEvents test delivery
       x-required-permissions: [plugin_webhooks.manage]
       parameters:
@@ -108,6 +112,7 @@ paths:
     get:
       tags: [Plugin webhooks]
       operationId: listPluginWebhookDeliveries
+      x-summary-zh: "列出订阅的投递记录"
       summary: List subscription deliveries
       x-required-permissions: [plugin_webhooks.read]
       parameters:
@@ -128,6 +133,7 @@ paths:
     get:
       tags: [Plugin webhooks]
       operationId: getPluginWebhookDelivery
+      x-summary-zh: "读取一次投递状态"
       summary: Get a delivery status
       x-required-permissions: [plugin_webhooks.read]
       responses:
@@ -144,6 +150,7 @@ paths:
     post:
       tags: [Plugin webhooks]
       operationId: replayPluginWebhookDelivery
+      x-summary-zh: "重放已投递或进入死信的投递"
       summary: Replay a delivered or dead-lettered delivery
       x-required-permissions: [plugin_webhooks.manage]
       parameters:
@@ -170,6 +177,7 @@ paths:
     post:
       tags: [Plugin webhooks]
       operationId: replayPluginWebhookDeliveryRange
+      x-summary-zh: "重放某时间段内已终结的投递"
       summary: Replay the terminal deliveries of a time range
       description: >-
         Re-sends every original (non-replay) delivery of this subscription
@@ -208,6 +216,7 @@ paths:
     post:
       tags: [Plugin webhooks]
       operationId: rotatePluginWebhookSecret
+      x-summary-zh: "生成待生效的密钥轮换"
       summary: Generate a pending secret rotation
       x-required-permissions: [plugin_webhooks.manage]
       parameters:
@@ -238,6 +247,7 @@ paths:
     post:
       tags: [Plugin webhooks]
       operationId: activatePluginWebhookSecret
+      x-summary-zh: "启用待生效的密钥轮换"
       summary: Activate a pending secret rotation
       x-required-permissions: [plugin_webhooks.manage]
       parameters:
@@ -265,6 +275,7 @@ paths:
     post:
       tags: [Plugin webhooks]
       operationId: revokePluginWebhookSubscription
+      x-summary-zh: "吊销 Webhook 订阅并阻止新的投递"
       summary: Revoke a webhook subscription and fence new deliveries
       x-required-permissions: [plugin_webhooks.manage]
       parameters:

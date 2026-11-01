@@ -296,7 +296,7 @@ describe('DDoS protection settings', () => {
     expect(fetchSpy.mock.calls.some(([input]) => String(input).includes('/v1/nodes'))).toBe(false)
   })
 
-  it('stacks CC under empty connections in the left column and lays the number fields out in one row (fix-ddoscompact)', async () => {
+  it('stacks CC under empty connections in the left column and lays the number fields out in one row', async () => {
     authenticate(['system_configuration.read', 'system_configuration.manage'])
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json(documentBody(stored, 3, 'active', 3), { ETag: '"3"' }))
     const { container } = renderWithProviders(<DDoSProtectionSettingsPage />)
@@ -318,7 +318,7 @@ describe('DDoS protection settings', () => {
     expect(container.querySelectorAll('#ddos-section-empty .ant-input-number-suffix')).toHaveLength(4)
   })
 
-  it('gives the four-field rows short labels with the full name in a tooltip and on the input (fix-ddoscompact2)', async () => {
+  it('gives the four-field rows short labels with the full name in a tooltip and on the input', async () => {
     authenticate(['system_configuration.read', 'system_configuration.manage'])
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => json(documentBody(stored, 3, 'active', 3), { ETag: '"3"' }))
     const { container } = renderWithProviders(<DDoSProtectionSettingsPage />)
@@ -339,7 +339,7 @@ describe('DDoS protection settings', () => {
     expect(within(screen.getByRole('region', { name: '本页摘要' })).getByRole('button', { name: /单客户端并发连接上限\s*200/ })).toBeInTheDocument()
   })
 
-  it('lays four fields in one row from 900px, the two-column 1200–1439px range included (fix-ddoscompact2)', () => {
+  it('lays four fields in one row from 900px, the two-column 1200–1439px range included', () => {
     const css = Object.values(import.meta.glob('../pages/DDoSProtectionV2.css', { eager: true, import: 'default', query: '?raw' }))[0] as string
     const media = (query: string) => {
       const start = css.indexOf(`@media ${query} {`)
@@ -361,7 +361,7 @@ describe('DDoS protection settings', () => {
     expect(tight).toMatch(/\.is-four \.ant-input-number-affix-wrapper \.ant-input-number-input\s*\{[^}]*padding-inline:\s*0/)
   })
 
-  it('puts a switch next to its label and the help under both, over antd vertical layout (fix-ddoscompact)', () => {
+  it('puts a switch next to its label and the help under both, over antd vertical layout', () => {
     const css = Object.values(import.meta.glob('../pages/DDoSProtectionV2.css', { eager: true, import: 'default', query: '?raw' }))[0] as string
     const rule = (selector: string) => new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? ''
     // antd .ant-form-item-vertical gives the control width: 100%, which wraps the switch under its label

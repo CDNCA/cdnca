@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/jobs",
    "summary": "Page through jobs across the customer control plane",
+   "summary_zh": "分页列出全平台的任务",
    "auth": [
     "bearer"
    ],
@@ -139,6 +140,7 @@
    "method": "GET",
    "path": "/v1/admin/jobs/kinds",
    "summary": "Read the integrated producer kind catalog independently of job rows",
+   "summary_zh": "读取已接入的任务类型目录（与是否有任务无关）",
    "auth": [
     "bearer"
    ],
@@ -190,6 +192,7 @@
    "method": "GET",
    "path": "/v1/admin/jobs/{task_id}",
    "summary": "Read a job visible to the platform administrator",
+   "summary_zh": "读取平台管理员可见的一个任务",
    "auth": [
     "bearer"
    ],
@@ -257,6 +260,7 @@
    "method": "GET",
    "path": "/v1/admin/jobs/{task_id}/attempts",
    "summary": "Page through a job's immutable attempt history",
+   "summary_zh": "分页读取任务不可变的执行历史",
    "auth": [
     "bearer"
    ],
@@ -340,6 +344,7 @@
    "method": "POST",
    "path": "/v1/admin/jobs/{task_id}/cancel",
    "summary": "Cancel a queued or running job",
+   "summary_zh": "取消排队中或运行中的任务",
    "auth": [
     "bearer"
    ],
@@ -441,6 +446,7 @@
    "method": "GET",
    "path": "/v1/admin/jobs/{task_id}/dead-letters",
    "summary": "Page through append-only terminal-attempt dead letters",
+   "summary_zh": "分页读取只追加的终态死信",
    "auth": [
     "bearer"
    ],
@@ -524,6 +530,7 @@
    "method": "GET",
    "path": "/v1/admin/jobs/{task_id}/receipts",
    "summary": "Page through immutable per-attempt settlement receipts",
+   "summary_zh": "分页读取每次执行不可变的结算回执",
    "auth": [
     "bearer"
    ],
@@ -607,6 +614,7 @@
    "method": "POST",
    "path": "/v1/admin/jobs/{task_id}/replay",
    "summary": "Add one attempt and replay the latest dead-lettered job",
+   "summary_zh": "为最近进入死信的任务追加一次执行并重放",
    "auth": [
     "bearer"
    ],
@@ -708,6 +716,7 @@
    "method": "GET",
    "path": "/v1/admin/jobs/{task_id}/results",
    "summary": "Page through current per-item and per-node result projections",
+   "summary_zh": "分页读取当前按条目与按节点的结果",
    "auth": [
     "bearer"
    ],
@@ -791,6 +800,7 @@
    "method": "POST",
    "path": "/v1/admin/jobs/{task_id}/retry",
    "summary": "Retry failed items in a failed or partially failed job",
+   "summary_zh": "重试失败或部分失败任务中的失败条目",
    "auth": [
     "bearer"
    ],

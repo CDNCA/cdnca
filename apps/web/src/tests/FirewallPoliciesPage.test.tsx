@@ -199,6 +199,32 @@ describe('FirewallPoliciesPage', () => {
     ))
   })
 
+  // A3-07: an invalid CC number is shown as an error and never saved (it used to snap back and auto-save).
+  it('shows an error for an invalid CC number and does not save it', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    const blockTime = await screen.findByRole('spinbutton', { name: '黑名单时间' })
+    await user.clear(blockTime)
+    await user.type(blockTime, '-5')
+    await user.tab()
+    expect(await screen.findByText('请输入 0 到 2147483647 的整数')).toBeInTheDocument()
+    expect(blockTime).toHaveValue('-5')
+    expect(blockTime).toHaveAttribute('aria-invalid', 'true')
+    const whiteTime = screen.getByRole('spinbutton', { name: '临时白名单' })
+    await user.clear(whiteTime)
+    await user.type(whiteTime, '100')
+    await user.tab()
+    expect(await screen.findByText('请输入 600 到 2147483647 的整数')).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(openrestySecurityApi.patchGlobal).not.toHaveBeenCalled()
+
+    await user.clear(blockTime)
+    await user.type(blockTime, '7200')
+    await user.tab()
+    await waitFor(() => expect(openrestySecurityApi.patchGlobal).toHaveBeenCalledWith('token', 7, { block_time: 7200 }, expect.any(Object)))
+    expect(screen.queryByText('请输入 0 到 2147483647 的整数')).not.toBeInTheDocument()
+  })
+
   it('does not save a global switch when its confirmation is cancelled (W4)', async () => {
     const user = userEvent.setup()
     renderPage()
@@ -348,7 +374,7 @@ describe('FirewallPoliciesPage', () => {
     expect(await screen.findByText('暂无数据')).toBeInTheDocument()
   })
 
-  it('shows a platform node\'s effective auto switch and the layer it comes from (fix-fwregion)', async () => {
+  it('shows a platform node\'s effective auto switch and the layer it comes from', async () => {
     const user = userEvent.setup()
     vi.mocked(openrestySecurityApi.searchTargets).mockResolvedValue({
       items: [{ value: '55555555-5555-4555-8555-555555555555', label: '华东节点', description: '192.0.2.41' }],

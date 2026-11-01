@@ -175,7 +175,7 @@ func (s *Store) Project(ctx context.Context, envelope Envelope) (ProjectionResul
 		if command.RowsAffected() != 1 {
 			return ErrProjectionConflict
 		}
-		// A frozen node's refusal waits for redelivery (fix-stoppolicy2):
+		// A frozen node's refusal waits for redelivery:
 		// marked before the rollout advances, so it is no failure there.
 		if domain == artifactDomainConfiguration && edgedeployment.FrozenRefusal(deployment.action, envelope.Status) {
 			if _, err := tx.Exec(ctx, `INSERT INTO node_deployment_frozen_refusals(

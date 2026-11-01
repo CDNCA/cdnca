@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/account-recovery/confirmations",
    "summary": "Replace a password with a delivered recovery link",
+   "summary_zh": "用收到的找回链接重设密码",
    "auth": [
     "none"
    ],
@@ -88,6 +89,7 @@
    "method": "POST",
    "path": "/v1/account-recovery/requests",
    "summary": "Request a password recovery link",
+   "summary_zh": "申请密码找回链接",
    "auth": [
     "none"
    ],

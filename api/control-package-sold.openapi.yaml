@@ -14,6 +14,7 @@ paths:
   /v1/admin/package-commerce/sold:
     get:
       operationId: listAdminSoldPackages
+      x-summary-zh: "列出所有租户已售套餐"
       summary: List sold packages across tenants
       security: [{bearerAuth: []}]
       x-required-permissions: [billing.adjustments.manage]
@@ -89,6 +90,7 @@ paths:
   /v1/admin/package-commerce/sold/{subscription_id}:
     get:
       operationId: getAdminSoldPackage
+      x-summary-zh: "读取一个已售套餐"
       security: [{bearerAuth: []}]
       x-required-permissions: [billing.adjustments.manage]
       parameters:
@@ -104,6 +106,7 @@ paths:
   /v1/admin/package-commerce/sold/commands:
     post:
       operationId: administerSoldPackages
+      x-summary-zh: "批量管理已售套餐"
       security: [{bearerAuth: []}]
       x-required-permissions: [package_subscriptions.manage]
       description: >-
@@ -143,6 +146,7 @@ paths:
   /v1/admin/package-commerce/sold/{subscription_id}/sync:
     get:
       operationId: getAdminSoldPackageSync
+      x-summary-zh: "读取已售套餐的同步状态"
       security: [{bearerAuth: []}]
       x-required-permissions: [billing.adjustments.manage]
       parameters:
@@ -245,6 +249,8 @@ components:
             http3: {type: boolean}
             l2_origin: {type: boolean}
             waf: {type: boolean}
+            aggregated_edge: {type: boolean}
+            aggregated_edge_accounts: {type: integer, minimum: -1, maximum: 1000}
         prices:
           type: object
           additionalProperties: false

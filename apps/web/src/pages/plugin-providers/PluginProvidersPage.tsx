@@ -10,6 +10,8 @@ import { ApiError } from '../../api/auth'
 import { createMfaWriteMetadata, mfaApi, type MfaAuthenticationMethod } from '../../api/mfa'
 import { paymentStepUpAction, pluginProvidersApi, type EnableConfirmation, type PluginProvider } from '../../api/pluginProviders'
 import { useSessionStore } from '../../auth/session'
+import { useMfaActive } from '../../hooks/useMfaActive'
+import { mfaStepUpErrorText } from '../../i18n/apiError'
 import '../../i18n/pluginProviders'
 import { DataState } from '../../components/DataState'
 
@@ -33,6 +35,7 @@ export function PaymentEnableDialog({ provider, busy, onCancel, onConfirm }: {
   const [form] = Form.useForm<ConfirmValues>()
   const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const requireMfaCode = useMfaActive() !== false
   const submit = async (values: ConfirmValues) => {
     if (!provider.tenant_id) {
       setError(t('hints.noTenant'))
@@ -41,6 +44,11 @@ export function PaymentEnableDialog({ provider, busy, onCancel, onConfirm }: {
     setVerifying(true)
     setError(null)
     try {
+      if (!requireMfaCode) {
+        // 未启用 MFA：只确认风险，不签发证明。
+        await onConfirm({ risk_acknowledged: true, step_up_token: '' })
+        return
+      }
       const proof = await mfaApi.createStepUpProof(accessToken, {
         tenant_id: provider.tenant_id, audience: paymentStepUpAction, action: paymentStepUpAction,
         authentication: { method: values.method, code: values.code.trim() }, ttl_seconds: 300, max_uses: 1,
@@ -49,7 +57,7 @@ export function PaymentEnableDialog({ provider, busy, onCancel, onConfirm }: {
       await onConfirm({ risk_acknowledged: true, step_up_token: proof.token })
     } catch (cause) {
       const code = cause instanceof ApiError ? cause.code : ''
-      setError(t(`errors.codes.${code}`, { defaultValue: '' }) || t('errors.codes.plugin_provider_step_up_required'))
+      setError(mfaStepUpErrorText(cause) ?? (t(`errors.codes.${code}`, { defaultValue: '' }) || t('errors.codes.plugin_provider_step_up_required')))
     } finally {
       setVerifying(false)
     }
@@ -65,7 +73,7 @@ export function PaymentEnableDialog({ provider, busy, onCancel, onConfirm }: {
         rules={[{ validator: (_, value) => (value ? Promise.resolve() : Promise.reject(new Error(t('confirm.needRisk')))) }]}>
         <Checkbox>{t('confirm.risk')}</Checkbox>
       </Form.Item>
-      <Space wrap align="start">
+      {requireMfaCode ? <Space wrap align="start">
         <Form.Item name="method" label={t('confirm.method')}>
           <Select style={{ width: 160 }} aria-label={t('confirm.method')}
             options={[{ value: 'totp', label: t('confirm.totp') }, { value: 'recovery_code', label: t('confirm.recovery') }]} />
@@ -73,7 +81,7 @@ export function PaymentEnableDialog({ provider, busy, onCancel, onConfirm }: {
         <Form.Item name="code" label={t('confirm.code')} rules={[{ required: true, whitespace: true, message: t('confirm.needCode') }]}>
           <Input autoComplete="one-time-code" aria-label={t('confirm.code')} style={{ width: 220 }} />
         </Form.Item>
-      </Space>
+      </Space> : null}
       <Space>
         <Button type="primary" danger htmlType="submit" loading={verifying || busy}>{t('confirm.submit')}</Button>
         <Button onClick={onCancel}>{t('confirm.cancel')}</Button>

@@ -128,7 +128,7 @@ func seedSecondPublishTenant(t *testing.T, base *publishFixture) *publishFixture
 	}
 	second := *base
 	second.tenantID, second.scopeID, second.userID = tenantID, scopeID, userID
-	// Its own package: a site without one is never published (fix-nopkgpub).
+	// Its own package: a site without one is never published.
 	second.subscriptionID = seedPublishPackage(t, base.pool, scopeID, userID, base.platformScopeID, base.platformUserID)
 	return &second
 }

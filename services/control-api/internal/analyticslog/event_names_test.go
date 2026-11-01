@@ -59,7 +59,7 @@ func TestHandlerNamesBlockEventSiteAndRule(t *testing.T) {
 	}
 
 	// Without a lookup the site names are empty and a UUID rule gets the
-	// fallback name, never the bare UUID (fix-wafname).
+	// fallback name, never the bare UUID.
 	for index, item := range decode(t) {
 		want := []string{"未命名规则（018f0000）", "未命名规则（018f0000）", "默认动作（策略 018f0000）"}[index]
 		if item.SiteDomain != "" || item.RuleName != want {

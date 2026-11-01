@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/security/cc-stats",
    "summary": "Read the CC rule statistics of a site of any tenant scope",
+   "summary_zh": "读取任意租户网站的 CC 规则统计",
    "auth": [
     "bearer"
    ],
@@ -123,6 +124,7 @@
    "method": "GET",
    "path": "/v1/admin/security/coordination/metrics",
    "summary": "Read bounded cross-node CC and global firewall coordination counters",
+   "summary_zh": "读取有界的跨节点 CC 与全局防火墙联动计数",
    "auth": [
     "bearer"
    ],
@@ -180,6 +182,7 @@
    "method": "POST",
    "path": "/v1/admin/security/ja4-blocks",
    "summary": "Create a tenant/site-scoped JA4 block as a platform administrator",
+   "summary_zh": "以平台管理员身份创建租户/网站范围的 JA4 封禁",
    "auth": [
     "bearer"
    ],
@@ -381,6 +384,7 @@
    "method": "GET",
    "path": "/v1/admin/security/ja4-blocks/{workflow_id}",
    "summary": "Get one exact tenant JA4 block workflow without raw access events",
+   "summary_zh": "读取一个租户 JA4 封禁流程（不含原始访问事件）",
    "auth": [
     "bearer"
    ],

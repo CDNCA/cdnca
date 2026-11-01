@@ -27,6 +27,7 @@ paths:
       tags: [Error page assets]
       summary: Initiate a content-addressed asset
       operationId: initiateErrorPageAsset
+      x-summary-zh: "创建一个按内容寻址的素材"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -59,6 +60,7 @@ paths:
       tags: [Error page assets]
       summary: List error page assets
       operationId: listErrorPageAssets
+      x-summary-zh: "列出错误页素材"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -91,6 +93,7 @@ paths:
       tags: [Error page assets]
       summary: Get an error page asset
       operationId: getErrorPageAsset
+      x-summary-zh: "读取一个错误页素材"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -114,6 +117,7 @@ paths:
       tags: [Error page assets]
       summary: Mark an unreferenced asset for reconciled deletion
       operationId: deleteErrorPageAsset
+      x-summary-zh: "把未被引用的素材标记为待删除"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -150,6 +154,7 @@ paths:
         (网站编辑 → 错误页面). A staged, scanning, rejected or deleted asset
         answers 409.
       operationId: getErrorPageAssetContent
+      x-summary-zh: "读取就绪素材的内容"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -174,6 +179,7 @@ paths:
       tags: [Error page assets]
       summary: Upload bounded asset content to staging
       operationId: uploadErrorPageAssetContent
+      x-summary-zh: "上传限定大小的素材内容到暂存区"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -219,6 +225,7 @@ paths:
       tags: [Error page assets]
       summary: Scan and finalize staged asset content
       operationId: finalizeErrorPageAsset
+      x-summary-zh: "扫描并定稿暂存的素材内容"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -246,6 +253,7 @@ paths:
       tags: [Error page slots]
       summary: List the twelve canonical error-page slots in display order
       operationId: listErrorPageSlots
+      x-summary-zh: "按显示顺序列出十二个标准错误页位"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -270,6 +278,7 @@ paths:
       tags: [Error page slots]
       summary: Read a slot binding and its verified immutable content
       operationId: getErrorPageSlot
+      x-summary-zh: "读取错误页位的绑定及其已校验的不可变内容"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -293,6 +302,7 @@ paths:
       tags: [Error page slots]
       summary: Append a slot revision that binds a ready immutable asset
       operationId: bindErrorPageSlot
+      x-summary-zh: "追加一个绑定就绪不可变素材的错误页位版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/SlotIfMatch'
@@ -324,6 +334,7 @@ paths:
       tags: [Error page slots]
       summary: Append an unbound revision and restore the built-in default
       operationId: unbindErrorPageSlot
+      x-summary-zh: "追加未绑定版本并恢复内置默认页"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/SlotIfMatch'
@@ -351,6 +362,7 @@ paths:
       tags: [Error page scope overrides]
       summary: List current node and region error-page overrides
       operationId: listErrorPageScopeOverrides
+      x-summary-zh: "列出当前节点与区域的错误页覆盖"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -372,6 +384,7 @@ paths:
       tags: [Error page scope overrides]
       summary: Create or restore a node or region override
       operationId: createErrorPageScopeOverride
+      x-summary-zh: "创建或恢复节点或区域覆盖"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -404,6 +417,7 @@ paths:
       tags: [Error page scope overrides]
       summary: Read an override with verified immutable editor content
       operationId: getErrorPageScopeOverride
+      x-summary-zh: "读取覆盖及其已校验的不可变编辑内容"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -427,6 +441,7 @@ paths:
       tags: [Error page scope overrides]
       summary: Replace an override item set using compare-and-swap
       operationId: updateErrorPageScopeOverride
+      x-summary-zh: "按 CAS 替换覆盖的条目集合"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -458,6 +473,7 @@ paths:
       tags: [Error page scope overrides]
       summary: Append a soft-delete override revision
       operationId: deleteErrorPageScopeOverride
+      x-summary-zh: "追加覆盖的软删除版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -485,6 +501,7 @@ paths:
       tags: [Error page rules]
       summary: List current error page rule revisions
       operationId: listErrorPageRules
+      x-summary-zh: "列出错误页规则的当前版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -515,6 +532,7 @@ paths:
       tags: [Error page rules]
       summary: Create an append-only error page rule
       operationId: createErrorPageRule
+      x-summary-zh: "创建只追加的错误页规则"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -548,6 +566,7 @@ paths:
       tags: [Error page rules]
       summary: Get the current rule revision
       operationId: getErrorPageRule
+      x-summary-zh: "读取规则当前版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'
@@ -570,6 +589,7 @@ paths:
       tags: [Error page rules]
       summary: Append an updated rule revision
       operationId: updateErrorPageRule
+      x-summary-zh: "追加规则修改版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -602,6 +622,7 @@ paths:
       tags: [Error page rules]
       summary: Append a soft-delete rule revision
       operationId: deleteErrorPageRule
+      x-summary-zh: "追加规则软删除版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -631,6 +652,7 @@ paths:
       tags: [Error page rules]
       summary: Append an enabled rule revision
       operationId: enableErrorPageRule
+      x-summary-zh: "追加规则启用版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -655,6 +677,7 @@ paths:
       tags: [Error page rules]
       summary: Append a disabled rule revision
       operationId: disableErrorPageRule
+      x-summary-zh: "追加规则停用版本"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/IfMatch'
@@ -676,6 +699,7 @@ paths:
       tags: [Error page publication]
       summary: Read the latest deterministic publication source snapshot
       operationId: getErrorPagePublicationSnapshot
+      x-summary-zh: "读取最新的确定性发布源快照"
       security: [{bearerAuth: []}, {cdncaApiKey: []}]
       parameters:
         - $ref: '#/components/parameters/OptionalRequestID'

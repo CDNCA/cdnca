@@ -9,6 +9,7 @@ paths:
   /v1/admin/package-addons:
     get:
       operationId: listPackageAddons
+      x-summary-zh: "列出套餐增值项"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
@@ -31,6 +32,7 @@ paths:
   /v1/admin/package-addons/bindings:
     get:
       operationId: listPackageAddonBindings
+      x-summary-zh: "列出套餐增值项的绑定"
       description: Minimal product choices under the same addon administration permission.
       parameters:
         - $ref: '#/components/parameters/Page'
@@ -59,6 +61,7 @@ paths:
   /v1/admin/package-addons/assignments:
     get:
       operationId: listPackageAddonAssignments
+      x-summary-zh: "列出套餐增值项的分配"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
@@ -83,6 +86,7 @@ paths:
   /v1/admin/package-addons/subscriptions:
     get:
       operationId: listPackageAddonEligibleSubscriptions
+      x-summary-zh: "列出可加购增值项的套餐订阅"
       parameters:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/Limit'
@@ -107,6 +111,7 @@ paths:
   /v1/admin/package-addons/quote:
     get:
       operationId: quotePackageAddonPurchase
+      x-summary-zh: "查询购买套餐增值项的报价"
       description: Price of buying `amount` of an add-on for a sold package now (549). The monthly price is prorated over the remaining days (a started day counts whole, a month is 30 days, half-up to the cent), then the matching automatic package_addon discounts apply (tenant and the owner's user group). Includes the owner tenant's balance and available balance (balance minus active holds).
       parameters:
         - { name: addon_id, in: query, required: true, schema: { type: string, format: uuid } }
@@ -127,6 +132,7 @@ paths:
   /v1/admin/package-addons/commands:
     post:
       operationId: commandPackageAddon
+      x-summary-zh: "执行套餐增值项操作"
       description: Writes are transactional with audit and actor/scope-bound idempotency receipts. Reusing a key with a different body returns package_addon_conflict. assignment.create is the administrator's free allocation (never charges). assignment.purchase (549) charges the owner tenant's balance at the quoted price on the owner's behalf (the administrator is the recorded actor), creates a paid add-on order, and adds to an existing assignment of the same add-on; a changed price returns package_addon_price_changed, an insufficient available balance returns insufficient_funds (422). Product deletion and assignment deletion retain history. WAF is fixed to one allocation and deletion is rejected while bound policies use it.
       parameters:
         - name: Idempotency-Key

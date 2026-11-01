@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// DNS-SEC-20261027-01（fix-dnscert）：平台只把 CNAME 子域委派给租户；租户不能拿同步来的
+// DNS-SEC-20261027-01：平台只把 CNAME 子域委派给租户；租户不能拿同步来的
 // 「平台DNS配置」副本新增父域解析区、申请 DNS-01、设为默认/建站自动添加记录，也不能编辑/删除/验证它。
 // 租户本人提交的账户照常可用；平台管理员代租户操作照常可用。
 func TestPlatformDNSCopyServesOnlyThePlatform(t *testing.T) {

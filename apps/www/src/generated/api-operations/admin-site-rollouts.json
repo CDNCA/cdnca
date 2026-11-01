@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/site-rollouts",
    "summary": "List rollouts for one tenant scope",
+   "summary_zh": "列出某租户范围的灰度发布",
    "auth": [
     "bearer"
    ],
@@ -73,6 +74,7 @@
    "method": "POST",
    "path": "/v1/admin/site-rollouts/reconciliations",
    "summary": "Record the configuration proven to be active after an uncertain deployment result",
+   "summary_zh": "部署结果不确定时，记录已确认生效的配置",
    "auth": [
     "bearer"
    ],
@@ -243,6 +245,7 @@
    "method": "GET",
    "path": "/v1/admin/site-rollouts/{rollout_id}",
    "summary": "Get deterministic rollout progress for one tenant scope",
+   "summary_zh": "读取某租户范围一次灰度发布的进度",
    "auth": [
     "bearer"
    ],
@@ -382,6 +385,7 @@
    "method": "POST",
    "path": "/v1/admin/site-rollouts/{rollout_id}/cancel",
    "summary": "Cancel queued work in a rollout",
+   "summary_zh": "取消灰度发布中排队的工作",
    "auth": [
     "bearer"
    ],
@@ -571,6 +575,7 @@
    "method": "GET",
    "path": "/v1/admin/site-rollouts/{rollout_id}/deployments",
    "summary": "List latest per-node deployment attempts",
+   "summary_zh": "列出各节点最近一次部署尝试",
    "auth": [
     "bearer"
    ],
@@ -647,6 +652,7 @@
    "method": "POST",
    "path": "/v1/admin/site-rollouts/{rollout_id}/pause",
    "summary": "Pause a running progressive rollout",
+   "summary_zh": "暂停进行中的渐进式发布",
    "auth": [
     "bearer"
    ],
@@ -836,6 +842,7 @@
    "method": "POST",
    "path": "/v1/admin/site-rollouts/{rollout_id}/resume",
    "summary": "Resume a paused progressive rollout",
+   "summary_zh": "继续已暂停的渐进式发布",
    "auth": [
     "bearer"
    ],
@@ -1025,6 +1032,7 @@
    "method": "POST",
    "path": "/v1/admin/site-rollouts/{rollout_id}/retry-failed",
    "summary": "Append attempts for retryable failed deployments",
+   "summary_zh": "为可重试的失败部署追加尝试",
    "auth": [
     "bearer"
    ],
@@ -1214,6 +1222,7 @@
    "method": "POST",
    "path": "/v1/admin/site-rollouts/{rollout_id}/start",
    "summary": "Start a held progressive rollout",
+   "summary_zh": "开始暂缓中的渐进式发布",
    "auth": [
     "bearer"
    ],

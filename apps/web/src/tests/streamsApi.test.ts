@@ -89,6 +89,7 @@ const stream: Stream = {
     automatic_request_id: null,
     publication_id: null,
     rollout_id: null,
+    failure_code: null,
     created_at: '2026-07-22T08:00:00Z',
   },
   created_at: '2026-07-22T08:00:00Z',
@@ -171,6 +172,23 @@ describe('streamsApi', () => {
   ])('rejects invalid additional listener identities, sockets and UDP with PROXY: %j', async (listeners) => {
     const item = { ...modernStream, additional_listeners: listeners, publish_intent: { ...modernStream.publish_intent,
       runtime_spec: { ...modernStream.publish_intent.runtime_spec, additional_listeners: listeners } } }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(item)))
+    await expect(streamsApi.get('token', item.id)).rejects.toMatchObject({ code: 'invalid_response' })
+  })
+
+  // A3-04：发布失败原因随发布意图返回；老响应没有该字段时按 null 处理，格式不对则拒收。
+  it('reads the publication failure code and defaults a missing one to null', async () => {
+    const failed = { ...modernStream, publish_intent: { ...modernStream.publish_intent, state: 'failed', failure_code: 'node_artifacts_syncing' } }
+    const { failure_code: _omitted, ...withoutCode } = modernStream.publish_intent
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify(failed)))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...modernStream, publish_intent: withoutCode })))
+    expect((await streamsApi.get('token', failed.id)).publish_intent).toMatchObject({ state: 'failed', failure_code: 'node_artifacts_syncing' })
+    expect((await streamsApi.get('token', modernStream.id)).publish_intent.failure_code).toBeNull()
+  })
+
+  it.each([42, 'Node Artifacts', ''])('rejects a malformed publication failure code %j', async (code) => {
+    const item = { ...modernStream, publish_intent: { ...modernStream.publish_intent, state: 'failed', failure_code: code } }
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify(item)))
     await expect(streamsApi.get('token', item.id)).rejects.toMatchObject({ code: 'invalid_response' })
   })

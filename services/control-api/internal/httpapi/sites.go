@@ -268,11 +268,11 @@ type siteDetailResponse struct {
 	PackageExpiredDays   *int    `json:"package_expired_days"`
 	PackageRemainingDays *int    `json:"package_remaining_days"`
 
-	// AccessReadiness: 接入状态 (fix-readiness); null only when unreadable.
+	// AccessReadiness: 接入状态; null only when unreadable.
 	AccessReadiness *site.AccessReadiness `json:"access_readiness"`
 	// PackageUnavailableReason: no_package / package_disabled /
 	// package_deleted while the site is not served for lack of a valid
-	// package (fix-nopkgpub2); null while it is valid.
+	// package; null while it is valid.
 	PackageUnavailableReason *string `json:"package_unavailable_reason"`
 }
 
@@ -928,7 +928,7 @@ func siteDetailAt(item site.Site, now time.Time) siteDetailResponse {
 	}
 }
 
-// handleCheckSiteAccess: 详情 > 接入状态 > 立即检查 (fix-readiness). It
+// handleCheckSiteAccess: 详情 > 接入状态 > 立即检查. It
 // resolves the site's domains through the control plane's resolver now and
 // returns the readiness; once a minute per site (429 + Retry-After).
 func (s *Server) handleCheckSiteAccess(w http.ResponseWriter, r *http.Request) {

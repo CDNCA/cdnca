@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/identity-verification/admin/cases",
    "summary": "List every tenant's identity verification cases (platform administrator)",
+   "summary_zh": "列出所有租户的实名认证申请（平台管理员）",
    "auth": [
     "bearer"
    ],
@@ -88,6 +89,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/cases",
    "summary": "Create a draft from trusted server-resolved evidence",
+   "summary_zh": "用服务端核实的证据创建草稿",
    "auth": [
     "bearer"
    ],
@@ -334,6 +336,7 @@
    "method": "GET",
    "path": "/v1/identity-verification/cases/{case_id}",
    "summary": "Read a case owned by the authenticated user",
+   "summary_zh": "读取当前用户自己的申请",
    "auth": [
     "bearer"
    ],
@@ -471,6 +474,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/cases/{case_id}/expire",
    "summary": "Expire an owned submitted or reviewing case after its deadline",
+   "summary_zh": "让已提交或审核中的自有申请在截止后过期",
    "auth": [
     "bearer"
    ],
@@ -512,6 +516,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/cases/{case_id}/submit",
    "summary": "Submit an owned draft for review",
+   "summary_zh": "提交自有草稿进入审核",
    "auth": [
     "bearer"
    ],
@@ -675,6 +680,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/cases/{case_id}/withdraw",
    "summary": "Withdraw an owned draft or submitted case",
+   "summary_zh": "撤回自有草稿或已提交的申请",
    "auth": [
     "bearer"
    ],
@@ -715,6 +721,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/provider-callbacks/{provider}",
    "summary": "Accept a signed replay-safe provider callback",
+   "summary_zh": "接收带签名、防重放的认证服务商回调",
    "auth": [
     "none"
    ],
@@ -824,6 +831,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/provider-sessions",
    "summary": "Start or retry a durable KYC provider session",
+   "summary_zh": "开始或重试持久化的 KYC 服务商会话",
    "auth": [
     "bearer"
    ],
@@ -1005,6 +1013,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/provider-sessions/{session_id}/uploads",
    "summary": "Create a bound private object store upload",
+   "summary_zh": "创建绑定会话的私有对象存储上传",
    "auth": [
     "bearer"
    ],
@@ -1204,6 +1213,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/provider-sessions/{session_id}/uploads/{upload_id}/finalize",
    "summary": "Finalize exact immutable private object facts",
+   "summary_zh": "定稿精确的不可变私有对象信息",
    "auth": [
     "bearer"
    ],
@@ -1342,6 +1352,7 @@
    "method": "GET",
    "path": "/v1/identity-verification/reviewer/cases",
    "summary": "List the authenticated tenant's review cases",
+   "summary_zh": "列出当前租户的待审申请",
    "auth": [
     "bearer"
    ],
@@ -1431,6 +1442,7 @@
    "method": "GET",
    "path": "/v1/identity-verification/reviewer/cases/{case_id}",
    "summary": "Read one case in the authenticated reviewer tenant",
+   "summary_zh": "读取当前审核租户中的一个申请",
    "auth": [
     "bearer"
    ],
@@ -1576,6 +1588,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/reviewer/cases/{case_id}/claim",
    "summary": "Atomically claim a submitted case as the authenticated reviewer",
+   "summary_zh": "以当前审核人身份原子认领已提交的申请",
    "auth": [
     "bearer"
    ],
@@ -1624,6 +1637,7 @@
    "method": "POST",
    "path": "/v1/identity-verification/reviewer/cases/{case_id}/decision",
    "summary": "Approve or reject a case assigned to the authenticated reviewer",
+   "summary_zh": "通过或驳回分配给当前审核人的申请",
    "auth": [
     "bearer"
    ],
@@ -1691,6 +1705,7 @@
    "method": "GET",
    "path": "/v1/identity-verification/status",
    "summary": "Read the authenticated user's own verification status",
+   "summary_zh": "读取当前用户自己的实名状态",
    "auth": [
     "bearer"
    ],

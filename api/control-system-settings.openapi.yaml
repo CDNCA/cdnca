@@ -13,6 +13,7 @@ paths:
     get:
       summary: Read platform system settings
       operationId: getPlatformSystemSettings
+      x-summary-zh: "读取平台系统设置"
       x-required-permissions: [system_configuration.read]
       responses:
         '200': {description: Current settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
@@ -23,6 +24,7 @@ paths:
     put:
       summary: Update platform system settings
       operationId: updatePlatformSystemSettings
+      x-summary-zh: "修改平台系统设置"
       x-required-permissions: [system_configuration.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}
@@ -48,6 +50,7 @@ paths:
         notice (HTML, sanitized by the client before rendering) and the global JavaScript loaded by the tenant user
         console. An Authorization header that is present but invalid is refused with 401.
       operationId: getPublicPlatformSystemSettings
+      x-summary-zh: "读取平台设置中用于展示的部分"
       security: [{}, {bearerAuth: []}]
       responses:
         '200':
@@ -64,6 +67,7 @@ paths:
         returned https sources to the page CSP connect-src and img-src. The external path is not routed by the
         container; only its internal subrequest reaches it. When it fails the page keeps the strict default CSP.
       operationId: getGlobalJavaScriptCSPHosts
+      x-summary-zh: "读取 Web 容器 CSP 的全局 JavaScript 上报域名"
       security: []
       responses:
         '204':

@@ -20,6 +20,7 @@ paths:
     get:
       tags: [SiteCapture]
       operationId: getSiteCapturePolicy
+      x-summary-zh: "读取网站的遥测采集策略"
       security: [{bearerAuth: []}]
       x-required-permissions: [site_capture.read]
       description: >-
@@ -36,6 +37,7 @@ paths:
     put:
       tags: [SiteCapture]
       operationId: updateSiteCapturePolicy
+      x-summary-zh: "修改网站的遥测采集策略"
       security: [{bearerAuth: []}]
       x-required-permissions: [site_capture.manage]
       parameters:

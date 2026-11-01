@@ -1122,7 +1122,8 @@ func validTerminalReason(reason string) bool {
 	switch reason {
 	case FailureRBACRevoked, FailureApplyReverted, FailureRollbackUnexpected,
 		FailureDeploymentFailed, FailureRollbackFailed, FailureCancelled,
-		FailureNoTargetNodes, FailureNodeCapability, FailureNodeArtifactsSyncing, FailureNodeScopeConflict:
+		FailureNoTargetNodes, FailureNodeCapability, FailureNodeArtifactsSyncing, FailureNodeScopeConflict,
+		FailureSiteConfigInvalid:
 		return true
 	default:
 		return false

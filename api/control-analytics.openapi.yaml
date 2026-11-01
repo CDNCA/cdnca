@@ -41,6 +41,7 @@ paths:
   /v1/admin/analytics/blocked-ip-count:
     get:
       operationId: getPlatformAnalyticsBlockedIPCount
+      x-summary-zh: "统计被全局防火墙或 CC 自动封禁拦截的去重客户端 IP 数"
       summary: Count distinct client IPs blocked by the global firewall or CC auto-bans
       description: >-
         Requires a platform-scoped identity with sites.read or platform.admin.
@@ -95,6 +96,7 @@ paths:
   /v1/admin/analytics/blocked-ip-trend:
     get:
       operationId: getPlatformAnalyticsBlockedIPTrend
+      x-summary-zh: "读取被全局防火墙拦截的去重客户端 IP 小时趋势"
       summary: Read the hourly distinct client IPs blocked by the global firewall
       description: >-
         Requires a platform-scoped identity with sites.read or platform.admin.
@@ -169,6 +171,7 @@ paths:
   /v1/admin/analytics/site-realtime:
     get:
       operationId: getPlatformSiteRealtime
+      x-summary-zh: "读取全平台或某租户已定稿的网站实时数据"
       summary: Read platform-wide or one tenant's finalized site realtime facts
       description: >-
         Requires a platform identity with sites.read or platform.admin. Omitting
@@ -262,6 +265,7 @@ paths:
   /v1/analytics/blocked-ip-count:
     get:
       operationId: getTenantAnalyticsBlockedIPCount
+      x-summary-zh: "统计被全局防火墙或 CC 自动封禁拦截的去重客户端 IP 数"
       summary: Count distinct client IPs blocked by the global firewall or CC auto-bans
       description: >-
         Requires a tenant-scoped identity with sites.read. Counts distinct
@@ -316,6 +320,7 @@ paths:
   /v1/analytics/blocked-ip-trend:
     get:
       operationId: getTenantAnalyticsBlockedIPTrend
+      x-summary-zh: "读取被全局防火墙拦截的去重客户端 IP 小时趋势"
       summary: Read the hourly distinct client IPs blocked by the global firewall
       description: >-
         Requires a tenant-scoped identity with sites.read. Each returned UTC
@@ -389,6 +394,7 @@ paths:
   /v1/analytics/site-realtime:
     get:
       operationId: getTenantSiteRealtime
+      x-summary-zh: "读取当前租户已定稿的实时数据"
       summary: Read finalized realtime facts for the authenticated tenant
       description: >-
         Tenant scope is derived exclusively from the authenticated identity.
@@ -454,6 +460,7 @@ paths:
   /v1/admin/analytics/connections/retention:
     get:
       operationId: getPlatformAnalyticsConnectionsRetention
+      x-summary-zh: "读取某租户订阅已定稿的连接数据保留情况"
       summary: Read finalized connections retention facts for a tenant subscription
       description: >-
         Requires a revocable platform Bearer session with sites.read and
@@ -479,6 +486,7 @@ paths:
   /v1/analytics/connections/retention:
     get:
       operationId: getTenantAnalyticsConnectionsRetention
+      x-summary-zh: "读取当前租户已定稿的连接数据保留情况"
       summary: Read finalized connections retention facts for the authenticated tenant
       description: >-
         Requires a revocable tenant Bearer session with sites.read. Tenant scope
@@ -502,6 +510,7 @@ paths:
   /v1/admin/analytics/connections/dead-letters:
     get:
       operationId: listPlatformAnalyticsConnectionsDeadLetters
+      x-summary-zh: "列出连接统计的持久化死信回执"
       summary: List durable analytics connections dead-letter receipts
       description: >-
         Requires a revocable platform Bearer session with sites.read and
@@ -526,6 +535,7 @@ paths:
   /v1/admin/analytics/connections/dead-letters/{dead_letter_id}:
     get:
       operationId: getPlatformAnalyticsConnectionsDeadLetter
+      x-summary-zh: "读取一条连接统计的持久化死信回执"
       summary: Read one durable analytics connections dead-letter receipt
       description: >-
         Requires a revocable platform Bearer session with sites.read and
@@ -548,6 +558,7 @@ paths:
   /v1/analytics/connections/dead-letters:
     get:
       operationId: listTenantAnalyticsConnectionsDeadLetters
+      x-summary-zh: "列出连接统计的持久化死信回执"
       summary: List durable analytics connections dead-letter receipts
       description: >-
         Requires a revocable tenant Bearer session with sites.read. Tenant
@@ -571,6 +582,7 @@ paths:
   /v1/analytics/connections/dead-letters/{dead_letter_id}:
     get:
       operationId: getTenantAnalyticsConnectionsDeadLetter
+      x-summary-zh: "读取一条连接统计的持久化死信回执"
       summary: Read one durable analytics connections dead-letter receipt
       description: >-
         Requires a revocable tenant Bearer session with sites.read. The tenant

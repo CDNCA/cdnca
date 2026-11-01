@@ -1587,6 +1587,8 @@ PROGRESS_WAIT_NEXT=0
 PROGRESS_HEARTBEAT=''
 # 安装器知道版本后设置（失败行与安装日志带上版本）。
 PROGRESS_VERSION=''
+# 预期的非零结束（不是失败）时由安装器设置，见 progress_on_exit。
+PROGRESS_EXIT_NOTICE=''
 
 progress_clock() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
 
@@ -1694,10 +1696,17 @@ progress_done() {
 
 # 由安装器的 EXIT 清理调用：中途失败时标出失败阶段、版本与日志位置。原因与下一步
 # 就是上方安装器自己的 error 行，这里不另编文案。始终返回 0。
+# PROGRESS_EXIT_NOTICE 非空：本次非零退出是预期结果（如节点待主控初始化），
+# 用提示色显示该文案，不标成失败。
 progress_on_exit() {
   local status=$1 name
   progress_stop_heartbeat
-  if [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ]; then
+  if [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ] && [ -n "$PROGRESS_EXIT_NOTICE" ]; then
+    IFS='|' read -r name _ <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
+    name=$(progress_name "$name")
+    progress_line "! [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} ${PROGRESS_EXIT_NOTICE}${PROGRESS_LOG:+$(msg "（安装日志：${PROGRESS_LOG}）" " (install log: ${PROGRESS_LOG})")}" 33
+    PROGRESS_CURRENT=0
+  elif [ "$status" -ne 0 ] && [ "$PROGRESS_CURRENT" -gt 0 ]; then
     IFS='|' read -r name _ <<<"${PROGRESS_STAGES[$((PROGRESS_CURRENT - 1))]}"
     name=$(progress_name "$name")
     progress_line "✗ [${PROGRESS_CURRENT}/${#PROGRESS_STAGES[@]}] ${name} $(msg "失败（${PROGRESS_VERSION:+版本 ${PROGRESS_VERSION}，}本步骤已用 $(progress_clock $((SECONDS - PROGRESS_STAGE_START)))，退出码 ${status}）。原因与处理办法见上方 error 行${PROGRESS_LOG:+；完整输出：${PROGRESS_LOG}}" "failed (${PROGRESS_VERSION:+version ${PROGRESS_VERSION}, }$(progress_clock $((SECONDS - PROGRESS_STAGE_START))) in this step, exit ${status}). The cause and fix are in the error line above${PROGRESS_LOG:+; full output: ${PROGRESS_LOG}}")" 31

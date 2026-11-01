@@ -10,6 +10,7 @@ paths:
     get:
       summary: List platform global announcements
       operationId: listGlobalAnnouncements
+      x-summary-zh: "列出平台全局公告"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/Limit'
@@ -26,6 +27,7 @@ paths:
     post:
       summary: Create a platform global announcement draft
       operationId: createGlobalAnnouncement
+      x-summary-zh: "创建平台全局公告草稿"
       security: [{ bearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalAnnouncementInput' } } } }
@@ -43,6 +45,7 @@ paths:
       summary: Search tenants, or one tenant's roles and users, by name for a platform global announcement audience
       description: Read-only; authorized by announcements.manage (or platform.admin) in the platform scope. Role and user searches require scope_id. ids resolves stored targets back to names and returns only those that still exist.
       operationId: searchGlobalAnnouncementAudience
+      x-summary-zh: "按名称搜索租户或某租户的角色与用户，用作全局公告接收范围"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/AudienceKindGlobal'
@@ -62,6 +65,7 @@ paths:
       summary: Count the recipients a platform global announcement would be delivered to now
       description: Read-only; resolves recipients with the same query publication uses and writes nothing.
       operationId: countGlobalAnnouncementAudience
+      x-summary-zh: "统计全局公告此刻发布会送达的人数"
       security: [{ bearerAuth: [] }]
       responses:
         '200': { $ref: '#/components/responses/AudienceCount' }
@@ -75,6 +79,7 @@ paths:
     get:
       summary: Get a platform global announcement
       operationId: getGlobalAnnouncement
+      x-summary-zh: "读取一条平台全局公告"
       security: [{ bearerAuth: [] }]
       responses:
         '200': { $ref: '#/components/responses/GlobalAnnouncement' }
@@ -86,6 +91,7 @@ paths:
     patch:
       summary: Update a platform global announcement draft
       operationId: updateGlobalAnnouncement
+      x-summary-zh: "修改平台全局公告草稿"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -106,6 +112,7 @@ paths:
     post:
       summary: Publish a platform global announcement and freeze recipients
       operationId: publishGlobalAnnouncement
+      x-summary-zh: "发布平台全局公告并锁定接收人"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -126,6 +133,7 @@ paths:
     post:
       summary: Withdraw a platform global announcement
       operationId: withdrawGlobalAnnouncement
+      x-summary-zh: "撤回平台全局公告"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -145,6 +153,7 @@ paths:
     post:
       summary: Archive a global announcement in management; published messages remain available
       operationId: archiveGlobalAnnouncement
+      x-summary-zh: "在管理列表中归档全局公告；已发布的消息仍可查看"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -164,6 +173,7 @@ paths:
     post:
       summary: Restore a global announcement to management
       operationId: restoreGlobalAnnouncement
+      x-summary-zh: "把全局公告恢复到管理列表"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -182,6 +192,7 @@ paths:
     get:
       summary: List tenant announcements
       operationId: listAnnouncements
+      x-summary-zh: "列出租户公告"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/Limit'
@@ -198,6 +209,7 @@ paths:
     post:
       summary: Create an announcement draft
       operationId: createAnnouncementDraft
+      x-summary-zh: "创建公告草稿"
       security: [{ bearerAuth: [] }]
       parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
       requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AnnouncementInput' } } } }
@@ -215,6 +227,7 @@ paths:
       summary: Search the current tenant's users or roles by name for an announcement audience
       description: Read-only; authorized by announcements.manage in the current tenant. ids resolves stored targets back to names and returns only those that still exist.
       operationId: searchAnnouncementAudience
+      x-summary-zh: "按名称搜索当前租户的用户或角色，用作公告接收范围"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/AudienceKindTenant'
@@ -233,6 +246,7 @@ paths:
       summary: Count the recipients the head version of an announcement would be delivered to now
       description: Read-only; resolves recipients with the same query publication uses and writes nothing.
       operationId: countAnnouncementAudience
+      x-summary-zh: "统计公告最新版本此刻发布会送达的人数"
       security: [{ bearerAuth: [] }]
       responses:
         '200': { $ref: '#/components/responses/AudienceCount' }
@@ -246,6 +260,7 @@ paths:
     get:
       summary: Get the current announcement version
       operationId: getAnnouncement
+      x-summary-zh: "读取公告的当前版本"
       security: [{ bearerAuth: [] }]
       responses:
         '200': { $ref: '#/components/responses/Announcement' }
@@ -257,6 +272,7 @@ paths:
     patch:
       summary: Update an announcement draft
       operationId: updateAnnouncementDraft
+      x-summary-zh: "修改公告草稿"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -277,6 +293,7 @@ paths:
     post:
       summary: Schedule an announcement
       operationId: scheduleAnnouncement
+      x-summary-zh: "定时发布公告"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -296,6 +313,7 @@ paths:
     post:
       summary: Publish an announcement
       operationId: publishAnnouncement
+      x-summary-zh: "发布公告"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -315,6 +333,7 @@ paths:
     post:
       summary: Create a revised announcement draft
       operationId: reviseAnnouncement
+      x-summary-zh: "基于已发布公告创建修订草稿"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -335,6 +354,7 @@ paths:
     post:
       summary: Withdraw an announcement
       operationId: withdrawAnnouncement
+      x-summary-zh: "撤回公告"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -354,6 +374,7 @@ paths:
     post:
       summary: Archive a tenant announcement for reversible deletion
       operationId: archiveAnnouncement
+      x-summary-zh: "归档租户公告（可恢复的删除）"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -373,6 +394,7 @@ paths:
     post:
       summary: Restore an archived tenant announcement
       operationId: restoreAnnouncement
+      x-summary-zh: "恢复已归档的租户公告"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -391,6 +413,7 @@ paths:
     get:
       summary: List the current user's in-app messages
       operationId: listAccountMessages
+      x-summary-zh: "列出当前用户的站内消息"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/Limit'
@@ -413,6 +436,7 @@ paths:
     post:
       summary: Mark an in-app message delivered
       operationId: markMessageDelivered
+      x-summary-zh: "把一条站内消息标为已送达"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -432,6 +456,7 @@ paths:
     post:
       summary: Mark an in-app message read
       operationId: markMessageRead
+      x-summary-zh: "把一条站内消息标为已读"
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'

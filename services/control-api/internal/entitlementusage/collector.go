@@ -1,5 +1,5 @@
 // Package entitlementusage collects the thirteen quota values the control
-// installation reports to the license service (fix-usagereport).
+// installation reports to the license service.
 package entitlementusage
 
 import (

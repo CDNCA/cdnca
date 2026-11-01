@@ -487,7 +487,7 @@ func EffectiveProfileTx(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUI
 }
 
 // SetAppsSystem sets the site's CRS application types for a market leaf
-// (fix-mktsiteconf3): the subscriber sends the site's managed WAF profile
+//: the subscriber sends the site's managed WAF profile
 // and exclusions inside its WAF policy, so only the application types are
 // the site's own override here. Unlike Update it does not need the site's
 // WAF binding yet (the leaf activates the policy after the commit). Every

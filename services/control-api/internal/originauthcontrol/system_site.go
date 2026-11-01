@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// System site origin auth for market sites (fix-mktsiteconf5). The subscriber
+// System site origin auth for market sites. The subscriber
 // reads a site's live rules with their credentials in clear only to seal them
 // to each leaf (SiteRulesSystem); the leaf writes what it opened as its own
 // site's rules under its own keyring (SetSiteSystem) and publishes them. The

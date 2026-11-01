@@ -12,6 +12,7 @@ paths:
   /v1/admin/control-upgrade-plan:
     get:
       operationId: getNativeControlUpgradePlanStatus
+      x-summary-zh: "读取原生单机主控的升级计划发布与执行状态"
       summary: Read native standalone publication and matching execution status
       description: >-
         Available only in explicitly enabled native-standalone mode. Requires a platform
@@ -39,6 +40,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     post:
       operationId: publishControlUpgradePlan
+      x-summary-zh: "发布已校验签名的主控升级包"
       summary: Publish a verified signed control-plane upgrade bundle
       description: >-
         Requires a platform session with control.upgrades.manage. If-Match is the current
@@ -77,6 +79,7 @@ paths:
   /v1/admin/control-upgrade-plan/run-log:
     get:
       operationId: getNativeControlUpgradeRunLog
+      x-summary-zh: "读取原生主控升级脚本日志与服务日志末尾"
       summary: Read the native master upgrade script log and service-log tail
       description: >-
         Available only in native-standalone mode. Requires a platform session with
@@ -107,6 +110,7 @@ paths:
   /v1/admin/control-upgrade-plan/options:
     get:
       operationId: listNativeControlUpgradeOptions
+      x-summary-zh: "列出主控可升级到的版本（版本选择器）"
       summary: List the versions the master may upgrade to (version picker)
       description: >-
         Available only in native-standalone mode. Requires a platform session with
@@ -130,6 +134,7 @@ paths:
   /v1/admin/control-upgrade-plan/issue:
     post:
       operationId: issueNativeControlUpgradePlan
+      x-summary-zh: "请授权服务签发升级计划并发布"
       summary: Have the License service issue a signed plan and publish it
       description: >-
         Available only in native-standalone mode. Requires a platform session with

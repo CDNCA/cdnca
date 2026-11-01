@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/user-configs",
    "summary": "List per-user stream defaults",
+   "summary_zh": "列出按用户的四层转发默认值",
    "auth": [
     "apiKey",
     "bearer"
@@ -94,6 +95,7 @@
    "method": "POST",
    "path": "/v1/user-configs",
    "summary": "Create a per-user stream default",
+   "summary_zh": "创建一项按用户的四层转发默认值",
    "auth": [
     "apiKey",
     "bearer"
@@ -238,6 +240,7 @@
    "method": "GET",
    "path": "/v1/user-configs/effective",
    "summary": "Resolve the stream defaults a new forward draft is prefilled with",
+   "summary_zh": "解析新建转发草稿预填的默认值",
    "auth": [
     "apiKey",
     "bearer"
@@ -320,6 +323,7 @@
    "method": "DELETE",
    "path": "/v1/user-configs/{id}",
    "summary": "Delete a per-user stream default",
+   "summary_zh": "删除一项按用户的四层转发默认值",
    "auth": [
     "apiKey",
     "bearer"

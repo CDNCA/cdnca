@@ -50,7 +50,7 @@ type FreezeRecord struct {
 
 // FrozenConsoleUnit serves a minimal console on the control-api port while a
 // migration hold is in force: sign-in, migration status/logs and rollback.
-// It never writes business data (fix-migrollback).
+// It never writes business data.
 const FrozenConsoleUnit = "cdnca-control-frozen-console.service"
 
 type Freezer struct {

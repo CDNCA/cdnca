@@ -42,7 +42,7 @@ ge-waf S1 给自研规则的“请求体超 64KB”：默认只检查前 64KB，
 
 - 单测：`go -C libs/edgeconfig test -run DynamicWAF .`、`go -C libs/edgeconfig test ./edgeskeleton/`、`go -C agents/edge-agent test ./internal/dynwaf/`。
 - 真实 OpenResty：`tests/dynroute-waf/run.sh`（节点运行时镜像 + `scripts/security/modsecurity-runtime.sh` 扩展，`--rm --network none`，2 worker）13/13：9 站 5 档位随机交替 54 请求不串；PL2 专属载荷只在 PL2 站点拦截；70 KiB 体在 64 KiB reject 档 403、partial 档前段无攻击 200（攻击在前段 403）、1 MiB 站整体检查 403；放行网段只对该站该源关引擎；伪造上下文头无效；上下文不送源站；改排除下一请求生效、nginx 进程号不变、WAF 文件目录不变；未知档位站点 500；error.log 无 crit/alert/emerg。
-- 金标：`CDNCA_EDGE_GOLDEN_RENDERER=cdnca-dynroute tests/edge-golden/run.sh check managed-waf` → SAME（集成头上为 ERROR，未支持）。
+- 金标：`CDNCA_EDGE_GOLDEN_RENDERER=cdnca-dynroute tests/edge-golden/run.sh check managed-waf` → SAME。
 - 每请求额外耗时（`ONLY=scale SCALE=… WORKERS=1`，干净 GET，单客户端顺序，三轮取中位；本机 arm64 Docker Desktop，load 11–26，只作量级）：
 
 | 站点数 | 档位 | 无托管 WAF p50 / p99 | 托管 WAF p50 / p99 | 额外 p50 | master RSS |

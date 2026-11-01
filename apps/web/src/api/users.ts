@@ -661,7 +661,7 @@ function resetPassword(
   if (!uuidPattern.test(input.user_id) || !uuidPattern.test(input.tenant_id) ||
     !uuidPattern.test(input.tenant_scope_id) || !Number.isSafeInteger(input.expected_revision) ||
     input.expected_revision < 1 || checkPassword(input.new_password).length > 0 ||
-    !input.step_up_token || input.step_up_token !== input.step_up_token.trim()) throw invalidRequest()
+    input.step_up_token !== input.step_up_token.trim()) throw invalidRequest()
   return request(accessToken, `/v1/admin/users/${encodeURIComponent(input.user_id)}?include=user_metadata`, {
     method: 'PATCH',
     headers: writeHeaders(metadata),
@@ -670,7 +670,8 @@ function resetPassword(
       password_reset: {
         tenant_scope_id: input.tenant_scope_id,
         new_password: input.new_password,
-        step_up_token: input.step_up_token,
+        // 空：操作者未启用 MFA，不带证明（后端放行并审计）。
+        ...(input.step_up_token ? { step_up_token: input.step_up_token } : {}),
       },
     }),
   }, (value, status) => {

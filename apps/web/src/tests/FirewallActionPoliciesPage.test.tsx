@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { CdncaProvider } from '@cdnca/ui'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -93,6 +93,29 @@ describe('FirewallActionPoliciesPage', () => {
     expect(firewallActionApi.put).toHaveBeenCalledWith('token', expect.objectContaining({ expectedRevision: 4, policy: expect.objectContaining({ engage_threshold: 120 }) }))
     await user.click(screen.getByRole('button', { name: '恢复最近稳定版本' }))
     expect(firewallActionApi.recover).toHaveBeenCalledWith('token', expect.objectContaining({ expectedRevision: 5 }))
+  })
+
+  // A3-03: invalid CIDRs and a recover threshold not below the engage threshold are refused before the PUT.
+  it('refuses invalid block networks and a recover threshold not below the engage threshold', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('候选策略下发失败，当前稳定版本继续生效')
+    const save = screen.getByRole('button', { name: '保存策略' })
+    const block = screen.getByLabelText('内核拦截网段')
+    fireEvent.change(block, { target: { value: '198.51.100.0/24\nnot-a-cidr\n10.0.0.0/33\n2001:db8::/129\n2001:db8::/32' } })
+    expect(screen.getByText('以下网段不是合法 CIDR：not-a-cidr、10.0.0.0/33、2001:db8::/129')).toBeInTheDocument()
+    expect(block).toHaveAttribute('aria-invalid', 'true')
+    expect(save).toBeDisabled()
+    fireEvent.change(block, { target: { value: '198.51.100.0/24\n2001:db8::/32' } })
+    expect(screen.queryByText(/不是合法 CIDR/)).not.toBeInTheDocument()
+    expect(save).toBeEnabled()
+
+    await user.clear(screen.getByLabelText('恢复阈值'))
+    await user.type(screen.getByLabelText('恢复阈值'), '200')
+    expect(screen.getByText('恢复阈值须小于触发阈值（100）')).toBeInTheDocument()
+    expect(save).toBeDisabled()
+    await user.click(save)
+    expect(firewallActionApi.put).not.toHaveBeenCalled()
   })
 
   // A08: a tenant whose sites run only on shared platform nodes is not

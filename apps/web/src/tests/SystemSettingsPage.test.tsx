@@ -93,7 +93,7 @@ const defaults: DefaultConfiguration = {
       no_cache: [{ variable: '$http_cookie', string: 'session=' }], enabled: true, position: 0,
     }],
     origin_request_headers: [{
-      id: 'header01', name: 'X-CDN-Origin', value: '', action: 'set', allow_duplicate: false, enabled: true, position: 0,
+      id: 'header01', name: 'X-CDN-Origin', value: 'edge', action: 'set', allow_duplicate: false, enabled: true, position: 0,
     }],
     access_log: {
       capture_request_headers: true, capture_response_headers: false, capture_request_body: false, request_body_limit_kb: 16,
@@ -502,6 +502,67 @@ describe('SystemSettingsPage', () => {
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
   })
 
+  // A3-05: an out-of-range listen port is reported under the field and blocks the save (was silently dropped).
+  it('refuses an out-of-range HTTP listen port instead of dropping it', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(defaultsDocument())
+    const put = vi.spyOn(systemConfigurationApi, 'put').mockResolvedValue(defaultsDocument(3))
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage initialCategory="defaults" />)
+    const httpCard = (await screen.findByRole('heading', { name: 'HTTP' })).closest('section')!
+    const port = within(httpCard).getByRole('textbox', { name: '监听端口' })
+    await user.clear(port)
+    await user.type(port, '70000')
+    await user.tab()
+    expect(await screen.findByText('端口范围为 1–65535')).toBeInTheDocument()
+    expect(port).toHaveValue('70000')
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  // A3-06: out-of-range or malformed nginx directive values are reported, not silently rewritten.
+  it('reports an out-of-range gzip_comp_level and a malformed gzip_min_length without rewriting them', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(nginxDocument())
+    const put = vi.spyOn(systemConfigurationApi, 'put').mockResolvedValue(nginxDocument(3))
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage />)
+    await user.click(await screen.findByRole('tab', { name: 'Http' }))
+    const level = await screen.findByRole('textbox', { name: 'gzip_comp_level' })
+    await user.clear(level)
+    await user.type(level, '99')
+    await user.tab()
+    expect(level).toHaveValue('99')
+    expect(await screen.findByText('请输入 1 到 9 的整数')).toBeInTheDocument()
+    const minLength = screen.getByRole('textbox', { name: 'gzip_min_length' })
+    await user.clear(minLength)
+    await user.type(minLength, 'abc')
+    await user.tab()
+    expect(minLength).toHaveValue('abc')
+    expect(await screen.findByText('请输入 0 到 1g 的大小（可带 k/m/g/t 单位）')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  // A3-12: a cache rule without match content and a set/append header without a value are required fields.
+  it('requires cache rule match content and an origin header value', async () => {
+    authenticate()
+    vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(defaultsDocument())
+    const put = vi.spyOn(systemConfigurationApi, 'put').mockResolvedValue(defaultsDocument(3))
+    const user = userEvent.setup()
+    renderWithProviders(<SystemSettingsPage initialCategory="defaults" />)
+    const cacheCard = (await screen.findByRole('heading', { name: '缓存' })).closest('section')!
+    await user.click(within(cacheCard).getByRole('button', { name: '新增规则' }))
+    const headerCard = screen.getByRole('heading', { name: '源站请求头' }).closest('section')!
+    await user.click(within(headerCard).getByRole('button', { name: '新增请求头' }))
+    await user.click(screen.getByRole('button', { name: '保存' }))
+    expect(await within(cacheCard).findByText('请填写匹配内容')).toBeInTheDocument()
+    expect(within(headerCard).getAllByText('请填写请求头值').length).toBeGreaterThan(0)
+    expect(put).not.toHaveBeenCalled()
+  })
+
   it('exposes all supported default load balancing modes on website and stream tabs', async () => {
     authenticate()
     vi.spyOn(systemConfigurationApi, 'get').mockResolvedValue(defaultsDocument())
@@ -536,7 +597,7 @@ describe('SystemSettingsPage', () => {
       website: expect.objectContaining({
         https: expect.objectContaining({ http2_enabled: true }),
         security: expect.objectContaining({ default_cc_policy_id: null }),
-        origin_request_headers: [expect.objectContaining({ value: '', action: 'set', position: 0 })],
+        origin_request_headers: [expect.objectContaining({ value: 'edge', action: 'set', position: 0 })],
       }),
     }))
   })
@@ -568,6 +629,7 @@ describe('SystemSettingsPage', () => {
     const headerCard = screen.getByRole('heading', { name: '源站请求头' }).closest('section')!
     await user.click(within(headerCard).getAllByRole('button', { name: '删除' })[1])
     await user.click(within(headerCard).getByRole('button', { name: '新增请求头' }))
+    await user.type(within(headerCard).getAllByRole('textbox', { name: '请求头值' })[2]!, 'origin.example')
     await user.click(within(headerCard).getAllByRole('combobox', { name: '动作' })[0])
     await user.click(await screen.findByText('删除', { selector: '.ant-select-item-option-content' }))
     await user.click(screen.getByRole('button', { name: '保存' }))
@@ -582,7 +644,7 @@ describe('SystemSettingsPage', () => {
     }))
     expect(written.website.origin_request_headers.map((header) => header.position)).toEqual([0, 1, 2])
     expect(written.website.origin_request_headers[0]).toEqual(expect.objectContaining({ action: 'delete', value: null }))
-    expect(written.website.origin_request_headers[2]).toEqual(expect.objectContaining({ action: 'set', value: '', position: 2 }))
+    expect(written.website.origin_request_headers[2]).toEqual(expect.objectContaining({ action: 'set', value: 'origin.example', position: 2 }))
   })
 
   it('serializes every cache/header schema field and restores them from the saved document', async () => {

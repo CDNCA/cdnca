@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/cache-operation-requests/{idempotency_key}",
    "summary": "What the server did with a cache write sent with this Idempotency-Key",
+   "summary_zh": "查询带此 Idempotency-Key 的缓存写请求的处理结果",
    "auth": [
     "bearer"
    ],

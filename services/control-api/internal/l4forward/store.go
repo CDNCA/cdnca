@@ -1276,7 +1276,7 @@ var forwardSelect = `SELECT ` +
 	forwardGroupReferences + `, ` +
 	`pi.id, pi.version, pi.operation, pi.desired_state, pi.resource_revision, pi.configuration_source_revision, ` +
 	`pi.runtime_spec, pi.created_at, automatic.request_id, automatic.state, ` +
-	`automatic.publication_id, automatic.rollout_id, subscription.product_snapshot->>'name', subscription.ends_at, ` + additionalListenersJSON + `, ` +
+	`automatic.publication_id, automatic.rollout_id, automatic.terminal_code, subscription.product_snapshot->>'name', subscription.ends_at, ` + additionalListenersJSON + `, ` +
 	`line.region_id, COALESCE((SELECT name FROM region_catalog WHERE id=line.region_id), ''), ` +
 	`line.node_group_id, COALESCE((SELECT name FROM node_line_groups WHERE id=line.node_group_id AND deleted_at IS NULL LIMIT 1), ''), ` +
 	`line.backup_node_group_id, COALESCE((SELECT name FROM node_line_groups WHERE id=line.backup_node_group_id AND deleted_at IS NULL LIMIT 1), ''), ` +
@@ -1290,9 +1290,9 @@ const forwardFrom = `FROM l4_forwards f JOIN users u ON u.id = f.owner_user_id `
 	streamOwnCNAMEJoins +
 	`JOIN LATERAL (SELECT * FROM l4_publish_intents WHERE stream_id = f.id AND scope_id=f.scope_id ORDER BY version DESC LIMIT 1) pi ON true ` +
 	`LEFT JOIN LATERAL (` +
-	`SELECT request_row.id AS request_id, state.state, state.publication_id, state.rollout_id ` +
+	`SELECT request_row.id AS request_id, state.state, state.publication_id, state.rollout_id, state.terminal_code ` +
 	`FROM edge_automatic_publication_requests request_row ` +
-	`JOIN LATERAL (SELECT state,publication_id,rollout_id ` +
+	`JOIN LATERAL (SELECT state,publication_id,rollout_id,terminal_code ` +
 	`FROM edge_automatic_publication_request_state_facts WHERE request_id=request_row.id ` +
 	`ORDER BY sequence DESC LIMIT 1) state ON true ` +
 	`WHERE request_row.source_kind='l4' AND request_row.publish_intent_id=pi.id AND request_row.target_scope_id=f.scope_id ` +
@@ -1379,14 +1379,14 @@ func scanForward(scanner rowScanner) (Forward, error) {
 	var cnameDomain, cnameHostname, cnameState *string
 	var runtimeJSON []byte
 	var groupsJSON []byte
-	var internalState *string
+	var internalState, terminalCode *string
 	destinations := forwardScanDestinations(&item, &ownerName, &groupsJSON, &cname, &cnameDomain, &cnameHostname, &cnameState)
 	destinations = append(destinations,
 		&item.PublishIntent.ID, &item.PublishIntent.Version, &item.PublishIntent.Operation,
 		&item.PublishIntent.DesiredState, &item.PublishIntent.ResourceRevision,
 		&item.PublishIntent.ConfigurationSourceRevision, &runtimeJSON,
 		&item.PublishIntent.CreatedAt, &item.PublishIntent.AutomaticRequestID, &internalState,
-		&item.PublishIntent.PublicationID, &item.PublishIntent.RolloutID, &item.PackageName, &item.PackageExpiresAt,
+		&item.PublishIntent.PublicationID, &item.PublishIntent.RolloutID, &terminalCode, &item.PackageName, &item.PackageExpiresAt,
 		&jsonValueScanner{target: &item.AdditionalListeners},
 		&item.Line.RegionID, &item.Line.RegionName, &item.Line.NodeGroupID, &item.Line.NodeGroupName,
 		&item.Line.BackupNodeGroupID, &item.Line.BackupNodeGroupName, &item.SyncState, &item.CNAMEFailureCode,
@@ -1410,6 +1410,7 @@ func scanForward(scanner rowScanner) (Forward, error) {
 	fillOrigins(&item)
 	if internalState != nil {
 		item.PublishIntent.State = projectPublicationState(*internalState)
+		item.PublishIntent.FailureCode = publicationFailureCode(item.PublishIntent.State, terminalCode)
 	} else {
 		item.PublishIntent.State = PublicationStateUnknown
 	}
@@ -1428,8 +1429,22 @@ func projectPublicationState(internal string) string {
 	}
 }
 
+// publicationFailureCode is why a failed automatic publication request ended
+// (edge_automatic_publication_request_state_facts.terminal_code, written by
+// edgeautopublish with the failed state, e.g. node_artifacts_syncing when the
+// target nodes have not loaded the IP library a geo guard rule needs); nil
+// for any other state (A3-04: a failed stream showed no reason).
+func publicationFailureCode(state string, terminalCode *string) *string {
+	if state != PublicationStateFailed || terminalCode == nil || *terminalCode == "" {
+		return nil
+	}
+	code := *terminalCode
+	return &code
+}
+
 func markPublicationUnknown(intent *PublishIntent) {
 	intent.State = PublicationStateUnknown
+	intent.FailureCode = nil
 	intent.AutomaticRequestID = nil
 	intent.PublicationID = nil
 	intent.RolloutID = nil

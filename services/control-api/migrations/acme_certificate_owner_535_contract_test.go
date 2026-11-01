@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Migration 535 (fix-certowner): ACME certificate owner rule and backfill.
+// Migration 535: ACME certificate owner rule and backfill.
 // The 534 predecessor is pinned at merge.
 const (
 	migration535ID      = "535_acme_certificate_owner"

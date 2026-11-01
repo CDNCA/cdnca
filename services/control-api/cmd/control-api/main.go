@@ -1397,6 +1397,16 @@ func runServer() error {
 	if accountRegistrationRuntime != nil {
 		defer accountRegistrationRuntime.Close()
 	}
+	// builtin registration: without the Turnstile registration runtime (the fresh
+	// install default) 开放注册 uses the built-in CAPTCHA instead.
+	var builtInRegistration httpapi.BuiltInRegistration
+	if accountRegistrationRuntime == nil {
+		service, err := openBuiltInRegistration(pool, publicSystemSettings, identityService, cfg.AccessSecret)
+		if err != nil {
+			return runtimeStageError{stage: "initialize built-in account registration", err: err}
+		}
+		builtInRegistration = service
+	}
 	accountLoginRuntime, err := openAccountLoginRuntime(
 		ctx, accountRecoveryConfig, notificationConfig, pool, identityService, cfg.CookieSecure, cfg.CookieDomain,
 		accountRegistrationRuntime != nil,
@@ -2795,6 +2805,7 @@ func runServer() error {
 		NodeInstallGateway:                         nodeInstallGatewayForAPI(gatewayRegistry),
 		AccountRegistrationHandlerFactory:          accountRegistrationRuntime.HandlerFactory(),
 		AccountLoginHandlerFactory:                 accountLoginRuntime.HandlerFactory(),
+		BuiltInRegistration:                        builtInRegistration,
 		CertificateAssetHandlerFactory:             certificateAssetHandlerFactory,
 		CertificatePublicationStatusHandlerFactory: certificatePublicationStatusHandlerFactory,
 		CacheControlHandlerFactory:                 cacheRuntime.HandlerFactory(),

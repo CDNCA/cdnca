@@ -8,6 +8,7 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations:
     get:
       operationId: listPluginInstallations
+      x-summary-zh: "列出租户插件安装的授权状态"
       summary: List tenant plugin installation authorization state
       parameters:
         - $ref: '#/components/parameters/TenantScopeID'
@@ -37,6 +38,7 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}:
     get:
       operationId: getPluginInstallation
+      x-summary-zh: "读取一条租户插件安装授权"
       summary: Read one tenant plugin installation authorization
       parameters:
         - $ref: '#/components/parameters/TenantScopeID'
@@ -51,6 +53,7 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/confirm:
     post:
       operationId: confirmPluginInstallation
+      x-summary-zh: "安装前确认插件声明的权限与敏感权限"
       summary: Confirm declared and sensitive plugin scopes before installation
       parameters:
         - $ref: '#/components/parameters/TenantScopeID'
@@ -72,6 +75,7 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/upgrade:
     post:
       operationId: upgradePluginInstallation
+      x-summary-zh: "批准兼容的插件升级及新声明的权限"
       summary: Approve a compatible plugin upgrade and any newly declared scopes
       parameters:
         - $ref: '#/components/parameters/TenantScopeID'
@@ -93,6 +97,7 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/disable:
     post:
       operationId: disablePluginInstallation
+      x-summary-zh: "不经授权服务，保护性停用已安装插件"
       summary: Protectively disable an installed plugin without consulting License
       parameters:
         - $ref: '#/components/parameters/TenantScopeID'
@@ -141,6 +146,7 @@ paths:
   /v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall:
     post:
       operationId: uninstallPluginInstallation
+      x-summary-zh: "吊销本地插件身份并记录保护性卸载"
       summary: Revoke local plugin identity and record protective uninstall
       parameters:
         - $ref: '#/components/parameters/TenantScopeID'

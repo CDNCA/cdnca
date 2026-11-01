@@ -187,7 +187,12 @@ func (handler *Handler) submit(response http.ResponseWriter, request *http.Reque
 		return
 	}
 	idempotency, ok := singleHeader(request, "Idempotency-Key")
+	// No X-Step-Up-Token: the operator has no active MFA;
+	// the verifier waives the step-up or refuses it when MFA is active.
 	stepToken, stepOK := singleHeader(request, "X-Step-Up-Token")
+	if len(request.Header.Values("X-Step-Up-Token")) == 0 {
+		stepToken, stepOK = "", true
+	}
 	if !ok || !stepOK {
 		writeError(response, http.StatusPreconditionRequired, "ja4_block_step_up_required", requestID)
 		return

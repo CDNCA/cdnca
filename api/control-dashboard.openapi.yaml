@@ -23,6 +23,7 @@ paths:
     get:
       tags: [Dashboards]
       operationId: getAdminDashboard
+      x-summary-zh: "读取平台管理员仪表盘"
       summary: Read the platform administrator dashboard
       description: >-
         Requires a live platform session and platform.admin. The calendar
@@ -53,6 +54,7 @@ paths:
     get:
       tags: [Dashboards]
       operationId: getTenantDashboard
+      x-summary-zh: "读取当前租户的仪表盘"
       summary: Read the authenticated tenant dashboard
       description: >-
         The target tenant, scope, user, and session are derived only from the
@@ -400,6 +402,14 @@ components:
         expires_at: {type: string, format: date-time}
         grace_until: {type: string, format: date-time}
         last_verified_at: {type: string, format: date-time}
+        customer:
+          type: object
+          additionalProperties: false
+          description: Display-only customer label returned by the license service with the lease; absent until received.
+          required: [name]
+          properties:
+            name: {type: string, minLength: 1, maxLength: 200}
+            portal_account: {type: string, pattern: '^[a-z][a-z0-9_]{3,31}$'}
     NodeHealthStats:
       type: object
       additionalProperties: false

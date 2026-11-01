@@ -124,7 +124,7 @@ describe('limitsModel', () => {
   })
 })
 
-describe('listing money and custom tags (fix-offerform)', () => {
+describe('listing money and custom tags', () => {
   it('converts yuan to minor units exactly and flags what it would have to round', () => {
     const v = { billing_model: 'traffic' as const, price: 0.29, deposit: 10.1, minDays: 1, maxDays: 30 }
     expect(pricingOf(v)).toEqual({ currency: 'CNY', tiers: [{ up_to_gb: 0, price_per_gb_minor: 29 }], deposit_minor: 1010 })

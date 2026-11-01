@@ -190,7 +190,7 @@ func TestCertificateStorePostgresTransaction(t *testing.T) {
 		assertDispatchAssetOwner(t, fixture, fixture.tenant.ownerID)
 	})
 
-	t.Run("tenant member order records the member as owner (fix-certowner)", func(t *testing.T) {
+	t.Run("tenant member order records the member as owner", func(t *testing.T) {
 		fixture := newDispatchFixture(t, pool, dispatchFixtureOptions{finalizing: true})
 		if err := fixture.store.Save(context.Background(), fixture.lease, fixture.certificate); err != nil {
 			t.Fatalf("Save() error = %v", err)

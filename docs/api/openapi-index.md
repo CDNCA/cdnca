@@ -1,8 +1,8 @@
 # OpenAPI operation 索引
 
 <!-- generated:openapi-index:begin -->
-本索引按契约完整列出当前四份 OpenAPI 的 882 个 operation，并包含
-857 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
+本索引按契约完整列出当前四份 OpenAPI 的 885 个 operation，并包含
+860 个 distinct wire tuple。字段、参数、权限、错误和示例仍以源文件为准。
 跨契约重复只允许 method/path/operationId 完全一致。
 
 按契约跳转：[control.yaml](#controlyaml)、[dns-acme.yaml](#dns-acmeyaml)、
@@ -42,7 +42,7 @@
 
 ## control.yaml
 
-源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，609 个 operation。
+源文件：[`control.yaml`](../../api/openapi/v1/control.yaml)，612 个 operation。
 
 | 契约 | 方法 | 路径 | operationId |
 | --- | --- | --- | --- |
@@ -499,6 +499,9 @@
 | `control.yaml` | `GET` | `/v1/openresty-security/targets` | `searchOpenRestySecurityTargets` |
 | `control.yaml` | `GET` | `/v1/plugin-ui/pages` | `listPluginUIPages` |
 | `control.yaml` | `GET` | `/v1/plugin-ui/signing-key` | `getPluginUISigningKey` |
+| `control.yaml` | `GET` | `/v1/plugin-ui/{plugin_id}/identity` | `getPluginIdentity` |
+| `control.yaml` | `POST` | `/v1/plugin-ui/{plugin_id}/identity` | `authorizePluginIdentity` |
+| `control.yaml` | `DELETE` | `/v1/plugin-ui/{plugin_id}/identity` | `revokePluginIdentity` |
 | `control.yaml` | `POST` | `/v1/plugin-ui/{plugin_id}/proxy` | `proxyPluginUIRequest` |
 | `control.yaml` | `GET` | `/v1/regions` | `listPlatformRegions` |
 | `control.yaml` | `POST` | `/v1/regions` | `createPlatformRegion` |

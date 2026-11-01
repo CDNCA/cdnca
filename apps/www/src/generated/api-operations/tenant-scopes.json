@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{scope_id}/l4-line-switches",
    "summary": "Create an idempotent line-group switch",
+   "summary_zh": "创建幂等的线路组切换",
    "auth": [
     "bearer"
    ],
@@ -206,6 +207,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{scope_id}/l4-line-switches/current",
    "summary": "Read the latest durable switch for operator recovery",
+   "summary_zh": "读取最近一次持久化的切换，供运维恢复",
    "auth": [
     "bearer"
    ],
@@ -341,6 +343,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{scope_id}/l4-line-switches/{switch_id}",
    "summary": "Read durable switch state",
+   "summary_zh": "读取持久化的切换状态",
    "auth": [
     "bearer"
    ],
@@ -482,6 +485,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{scope_id}/l4-line-switches/{switch_id}/reconcile",
    "summary": "Advance one idempotent state-machine step from durable facts",
+   "summary_zh": "基于持久化事实推进一步幂等状态机",
    "auth": [
     "bearer"
    ],
@@ -632,6 +636,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{scope_id}/sites/{site_id}/telemetry-capture-policy",
    "summary": "",
+   "summary_zh": "读取网站的遥测采集策略",
    "auth": [
     "bearer"
    ],
@@ -681,6 +686,7 @@
    "method": "PUT",
    "path": "/v1/tenant-scopes/{scope_id}/sites/{site_id}/telemetry-capture-policy",
    "summary": "",
+   "summary_zh": "修改网站的遥测采集策略",
    "auth": [
     "bearer"
    ],
@@ -789,6 +795,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies",
    "summary": "List active challenge policies in one tenant scope",
+   "summary_zh": "列出某租户范围的在用挑战策略",
    "auth": [
     "bearer"
    ],
@@ -896,6 +903,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies",
    "summary": "Create a challenge policy for a tenant-owned site and host",
+   "summary_zh": "为租户自有网站与主机名创建挑战策略",
    "auth": [
     "bearer"
    ],
@@ -1125,6 +1133,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}",
    "summary": "Read one challenge policy",
+   "summary_zh": "读取一个挑战策略",
    "auth": [
     "bearer"
    ],
@@ -1315,6 +1324,7 @@
    "method": "PATCH",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}",
    "summary": "Append a new challenge policy configuration revision",
+   "summary_zh": "追加挑战策略的新配置版本",
    "auth": [
     "bearer"
    ],
@@ -1545,6 +1555,7 @@
    "method": "DELETE",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}",
    "summary": "Soft-delete a challenge policy by appending a tombstone revision",
+   "summary_zh": "追加删除标记版本，软删除挑战策略",
    "auth": [
     "bearer"
    ],
@@ -1757,6 +1768,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/disable",
    "summary": "Disable a challenge policy with revision CAS",
+   "summary_zh": "按版本 CAS 停用挑战策略",
    "auth": [
     "bearer"
    ],
@@ -1974,6 +1986,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/enable",
    "summary": "Enable a challenge policy with revision CAS",
+   "summary_zh": "按版本 CAS 启用挑战策略",
    "auth": [
     "bearer"
    ],
@@ -2191,6 +2204,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications",
    "summary": "Publish one exact enabled challenge policy revision to Edge nodes",
+   "summary_zh": "把一个已启用的挑战策略版本发布到边缘节点",
    "auth": [
     "bearer"
    ],
@@ -2366,6 +2380,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}",
    "summary": "Read the bounded rollout state for an exact policy artifact",
+   "summary_zh": "读取某策略制品的灰度状态",
    "auth": [
     "bearer"
    ],
@@ -2516,6 +2531,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/challenge-policies/{policy_id}/publications/{rollout_id}/promote",
    "summary": "Promote an exact healthy challenge rollout into Edge configuration",
+   "summary_zh": "把健康的挑战灰度晋升到边缘配置",
    "auth": [
     "bearer"
    ],
@@ -3028,6 +3044,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies",
    "summary": "List non-deleted HTTP policies in one tenant scope",
+   "summary_zh": "列出某租户范围未删除的 HTTP 策略",
    "auth": [
     "bearer"
    ],
@@ -3126,6 +3143,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies",
    "summary": "Create revision one for a tenant-owned site",
+   "summary_zh": "为租户自有网站创建第一个版本",
    "auth": [
     "bearer"
    ],
@@ -3324,6 +3342,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies/publication-preview",
    "summary": "Read a deterministic unsigned Edge v1 source snapshot",
+   "summary_zh": "读取确定性的、未签名的 Edge v1 源快照",
    "auth": [
     "bearer"
    ],
@@ -3411,6 +3430,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}",
    "summary": "Read one HTTP policy",
+   "summary_zh": "读取一个 HTTP 策略",
    "auth": [
     "bearer"
    ],
@@ -3577,6 +3597,7 @@
    "method": "PATCH",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}",
    "summary": "Append a configuration revision",
+   "summary_zh": "追加配置版本",
    "auth": [
     "bearer"
    ],
@@ -3782,6 +3803,7 @@
    "method": "DELETE",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}",
    "summary": "Soft-delete a policy by appending a tombstone revision",
+   "summary_zh": "追加删除标记版本，软删除策略",
    "auth": [
     "bearer"
    ],
@@ -3970,6 +3992,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}/disable",
    "summary": "Disable a policy with revision CAS",
+   "summary_zh": "按版本 CAS 停用策略",
    "auth": [
     "bearer"
    ],
@@ -4164,6 +4187,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/http-policies/{policy_id}/enable",
    "summary": "Enable a policy with revision CAS",
+   "summary_zh": "按版本 CAS 启用策略",
    "auth": [
     "bearer"
    ],
@@ -4358,6 +4382,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials",
    "summary": "List redacted credential heads in one tenant",
+   "summary_zh": "列出某租户脱敏后的凭据",
    "auth": [
     "bearer"
    ],
@@ -4450,6 +4475,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials",
    "summary": "Encrypt and append credential revision 1",
+   "summary_zh": "加密并追加凭据第 1 版",
    "auth": [
     "bearer"
    ],
@@ -4610,6 +4636,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}",
    "summary": "Read one redacted credential head",
+   "summary_zh": "读取一条脱敏后的凭据",
    "auth": [
     "bearer"
    ],
@@ -4738,6 +4765,7 @@
    "method": "DELETE",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}",
    "summary": "Append a credential tombstone revision",
+   "summary_zh": "追加凭据删除标记版本",
    "auth": [
     "bearer"
    ],
@@ -4898,6 +4926,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}/disable",
    "summary": "Append a disabled credential revision",
+   "summary_zh": "追加凭据停用版本",
    "auth": [
     "bearer"
    ],
@@ -5054,6 +5083,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}/replace",
    "summary": "Encrypt replacement material with the active envelope key",
+   "summary_zh": "用当前信封密钥加密替换后的凭据",
    "auth": [
     "bearer"
    ],
@@ -5220,6 +5250,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/credentials/{credential_id}/verify",
    "summary": "Invoke the injected verifier and append a verified revision",
+   "summary_zh": "调用校验器并追加已校验版本",
    "auth": [
     "bearer"
    ],
@@ -5726,6 +5757,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/publications",
    "summary": "Read the latest deterministic secret-free snapshot",
+   "summary_zh": "读取最新的确定性快照（不含密钥）",
    "auth": [
     "bearer"
    ],
@@ -5822,6 +5854,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/publications",
    "summary": "Append the next tenant publication snapshot",
+   "summary_zh": "追加下一个租户发布快照",
    "auth": [
     "bearer"
    ],
@@ -5950,6 +5983,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules",
    "summary": "List current rule revisions",
+   "summary_zh": "列出规则当前版本",
    "auth": [
     "bearer"
    ],
@@ -6042,6 +6076,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules",
    "summary": "Create a tenant, site, and source-bound rule",
+   "summary_zh": "创建绑定租户、网站与来源的规则",
    "auth": [
     "bearer"
    ],
@@ -6249,6 +6284,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}",
    "summary": "Read one current rule revision",
+   "summary_zh": "读取一条规则的当前版本",
    "auth": [
     "bearer"
    ],
@@ -6419,6 +6455,7 @@
    "method": "PATCH",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}",
    "summary": "Append a rule configuration revision",
+   "summary_zh": "追加规则配置版本",
    "auth": [
     "bearer"
    ],
@@ -6627,6 +6664,7 @@
    "method": "DELETE",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}",
    "summary": "Append a rule tombstone revision",
+   "summary_zh": "追加规则删除标记版本",
    "auth": [
     "bearer"
    ],
@@ -6824,6 +6862,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}/disable",
    "summary": "Disable a rule by revision CAS",
+   "summary_zh": "按版本 CAS 停用规则",
    "auth": [
     "bearer"
    ],
@@ -7021,6 +7060,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}/enable",
    "summary": "Enable a rule after verified credential gates pass",
+   "summary_zh": "凭据校验通过后启用规则",
    "auth": [
     "bearer"
    ],
@@ -7222,6 +7262,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/rules/{rule_id}/rotate",
    "summary": "Schedule current and previous credential cutover",
+   "summary_zh": "安排新旧凭据切换",
    "auth": [
     "bearer"
    ],
@@ -7436,6 +7477,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations",
    "summary": "List tenant plugin installation authorization state",
+   "summary_zh": "列出租户插件安装的授权状态",
    "auth": [
     "bearer"
    ],
@@ -7512,6 +7554,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}",
    "summary": "Read one tenant plugin installation authorization",
+   "summary_zh": "读取一条租户插件安装授权",
    "auth": [
     "bearer"
    ],
@@ -7697,6 +7740,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/confirm",
    "summary": "Confirm declared and sensitive plugin scopes before installation",
+   "summary_zh": "安装前确认插件声明的权限与敏感权限",
    "auth": [
     "bearer"
    ],
@@ -7811,6 +7855,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/disable",
    "summary": "Protectively disable an installed plugin without consulting License",
+   "summary_zh": "不经授权服务，保护性停用已安装插件",
    "auth": [
     "bearer"
    ],
@@ -7906,6 +7951,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/uninstall",
    "summary": "Revoke local plugin identity and record protective uninstall",
+   "summary_zh": "吊销本地插件身份并记录保护性卸载",
    "auth": [
     "bearer"
    ],
@@ -8001,6 +8047,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-installations/{authorization_id}/upgrade",
    "summary": "Approve a compatible plugin upgrade and any newly declared scopes",
+   "summary_zh": "批准兼容的插件升级及新声明的权限",
    "auth": [
     "bearer"
    ],
@@ -8115,6 +8162,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions",
    "summary": "List webhook subscriptions",
+   "summary_zh": "列出 Webhook 订阅",
    "auth": [
     "bearer"
    ],
@@ -8182,6 +8230,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions",
    "summary": "Create a webhook subscription and one-time secret",
+   "summary_zh": "创建 Webhook 订阅及一次性密钥",
    "auth": [
     "bearer"
    ],
@@ -8290,6 +8339,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}",
    "summary": "Get a webhook subscription",
+   "summary_zh": "读取一个 Webhook 订阅",
    "auth": [
     "bearer"
    ],
@@ -8410,6 +8460,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/deliveries",
    "summary": "List subscription deliveries",
+   "summary_zh": "列出订阅的投递记录",
    "auth": [
     "bearer"
    ],
@@ -8483,6 +8534,7 @@
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/deliveries/{delivery_id}",
    "summary": "Get a delivery status",
+   "summary_zh": "读取一次投递状态",
    "auth": [
     "bearer"
    ],
@@ -8581,6 +8633,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/deliveries/{delivery_id}/replays",
    "summary": "Replay a delivered or dead-lettered delivery",
+   "summary_zh": "重放已投递或进入死信的投递",
    "auth": [
     "bearer"
    ],
@@ -8670,6 +8723,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/delivery-replays",
    "summary": "Replay the terminal deliveries of a time range",
+   "summary_zh": "重放某时间段内已终结的投递",
    "auth": [
     "bearer"
    ],
@@ -8780,6 +8834,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/revoke",
    "summary": "Revoke a webhook subscription and fence new deliveries",
+   "summary_zh": "吊销 Webhook 订阅并阻止新的投递",
    "auth": [
     "bearer"
    ],
@@ -8869,6 +8924,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/secret-rotations",
    "summary": "Generate a pending secret rotation",
+   "summary_zh": "生成待生效的密钥轮换",
    "auth": [
     "bearer"
    ],
@@ -8992,6 +9048,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/secret-rotations/{rotation_id}/activate",
    "summary": "Activate a pending secret rotation",
+   "summary_zh": "启用待生效的密钥轮换",
    "auth": [
     "bearer"
    ],
@@ -9087,6 +9144,7 @@
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/plugin-webhook-subscriptions/{subscription_id}/test-deliveries",
    "summary": "Queue a signed CloudEvents test delivery",
+   "summary_zh": "排队发送一次带签名的 CloudEvents 测试投递",
    "auth": [
     "bearer"
    ],

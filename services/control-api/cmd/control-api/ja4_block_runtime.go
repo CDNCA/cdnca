@@ -171,7 +171,7 @@ func (verifier *ja4BlockStepUpVerifier) Verify(ctx context.Context,
 ) (ja4blockhttp.StepUpEvidence, error) {
 	if verifier == nil || !configuredRuntimePool(verifier.pool) || nilRuntimeDependency(verifier.consumer) ||
 		verifier.now == nil || ctx == nil || check.SessionID == uuid.Nil || check.UserID == uuid.Nil ||
-		check.ScopeID == uuid.Nil || check.TargetTenantScopeID == uuid.Nil || check.Token == "" ||
+		check.ScopeID == uuid.Nil || check.TargetTenantScopeID == uuid.Nil ||
 		check.Action != ja4BlockStepUpAudience || check.RequestID == "" || check.RequestSHA256 == ([32]byte{}) {
 		return ja4blockhttp.StepUpEvidence{}, ja4blockhttp.ErrStepUpRequired
 	}

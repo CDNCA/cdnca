@@ -81,7 +81,7 @@ func (s *Service) ResetManagedUserPassword(
 	input.StepUpToken = strings.TrimSpace(input.StepUpToken)
 	if !validAdminActor(actor) || actor.SessionID == uuid.Nil || input.ID == uuid.Nil ||
 		input.TenantScopeID == uuid.Nil || input.ExpectedRevision < 1 ||
-		input.StepUpToken == "" || !validWriteMetadata(input.IdempotencyKey, input.RequestID) {
+		!validWriteMetadata(input.IdempotencyKey, input.RequestID) {
 		return ManagedUser{}, ErrInvalidUserInput
 	}
 	if err := CheckNewPassword(input.NewPassword); err != nil {
@@ -208,6 +208,7 @@ func (s *Store) resetManagedUserPassword(
 				"tenant_id": tenantID.String(), "tenant_scope_id": input.TenantScopeID.String(),
 				"previous_revision": revision, "revision": result.Revision,
 				"step_up_proof_id": evidence.ProofID.String(), "step_up_use_ordinal": evidence.UseOrdinal,
+				"step_up_method": evidence.Method,
 			},
 		}); err != nil {
 			return ErrManagedPasswordResetUnavailable

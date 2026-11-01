@@ -171,7 +171,7 @@ func compileCCV2RuleMatchAndAction(site edgeconfig.Site, domains []string, rule 
 			result.Match.Headers = append(result.Match.Headers, header)
 			continue
 		case "ja4":
-			// CC API v7 (fix-ja4rule): equals / in, one condition per rule.
+			// CC API v7: equals / in, one condition per rule.
 			values, err := edgeconfig.NormalizeWAFJA4(append([]string(nil), condition.Values...))
 			if err != nil || condition.Key != "" || result.Match.JA4 != nil ||
 				condition.Operator != "equals" && condition.Operator != "in" || condition.Operator == "equals" && len(values) != 1 {

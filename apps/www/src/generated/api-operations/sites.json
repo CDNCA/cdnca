@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/sites",
    "summary": "List websites visible in the authenticated scope",
+   "summary_zh": "列出当前范围可见的网站",
    "auth": [
     "apiKey",
     "bearer"
@@ -182,6 +183,7 @@
    "method": "POST",
    "path": "/v1/sites",
    "summary": "Create a website",
+   "summary_zh": "创建网站",
    "auth": [
     "bearer"
    ],
@@ -349,6 +351,7 @@
    "method": "POST",
    "path": "/v1/sites/batch-action",
    "summary": "Enable, disable, soft-delete, queue CNAME regeneration for, or set the HTTPS protocols of websites",
+   "summary_zh": "批量启用、停用、软删除网站，排队重新生成 CNAME，或设置 HTTPS 协议",
    "auth": [
     "bearer"
    ],
@@ -426,6 +429,7 @@
    "method": "GET",
    "path": "/v1/sites/export",
    "summary": "Export an immutable snapshot of site domains",
+   "summary_zh": "导出网站域名的不可变快照",
    "auth": [
     "bearer"
    ],
@@ -571,6 +575,7 @@
    "method": "GET",
    "path": "/v1/sites/{id}",
    "summary": "Get one website and its basic settings",
+   "summary_zh": "读取一个网站及其基本设置",
    "auth": [
     "apiKey",
     "bearer"
@@ -708,6 +713,7 @@
    "method": "PATCH",
    "path": "/v1/sites/{id}",
    "summary": "Replace the complete basic or origin settings section",
+   "summary_zh": "整体替换基本设置或回源设置",
    "auth": [
     "apiKey",
     "bearer"
@@ -863,6 +869,7 @@
    "method": "DELETE",
    "path": "/v1/sites/{id}",
    "summary": "Soft-delete a website",
+   "summary_zh": "软删除网站",
    "auth": [
     "bearer"
    ],
@@ -924,7 +931,7 @@
    "method": "POST",
    "path": "/v1/sites/{id}/access-check",
    "summary": "Access status > Check now (resolve the site's domains now)",
-   "summary_zh": "接入状态 > 立即检查 (resolve the site's domains now)",
+   "summary_zh": "接入状态 > 立即检查（立即解析网站域名）",
    "auth": [
     "bearer"
    ],
@@ -985,7 +992,7 @@
    "method": "POST",
    "path": "/v1/sites/{id}/auto-dns/sync",
    "summary": "DNS check > Sync records (run the site's automatic DNS records again)",
-   "summary_zh": "解析检测 > 同步解析 (run the site's automatic DNS records again)",
+   "summary_zh": "解析检测 > 同步解析（重新执行网站的自动 DNS 记录）",
    "auth": [
     "bearer"
    ],
@@ -1086,6 +1093,7 @@
    "method": "POST",
    "path": "/v1/sites/{id}/lock",
    "summary": "Lock a website against tenant writes",
+   "summary_zh": "锁定网站，禁止租户写入",
    "auth": [
     "bearer"
    ],
@@ -1249,6 +1257,7 @@
    "method": "POST",
    "path": "/v1/sites/{id}/origin-failback",
    "summary": "Switch the pool back to the highest healthy level (manual failback)",
+   "summary_zh": "把源站池切回最高的健康等级（手动回切）",
    "auth": [
     "bearer"
    ],
@@ -1349,6 +1358,7 @@
    "method": "GET",
    "path": "/v1/sites/{id}/origin-routing",
    "summary": "Get the normalized conditional origin-routing document",
+   "summary_zh": "读取规范化后的条件回源路由",
    "auth": [
     "apiKey",
     "bearer"
@@ -1430,6 +1440,7 @@
    "method": "PUT",
    "path": "/v1/sites/{id}/origin-routing",
    "summary": "Replace the complete conditional origin-routing document",
+   "summary_zh": "整体替换条件回源路由",
    "auth": [
     "apiKey",
     "bearer"
@@ -1571,6 +1582,7 @@
    "method": "GET",
    "path": "/v1/sites/{id}/origin-status",
    "summary": "Origin pool probe state and the active origin level",
+   "summary_zh": "源站池探测状态与当前生效的源站等级",
    "auth": [
     "apiKey",
     "bearer"
@@ -1664,6 +1676,7 @@
    "method": "GET",
    "path": "/v1/sites/{id}/schedule302",
    "summary": "Get the site's HTTP 302 scheduling settings",
+   "summary_zh": "读取网站的 HTTP 302 调度设置",
    "auth": [
     "bearer"
    ],
@@ -1735,6 +1748,7 @@
    "method": "PUT",
    "path": "/v1/sites/{id}/schedule302",
    "summary": "Replace the site's HTTP 302 scheduling settings",
+   "summary_zh": "替换网站的 HTTP 302 调度设置",
    "auth": [
     "bearer"
    ],
@@ -1884,6 +1898,7 @@
    "method": "POST",
    "path": "/v1/sites/{id}/transfer",
    "summary": "Move a website to another user",
+   "summary_zh": "把网站转移给另一位用户",
    "auth": [
     "bearer"
    ],
@@ -1994,6 +2009,7 @@
    "method": "POST",
    "path": "/v1/sites/{id}/unlock",
    "summary": "Restore tenant write access to a website",
+   "summary_zh": "恢复租户对网站的写权限",
    "auth": [
     "bearer"
    ],
@@ -2152,6 +2168,7 @@
    "method": "GET",
    "path": "/v1/sites/{site_id}/access",
    "summary": "Get a site's request handling settings",
+   "summary_zh": "读取网站的请求处理设置",
    "auth": [
     "bearer"
    ],
@@ -2232,6 +2249,7 @@
    "method": "PUT",
    "path": "/v1/sites/{site_id}/access",
    "summary": "Replace a site's request handling settings",
+   "summary_zh": "替换网站的请求处理设置",
    "auth": [
     "bearer"
    ],
@@ -2378,6 +2396,7 @@
    "method": "GET",
    "path": "/v1/sites/{site_id}/certificate-binding",
    "summary": "Get the active certificate binding for one site",
+   "summary_zh": "读取一个网站当前生效的证书绑定",
    "auth": [
     "bearer"
    ],
@@ -2452,6 +2471,7 @@
    "method": "POST",
    "path": "/v1/sites/{site_id}/dns-reconcile/apply",
    "summary": "Persist and enqueue a DNS reconciliation task",
+   "summary_zh": "保存并排队一个 DNS 修复任务",
    "auth": [
     "bearer"
    ],
@@ -2651,6 +2671,7 @@
    "method": "POST",
    "path": "/v1/sites/{site_id}/dns-reconcile/dry-run",
    "summary": "Build a deterministic repair plan without provider side effects",
+   "summary_zh": "生成确定性的修复计划，不调用服务商",
    "auth": [
     "bearer"
    ],
@@ -2865,6 +2886,7 @@
    "method": "GET",
    "path": "/v1/sites/{site_id}/dns-reconcile/tasks/{task_id}",
    "summary": "Read one durable DNS reconciliation task",
+   "summary_zh": "读取一个持久化的 DNS 修复任务",
    "auth": [
     "bearer"
    ],
@@ -2999,6 +3021,7 @@
    "method": "POST",
    "path": "/v1/sites/{site_id}/dns-reconcile/tasks/{task_id}/cancel",
    "summary": "Persist a cancellation request for a DNS reconciliation task",
+   "summary_zh": "保存 DNS 修复任务的取消请求",
    "auth": [
     "bearer"
    ],
@@ -3162,6 +3185,7 @@
    "method": "POST",
    "path": "/v1/sites/{site_id}/dns-reconcile/tasks/{task_id}/commit",
    "summary": "Delete superseded records after propagation is healthy",
+   "summary_zh": "传播正常后删除被替换的记录",
    "auth": [
     "bearer"
    ],
@@ -3326,6 +3350,7 @@
    "method": "GET",
    "path": "/v1/sites/{site_id}/traffic-limit",
    "summary": "Read a website's traffic caps and their enforcement (sites.read)",
+   "summary_zh": "读取网站的流量上限及执行情况（sites.read）",
    "auth": [
     "bearer"
    ],
@@ -3404,6 +3429,7 @@
    "method": "PUT",
    "path": "/v1/sites/{site_id}/traffic-limit",
    "summary": "Replace a website's traffic caps (sites.manage)",
+   "summary_zh": "替换网站的流量上限（sites.manage）",
    "auth": [
     "bearer"
    ],

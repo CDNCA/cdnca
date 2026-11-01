@@ -6,6 +6,7 @@ paths:
   /v1/account/orders:
     get:
       operationId: listAccountOrders
+      x-summary-zh: "列出租户消费记录"
       summary: List tenant consumption records
       description: Requires billing.account.read. Callers with billing.order_records.read (tenant_owner) see all tenant users; other callers are restricted to their own user ID. Tenant rows are never editable.
       parameters:
@@ -54,6 +55,7 @@ paths:
   /v1/account/statement:
     get:
       operationId: listAccountStatement
+      x-summary-zh: "列出调用者合并后的消费明细（订单、充值与余额流水）"
       summary: List the caller's merged consumption statement (orders, recharges and balance ledger entries)
       description: |
         Requires billing.account.read in the caller's own tenant scope. Merges manual order records, package and
@@ -98,6 +100,7 @@ paths:
   /v1/admin/account/orders:
     post:
       operationId: createAccountOrder
+      x-summary-zh: "录入一条带审计的兼容订单记录"
       summary: Enter an audited compatibility order record
       description: Platform administrators only (live platform session with billing.adjustments.manage); tenants have no order-record write API. This does not mutate package, recharge, payment, or balance-ledger facts.
       parameters:
@@ -141,6 +144,7 @@ paths:
           format: uuid
     patch:
       operationId: updateAccountOrder
+      x-summary-zh: "编辑一条带审计的兼容订单记录"
       summary: Edit an audited compatibility order record
       description: Platform administrators only (billing.adjustments.manage). Only records whose source is manual are editable. Package and recharge facts remain immutable.
       parameters:
@@ -179,6 +183,7 @@ paths:
           $ref: '#/components/responses/Unavailable'
     delete:
       operationId: deleteAccountOrder
+      x-summary-zh: "归档一条带审计的兼容订单记录"
       summary: Archive an audited compatibility order record
       description: Archives the editable head while retaining its append-only event, receipt, and audit facts.
       parameters:
@@ -210,6 +215,7 @@ paths:
   /v1/admin/account/order-users:
     get:
       operationId: listAccountOrderUsers
+      x-summary-zh: "录入订单时搜索可用用户"
       summary: Search active users for order entry
       description: Platform administrators only (billing.adjustments.manage); searches active tenant users for order entry.
       parameters:

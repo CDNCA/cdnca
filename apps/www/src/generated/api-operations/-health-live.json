@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/health/live",
    "summary": "Process liveness",
+   "summary_zh": "进程存活检查",
    "auth": [
     "none"
    ],

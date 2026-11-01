@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/node-registrations",
    "summary": "Self-register a node host (called by install-node.sh)",
+   "summary_zh": "节点主机自助注册（由 install-node.sh 调用）",
    "auth": [
     "bearer"
    ],
@@ -119,6 +120,7 @@
    "method": "POST",
    "path": "/v1/node-registrations/identity",
    "summary": "Fetch the issued identity of an interrupted node install (called by install-node.sh --resume)",
+   "summary_zh": "取回中断安装节点已签发的身份（由 install-node.sh --resume 调用）",
    "auth": [
     "bearer"
    ],

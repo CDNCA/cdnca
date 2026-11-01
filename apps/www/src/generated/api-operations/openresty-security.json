@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/openresty-security/actions/download-cc-image",
    "summary": "",
+   "summary_zh": "排队下载 CC 验证图片资源",
    "auth": [
     "bearer"
    ],
@@ -51,6 +52,7 @@
    "method": "GET",
    "path": "/v1/openresty-security/configs/global",
    "summary": "",
+   "summary_zh": "读取全局 OpenResty 安全配置",
    "auth": [
     "bearer"
    ],
@@ -123,6 +125,7 @@
    "method": "PATCH",
    "path": "/v1/openresty-security/configs/global",
    "summary": "",
+   "summary_zh": "修改全局 OpenResty 安全配置",
    "auth": [
     "bearer"
    ],
@@ -241,6 +244,7 @@
    "method": "GET",
    "path": "/v1/openresty-security/effective",
    "summary": "",
+   "summary_zh": "读取实际生效的 OpenResty 安全配置",
    "auth": [
     "bearer"
    ],
@@ -326,6 +330,7 @@
    "method": "GET",
    "path": "/v1/openresty-security/overrides",
    "summary": "",
+   "summary_zh": "列出 OpenResty 安全配置覆盖",
    "auth": [
     "bearer"
    ],
@@ -396,6 +401,7 @@
    "method": "POST",
    "path": "/v1/openresty-security/overrides",
    "summary": "",
+   "summary_zh": "创建 OpenResty 安全配置覆盖",
    "auth": [
     "bearer"
    ],
@@ -520,6 +526,7 @@
    "method": "PATCH",
    "path": "/v1/openresty-security/overrides/{id}",
    "summary": "",
+   "summary_zh": "修改 OpenResty 安全配置覆盖",
    "auth": [
     "bearer"
    ],
@@ -652,6 +659,7 @@
    "method": "DELETE",
    "path": "/v1/openresty-security/overrides/{id}",
    "summary": "",
+   "summary_zh": "删除 OpenResty 安全配置覆盖",
    "auth": [
     "bearer"
    ],
@@ -712,6 +720,7 @@
    "method": "GET",
    "path": "/v1/openresty-security/targets",
    "summary": "",
+   "summary_zh": "搜索可设置覆盖的对象",
    "auth": [
     "bearer"
    ],

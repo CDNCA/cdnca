@@ -22,7 +22,7 @@ const (
 // nodes download upgrade artifacts from this direct listener.
 func NodeDownloadServer(port int) string {
 	return fmt.Sprintf(`
-    # 宝塔环境节点升级下载直连端口（fix-btenv2）：证书由本机私有根 CA 签发，节点已信任。
+    # 宝塔环境节点升级下载直连端口：证书由本机私有根 CA 签发，节点已信任。
     server {
         listen %d ssl;
         server_name _;
@@ -47,7 +47,7 @@ var (
 )
 
 // retargetNodeDownload moves the node upgrade download endpoint with the
-// layout (fix-btenv3): a BaoTa host serves it on the profile's direct port
+// layout: a BaoTa host serves it on the profile's direct port
 // with the private root, a plain host on the management HTTPS port. The
 // artifact base URL and root in control.env feed the download policy signed
 // into each upgrade execution, so nodes follow without being reinstalled.

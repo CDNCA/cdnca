@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/cache-policies/{site_id}",
    "summary": "Get the current cache policy for a tenant site",
+   "summary_zh": "读取租户网站的当前缓存策略",
    "auth": [
     "bearer"
    ],
@@ -110,6 +111,7 @@
    "method": "POST",
    "path": "/v1/cache-policies/{site_id}",
    "summary": "Publish an immutable cache-policy revision with CAS",
+   "summary_zh": "按 CAS 发布不可变的缓存策略新版本",
    "auth": [
     "bearer"
    ],
@@ -261,6 +263,7 @@
    "method": "GET",
    "path": "/v1/cache-policies/{site_id}/revisions",
    "summary": "List immutable policy history in the tenant scope",
+   "summary_zh": "列出租户范围内不可变的缓存策略历史",
    "auth": [
     "bearer"
    ],
@@ -339,6 +342,7 @@
    "method": "GET",
    "path": "/v1/cache-policies/{site_id}/revisions/{revision}",
    "summary": "Get one immutable policy revision in the tenant scope",
+   "summary_zh": "读取租户范围内一个不可变的缓存策略版本",
    "auth": [
     "bearer"
    ],

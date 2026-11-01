@@ -33,7 +33,7 @@ type EdgeProgress struct {
 	ReadyNodes  int       `json:"ready_nodes"`
 	FailedNodes int       `json:"failed_nodes"`
 	// SupersededNodes: nodes that ignored the unlock as an old release (they
-	// already run a newer revision); not failed (fix-cfgflow3).
+	// already run a newer revision); not failed.
 	SupersededNodes int `json:"superseded_nodes"`
 }
 

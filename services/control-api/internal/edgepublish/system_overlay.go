@@ -166,7 +166,7 @@ func loadPublicationOverlay(ctx context.Context, tx pgx.Tx, scopeID uuid.UUID) (
 	// domain claim, overdue secondary verification that disabled the site, a
 	// suspended package subscription: bb03, migration 555).
 	// A published site whose bound package is no longer valid is taken out
-	// too (fix-nopkgpub); a site without a package needs none (community).
+	// too; a site without a package needs none (community).
 	rows, err = tx.Query(ctx, `SELECT site.id FROM sites site WHERE site.scope_id=$1 AND site.id=ANY($2::uuid[]) AND (
 		site.package_subscription_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM package_subscriptions package_subscription
 		  WHERE package_subscription.tenant_scope_id=site.scope_id AND package_subscription.id=site.package_subscription_id

@@ -227,7 +227,7 @@ func (h *Handler) updateSubscription(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// 546 (fix-ticket2): inbox_enabled is optional; absent keeps the stored
+	// 546: inbox_enabled is optional; absent keeps the stored
 	// in-app choice, null is refused.
 	var body struct {
 		SMSEnabled   *bool           `json:"sms_enabled"`

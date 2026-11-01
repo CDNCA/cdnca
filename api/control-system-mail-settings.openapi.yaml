@@ -13,6 +13,7 @@ paths:
     get:
       summary: Read platform mail settings
       operationId: getPlatformSystemMailSettings
+      x-summary-zh: "读取平台邮件设置"
       x-required-permissions: [system_configuration.read]
       responses:
         '200': {description: Current mail settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
@@ -24,6 +25,7 @@ paths:
       summary: Update platform mail settings
       description: Persists configuration only. Runtime settings are applied at process startup when the notification runtime is enabled; saving does not enable or reload a provider.
       operationId: updatePlatformSystemMailSettings
+      x-summary-zh: "修改平台邮件设置"
       x-required-permissions: [system_configuration.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/regions",
    "summary": "List platform regions",
+   "summary_zh": "列出平台区域",
    "auth": [
     "bearer"
    ],
@@ -80,6 +81,7 @@
    "method": "POST",
    "path": "/v1/regions",
    "summary": "Create a platform region",
+   "summary_zh": "创建平台区域",
    "auth": [
     "bearer"
    ],
@@ -225,6 +227,7 @@
    "method": "GET",
    "path": "/v1/regions/{id}",
    "summary": "Get a platform region",
+   "summary_zh": "读取一个平台区域",
    "auth": [
     "bearer"
    ],
@@ -332,6 +335,7 @@
    "method": "PUT",
    "path": "/v1/regions/{id}",
    "summary": "",
+   "summary_zh": "替换平台区域",
    "auth": [
     "bearer"
    ],
@@ -349,6 +353,7 @@
    "method": "PATCH",
    "path": "/v1/regions/{id}",
    "summary": "Replace the editable fields of a platform region",
+   "summary_zh": "替换平台区域的可编辑字段",
    "auth": [
     "bearer"
    ],
@@ -519,6 +524,7 @@
    "method": "DELETE",
    "path": "/v1/regions/{id}",
    "summary": "Delete an unused platform region",
+   "summary_zh": "删除未使用的平台区域",
    "auth": [
     "bearer"
    ],

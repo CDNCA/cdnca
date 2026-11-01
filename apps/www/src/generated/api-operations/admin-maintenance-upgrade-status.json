@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/maintenance-upgrade-status",
    "summary": "Read authoritative maintenance upgrade status",
+   "summary_zh": "读取权威的维护升级状态",
    "auth": [
     "bearer"
    ],

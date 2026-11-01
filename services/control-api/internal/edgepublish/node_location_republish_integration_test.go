@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// fix-nodeipgeo: a node's IP 归属 changing (resolved or corrected) queues a
+// node IP location: a node's IP 归属 changing (resolved or corrected) queues a
 // system republication (node_networks, due at once) of the scopes whose L2
 // conditions match node country/ISP/province/city; a scope without such a
 // condition is not republished, and the first sweep only records the mark.

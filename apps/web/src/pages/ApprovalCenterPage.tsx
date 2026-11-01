@@ -12,6 +12,7 @@ import {
   type ApprovalRequest, type ApprovalState,
 } from '../api/approvalCenter'
 import { useSessionStore } from '../auth/session'
+import { mfaStepUpErrorText } from '../i18n/apiError'
 import { formatDateTime } from '../i18n/formatters'
 import '../i18n/approvalCenter'
 
@@ -62,6 +63,8 @@ export default function ApprovalCenterPage() {
 }
 
 function errorText(t: (key: string) => string, error: unknown): string {
+  const stepUp = mfaStepUpErrorText(error)
+  if (stepUp) return stepUp
   const code = error instanceof ApiError ? error.code : 'unknown'
   const text = t(`errors.${code}`)
   return text === `errors.${code}` ? t('errors.unknown') : text

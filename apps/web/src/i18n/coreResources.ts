@@ -107,6 +107,11 @@ export const coreZhCN = {
     installation_locked: '主控授权已锁定，后台只读，暂不能执行此修改。请按页面顶部授权提示中的处理办法恢复授权后点「重新检查」，或联系授权方。',
     // ID-06：代登录期间的敏感操作被拒，不是登录失效。
     impersonation_sensitive_action_denied: '代登录期间不能执行此操作，请由用户本人登录后操作。',
+    mfa_invalid_code: '验证码错误，请输入身份验证器当前显示的 6 位验证码',
+    mfa_code_replayed: '该验证码已使用过，请等身份验证器显示下一组验证码后再试',
+    mfa_recovery_code_used: '该恢复码已使用过，请换一个恢复码',
+    mfa_not_active: '你还没有启用身份验证器，请先设置身份验证器后再操作',
+    // omfix-a 5：feature_disabled 是主控没开这项功能（503），不是暂时故障。
     feature_disabled: '该功能未启用。当前主控没有开启此功能，请平台管理员按部署文档启用（源站鉴权：在主控 /etc/cdnca-control/control.env 中设置 ORIGIN_AUTH_RUNTIME_ENABLED=true 及加密密钥后重启 control-api）。',
     unknown: '操作失败，请稍后重试',
     requestId: '请求 ID：{{requestId}}',
@@ -219,6 +224,10 @@ export const coreEnUS = {
     request_failed: 'Request failed. Try again later.',
     installation_locked: 'This controller\'s license is locked and the console is read-only, so this change cannot be made. Follow the steps in the license banner at the top of the page, then select "Check again", or contact your license provider.',
     impersonation_sensitive_action_denied: 'This action is not available while signed in on behalf of a user. Ask the user to do it from their own account.',
+    mfa_invalid_code: 'Incorrect verification code. Enter the 6-digit code your authenticator shows now.',
+    mfa_code_replayed: 'This code was already used. Wait for the next code in your authenticator and try again.',
+    mfa_recovery_code_used: 'This recovery code was already used. Use another one.',
+    mfa_not_active: 'You have not set up an authenticator yet. Set one up first, then try again.',
     feature_disabled: 'This feature is not enabled on this control plane. A platform administrator enables it as the deployment guide describes (origin authentication: set ORIGIN_AUTH_RUNTIME_ENABLED=true and its encryption keys in /etc/cdnca-control/control.env, then restart control-api).',
     unknown: 'The operation failed. Try again later.',
     requestId: 'Request ID: {{requestId}}',

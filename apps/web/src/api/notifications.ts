@@ -165,7 +165,7 @@ export interface OwnNotificationMessage {
   content: string | null
 }
 export interface OwnNotificationMessagePage { schema: 'cdnca.notification-own-messages/v1'; items: OwnNotificationMessage[]; total: number }
-// site/package: name (domain / package name) or display-ID keyword when no full ID is given (fix-livefilter2).
+// site/package: name (domain / package name) or display-ID keyword when no full ID is given.
 export interface OwnNotificationMessageFilters { type?: string; siteID?: string; packageID?: string; site?: string; package?: string; limit?: number; offset?: number }
 export interface TemplateWrite { subject: string; body: string; variables: string[] }
 

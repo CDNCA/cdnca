@@ -13,6 +13,7 @@ paths:
   /v1/admin/market/plugin-library:
     get:
       operationId: getMarketPluginLibrary
+      x-summary-zh: "本主控持有的各市场插件状态（已安装、已启用、已下架）"
       summary: What this controller holds of each market plugin (installed, enabled, withdrawn)
       description: >-
         Installed means an installation head exists in any tenant; enabled that one is enabled; withdrawn that a
@@ -32,6 +33,7 @@ paths:
   /v1/admin/market/plugin-downloads:
     post:
       operationId: downloadMarketPlugin
+      x-summary-zh: "为本安装下载插件许可（转发到插件市场）"
       summary: Download a plugin licence for this installation (forwarded to the market)
       description: >-
         A live licence this installation holds is returned; a free plan issues the installation's free licence

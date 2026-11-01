@@ -84,7 +84,7 @@ func SiteDocumentTx(ctx context.Context, tx pgx.Tx, scopeID, siteID uuid.UUID) (
 // SiteEffectiveDocument is the cache policy document the site's nodes run
 // (its own override or the inherited definition); found false for a site
 // that never had a policy. The market subscriber compiles it into the
-// site's market revision (fix-mktsiteconf).
+// site's market revision.
 func SiteEffectiveDocument(ctx context.Context, q interface {
 	QueryRow(context.Context, string, ...any) pgx.Row
 }, siteID uuid.UUID) (PolicyDocument, bool, error) {

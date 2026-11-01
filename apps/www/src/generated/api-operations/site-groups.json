@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/site-groups",
    "summary": "List site groups",
+   "summary_zh": "列出网站分组",
    "auth": [
     "bearer"
    ],
@@ -81,6 +82,7 @@
    "method": "POST",
    "path": "/v1/site-groups",
    "summary": "Create a site group",
+   "summary_zh": "创建网站分组",
    "auth": [
     "bearer"
    ],
@@ -196,6 +198,7 @@
    "method": "GET",
    "path": "/v1/site-groups/{id}",
    "summary": "Read one exact active site group in an authorized tenant scope",
+   "summary_zh": "在有权的租户范围内读取一个在用网站分组",
    "auth": [
     "bearer"
    ],
@@ -294,6 +297,7 @@
    "method": "PATCH",
    "path": "/v1/site-groups/{id}",
    "summary": "Rename a site group",
+   "summary_zh": "重命名网站分组",
    "auth": [
     "bearer"
    ],
@@ -431,6 +435,7 @@
    "method": "DELETE",
    "path": "/v1/site-groups/{id}",
    "summary": "Delete an unused site group",
+   "summary_zh": "删除未使用的网站分组",
    "auth": [
     "bearer"
    ],

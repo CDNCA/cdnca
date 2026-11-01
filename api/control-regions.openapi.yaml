@@ -9,6 +9,7 @@ paths:
   /v1/regions:
     get:
       operationId: listPlatformRegions
+      x-summary-zh: "列出平台区域"
       summary: List platform regions
       x-required-permissions: [regions.read]
       parameters:
@@ -40,6 +41,7 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
       operationId: createPlatformRegion
+      x-summary-zh: "创建平台区域"
       summary: Create a platform region
       x-required-permissions: [regions.manage]
       parameters:
@@ -69,6 +71,7 @@ paths:
       - {$ref: '#/components/parameters/RegionID'}
     get:
       operationId: getPlatformRegion
+      x-summary-zh: "读取一个平台区域"
       summary: Get a platform region
       x-required-permissions: [regions.read]
       responses:
@@ -86,6 +89,7 @@ paths:
         '503': {$ref: '#/components/responses/Unavailable'}
     patch: &updateRegion
       operationId: updatePlatformRegion
+      x-summary-zh: "替换平台区域的可编辑字段"
       summary: Replace the editable fields of a platform region
       x-required-permissions: [regions.manage]
       parameters:
@@ -116,8 +120,10 @@ paths:
     put:
       <<: *updateRegion
       operationId: replacePlatformRegion
+      x-summary-zh: "替换平台区域"
     delete:
       operationId: deletePlatformRegion
+      x-summary-zh: "删除未使用的平台区域"
       summary: Delete an unused platform region
       x-required-permissions: [regions.manage]
       parameters:

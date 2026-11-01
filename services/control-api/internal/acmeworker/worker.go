@@ -229,7 +229,7 @@ func (w *Worker) Issue(ctx context.Context, request IssueRequest) (IssueResult, 
 		}
 	} else if !retry {
 		// The operation is now settled failed: every later claim returns
-		// this code, so the caller must not keep retrying it (fix-certstuck).
+		// this code, so the caller must not keep retrying it.
 		var workerErr *Error
 		if errors.As(originalErr, &workerErr) {
 			terminal := *workerErr
@@ -1183,7 +1183,7 @@ func parseCertificateChain(
 	signer crypto.Signer,
 	now time.Time,
 ) (IssuedCertificate, error) {
-	// Stable codes, so FailureDetail logs which check failed (fix-certstuck).
+	// Stable codes, so FailureDetail logs which check failed.
 	if len(chainDER) == 0 || len(chainDER) > 5 || certificateURL == "" {
 		return IssuedCertificate{}, errors.New("certificate_chain_invalid")
 	}

@@ -188,7 +188,7 @@ describe('HttpsSiteTab', () => {
     expect(await screen.findByText('还没有绑定证书：请先在下方选择证书（选中即绑定），再开启 HTTPS 和强制跳转。')).toBeInTheDocument()
     await waitFor(() => expect(access).toBeDisabled())
     expect(access).not.toBeChecked()
-    // The certificate select is there while HTTPS is off; choosing binds at once (fix-certinstant).
+    // The certificate select is there while HTTPS is off; choosing binds at once.
     const bind = vi.spyOn(certificatesApi, 'bindAsset').mockResolvedValue(binding)
     await selectCertificate(user)
     await waitFor(() => expect(bind).toHaveBeenCalledTimes(1))

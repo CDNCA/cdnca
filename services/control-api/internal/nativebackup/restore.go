@@ -202,7 +202,7 @@ func (restorer Restorer) Run(ctx context.Context, request RestoreRequest) (Resto
 		}
 	}
 	// The restored configuration names the source host's dependency ports; a
-	// migration between a plain and a BaoTa host moves them (fix-btenv).
+	// migration between a plain and a BaoTa host moves them.
 	if err := RetargetPorts(ctx, restorer.Host.Layout, restorer.progress); err != nil {
 		return fail(err)
 	}

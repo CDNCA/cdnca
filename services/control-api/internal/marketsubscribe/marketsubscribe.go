@@ -28,7 +28,7 @@ var (
 	ErrInvalid         = errors.New("market subscribe: invalid input")
 	ErrNotFound        = errors.New("market subscribe: site or supply not found")
 	// ErrSitePackageUnavailable: the site has no valid package and every
-	// subscription bound to it is the controller's (fix-nopkgpub4).
+	// subscription bound to it is the controller's.
 	ErrSitePackageUnavailable = errors.New("market subscribe: site has no valid package for the controller's subscriptions")
 	// ErrRevisionConflict: this revision already holds different content
 	// (CORE-REV-01). Nothing was sent; re-read the site and save a new revision.
@@ -530,7 +530,7 @@ type bound struct {
 	paused bool
 }
 
-// pushable drops the supplies paused for lack of a valid package (fix-nopkgpub4):
+// pushable drops the supplies paused for lack of a valid package:
 // the controller's subscriptions take no new revision until the package is
 // valid again, their leaves keep what they have; the site owner's own
 // subscriptions are still pushed. Only paused ones left is

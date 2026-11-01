@@ -233,7 +233,7 @@ func (deliverer *RenewalDeliverer) startRoundTx(ctx context.Context, tx pgx.Tx, 
 	}
 	attempt := candidate.attempt + 1
 	// The revisions this round sends are reserved before any node can take
-	// them: a user's later binding change is numbered past them (fix-dnscert4).
+	// them: a user's later binding change is numbered past them.
 	if err := certificateasset.ReserveRenewalBindingRevisionsTx(ctx, tx, candidate.scopeID, bindings.Sites,
 		renewalRequestID(candidate)); errors.Is(err, certificateasset.ErrRenewalSuperseded) {
 		return deliverer.recheckLater(ctx, tx, candidate)

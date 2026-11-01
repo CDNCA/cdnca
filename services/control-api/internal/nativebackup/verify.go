@@ -27,7 +27,7 @@ type VerifyReport struct {
 	GatewayEndpoint string `json:"gateway_endpoint"`
 	DNSPointsHere   bool   `json:"dns_points_here"`
 	// NodeInstallTrust is the node install trust republished for this host
-	// once control-api and the Gateway are healthy (fix-btenv4).
+	// once control-api and the Gateway are healthy.
 	NodeInstallTrust *NodeInstallTrustReport `json:"node_install_trust,omitempty"`
 	Warnings         []string                `json:"warnings"`
 }
@@ -136,7 +136,7 @@ func (verifier Verifier) Verify(ctx context.Context, manifest Manifest, since ti
 // republishNodeInstallTrust points the node install command at this host:
 // the restored document still names the source host's addresses, port and
 // root. A failure is a warning, not a failed verification: running nodes
-// follow the download policy signed into each upgrade (fix-btenv3) and
+// follow the download policy signed into each upgrade and
 // control-api retries every 10 minutes (NodeInstallTrustWatcher, fix-btenv5).
 func (verifier Verifier) republishNodeInstallTrust(ctx context.Context, report *VerifyReport) {
 	if verifier.PublishTrust == nil {

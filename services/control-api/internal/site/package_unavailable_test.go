@@ -8,7 +8,7 @@ import (
 )
 
 // fix-nopkgpub2 ①: a site whose package is disabled or deleted is not served
-// (fix-nopkgpub); the list and detail say why, like an unbound site.
+//; the list and detail say why, like an unbound site.
 func TestPackageUnavailableReason(t *testing.T) {
 	subscription := uuid.New()
 	text := func(value string) *string { return &value }

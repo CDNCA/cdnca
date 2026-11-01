@@ -48,6 +48,7 @@ const zhCN = {
     save: '保存保留天数',
     saved: '保留天数已保存',
     loadError: '无法加载保留天数',
+    invalid: '保留天数须为 0–3650 的整数（0 表示永久保留）',
   },
   status: {
     label: '当前版本',
@@ -114,6 +115,7 @@ const enUS: typeof zhCN = {
     save: 'Save retention',
     saved: 'Retention saved',
     loadError: 'Unable to load the retention',
+    invalid: 'Retention must be a whole number from 0 to 3650 (0 keeps logs forever)',
   },
   status: {
     label: 'Revision',

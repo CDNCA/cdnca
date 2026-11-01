@@ -18,13 +18,13 @@ const defaultMessageQueryLimit = 10
 var messageTypePattern = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,95}$`)
 
 // validMessageKeyword: a name / display-ID keyword, up to 128 bytes, trimmed,
-// no control characters (fix-livefilter2).
+// no control characters.
 func validMessageKeyword(value string) bool {
 	return value == "" || len(value) <= 128 && value == strings.TrimSpace(value) &&
 		strings.IndexFunc(value, func(r rune) bool { return r < 0x20 || r == 0x7f }) < 0
 }
 
-// Keyword matches (fix-livefilter2): an exact display ID, or a case-insensitive
+// Keyword matches: an exact display ID, or a case-insensitive
 // substring of the readable name. Placeholders are filled by the caller.
 const (
 	messageUserKeywordSQL = `($%[1]d::text='' OR EXISTS (SELECT 1 FROM users keyword_user WHERE keyword_user.id=%[2]s AND (

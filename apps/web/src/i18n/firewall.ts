@@ -45,6 +45,7 @@ const zhCN = {
       title: '上一次提交结果未知',
       description: '网络中断时服务端可能已经接收请求。请使用相同幂等标识重试，或放弃本次操作并刷新最新配置。',
     },
+    validation: { integerRange: '请输入 {{minimum}} 到 {{maximum}} 的整数' },
     cc: {
       section: 'CC 防护策略', sectionDescription: '控制全局拦截方式、黑白名单时长和临时白名单阈值。',
       enable: 'CC 防护开关', enableDescription: '控制全局 CC 防护是否启用。',
@@ -242,6 +243,7 @@ const enUS = {
     notices: { saved: 'Configuration saved and queued for distribution', imageQueued: 'CC image update queued', overrideSaved: 'Override saved', overrideDeleted: 'Override deleted' },
     errors: { forbidden: 'Firewall access denied', loadFailed: 'Failed to load firewall configuration', unknown: 'The operation failed. Try again later.', revisionConflict: 'The configuration changed and the latest revision was reloaded.', invalidResponse: 'The service returned unrecognized data.', outcomeUnknown: 'The submission result is unknown. Retry the exact request or refresh to verify.', saveFailed: 'Failed to save the configuration.' },
     uncertainty: { title: 'Previous submission outcome is unknown', description: 'The server may have received the request before the connection failed. Retry with the same idempotency identity, or discard it and reload the current configuration.' },
+    validation: { integerRange: 'Enter a whole number from {{minimum}} to {{maximum}}' },
     cc: {
       section: 'Allowlist and blocklist', sectionDescription: 'Configure global CC protection, blocking, and temporary allowlisting.',
       enable: 'CC protection', enableDescription: 'Default state when no region or node override exists.', duration: 'List durations', durationDescription: 'Configure blocklist and temporary allowlist durations.',

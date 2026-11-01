@@ -48,7 +48,7 @@ describe('domain ownership policy setting', () => {
   })
 })
 
-describe('other settings grouped layout (fix-sysother)', () => {
+describe('other settings grouped layout', () => {
   it('shows the summary, moves long hints behind (?) and blocks saving invalid notice days', async () => {
     signIn('platform', ['system_configuration.read', 'system_configuration.manage'])
     const value = { source_ip_header: 'X-Real-IP', api_key_enabled: false, dns_protection: '', record_repair_mode: 'repair' as const, sync_batch: 1000,

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/custom-rbac/grants",
    "summary": "Page through active or revoked custom-role grants",
+   "summary_zh": "分页列出生效或已撤销的自定义角色授予",
    "auth": [
     "bearer"
    ],
@@ -93,6 +94,7 @@
    "method": "POST",
    "path": "/v1/custom-rbac/grants",
    "summary": "Assign the current role revision to another active tenant member",
+   "summary_zh": "把角色当前版本授予另一位在用租户成员",
    "auth": [
     "bearer"
    ],
@@ -213,6 +215,7 @@
    "method": "POST",
    "path": "/v1/custom-rbac/grants/{grant_id}/revoke",
    "summary": "Append a custom-role grant revocation fact",
+   "summary_zh": "追加一条自定义角色撤销记录",
    "auth": [
     "bearer"
    ],
@@ -310,6 +313,7 @@
    "method": "GET",
    "path": "/v1/custom-rbac/permissions",
    "summary": "List the tenant-delegable permission catalog",
+   "summary_zh": "列出租户可下放的权限目录",
    "auth": [
     "bearer"
    ],
@@ -363,6 +367,7 @@
    "method": "GET",
    "path": "/v1/custom-rbac/roles",
    "summary": "Page through custom roles in the authenticated tenant scope",
+   "summary_zh": "分页列出当前租户范围的自定义角色",
    "auth": [
     "bearer"
    ],
@@ -439,6 +444,7 @@
    "method": "POST",
    "path": "/v1/custom-rbac/roles",
    "summary": "Create a custom role and its first immutable revision",
+   "summary_zh": "创建自定义角色及其第一个不可变版本",
    "auth": [
     "bearer"
    ],
@@ -552,6 +558,7 @@
    "method": "GET",
    "path": "/v1/custom-rbac/roles/{role_id}",
    "summary": "Get a custom role in the authenticated tenant scope",
+   "summary_zh": "读取当前租户范围的一个自定义角色",
    "auth": [
     "bearer"
    ],
@@ -618,6 +625,7 @@
    "method": "POST",
    "path": "/v1/custom-rbac/roles/{role_id}/deactivate",
    "summary": "Deactivate a custom role with compare-and-swap",
+   "summary_zh": "按 CAS 停用自定义角色",
    "auth": [
     "bearer"
    ],
@@ -730,6 +738,7 @@
    "method": "POST",
    "path": "/v1/custom-rbac/roles/{role_id}/publish",
    "summary": "Publish a new permission revision with compare-and-swap",
+   "summary_zh": "按 CAS 发布新的权限版本",
    "auth": [
     "bearer"
    ],
@@ -855,6 +864,7 @@
    "method": "POST",
    "path": "/v1/custom-rbac/roles/{role_id}/rename",
    "summary": "Rename a custom role with revision compare-and-swap",
+   "summary_zh": "按版本 CAS 重命名自定义角色",
    "auth": [
     "bearer"
    ],

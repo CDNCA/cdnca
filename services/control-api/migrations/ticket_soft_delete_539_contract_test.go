@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Migration 539 (fix-ticketops): staff soft-delete tickets; messages and
+// Migration 539: staff soft-delete tickets; messages and
 // bound attachments stay (314). The 538 predecessor is pinned at merge.
 func TestTicketSoftDelete539Contract(t *testing.T) {
 	for _, script := range []struct {

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/url-auth-policies",
    "summary": "List tenant URL authentication policies",
+   "summary_zh": "列出租户的 URL 鉴权策略",
    "auth": [
     "apiKey",
     "bearer"
@@ -93,11 +94,12 @@
    "method": "POST",
    "path": "/v1/url-auth-policies",
    "summary": "Create a site-bound HMAC-SHA256 URL authentication policy",
+   "summary_zh": "创建绑定网站的 HMAC-SHA256 URL 鉴权策略",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "Requires url_auth_policies.manage. The generated key secret is returned exactly once on the first successful request. An identical idempotent replay returns the same policy with replayed=true and no secret. Third-party panel Type A, Type B, and MD5 are migration provenance only and cannot be selected for new execution. This endpoint records a deterministic edge-compatible snapshot but does not publish it to Gateway or an edge node.",
+   "description": "Requires url_auth_policies.manage. The generated key secret is returned exactly once on the first successful request. An identical idempotent replay returns the same policy with replayed=true and no secret. Legacy Type A, Type B, and MD5 are migration provenance only and cannot be selected for new execution. This endpoint records a deterministic edge-compatible snapshot but does not publish it to Gateway or an edge node.",
    "params": [
     {
      "name": "Idempotency-Key",
@@ -245,6 +247,7 @@
    "method": "GET",
    "path": "/v1/url-auth-policies/{id}",
    "summary": "Get URL authentication policy metadata",
+   "summary_zh": "读取 URL 鉴权策略元数据",
    "auth": [
     "apiKey",
     "bearer"
@@ -410,6 +413,7 @@
    "method": "PATCH",
    "path": "/v1/url-auth-policies/{id}",
    "summary": "Replace URL authentication policy fields using optimistic concurrency",
+   "summary_zh": "用乐观并发替换 URL 鉴权策略字段",
    "auth": [
     "apiKey",
     "bearer"
@@ -562,6 +566,7 @@
    "method": "GET",
    "path": "/v1/url-auth-policies/{id}/edge-snapshot",
    "summary": "Get the deterministic edge-compatible policy snapshot",
+   "summary_zh": "读取与边缘兼容的确定性策略快照",
    "auth": [
     "apiKey",
     "bearer"
@@ -634,6 +639,7 @@
    "method": "POST",
    "path": "/v1/url-auth-policies/{id}/revoke",
    "summary": "Revoke the current previous key",
+   "summary_zh": "吊销当前的旧密钥",
    "auth": [
     "apiKey",
     "bearer"
@@ -726,6 +732,7 @@
    "method": "POST",
    "path": "/v1/url-auth-policies/{id}/rotate",
    "summary": "Rotate the current HMAC key",
+   "summary_zh": "轮换当前 HMAC 密钥",
    "auth": [
     "apiKey",
     "bearer"

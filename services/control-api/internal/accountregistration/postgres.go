@@ -163,6 +163,29 @@ func registrationSuccessEnqueueRequest(
 	}, nil
 }
 
+// CompletedRegistration reports whether the idempotency key already has a
+// completed receipt with this digest (exact retry); another digest is a
+// conflict, and no receipt or a pending one is not a replay.
+func (store *PostgresStore) CompletedRegistration(ctx context.Context, idempotencyKey string, requestDigest [32]byte) (bool, error) {
+	if store == nil || !registrationPoolConfigured(store.pool) {
+		return false, ErrInvalidStore
+	}
+	var digest []byte
+	var state string
+	err := store.pool.QueryRow(ctx, `SELECT request_digest,state FROM account_registration_requests_159
+		WHERE idempotency_key=$1`, idempotencyKey).Scan(&digest, &state)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("read account registration replay: %w", err)
+	}
+	if len(digest) != len(requestDigest) || subtle.ConstantTimeCompare(digest, requestDigest[:]) != 1 {
+		return false, ErrIdempotencyConflict
+	}
+	return state == "completed", nil
+}
+
 func claimRegistrationReceipt(
 	ctx context.Context,
 	tx pgx.Tx,

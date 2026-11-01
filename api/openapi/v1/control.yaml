@@ -289,6 +289,7 @@ paths:
   /health/live:
     get:
       operationId: getLiveness
+      x-summary-zh: "进程存活检查"
       summary: Process liveness
       security: []
       responses:
@@ -304,6 +305,7 @@ paths:
   /health/ready:
     get:
       operationId: getReadiness
+      x-summary-zh: "依赖就绪检查"
       summary: Dependency readiness
       security: []
       responses:
@@ -321,6 +323,7 @@ paths:
   /v1/auth/login:
     post:
       operationId: login
+      x-summary-zh: "登录并创建刷新令牌族"
       summary: Authenticate and create a refresh-token family
       security: []
       parameters:
@@ -379,6 +382,7 @@ paths:
   /v1/auth/login-captchas:
     post:
       operationId: issueLoginCaptcha
+      x-summary-zh: "签发绑定来源地址的一次性内置登录验证码"
       summary: Issue a one-time built-in sign-in CAPTCHA bound to the source address
       description: Requested after login_captcha_required. The answer is never returned as text; send {id, answer} as captcha with the next password attempt. Each challenge is consumed by one attempt and expires after five minutes. Thirty challenges per source per hour.
       security: []
@@ -403,6 +407,7 @@ paths:
   /v1/auth/session-region-verifications:
     post:
       operationId: verifySessionRegion
+      x-summary-zh: "用密码把会话重新绑定到当前地区"
       summary: Re-bind the session to its current region with the password
       description: Called after a session request returned 401 session_region_changed (platform setting session_region_check). The password attempt is throttled like sign-in.
       requestBody:
@@ -435,6 +440,7 @@ paths:
   /v1/admin/inbox:
     get:
       operationId: listAdminInbox
+      x-summary-zh: "列出平台管理员的消息，最新在前"
       summary: List the platform administrator's messages, newest first
       description: Platform operations events addressed to the caller (node offline/recovered, ACME HTTP-01 epoch drift, staff ticket events). Every platform-scope session reads only its own messages. params holds the event's public template values; the console renders the text per language.
       parameters:
@@ -475,6 +481,7 @@ paths:
   /v1/admin/inbox/unread-count:
     get:
       operationId: getAdminInboxUnreadCount
+      x-summary-zh: "页头角标用的未读消息数"
       summary: Unread message count for the header badge
       responses:
         '200':
@@ -487,6 +494,7 @@ paths:
   /v1/admin/inbox/{message_id}/read:
     post:
       operationId: markAdminInboxMessageRead
+      x-summary-zh: "把一条消息标为已读"
       summary: Mark one message read
       parameters:
         - {name: message_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -502,6 +510,7 @@ paths:
   /v1/admin/inbox/read-all:
     post:
       operationId: markAllAdminInboxMessagesRead
+      x-summary-zh: "把调用者的消息全部标为已读（审计 admin.inbox.read_all）；超过 180 天的已读消息会被清理"
       summary: Mark all the caller's messages read (audited admin.inbox.read_all); read messages older than 180 days are pruned
       responses:
         '200':
@@ -513,7 +522,7 @@ paths:
     get:
       operationId: listAccountInbox
       summary: "List the tenant member's in-app messages, newest first"
-      x-summary-zh: List the tenant member's in-app messages (站内信), newest first
+      x-summary-zh: "列出租户成员的站内信，最新在前"
       description: Tenant in-app notices addressed to the caller in the session's tenant scope (attack escalation security.escalate.blackhole once the blackhole is in force, security.escalate.cname_change_required). Written whatever the platform email/SMS settings say. Tenant-scope sessions only (platform sessions use /v1/admin/inbox). params holds the event's public template values; the console renders the text per language.
       parameters:
         - {name: unread, in: query, required: false, schema: {type: string, enum: ['true']}}
@@ -553,6 +562,7 @@ paths:
   /v1/account/inbox/unread-count:
     get:
       operationId: getAccountInboxUnreadCount
+      x-summary-zh: "页头角标用的未读消息数"
       summary: Unread message count for the header badge
       responses:
         '200':
@@ -565,6 +575,7 @@ paths:
   /v1/account/inbox/{message_id}/read:
     post:
       operationId: markAccountInboxMessageRead
+      x-summary-zh: "把一条消息标为已读"
       summary: Mark one message read
       parameters:
         - {name: message_id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -580,6 +591,7 @@ paths:
   /v1/account/inbox/read-all:
     post:
       operationId: markAllAccountInboxMessagesRead
+      x-summary-zh: "把调用者的站内信全部标为已读（审计 admin.inbox.read_all）；超过 180 天的已读消息会被清理"
       summary: Mark all the caller's in-app messages read (audited admin.inbox.read_all); read messages older than 180 days are pruned
       responses:
         '200':
@@ -590,6 +602,7 @@ paths:
   /v1/tenant/members:
     get:
       operationId: listTenantMembers
+      x-summary-zh: "列出调用者租户范围的成员"
       summary: List the members of the caller's tenant scope
       description: Tenant session with identity.users.manage or identity.roles.manage (the tenant owner). The owner is the scope's earliest member.
       responses:
@@ -613,6 +626,7 @@ paths:
   /v1/admin/admin-access-policy:
     get:
       operationId: getAdminAccessPolicy
+      x-summary-zh: "读取平台管理后台访问白名单"
       summary: Read the platform administration access allowlist
       description: Requires system_configuration.read on the platform scope. current_ip is the client address the control plane resolved for this request.
       responses:
@@ -628,6 +642,7 @@ paths:
           $ref: '#/components/responses/Forbidden'
     put:
       operationId: updateAdminAccessPolicy
+      x-summary-zh: "保存平台管理后台访问白名单"
       summary: Save the platform administration access allowlist
       description: |
         Requires system_configuration.manage on the platform scope. When enabled, platform-scope sign-in, refresh and every platform-scope session request must come from an allowed address or CIDR prefix; loopback is always allowed; tenant sessions and API keys are not affected. A policy that would not allow the saving request's own address is refused (422 admin_access_self_lockout). Recovery when locked out: run `control-api admin-access-allowlist disable` as root on the control host. Requests refused by the policy get 403 admin_access_denied.
@@ -670,6 +685,7 @@ paths:
   /v1/auth/refresh:
     post:
       operationId: refresh
+      x-summary-zh: "轮换刷新令牌并签发新的访问令牌"
       summary: Rotate the refresh token and issue a new access token
       security:
         - refreshCookie: []
@@ -696,6 +712,7 @@ paths:
   /v1/auth/logout:
     post:
       operationId: logout
+      x-summary-zh: "吊销刷新令牌族"
       summary: Revoke the refresh-token family
       description: >-
         When the request still carries the cdnca_impersonation cookie, the
@@ -718,6 +735,7 @@ paths:
   /v1/auth/me:
     get:
       operationId: getCurrentIdentity
+      x-summary-zh: "返回当前用户、范围、角色与权限"
       summary: Return the current user, scope, roles, and permissions
       description: Requires the server-side identity.self.read permission in the active scope.
       security:
@@ -747,6 +765,7 @@ paths:
   /v1/modules:
     get:
       operationId: listGrantedModules
+      x-summary-zh: "列出本地授权租约授予的模块、规则包与主题功能码"
       summary: List the module, pack and theme feature codes the local entitlement lease grants
       description: >-
         Any authenticated session. Modules is empty unless the verified local lease is valid (grace included is
@@ -783,6 +802,7 @@ paths:
   /v1/runtime-features:
     get:
       operationId: listRuntimeFeatures
+      x-summary-zh: "列出已挂载的可选主控运行模块"
       summary: List which optional control-plane runtimes are mounted
       description: >-
         Any authenticated session. Each flag is true exactly when the corresponding route set is mounted on this
@@ -830,6 +850,7 @@ paths:
   /v1/admin/plugin-providers:
     get:
       operationId: listPluginProviders
+      x-summary-zh: "列出第三方 DNS / 短信 / 备案服务商插件及其安装契约检查结果"
       summary: List third-party DNS / SMS / ICP provider plugins with their installation contract results (PA-22)
       description: >-
         Platform administrators with plugin_installations.read (or platform.admin). A provider plugin appears once
@@ -859,6 +880,7 @@ paths:
   /v1/admin/plugin-providers/{plugin_id}/{action}:
     post:
       operationId: actOnPluginProvider
+      x-summary-zh: "运行安装契约检查，或启用、停用服务商插件"
       summary: Run the installation contract, enable or disable a provider plugin (PA-22/PA-23)
       description: >-
         Platform administrators with plugin_installations.manage (or platform.admin). contract runs the
@@ -910,6 +932,7 @@ paths:
   /v1/plugin-ui/pages:
     get:
       operationId: listPluginUIPages
+      x-summary-zh: "列出当前身份可打开的插件页面（ui_page）"
       summary: List the ui_page plugin pages this principal may open (PA-19)
       description: >-
         Any authenticated session. Only plugins enabled on this installation (and still served by the license
@@ -938,6 +961,7 @@ paths:
   /v1/plugin-ui/signing-key:
     get:
       operationId: getPluginUISigningKey
+      x-summary-zh: "插件后端用来校验代理调用的本安装公钥"
       summary: The installation public key plugin backends verify proxied calls with (PA-19)
       description: >-
         Requires plugin_installations.read or plugin_installations.manage (any scope) or platform.admin in the
@@ -967,9 +991,179 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '503':
           $ref: '#/components/responses/ServiceUnavailable'
+  /v1/plugin-ui/{plugin_id}/identity:
+    get:
+      operationId: getPluginIdentity
+      x-summary-zh: "本租户的插件一键授权状态"
+      summary: One-click plugin identity status of this tenant (ADR 0007 §3.2)
+      description: >-
+        Tenant session that may open a user page of this enabled ui_page plugin with an api_base_url. Lists the
+        permissions the identity would carry (the installation's approved scopes that an API key may hold, minus
+        platform.*), which of them the caller holds, and the current identity (who authorized it, when). Never
+        returns key material.
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: plugin_id, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9]+([.-][a-z0-9]+)+$'}}
+      responses:
+        '200':
+          description: The plugin identity status (never the secret).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginIdentityStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: permission_denied (platform session)
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: plugin_ui_not_found
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: plugin_installation_unavailable
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    post:
+      operationId: authorizePluginIdentity
+      x-summary-zh: "授权插件：主控签发插件身份并交给插件后端"
+      summary: Authorize the plugin; the control plane issues its identity and hands it to the plugin backend
+      description: >-
+        Requires api_keys.self.manage (same rule as POST /v1/account/api-keys; refused while impersonating). The
+        control plane issues an API key bound to this tenant's installation (migration 604) with the scopes of
+        GET .../identity granted_scopes, and delivers it only to the plugin backend: PUT {api_base_url}/plugin-identity
+        signed like the proxy (X-Cdnca-Plugin-*; context delivery "plugin_identity") with body {api_key, api_key_id,
+        scopes, issued_by_user_id, issued_by_display_name, issued_at}. Once delivered, older identities of the
+        installation in this tenant are revoked at once; a failed delivery revokes the new key (502
+        plugin_identity_delivery_failed). An identity another member authorized can be replaced only with
+        plugin_installations.manage. Audited as plugin.identity.grant and api_key.plugin_identity.revoke.
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: plugin_id, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9]+([.-][a-z0-9]+)+$'}}
+        - {name: Idempotency-Key, in: header, required: true, schema: {type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$'}}
+      responses:
+        '200':
+          description: The plugin identity status (never the secret).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginIdentityStatus'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: permission_denied, plugin_identity_held_by_other, api_key_disabled
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: plugin_ui_not_found
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: plugin_installation_unavailable, idempotency_conflict (that attempt already ended; retry with a new key)
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '502':
+          description: plugin_identity_delivery_failed
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+    delete:
+      operationId: revokePluginIdentity
+      x-summary-zh: "撤销插件在本租户的授权"
+      summary: Revoke the plugin's authorization in this tenant
+      description: >-
+        Requires api_keys.self.manage; revoking an identity another member authorized needs
+        plugin_installations.manage. Revocation is immediate (the next plugin call is 401); the plugin backend is
+        then told with a signed DELETE {api_base_url}/plugin-identity (best effort). Audited as plugin.identity.revoke.
+      security:
+        - bearerAuth: []
+      parameters:
+        - {name: plugin_id, in: path, required: true, schema: {type: string, pattern: '^[a-z0-9]+([.-][a-z0-9]+)+$'}}
+      responses:
+        '200':
+          description: The plugin identity status (never the secret).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PluginIdentityStatus'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: permission_denied, plugin_identity_held_by_other
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '404':
+          description: plugin_ui_not_found
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '409':
+          description: plugin_installation_unavailable
+          headers:
+            X-Request-ID:
+              $ref: '#/components/headers/RequestID'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
   /v1/plugin-ui/{plugin_id}/proxy:
     post:
       operationId: proxyPluginUIRequest
+      x-summary-zh: "代插件页面调用该插件自己的后端"
       summary: Call a ui_page plugin's own backend on behalf of one of its pages (PA-19)
       description: >-
         Any authenticated session that may open page_id. The control plane forwards method/path/query/body to
@@ -1041,6 +1235,7 @@ paths:
   /v1/admin/users:
     get:
       operationId: listManagedUsers
+      x-summary-zh: "列出客户控制面的租户用户"
       summary: List tenant users in the customer control plane
       description: Requires identity.users.manage in a platform scope. Platform identities are never returned.
       security:
@@ -1161,6 +1356,7 @@ paths:
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: batchUpdateManagedUsers
+      x-summary-zh: "原子批量修改租户用户"
       summary: Atomically update tenant users
       description: Applies the complete array or no changes. Disabling a user revokes every refresh family and invalidates existing access sessions immediately.
       security:
@@ -1201,6 +1397,7 @@ paths:
           $ref: '#/components/responses/InternalError'
     post:
       operationId: createManagedUser
+      x-summary-zh: "创建隔离的租户用户"
       summary: Create an isolated tenant user
       description: Creates the tenant, tenant scope, system roles, membership, and Argon2id credential atomically.
       security:
@@ -1236,6 +1433,7 @@ paths:
   /v1/admin/tenant-scopes:
     get:
       operationId: listTenantScopes
+      x-summary-zh: "列出可供平台管理的租户范围"
       summary: List tenant scope targets for platform administration
       description: Returns a small read-only tenant directory for platform identities. Requires identity.users.manage (or platform.admin) in a platform scope. Billing and other tenant data are intentionally excluded; suspended and closed tenants remain visible with their status.
       x-required-permissions: [identity.users.manage]
@@ -1285,6 +1483,7 @@ paths:
   /v1/admin/tenant-scopes/{scope_id}/parent:
     put:
       operationId: setTenantParent
+      x-summary-zh: "把租户挂到某个代理商下，或挂回平台"
       summary: Put a tenant under a reseller, or back to the platform
       description: >-
         ADR 0018 (Q6). parent_scope_id null makes the tenant a platform customer again. The parent must be an active
@@ -1321,6 +1520,7 @@ paths:
   /v1/admin/users/{id}:
     get:
       operationId: getManagedUser
+      x-summary-zh: "读取一个租户用户"
       summary: Get one tenant user
       description: A platform identity or an unknown tenant user produces the same 404 response.
       security:
@@ -1347,6 +1547,7 @@ paths:
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: updateManagedUser
+      x-summary-zh: "修改租户用户的资料、状态与角色"
       summary: Update tenant user profile, status, and role
       description: Disabling a user revokes every refresh family and invalidates existing access sessions immediately.
       security:
@@ -1392,6 +1593,7 @@ paths:
         schema: {type: string, format: uuid}
     get:
       operationId: getManagedUserLoginSecurity
+      x-summary-zh: "读取所选租户用户的登录安全策略"
       summary: Read the selected tenant user's login security policy
       description: Requires an active primary platform bearer session and identity.users.manage. API keys and impersonation sessions are rejected. A missing policy returns revision 0, none, and an empty allowlist.
       security:
@@ -1412,6 +1614,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     put:
       operationId: updateManagedUserLoginSecurity
+      x-summary-zh: "替换租户用户的登录安全策略"
       summary: Replace a tenant user's login security policy
       description: >-
         Same primary-session authorization as GET. The policy uses its own revision,
@@ -1462,6 +1665,7 @@ paths:
         schema: {type: string, format: uuid}
     get:
       operationId: getManagedUserSecondaryVerification
+      x-summary-zh: "读取所选租户用户的二次实名认证要求"
       summary: Read the selected tenant user's secondary identity verification request
       description: Same primary-session authorization as login-security. A missing request returns revision 0, disabled, expiry_action none.
       security:
@@ -1482,6 +1686,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     put:
       operationId: updateManagedUserSecondaryVerification
+      x-summary-zh: "替换租户用户的二次实名认证要求"
       summary: Replace a tenant user's secondary identity verification request
       description: >-
         Own revision, receipt and audit; users.revision is unchanged. Switching it on records
@@ -1522,6 +1727,7 @@ paths:
   /v1/admin/user-groups:
     get:
       operationId: listUserGroups
+      x-summary-zh: "列出平台范围的租户用户分组"
       summary: List platform-scoped tenant-user groups
       security:
         - bearerAuth: []
@@ -1547,6 +1753,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createUserGroup
+      x-summary-zh: "创建平台范围的租户用户分组"
       summary: Create a platform-scoped tenant-user group
       security:
         - bearerAuth: []
@@ -1573,6 +1780,7 @@ paths:
   /v1/admin/user-groups/{id}:
     patch:
       operationId: updateUserGroup
+      x-summary-zh: "按 CAS 重命名租户用户分组"
       summary: Rename a tenant-user group with CAS
       security:
         - bearerAuth: []
@@ -1600,6 +1808,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     delete:
       operationId: deleteUserGroup
+      x-summary-zh: "按 CAS 删除空的租户用户分组"
       summary: Delete an empty tenant-user group with CAS
       security:
         - bearerAuth: []
@@ -1624,6 +1833,7 @@ paths:
   /v1/account/profile:
     get:
       operationId: getAccountProfile
+      x-summary-zh: "读取当前租户用户的个人资料"
       summary: Get the current tenant user's profile
       security:
         - bearerAuth: []
@@ -1642,6 +1852,7 @@ paths:
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: updateAccountProfile
+      x-summary-zh: "修改当前租户用户的个人资料"
       summary: Update the current tenant user's profile
       description: Changing email or phone requires current_password. A display-name-only update remains compatible without reauthentication.
       security:
@@ -1674,6 +1885,7 @@ paths:
   /v1/account/password:
     post:
       operationId: changeAccountPassword
+      x-summary-zh: "复核身份后修改当前租户用户的密码"
       summary: Re-authenticate and change the current tenant user's password
       description: Success revokes every existing session, including the session used for this request.
       security:
@@ -1700,6 +1912,7 @@ paths:
   /v1/admin/control-upgrade-checks:
     post:
       operationId: checkControlUpgradeEligibility
+      x-summary-zh: "检查本主控能否升级"
       summary: Check local control-plane upgrade eligibility
       description: >-
         Requires control.upgrades.check in a platform scope. The decision re-verifies the
@@ -1762,6 +1975,7 @@ paths:
   /v1/admin/control-upgrade-rollouts:
     get:
       operationId: listControlUpgradeRollouts
+      x-summary-zh: "列出主控升级发布任务"
       summary: List durable control upgrade rollouts
       description: >-
         Requires a platform-scoped identity with control.upgrades.read. The response is ordered
@@ -1794,6 +2008,7 @@ paths:
         '503': { $ref: '#/components/responses/ServiceUnavailable' }
     post:
       operationId: createControlUpgradeRollout
+      x-summary-zh: "创建主控升级发布任务"
       summary: Create a durable control upgrade rollout
       description: >-
         Requires control.upgrades.manage in a platform scope. The canonical request freezes the
@@ -1827,6 +2042,7 @@ paths:
   /v1/admin/control-upgrade-rollouts/{rollout_id}:
     get:
       operationId: getControlUpgradeRollout
+      x-summary-zh: "读取一个主控升级发布任务"
       summary: Get a durable control upgrade rollout
       description: Requires control.upgrades.read in a platform scope.
       x-required-permissions: [control.upgrades.read]
@@ -1847,6 +2063,7 @@ paths:
   /v1/admin/control-upgrade-rollouts/{rollout_id}/start:
     post:
       operationId: startControlUpgradeRollout
+      x-summary-zh: "开始排队中的主控升级发布"
       summary: Start a queued control upgrade rollout
       description: Requires control.upgrades.manage and a current expected revision.
       x-required-permissions: [control.upgrades.manage]
@@ -1867,6 +2084,7 @@ paths:
   /v1/admin/control-upgrade-rollouts/{rollout_id}/pause:
     post:
       operationId: pauseControlUpgradeRollout
+      x-summary-zh: "暂停进行中的主控升级发布"
       summary: Pause a running control upgrade rollout
       description: Requires control.upgrades.manage and a current expected revision.
       x-required-permissions: [control.upgrades.manage]
@@ -1887,6 +2105,7 @@ paths:
   /v1/admin/control-upgrade-rollouts/{rollout_id}/resume:
     post:
       operationId: resumeControlUpgradeRollout
+      x-summary-zh: "继续已暂停的主控升级发布"
       summary: Resume a paused control upgrade rollout
       description: Requires control.upgrades.manage and a current expected revision.
       x-required-permissions: [control.upgrades.manage]
@@ -1907,6 +2126,7 @@ paths:
   /v1/admin/control-upgrade-rollouts/{rollout_id}/rollback:
     post:
       operationId: rollbackControlUpgradeRollout
+      x-summary-zh: "回滚主控升级发布"
       summary: Roll back a control upgrade rollout
       description: >-
         Requires control.upgrades.manage and a current expected revision. Rollback remains blocked
@@ -1929,6 +2149,7 @@ paths:
   /v1/nodes:
     post:
       operationId: createNode
+      x-summary-zh: "创建待接入的平台节点"
       summary: Create a pending platform node
       description: >-
         Requires nodes.manage in a platform scope and a valid local entitlement granting
@@ -1974,6 +2195,7 @@ paths:
           $ref: '#/components/responses/InternalError'
     get:
       operationId: listNodes
+      x-summary-zh: "按明确的清单顺序与键集分页列出平台节点"
       summary: List platform nodes with explicit inventory order and keyset pagination
       description: >-
         Requires nodes.read in a platform scope. Search is always evaluated after scope isolation and matches
@@ -2035,6 +2257,7 @@ paths:
   /v1/nodes/batch-admin-state:
     post:
       operationId: batchUpdateNodeAdminState
+      x-summary-zh: "批量修改节点的管理状态"
       summary: Update one administrative state across a batch of nodes
       description: Requires nodes.manage in a platform scope. The request accepts at most 100 unique node IDs and preserves input order in the response. Nodes are locked in UUID order, successful items and their audits commit in one transaction, and validation or state failures are returned per item. Replaying the same idempotency key with the same normalized request returns the stored result without another revision or audit event. admin_state retired is the batch delete; it follows updateNode. Each deletion runs in its own savepoint, so a node in use fails alone with node_in_use (or node_not_found) and the others are still deleted; a deleted item reports status updated with the last node snapshot. Disabling or draining the last online available node of a node-market supply that still has a normal subscriber fails that item with supply_in_use (with online_available and normal_subscriptions); items are checked in UUID order against the ones applied before them.
       security:
@@ -2070,6 +2293,7 @@ paths:
   /v1/nodes/{id}/ip-location:
     get:
       operationId: getNodeIPLocation
+      x-summary-zh: "读取节点 IP 归属地（自动解析与手工填写的字段）"
       summary: Get a node's IP location (automatic resolution and manual fields)
       description: "Requires nodes.read in a platform scope. effective is the value condition matching actually uses (node country code / carrier / province / city of L2 conditions, market supply groups); fields in manual_fields were corrected by an administrator, the rest come from resolution (the first result the control plane's IP intelligence library resolves for IPv4, IPv6 and sub-IPs in that order, re-resolved within a minute of a node being added, an address change or an IP library update). resolution is null when not yet resolved; outcome unresolved means the IP library has no match, no_library means the control plane has no IP library yet."
       x-description-zh: >-
@@ -2104,6 +2328,7 @@ paths:
   /v1/nodes/{id}:
     get:
       operationId: getNode
+      x-summary-zh: "读取一个平台节点"
       summary: Get one platform node
       description: Requires nodes.read in a platform scope. platform.admin remains a wildcard permission.
       security:
@@ -2132,6 +2357,7 @@ paths:
           $ref: '#/components/responses/InternalError'
     patch:
       operationId: updateNode
+      x-summary-zh: "修改节点清单信息或管理状态"
       summary: Update node inventory metadata or administrative state
       description: >-
         Requires nodes.manage in a platform scope. If-Match supplies the expected revision. pending nodes cannot be
@@ -2197,6 +2423,7 @@ paths:
   /v1/nodes/metrics/latest:
     get:
       operationId: getLatestNodeMetricsBatch
+      x-summary-zh: "读取一批平台节点最新的持久化负载样本"
       summary: Get latest durable load samples for a bounded set of platform nodes
       description: >-
         Requires nodes.read in the current platform scope. Supply only node_id,
@@ -2257,6 +2484,7 @@ paths:
   /v1/nodes/installation-tickets:
     get:
       operationId: getNodeInstallationTickets
+      x-summary-zh: "读取每个节点最近的授权服务票据及剩余天数"
       summary: Get each node's last license service ticket and the days left
       description: >-
         PF09 (ADR 0014). Requires nodes.read in the current platform scope. Supply only
@@ -2305,6 +2533,7 @@ paths:
   /v1/nodes/{id}/metrics/latest:
     get:
       operationId: getLatestNodeMetrics
+      x-summary-zh: "读取一个平台节点最新的持久化负载样本"
       summary: Get the latest durable load sample for one platform node
       description: >-
         Requires nodes.read in a platform scope. The latest row is selected by the
@@ -2341,6 +2570,7 @@ paths:
   /v1/nodes/{id}/gateway-port-transitions:
     post:
       operationId: createNodeGatewayPortTransition
+      x-summary-zh: "开始一次带版本的 Agent 网关通信端口切换"
       summary: Start a versioned Agent Gateway communication-port transition
       description: Requires nodes.manage in a platform scope. The old and candidate listeners remain distinct until a durable Agent status permits finalize or rollback. A missing, disabled or unavailable command runtime returns 503 node_port_transition_runtime_unavailable before any command is queued. Runtime readiness alone does not prove endpoint reachability or Agent capability.
       security:
@@ -2383,6 +2613,7 @@ paths:
   /v1/nodes/{id}/gateway-port-transitions/{transition_id}:
     get:
       operationId: getNodeGatewayPortTransition
+      x-summary-zh: "读取通信端口切换的持久化状态"
       summary: Get the durable communication-port transition state
       description: Requires nodes.read in a platform scope. State is advanced only by status events bound to the node certificate and JetStream PubAck identity.
       security:
@@ -2413,6 +2644,7 @@ paths:
   /v1/nodes/{id}/gateway-port-transitions/{transition_id}/finalize:
     post:
       operationId: finalizeNodeGatewayPortTransition
+      x-summary-zh: "完成已切换的 Agent 网关通信端口"
       summary: Finalize a switched Agent Gateway communication port
       description: Requires nodes.manage in a platform scope. Finalization is accepted only after the durable switched state and before the rollback deadline. Reuse both X-Request-ID and Idempotency-Key for an exact retry. A missing, disabled or unavailable command runtime returns 503 node_port_transition_runtime_unavailable without queueing an action. A 202 response confirms acceptance, not listener retirement or completed execution.
       security:
@@ -2449,6 +2681,7 @@ paths:
   /v1/nodes/{id}/gateway-port-transitions/{transition_id}/rollback:
     post:
       operationId: rollbackNodeGatewayPortTransition
+      x-summary-zh: "回滚 Agent 网关通信端口切换"
       summary: Roll back an Agent Gateway communication-port transition
       description: Requires nodes.manage in a platform scope. Rollback is accepted only while the previous listener remains inside its versioned rollback window. Reuse both X-Request-ID and Idempotency-Key for an exact retry. A missing, disabled or unavailable command runtime returns 503 node_port_transition_runtime_unavailable without queueing an action. A 202 response confirms acceptance, not completed rollback.
       security:
@@ -2485,6 +2718,7 @@ paths:
   /v1/nodes/{id}/enrollment-tokens:
     post:
       operationId: issueNodeEnrollmentToken
+      x-summary-zh: "签发一次性节点接入令牌"
       summary: Issue a one-time enrollment token
       description: Requires nodes.manage in a platform scope. platform.admin remains a wildcard permission. The raw token is shown only in this response.
       security:
@@ -2522,6 +2756,7 @@ paths:
   /v1/nodes/registration-credential:
     get:
       operationId: getNodeRegistrationCredential
+      x-summary-zh: "读取可重复使用的节点注册凭据"
       summary: Get the reusable node registration credential
       description: >-
         Requires nodes.manage in a platform scope. Returns the scope-level credential embedded in the
@@ -2549,6 +2784,7 @@ paths:
   /v1/nodes/registration-credential/reset:
     post:
       operationId: resetNodeRegistrationCredential
+      x-summary-zh: "重置节点注册凭据"
       summary: Reset the node registration credential
       description: >-
         Requires nodes.manage in a platform scope. Issues a new credential; every previously copied install
@@ -2574,6 +2810,7 @@ paths:
   /v1/node-registrations:
     post:
       operationId: registerNode
+      x-summary-zh: "节点主机自助注册（由 install-node.sh 调用）"
       summary: Self-register a node host (called by install-node.sh)
       description: "Unauthenticated except for the registration credential in the body; rate limited per source IP (10/min) and globally (120/min) per control-api process. Creates a pending node (awaiting initialisation) named after the host and records the observed public source IP and OS details, then returns a one-time initial_enrollment token (10 minutes) for the Gateway enrollment. Dedupe: the node ID is a keyed hash of the machine fingerprint, so the same machine reuses its pending node (200) instead of creating a duplicate; once it has enrolled or been initialized the call returns 409 node_already_registered. A deleted (retired) node lets the machine register again as a new node. Self-registered nodes stay pending after enrollment and receive no configuration until an administrator sets admin_state=active. A new node gets the region of the region catalog when it has exactly one region, else an empty region."
       x-description-zh: >-
@@ -2639,6 +2876,7 @@ paths:
   /v1/node-registrations/identity:
     post:
       operationId: recoverNodeRegistrationIdentity
+      x-summary-zh: "取回中断安装节点已签发的身份（由 install-node.sh --resume 调用）"
       summary: Fetch the issued identity of an interrupted node install (called by install-node.sh --resume)
       description: >-
         For an install whose Gateway enrollment committed on the controller (certificate issued) but whose
@@ -2719,6 +2957,7 @@ paths:
   /v1/account/api-keys:
     get:
       operationId: listSelfAPIKeys
+      x-summary-zh: "列出当前租户用户自己的 API 密钥"
       summary: List API keys owned by the current tenant user
       description: >-
         Session-only endpoint requiring api_keys.self.manage. CdncaKey credentials are rejected.
@@ -2745,6 +2984,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createSelfAPIKey
+      x-summary-zh: "为当前租户用户创建并启用 API 密钥"
       summary: Create and activate an API key for the current tenant user
       description: >-
         Session-only endpoint requiring api_keys.self.manage. The secret is returned in this response only.
@@ -2779,6 +3019,7 @@ paths:
       - $ref: '#/components/parameters/APIKeyID'
     get:
       operationId: getSelfAPIKey
+      x-summary-zh: "读取当前租户用户自己的 API 密钥元数据"
       summary: Get API key metadata owned by the current tenant user
       description: >-
         Session-only endpoint requiring api_keys.self.manage. The exact persisted IP allowlist is returned;
@@ -2800,6 +3041,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     patch:
       operationId: updateSelfAPIKey
+      x-summary-zh: "修改 API 密钥元数据"
       summary: Update API key metadata
       description: >-
         Session-only endpoint. Revoked keys cannot be updated. An unknown result must be retried with
@@ -2832,6 +3074,7 @@ paths:
   /v1/account/api-keys/{key_id}/activate:
     post:
       operationId: activateSelfAPIKey
+      x-summary-zh: "启用待激活的 API 密钥并签发密钥原文"
       summary: Activate a pending API key and issue its secret
       description: >-
         Session-only endpoint for the key owner. Only an unexpired pending_activation key can be activated;
@@ -2866,6 +3109,7 @@ paths:
   /v1/account/api-keys/{key_id}/rotate:
     post:
       operationId: rotateSelfAPIKey
+      x-summary-zh: "轮换已启用 API 密钥的密钥原文"
       summary: Rotate an active API key secret
       description: >-
         Session-only endpoint. The previous credential becomes invalid when the transaction commits.
@@ -2900,6 +3144,7 @@ paths:
   /v1/account/api-keys/{key_id}/revoke:
     post:
       operationId: revokeSelfAPIKey
+      x-summary-zh: "吊销 API 密钥"
       summary: Revoke an API key
       description: >-
         Session-only endpoint. Revocation immediately prevents future API key authentication.
@@ -2937,6 +3182,7 @@ paths:
       - $ref: '#/components/parameters/APIKeyTenantScopeID'
     get:
       operationId: listManagedUserAPIKeys
+      x-summary-zh: "列出租户用户的 API 密钥元数据"
       summary: List a tenant user's API key metadata
       description: >-
         Platform session-only endpoint requiring api_keys.admin.manage. Each item includes the exact
@@ -2964,6 +3210,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createPendingManagedUserAPIKey
+      x-summary-zh: "为租户用户创建待激活的 API 密钥元数据"
       summary: Create pending API key metadata for a tenant user
       description: >-
         Platform session-only endpoint requiring api_keys.admin.manage. No secret is created or returned.
@@ -2997,6 +3244,7 @@ paths:
   /v1/admin/users/{user_id}/api-keys/{key_id}/revoke:
     post:
       operationId: revokeManagedUserAPIKey
+      x-summary-zh: "吊销租户用户的 API 密钥"
       summary: Revoke a tenant user's API key
       description: >-
         Platform session-only endpoint. Administrators cannot activate, rotate, or read key secrets.
@@ -3033,6 +3281,7 @@ paths:
   /v1/dns/providers/{id}/verify:
     post:
       operationId: verifyDNSProvider
+      x-summary-zh: "向上游接口校验 DNS 服务商凭据"
       summary: Verify a DNS provider credential against its upstream API
       description: >-
         Requires dns.manage in the active scope, an empty request body, a quoted
@@ -3094,6 +3343,7 @@ paths:
   /v1/dns/settings:
     get:
       operationId: getDNSSettings
+      x-summary-zh: "读取当前租户范围的 DNS 设置"
       summary: Read the DNS settings for the active tenant scope
       security: [{bearerAuth: []}]
       x-required-permissions: [dns.read]
@@ -3107,6 +3357,7 @@ paths:
         '503': {$ref: '#/components/responses/ServiceUnavailable'}
     patch:
       operationId: updateDNSSettings
+      x-summary-zh: "按 CAS 修改兼容的 DNS TTL"
       summary: Update the compatibility DNS TTL with compare-and-swap semantics
       security: [{bearerAuth: []}]
       x-required-permissions: [dns.manage]
@@ -3129,6 +3380,7 @@ paths:
   /v1/dns/settings/{kind}:
     post:
       operationId: enqueueDNSOperation
+      x-summary-zh: "排队执行记录修复或清除 CDN 无关解析"
       summary: Enqueue record repair or CDN-unrelated record cleanup
       security: [{bearerAuth: []}]
       x-required-permissions: [dns.manage]
@@ -3153,6 +3405,7 @@ paths:
   /v1/dns/settings/operations/{operation_id}:
     get:
       operationId: getDNSOperation
+      x-summary-zh: "读取一次 DNS 操作的状态"
       summary: Read a DNS DNS operation status
       security: [{bearerAuth: []}]
       x-required-permissions: [dns.read]
@@ -3174,7 +3427,7 @@ paths:
     get:
       operationId: getPlatformDNSConfig
       summary: "Read the installation-wide DNS configuration (Node management > DNS settings, platform administrator)"
-      x-summary-zh: Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)
+      x-summary-zh: "读取全安装共用的 DNS 配置（节点管理 > DNS 配置，平台管理员）"
       responses:
         '200':
           description: Provider, non-secret identifiers, TTL, IP weight, tenant sync summary and the last DNS write failure.
@@ -3183,6 +3436,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     put:
       operationId: savePlatformDNSConfig
+      x-summary-zh: "保存全安装共用的 DNS 配置并同步到每个租户副本"
       summary: Save the installation-wide DNS configuration and synchronise every tenant copy
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -3216,7 +3470,7 @@ paths:
     post:
       operationId: testPlatformDNSConnection
       summary: "Connection test - verify DNS credentials and the CNAME domains they host (read-only)"
-      x-summary-zh: 连接测试 - verify DNS credentials and the CNAME domains they host (read-only)
+      x-summary-zh: "连接测试：校验 DNS 凭据及其托管的 CNAME 域名（只读）"
       description: >-
         Verifies the entered credentials (or, without credentials, the saved ones of provider_type) with the
         same provider check as a save, then lists the account's domains once per CNAME domain. Nothing is saved
@@ -3273,7 +3527,7 @@ paths:
     post:
       operationId: startPlatformDNSOperation
       summary: "Start record repair (repair) or remove non-CDN records (cleanup) as background jobs"
-      x-summary-zh: Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs
+      x-summary-zh: "以后台任务开始记录修复（repair）或清除 CDN 无关解析（cleanup）"
       description: "repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner); cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the result lines shown under System > Background jobs."
       x-description-zh: >-
         repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner);
@@ -3313,7 +3567,7 @@ paths:
     get:
       operationId: listPlatformDNSZones
       summary: "List the CNAME domains"
-      x-summary-zh: List the CNAME domains (CNAME域名)
+      x-summary-zh: "列出 CNAME 域名"
       parameters:
         - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
         - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 10}}
@@ -3334,6 +3588,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
       operationId: createPlatformDNSZone
+      x-summary-zh: "添加 CNAME 域名（复制到每个租户；第一个为默认分配域名）"
       summary: Add a CNAME domain (copied into every tenant; the first is the default allocation zone)
       parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
       requestBody:
@@ -3360,6 +3615,7 @@ paths:
   /v1/dns/platform-zones/{id}:
     patch:
       operationId: updatePlatformDNSZone
+      x-summary-zh: "编辑 CNAME 域名；已分配 CNAME 的域名不能改名（dns_zone_in_use）"
       summary: Edit a CNAME domain; renaming one with allocated CNAMEs is refused (dns_zone_in_use)
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -3379,6 +3635,7 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
     delete:
       operationId: deletePlatformDNSZone
+      x-summary-zh: "删除 CNAME 域名及其租户副本；仍有网站使用时拒绝（dns_zone_in_use）"
       summary: Delete a CNAME domain and its tenant copies; refused while sites use it (dns_zone_in_use)
       parameters:
         - {name: id, in: path, required: true, schema: {type: string, format: uuid}}
@@ -3473,6 +3730,7 @@ paths:
   /v1/security-ip-lists:
     get:
       operationId: listSecurityIPLists
+      x-summary-zh: "列出命名 IP 列表"
       summary: List named IP lists
       description: "Requires security_policies.read. Tenant identities only: the tenant's own lists (writable) and the platform lists (read only, platform true)."
       security:
@@ -3489,6 +3747,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createSecurityIPList
+      x-summary-zh: "创建命名 IP 列表"
       summary: Create a named IP list
       description: "Requires security_policies.manage. Entries are canonicalized (masked, deduplicated, ordered). Audit security.ip_list.create. At most 200 live lists per scope."
       security:
@@ -3515,6 +3774,7 @@ paths:
   /v1/security-ip-lists/{list_id}:
     put:
       operationId: updateSecurityIPList
+      x-summary-zh: "替换命名 IP 列表"
       summary: Replace a named IP list
       description: "Requires security_policies.manage and the current revision. Every tenant whose bound WAF policy references the list is republished automatically (system trigger ip_list). Audit security.ip_list.update."
       security:
@@ -3542,6 +3802,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     delete:
       operationId: deleteSecurityIPList
+      x-summary-zh: "删除命名 IP 列表"
       summary: Delete a named IP list
       description: "Requires security_policies.manage and the current revision. A list any live policy version references is refused (409 ip_list_in_use). Audit security.ip_list.delete."
       security:
@@ -3562,6 +3823,7 @@ paths:
   /v1/admin/security-ip-lists:
     get:
       operationId: listAdminSecurityIPLists
+      x-summary-zh: "列出命名 IP 列表"
       summary: List named IP lists
       description: "Requires security_policies.read. Platform identities only: platform lists, which every tenant may reference."
       security:
@@ -3578,6 +3840,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createAdminSecurityIPList
+      x-summary-zh: "创建命名 IP 列表"
       summary: Create a named IP list
       description: "Requires security_policies.manage. Entries are canonicalized (masked, deduplicated, ordered). Audit security.ip_list.create. At most 200 live lists per scope."
       security:
@@ -3604,6 +3867,7 @@ paths:
   /v1/admin/security-ip-lists/{list_id}:
     put:
       operationId: updateAdminSecurityIPList
+      x-summary-zh: "替换命名 IP 列表"
       summary: Replace a named IP list
       description: "Requires security_policies.manage and the current revision. Every tenant whose bound WAF policy references the list is republished automatically (system trigger ip_list). Audit security.ip_list.update."
       security:
@@ -3631,6 +3895,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     delete:
       operationId: deleteAdminSecurityIPList
+      x-summary-zh: "删除命名 IP 列表"
       summary: Delete a named IP list
       description: "Requires security_policies.manage and the current revision. A list any live policy version references is refused (409 ip_list_in_use). Audit security.ip_list.delete."
       security:
@@ -4134,6 +4399,7 @@ paths:
   /v1/url-auth-policies:
     get:
       operationId: listURLAuthPolicies
+      x-summary-zh: "列出租户的 URL 鉴权策略"
       summary: List tenant URL authentication policies
       description: Requires url_auth_policies.read. Tenant identities are restricted to their active scope and owner metadata is omitted.
       security:
@@ -4157,10 +4423,11 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     post:
       operationId: createURLAuthPolicy
+      x-summary-zh: "创建绑定网站的 HMAC-SHA256 URL 鉴权策略"
       summary: Create a site-bound HMAC-SHA256 URL authentication policy
       description: >-
         Requires url_auth_policies.manage. The generated key secret is returned exactly once on the first successful
-        request. An identical idempotent replay returns the same policy with replayed=true and no secret. Third-party panel Type A,
+        request. An identical idempotent replay returns the same policy with replayed=true and no secret. Legacy Type A,
         Type B, and MD5 are migration provenance only and cannot be selected for new execution. This endpoint records a
         deterministic edge-compatible snapshot but does not publish it to Gateway or an edge node.
       security:
@@ -4190,6 +4457,7 @@ paths:
   /v1/url-auth-policies/{id}:
     get:
       operationId: getURLAuthPolicy
+      x-summary-zh: "读取 URL 鉴权策略元数据"
       summary: Get URL authentication policy metadata
       security:
         - bearerAuth: []
@@ -4211,6 +4479,7 @@ paths:
         '500': {$ref: '#/components/responses/InternalError'}
     patch:
       operationId: updateURLAuthPolicy
+      x-summary-zh: "用乐观并发替换 URL 鉴权策略字段"
       summary: Replace URL authentication policy fields using optimistic concurrency
       description: Requires url_auth_policies.manage. The algorithm remains fixed to hmac-sha256 and migration_marker is read-only.
       security:
@@ -4242,6 +4511,7 @@ paths:
   /v1/url-auth-policies/{id}/rotate:
     post:
       operationId: rotateURLAuthPolicyKey
+      x-summary-zh: "轮换当前 HMAC 密钥"
       summary: Rotate the current HMAC key
       description: >-
         Promotes the current key to previous, revokes an older previous key, and returns the new secret exactly once.
@@ -4271,6 +4541,7 @@ paths:
   /v1/url-auth-policies/{id}/revoke:
     post:
       operationId: revokeURLAuthPolicyPreviousKey
+      x-summary-zh: "吊销当前的旧密钥"
       summary: Revoke the current previous key
       description: The current signing key cannot be revoked. Disable the policy first when URL authentication must stop.
       security:
@@ -4302,6 +4573,7 @@ paths:
   /v1/url-auth-policies/{id}/edge-snapshot:
     get:
       operationId: getURLAuthPolicyEdgeSnapshot
+      x-summary-zh: "读取与边缘兼容的确定性策略快照"
       summary: Get the deterministic edge-compatible policy snapshot
       description: >-
         Returns the current cdnca.edge.urlauth/v1 document and its SHA-256. Key paths are deterministic references;
@@ -4325,6 +4597,7 @@ paths:
   /v1/admin/analytics/summary:
     get:
       operationId: getPlatformAnalyticsSummary
+      x-summary-zh: "读取全平台或指定租户的统计汇总"
       summary: Read a platform or explicitly selected tenant analytics summary
       description: >-
         Requires a platform-scoped identity with sites.read or platform.admin. Omitting tenant_id queries all
@@ -4351,6 +4624,7 @@ paths:
   /v1/admin/analytics/hourly-trend:
     get:
       operationId: getPlatformAnalyticsHourlyTrend
+      x-summary-zh: "读取全平台或指定租户的小时趋势"
       summary: Read a platform or explicitly selected tenant hourly trend
       description: >-
         Requires a platform-scoped identity with sites.read or platform.admin. Buckets are UTC hours and only
@@ -4377,6 +4651,7 @@ paths:
   /v1/admin/analytics/top/{dimension}:
     get:
       operationId: getPlatformAnalyticsTop
+      x-summary-zh: "分页读取全平台或指定租户的排行"
       summary: Page through a platform or explicitly selected tenant ranking
       description: >-
         Requires a platform-scoped identity with sites.read or platform.admin. The cursor is bound to scope,
@@ -4407,6 +4682,7 @@ paths:
   /v1/analytics/summary:
     get:
       operationId: getTenantAnalyticsSummary
+      x-summary-zh: "读取当前租户的统计汇总"
       summary: Read the authenticated tenant analytics summary
       description: >-
         Requires a tenant-scoped identity with sites.read. Scope comes only from the authenticated identity;
@@ -4433,6 +4709,7 @@ paths:
   /v1/analytics/hourly-trend:
     get:
       operationId: getTenantAnalyticsHourlyTrend
+      x-summary-zh: "读取当前租户的小时趋势"
       summary: Read the authenticated tenant hourly trend
       description: >-
         Requires a tenant-scoped identity with sites.read. Buckets are UTC hours and only buckets containing
@@ -4459,6 +4736,7 @@ paths:
   /v1/analytics/top/{dimension}:
     get:
       operationId: getTenantAnalyticsTop
+      x-summary-zh: "分页读取当前租户的排行"
       summary: Page through the authenticated tenant ranking
       description: >-
         Requires a tenant-scoped identity with sites.read. Scope comes only from the authenticated identity. The
@@ -4930,6 +5208,7 @@ paths:
   /v1/admin/gateways:
     get:
       operationId: listAgentGateways
+      x-summary-zh: "列出独立部署的 Agent 网关（平台会话，需 system.gateway.manage）"
       summary: List standalone Agent Gateways (platform session, system.gateway.manage)
       description: ADR 0013 §3.4. The co-located Gateway of an all-mode installation is not listed. standalone_access_open is false until the control plane opens ControlInternal/Redis/NATS to Gateways (GW-09); binding is refused until then.
       responses:
@@ -4948,6 +5227,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     post:
       operationId: createAgentGateway
+      x-summary-zh: "添加网关并签发一次性绑定令牌（1 小时内单次有效，只保存 SHA-256）"
       summary: Add a Gateway and issue its one-time binding token (1 hour, single use, only the SHA-256 is stored)
       requestBody:
         required: true
@@ -4969,6 +5249,7 @@ paths:
   /v1/admin/gateways/{id}/binding-token:
     post:
       operationId: reissueAgentGatewayBindingToken
+      x-summary-zh: "为待绑定网关更换绑定令牌（旧令牌立即失效）"
       summary: Replace the binding token of a pending Gateway (the previous token stops working)
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
@@ -4978,6 +5259,7 @@ paths:
   /v1/admin/gateways/{id}/disable:
     post:
       operationId: disableAgentGateway
+      x-summary-zh: "停用已绑定网关，其 ControlInternal 调用将被拒绝"
       summary: Disable a bound Gateway; its ControlInternal calls are refused
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
@@ -4987,6 +5269,7 @@ paths:
   /v1/admin/gateways/{id}/enable:
     post:
       operationId: enableAgentGateway
+      x-summary-zh: "重新启用已停用的网关"
       summary: Re-enable a disabled Gateway
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
@@ -4996,6 +5279,7 @@ paths:
   /v1/admin/gateways/{id}:
     delete:
       operationId: deleteAgentGateway
+      x-summary-zh: "删除网关，并吊销签发给它的全部证书"
       summary: Delete a Gateway; every certificate it was issued is revoked
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
       responses:
@@ -5004,6 +5288,7 @@ paths:
   /v1/admin/gateways/{id}/allowed-ips:
     put:
       operationId: setAgentGatewayAllowedIPs
+      x-summary-zh: "替换已绑定网关允许连接的来源地址（IPv4/IPv6，1–16 个，记审计）"
       summary: Replace the addresses a bound Gateway may connect from (IPv4/IPv6, 1–16, audited)
       parameters: [{name: id, in: path, required: true, schema: {type: string, format: uuid}}]
       requestBody:
@@ -5024,6 +5309,7 @@ paths:
   /v1/admin/gateway-settings:
     get:
       operationId: getAgentGatewaySettings
+      x-summary-zh: "下发给每个网关的可信 CDN 网段与额外节点接入地址"
       summary: Trusted CDN ranges and extra node entry points published to every Gateway
       responses:
         '200':
@@ -5035,6 +5321,7 @@ paths:
         '403': {$ref: '#/components/responses/Forbidden'}
     put:
       operationId: updateAgentGatewaySettings
+      x-summary-zh: "替换这两份列表（网关一分钟内生效；记审计）"
       summary: Replace both lists (Gateways pick them up within a minute; audited)
       description: Optimistic concurrency without a stored revision. If-Match must equal the ETag of the current settings (compared under the table lock); otherwise nothing is written and 409 gateway_settings_changed tells the page to reload.
       parameters:
@@ -5058,6 +5345,7 @@ paths:
   /v1/gateway-bindings/complete:
     post:
       operationId: completeAgentGatewayBinding
+      x-summary-zh: "网关安装器用一次性令牌完成绑定（公开接口，按来源限速）"
       summary: Gateway installer completes a binding with its one-time token (public, rate limited per source)
       description: ADR 0013 §3.2 step 4. The installer generated both private keys locally and verified the token's root CA fingerprint against /downloads/gateway-ca.pem first. Returns the client certificate (URI SAN spiffe://cdn-platform/gateway/<gateway_id>, 30 days), the node channel server certificate (90 days), CA bundles and the remote endpoints.
       security: []
@@ -5976,6 +6264,30 @@ components:
           format: uuid
           description: Tenant of the plugin installation; the step-up proof is issued for it.
         payment_confirmed_at: {type: string, format: date-time}
+    PluginIdentityStatus:
+      type: object
+      additionalProperties: false
+      required: [plugin_id, authorization_id, required_scopes, granted_scopes, missing_scopes, can_authorize, identity]
+      properties:
+        plugin_id: {type: string}
+        authorization_id: {type: string, format: uuid}
+        required_scopes: {type: array, items: {type: string}}
+        granted_scopes: {type: array, items: {type: string}, description: required_scopes the caller holds (what an authorization grants)}
+        missing_scopes: {type: array, items: {type: string}}
+        can_authorize: {type: boolean}
+        identity:
+          oneOf:
+            - {type: 'null'}
+            - type: object
+              additionalProperties: false
+              required: [api_key_id, key_id, scopes, issued_by_user_id, issued_by_display_name, issued_at]
+              properties:
+                api_key_id: {type: string, format: uuid}
+                key_id: {type: string}
+                scopes: {type: array, items: {type: string}}
+                issued_by_user_id: {type: string, format: uuid}
+                issued_by_display_name: {type: string}
+                issued_at: {type: string, format: date-time}
     PluginUIPage:
       type: object
       additionalProperties: false
@@ -6837,7 +7149,7 @@ components:
         mode: {type: string, enum: [system, custom], description: "system follows the global auto_switch (resolved by the server; a disabled global switch resolves to no rules, i.e. off)."}
         qps_total: {type: integer, minimum: 0, maximum: 1000000, description: Requests per second of the site on one node that engage the switch; 0 = not used.}
         qps_5xx: {type: integer, minimum: 0, maximum: 1000000, description: Origin 5xx responses per second that engage the switch; 0 = not used.}
-        recover_seconds: {type: integer, minimum: 0, maximum: 86400, description: Seconds below both thresholds before the site's own rules run again (60..86400 when active; 300 is a common choice).}
+        recover_seconds: {type: integer, minimum: 0, maximum: 86400, description: Seconds below both thresholds before the site's own rules run again (60..86400 when active; competitor default 300).}
         rule_groups:
           type: array
           maxItems: 8
@@ -8315,6 +8627,41 @@ components:
           type: string
           pattern: '^[A-Z][A-Z0-9_]{0,63}$'
           description: RUNTIME_* code of a rolled_back switch (see ControlUpgradeRolloutStatusReceipt.error_code).
+        installation_allowed:
+          type: string
+          enum: [serving, banned, service_ticket_expired, no_ticket]
+          description: >-
+            What the installation license documents the node holds allow now (EdgeRuntimeStatus.installation_serving
+            of the latest heartbeat). Omitted (with every installation_* field) when the node does not run the
+            installation ban or did not report it.
+        installation_serving:
+          type: string
+          enum: [serving, stopped, stop_failed, resume_failed]
+          description: >-
+            What the node actually serves: serving, stopped (maintenance page, as allowed asks), stop_failed (a stop
+            allowed asks for did not take effect) or resume_failed (allowed again, the resume has not succeeded yet;
+            the node retries every minute).
+        installation_stopped_at:
+          type: string
+          format: date-time
+          description: When the node stopped serving; omitted while serving.
+        installation_recovery_result:
+          type: string
+          enum: [resumed, failed]
+          description: Result of the last resume attempt after a stop; omitted (with the recovery fields) before the first.
+        installation_recovery_at:
+          type: string
+          format: date-time
+          description: Time of the last resume attempt.
+        installation_recovery_cause:
+          type: string
+          enum: [banned, service_ticket_expired, no_ticket]
+          description: The allowed status that had stopped the node.
+        installation_recovery_failures:
+          type: integer
+          minimum: 0
+          maximum: 65536
+          description: Resume attempts in a row that failed (0 after a success).
         telemetry_error_code:
           type: string
           pattern: '^[A-Z][A-Z0-9_]{0,63}$'
@@ -8939,6 +9286,8 @@ components:
         websocket: {type: boolean}
         http3: {type: boolean}
         l2_origin: {type: boolean}
+        aggregated_edge: {type: boolean, description: "租户可接入自有第三方 CDN（ADR 0020，需 module.aggregated_edge；缺省 false）"}
+        aggregated_edge_accounts: {type: integer, minimum: -1, maximum: 1000, description: "可绑定的自有第三方 CDN 账号数，-1 不限（缺省 0）"}
     PackageProtectionDescription:
       type: object
       additionalProperties: false
@@ -10346,7 +10695,7 @@ components:
     StreamPublishIntent:
       type: object
       additionalProperties: false
-      required: [id, version, operation, desired_state, resource_revision, configuration_source_revision, runtime_spec, state, automatic_request_id, publication_id, rollout_id, created_at]
+      required: [id, version, operation, desired_state, resource_revision, configuration_source_revision, runtime_spec, state, automatic_request_id, publication_id, rollout_id, failure_code, created_at]
       properties:
         id: {type: string, format: uuid}
         version: {type: integer, format: int64, minimum: 1}
@@ -10367,6 +10716,17 @@ components:
         rollout_id:
           oneOf:
             - {type: string, format: uuid}
+            - {type: 'null'}
+        failure_code:
+          description: >-
+            Why a failed publication ended, the automatic publication request's
+            terminal code (no_target_nodes, node_capability_unavailable,
+            node_artifacts_syncing, node_scope_conflict, site_config_invalid,
+            rbac_revoked, deployment_failed, apply_reverted, rollback_failed,
+            rollback_unexpected_state, cancelled, request_deadline_expired).
+            Clients show an unknown code as is. null unless state is failed.
+          oneOf:
+            - {type: string, pattern: '^[a-z0-9_]{1,128}$'}
             - {type: 'null'}
         created_at: {type: string, format: date-time}
     Stream:

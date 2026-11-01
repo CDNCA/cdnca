@@ -39,6 +39,7 @@ paths:
     get:
       tags: [My identity verification]
       operationId: getMyIdentityVerificationStatus
+      x-summary-zh: "读取当前用户自己的实名状态"
       summary: Read the authenticated user's own verification status
       description: >-
         Read-only profile badge source for the authenticated tenant user. An
@@ -63,6 +64,7 @@ paths:
     post:
       tags: [My identity verification]
       operationId: createMyIdentityVerificationDraft
+      x-summary-zh: "用服务端核实的证据创建草稿"
       summary: Create a draft from trusted server-resolved evidence
       description: >-
         Requires identity_verification.self.manage. The evidence token must be
@@ -97,6 +99,7 @@ paths:
     get:
       tags: [My identity verification]
       operationId: getMyIdentityVerificationCase
+      x-summary-zh: "读取当前用户自己的申请"
       summary: Read a case owned by the authenticated user
       description: A different-user or different-tenant case returns the same 404 as an unknown case.
       security: [{bearerAuth: []}]
@@ -116,6 +119,7 @@ paths:
     post:
       tags: [My identity verification]
       operationId: submitMyIdentityVerificationCase
+      x-summary-zh: "提交自有草稿进入审核"
       summary: Submit an owned draft for review
       security: [{bearerAuth: []}]
       x-required-permissions: [identity_verification.self.manage]
@@ -140,6 +144,7 @@ paths:
     post:
       tags: [My identity verification]
       operationId: withdrawMyIdentityVerificationCase
+      x-summary-zh: "撤回自有草稿或已提交的申请"
       summary: Withdraw an owned draft or submitted case
       security: [{bearerAuth: []}]
       x-required-permissions: [identity_verification.self.manage]
@@ -153,6 +158,7 @@ paths:
     post:
       tags: [My identity verification]
       operationId: expireMyIdentityVerificationCase
+      x-summary-zh: "让已提交或审核中的自有申请在截止后过期"
       summary: Expire an owned submitted or reviewing case after its deadline
       description: >-
         This is the narrow applicant-only operation authorized by the current
@@ -170,6 +176,7 @@ paths:
     get:
       tags: [Identity verification review]
       operationId: listTenantIdentityVerificationCases
+      x-summary-zh: "列出当前租户的待审申请"
       summary: List the authenticated tenant's review cases
       description: >-
         Requires live active membership, active user, identity_verification.read,
@@ -199,6 +206,7 @@ paths:
     get:
       tags: [Identity verification review]
       operationId: getTenantIdentityVerificationCase
+      x-summary-zh: "读取当前审核租户中的一个申请"
       summary: Read one case in the authenticated reviewer tenant
       description: A different-tenant case returns the same 404 as an unknown case.
       security: [{bearerAuth: []}]
@@ -220,6 +228,7 @@ paths:
     post:
       tags: [Identity verification review]
       operationId: claimTenantIdentityVerificationCase
+      x-summary-zh: "以当前审核人身份原子认领已提交的申请"
       summary: Atomically claim a submitted case as the authenticated reviewer
       security: [{bearerAuth: []}]
       x-required-permissions:
@@ -236,6 +245,7 @@ paths:
     post:
       tags: [Identity verification review]
       operationId: decideTenantIdentityVerificationCase
+      x-summary-zh: "通过或驳回分配给当前审核人的申请"
       summary: Approve or reject a case assigned to the authenticated reviewer
       description: Free-text review notes are not accepted. Only stable decision and reason codes are persisted.
       security: [{bearerAuth: []}]
@@ -258,6 +268,7 @@ paths:
     get:
       tags: [Identity verification review]
       operationId: listPlatformIdentityVerificationCases
+      x-summary-zh: "列出所有租户的实名认证申请（平台管理员）"
       summary: List every tenant's identity verification cases (platform administrator)
       description: >-
         Admin console identity review entry. Platform sessions only, and
@@ -287,6 +298,7 @@ paths:
     post:
       tags: [Identity verification provider]
       operationId: startIdentityVerificationProviderSession
+      x-summary-zh: "开始或重试持久化的 KYC 服务商会话"
       summary: Start or retry a durable KYC provider session
       description: >-
         Requires a live tenant session and identity_verification.self.manage.
@@ -317,6 +329,7 @@ paths:
     post:
       tags: [Identity verification provider]
       operationId: createIdentityVerificationPrivateUpload
+      x-summary-zh: "创建绑定会话的私有对象存储上传"
       summary: Create a bound private object store upload
       description: >-
         Returns a short-lived presigned PUT whose signed headers bind the exact
@@ -349,6 +362,7 @@ paths:
     post:
       tags: [Identity verification provider]
       operationId: finalizeIdentityVerificationPrivateUpload
+      x-summary-zh: "定稿精确的不可变私有对象信息"
       summary: Finalize exact immutable private object facts
       description: >-
         HEAD verification must return the expected object_version, SHA-256,
@@ -377,6 +391,7 @@ paths:
     post:
       tags: [Identity verification provider]
       operationId: acceptIdentityVerificationProviderCallback
+      x-summary-zh: "接收带签名、防重放的认证服务商回调"
       summary: Accept a signed replay-safe provider callback
       description: >-
         Bearer and actor headers are rejected. The callback signature covers

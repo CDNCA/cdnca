@@ -7,7 +7,18 @@ export function isFeatureDisabled(error: unknown): boolean {
   return error instanceof ApiError && error.code === 'feature_disabled'
 }
 
+// MFA step-up display：POST /v1/account/mfa/step-up-proofs 的确定拒绝（mfahttp publicError）。
+// 这些是用户输入或账号状态问题，要直接说原因，不能落到「请求失败，请稍后重试」。
+const mfaStepUpRefusals = new Set(['mfa_invalid_code', 'mfa_code_replayed', 'mfa_recovery_code_used', 'mfa_not_active'])
+
+/** The step-up refusal text for an MFA code / state error, or null for any other error. */
+export function mfaStepUpErrorText(error: unknown): string | null {
+  return error instanceof ApiError && mfaStepUpRefusals.has(error.code) ? i18n.t(`errors:${error.code}`) : null
+}
+
 export function localizedUnknownApiError(error: unknown, fallback: string): string {
+  const stepUp = mfaStepUpErrorText(error)
+  if (stepUp) return stepUp
   if (isFeatureDisabled(error)) fallback = i18n.t('errors:feature_disabled')
   // 423 installation_locked (ADR 0014 §5.2) answers every write while the
   // license is locked; say so instead of a generic failure on every page.

@@ -9,6 +9,7 @@ paths:
   /v1/observability/logs:
     get:
       operationId: listObservabilityLogs
+      x-summary-zh: "列出有权查看的可观测日志"
       security:
         - bearerSession: []
       summary: List authorized observability facts
@@ -52,6 +53,7 @@ paths:
   /v1/observability/logs/export:
     get:
       operationId: exportObservabilityLogs
+      x-summary-zh: "把有权查看的可观测日志导出为限定大小的 CSV"
       security:
         - bearerSession: []
       summary: Export authorized observability facts as bounded CSV
@@ -99,6 +101,7 @@ paths:
   /v1/observability/frontend-events:
     post:
       operationId: recordObservabilityFrontendEvent
+      x-summary-zh: "追加一条脱敏后的前端事件"
       security:
         - bearerSession: []
       summary: Append a sanitized frontend event

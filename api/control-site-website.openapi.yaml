@@ -16,6 +16,7 @@ paths:
   /v1/control-site/content:
     get:
       operationId: readControlSiteContent
+      x-summary-zh: "读取主控官网公开内容"
       security: []
       description: The published website as the active plugin lays it out; {schema, enabled:false} while nothing is published.
       responses:
@@ -26,6 +27,7 @@ paths:
     parameters: [{name: sha256, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: readControlSiteAsset
+      x-summary-zh: "读取主控官网素材"
       security: []
       description: An uploaded image, a built-in illustration or a website theme plugin image; immutable, served with a sandboxing CSP.
       responses:
@@ -35,6 +37,7 @@ paths:
   /v1/control-site/packages:
     get:
       operationId: listControlSitePackages
+      x-summary-zh: "列出主控官网展示的套餐"
       security: []
       description: >-
         The platform's purchasable packages for the website's plan blocks:
@@ -47,6 +50,7 @@ paths:
   /v1/admin/control-site:
     get:
       operationId: getControlSite
+      x-summary-zh: "读取主控官网内容"
       security: [{bearerAuth: []}]
       responses:
         '200': {description: Draft, published copy and assets, headers: {ETag: {schema: {type: string}}}, content: {application/json: {schema: {$ref: '#/components/schemas/State'}}}}
@@ -54,6 +58,7 @@ paths:
         '403': {description: Permission denied}
     put:
       operationId: saveControlSiteDraft
+      x-summary-zh: "保存主控官网草稿"
       security: [{bearerAuth: []}]
       parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/RequestID'}]
       requestBody:
@@ -67,6 +72,7 @@ paths:
   /v1/admin/control-site/publish:
     post:
       operationId: publishControlSite
+      x-summary-zh: "发布主控官网"
       security: [{bearerAuth: []}]
       parameters: [{$ref: '#/components/parameters/IfMatch'}, {$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/RequestID'}]
       responses:
@@ -76,6 +82,7 @@ paths:
   /v1/admin/control-site/assets:
     post:
       operationId: uploadControlSiteAsset
+      x-summary-zh: "上传主控官网素材"
       security: [{bearerAuth: []}]
       parameters: [{$ref: '#/components/parameters/IdempotencyKey'}, {$ref: '#/components/parameters/RequestID'}]
       requestBody:
@@ -93,6 +100,7 @@ paths:
   /v1/admin/control-site/themes:
     get:
       operationId: listWebsiteThemes
+      x-summary-zh: "列出官网主题"
       security: [{bearerAuth: []}]
       description: Built-in, uploaded and market website theme plugins (installed or available) and the active one.
       responses:
@@ -100,6 +108,7 @@ paths:
         '403': {description: Permission denied}
     post:
       operationId: uploadWebsiteTheme
+      x-summary-zh: "上传官网主题"
       security: [{bearerAuth: []}]
       description: Validates and installs an uploaded package (id custom.*); an upload with the same id is replaced and keeps its parameters.
       parameters: [{$ref: '#/components/parameters/RequestID'}]
@@ -115,6 +124,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     delete:
       operationId: uninstallWebsiteTheme
+      x-summary-zh: "卸载官网主题"
       security: [{bearerAuth: []}]
       description: Uninstalls a plugin that is not active and drops its parameters; website content is kept. A market plugin stays available to install.
       parameters: [{$ref: '#/components/parameters/RequestID'}]
@@ -126,6 +136,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     post:
       operationId: installWebsiteTheme
+      x-summary-zh: "安装官网主题"
       security: [{bearerAuth: []}]
       description: Installs a built-in plugin, or a market plugin this installation is authorized for.
       parameters: [{$ref: '#/components/parameters/RequestID'}]
@@ -138,6 +149,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     post:
       operationId: activateWebsiteTheme
+      x-summary-zh: "启用官网主题"
       security: [{bearerAuth: []}]
       description: Makes an installed plugin the website's theme. The website reads the new layout's content (or the plugin seed); other layouts' content is kept.
       parameters:
@@ -151,6 +163,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     put:
       operationId: customizeWebsiteTheme
+      x-summary-zh: "保存官网主题的自定义设置"
       security: [{bearerAuth: []}]
       description: Token overrides (the layout whitelist) and replacement images per plugin slot (uploaded images). Empty maps restore the plugin defaults. Applies at once.
       parameters:
@@ -174,6 +187,7 @@ paths:
     parameters: [{$ref: '#/components/parameters/ThemeID'}]
     get:
       operationId: readWebsiteThemeSeed
+      x-summary-zh: "读取官网主题的初始内容"
       security: [{bearerAuth: []}]
       responses:
         '200': {description: The plugin's default content, content: {application/json: {schema: {$ref: '#/components/schemas/SeedContent'}}}}
@@ -263,6 +277,8 @@ components:
               name: {type: string}
               description: {type: string}
               groups: {type: array, items: {type: string}, description: Names of the package's visible groups.}
+              region: {type: string, description: Name of the package's region; empty when unset.}
+              line: {type: string, description: Name of the package's line group; empty when unset.}
               limits:
                 type: object
                 properties:
@@ -277,7 +293,14 @@ components:
                   websocket: {type: boolean}
                   http3: {type: boolean}
                   l2_origin: {type: boolean}
-              protection: {type: object, properties: {cc: {type: string}, ddos: {type: string}}}
+                  aggregated_edge: {type: boolean}
+                  aggregated_edge_accounts: {type: integer}
+              protection:
+                type: object
+                properties:
+                  cc: {type: string}
+                  ddos: {type: string}
+                  waf: {type: boolean, description: The package itself includes WAF (a WAF add-on is bought separately).}
               prices:
                 type: object
                 properties:

@@ -9,6 +9,7 @@ paths:
   /v1/firewall-actions/policy:
     get:
       operationId: getFirewallActionPolicy
+      x-summary-zh: "读取网站实际生效的防火墙动作策略"
       summary: Read the site's effective firewall action policy
       description: A site without its own policy answers 200 with inherited=true and the tenant default (source tenant_default) or the undelivered system default (source system_default); 404 means the site is absent or outside the actor scope.
       x-required-permissions: [firewall.read]
@@ -23,6 +24,7 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
     put:
       operationId: putFirewallActionPolicy
+      x-summary-zh: "为网站单独设置一份不可变的防火墙动作策略候选"
       summary: Override the site with its own immutable firewall action policy candidate
       description: If-Match is the site's revision from GET (0 for a site that never had its own policy). A pending candidate is replaced.
       x-required-permissions: [firewall.manage]
@@ -46,6 +48,7 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
     patch:
       operationId: setFirewallActionPolicyEnabled
+      x-summary-zh: "启用或停用网站的防火墙动作策略"
       summary: Enable or disable the site's firewall action policy
       description: Switches the site's own policy on or off without a new revision (If-Match is the current revision, the ETag stays). A disabled policy keeps its revisions and last-known-good document but is not delivered to the nodes; enabling delivers the current revision again. Only a revision mismatch is a 409; 404 while the site inherits the tenant default (it has no policy of its own to switch).
       x-required-permissions: [firewall.manage]
@@ -72,6 +75,7 @@ paths:
         '409': {$ref: '#/components/responses/Conflict'}
     delete:
       operationId: inheritFirewallActionPolicy
+      x-summary-zh: "删除网站自己的策略，重新继承租户默认"
       summary: Drop the site's own policy and inherit the tenant default again
       description: Records the next revision as an inherited marker (revisions are never deleted). 404 when the site has no policy of its own.
       x-required-permissions: [firewall.manage]
@@ -94,6 +98,7 @@ paths:
   /v1/firewall-actions/default:
     get:
       operationId: getFirewallActionTenantDefault
+      x-summary-zh: "读取租户默认防火墙动作"
       summary: Read the tenant default firewall action
       description: source system_default with revision 0 when the tenant never saved one.
       x-required-permissions: [firewall.read]
@@ -109,6 +114,7 @@ paths:
         '404': {$ref: '#/components/responses/NotFound'}
     put:
       operationId: putFirewallActionTenantDefault
+      x-summary-zh: "保存租户默认防火墙动作"
       summary: Save the tenant default firewall action
       description: Validated as a site policy. Only inheriting sites change; without any the scope is not republished.
       x-required-permissions: [firewall.manage]
@@ -133,6 +139,7 @@ paths:
   /v1/firewall-actions/policy/recover:
     post:
       operationId: recoverFirewallActionLKG
+      x-summary-zh: "从最近一次正常的策略生成单调递增的恢复候选"
       summary: Create a monotonic recovery candidate from the last-known-good policy
       description: Creates a new monotonic candidate from the durable last-known-good document; it never rewinds revisions.
       x-required-permissions: [firewall.manage]

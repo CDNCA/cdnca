@@ -11,6 +11,7 @@ paths:
   /v1/theme/current:
     get:
       operationId: getCurrentTheme
+      x-summary-zh: "读取当前主题"
       description: >-
         Public pointer to the theme the caller sees (Cache-Control no-store). A tenant session gets its tenant's
         theme (PA-26); without a session, a Host bound to a tenant (sign-in page) gets that tenant's theme; the
@@ -23,6 +24,7 @@ paths:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemeStylesheet
+      x-summary-zh: "读取主题样式表"
       description: 'Rendered custom properties on :root[data-cdnca-theme], then one block per tokens_by_role role on :root[data-cdnca-theme][data-cdnca-role="admin"|"user"] carrying only that role''s overrides. Immutable.'
       responses:
         '200': {description: Stylesheet, content: {text/css: {schema: {type: string}}}}
@@ -31,6 +33,7 @@ paths:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemeTokens
+      x-summary-zh: "读取主题设计变量"
       description: Rendered tokens (cdnca.theme.rendered/v1) for ConfigProvider and layout slots. Immutable.
       responses:
         '200': {description: Rendered theme, content: {application/json: {schema: {$ref: '#/components/schemas/Rendered'}}}}
@@ -39,6 +42,7 @@ paths:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemeAsset
+      x-summary-zh: "读取主题素材"
       description: A theme brand image (png/jpeg/ico). Immutable.
       responses:
         '200': {description: Image}
@@ -46,6 +50,7 @@ paths:
   /v1/theme/auth-style:
     get:
       operationId: getThemeAuthStyle
+      x-summary-zh: "读取登录页主题样式"
       description: >-
         Public sign-in page style of the theme plugin active on the user console (site theme C, auth_style):
         CSS the console puts in a <style> of its own on /auth/* and the plugin's images. Forms and submission
@@ -60,6 +65,7 @@ paths:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemeAuthStyleAsset
+      x-summary-zh: "读取登录页主题素材"
       description: An image of an installed plugin's sign-in style, served with a sandboxing CSP. Immutable.
       responses:
         '200': {description: Image}
@@ -67,6 +73,7 @@ paths:
   /v1/admin/themes:
     get:
       operationId: listThemes
+      x-summary-zh: "列出主题"
       security: [{bearerAuth: []}]
       description: Catalog themes with download state and the downloaded packages. Requires system_configuration.read.
       responses:
@@ -77,6 +84,7 @@ paths:
     parameters: [{name: theme_id, in: path, required: true, schema: {type: string, pattern: '^(default|official\.[a-z][a-z0-9-]{0,31})$'}}]
     post:
       operationId: downloadTheme
+      x-summary-zh: "从目录下载主题"
       security: [{bearerAuth: []}]
       description: Store a catalog theme (downloaded, not active). Requires system_configuration.manage.
       responses:
@@ -85,6 +93,7 @@ paths:
   /v1/admin/themes/packages:
     post:
       operationId: uploadTheme
+      x-summary-zh: "上传主题包"
       security: [{bearerAuth: []}]
       description: Upload a custom cdnca.theme/v1 package (id custom.*). Packages with url(), @import, external links, script or undeclared classes are refused.
       requestBody: {required: true, content: {application/json: {schema: {type: object}}}}
@@ -96,6 +105,7 @@ paths:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     post:
       operationId: activateTheme
+      x-summary-zh: "启用主题包"
       security: [{bearerAuth: []}]
       description: >-
         Make a downloaded package the active theme of one console (site theme C, migration 461): no body is both
@@ -118,6 +128,7 @@ paths:
     parameters: [{name: sha, in: path, required: true, schema: {$ref: '#/components/schemas/SHA256'}}]
     get:
       operationId: getThemePackage
+      x-summary-zh: "读取主题包"
       security: [{bearerAuth: []}]
       description: >-
         The cdnca.theme/v1 JSON of a package this installation stored (removed ones too) or a catalog theme, byte for byte (its SHA-256 is the
@@ -128,6 +139,7 @@ paths:
         '404': {description: Never stored and not in the catalog}
     delete:
       operationId: removeTheme
+      x-summary-zh: "删除主题包"
       security: [{bearerAuth: []}]
       responses:
         '204': {description: Removed (can be downloaded again)}

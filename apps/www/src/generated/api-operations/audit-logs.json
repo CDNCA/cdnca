@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/audit-logs",
    "summary": "List rendered operation log rows, newest first",
+   "summary_zh": "列出操作日志，最新在前",
    "auth": [
     "bearer"
    ],
@@ -140,6 +141,7 @@
    "method": "GET",
    "path": "/v1/audit-logs/categories",
    "summary": "Event categories with labels and default retention days",
+   "summary_zh": "事件分类、显示名称与默认保留天数",
    "auth": [
     "bearer"
    ],
@@ -182,6 +184,7 @@
    "method": "GET",
    "path": "/v1/audit-logs/export",
    "summary": "Export the filtered rows as UTF-8 CSV (at most 10000 rows; the export itself is audited as system.audit_log.export)",
+   "summary_zh": "把筛选结果导出为 UTF-8 CSV（最多 10000 行；导出本身记审计 system.audit_log.export）",
    "auth": [
     "bearer"
    ],

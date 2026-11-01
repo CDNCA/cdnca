@@ -11,6 +11,7 @@ paths:
   /v1/admin/maintenance-upgrade-status:
     get:
       operationId: readMaintenanceUpgradeStatus
+      x-summary-zh: "读取权威的维护升级状态"
       summary: Read authoritative maintenance upgrade status
       description: >-
         Requires a platform identity with control.upgrades.read. Repeated node_id

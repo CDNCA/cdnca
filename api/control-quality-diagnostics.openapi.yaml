@@ -8,6 +8,7 @@ paths:
   /v1/analytics/quality-diagnostics:
     get:
       operationId: getTenantQualityDiagnostics
+      x-summary-zh: "基于已定稿的访问数据读取租户质量诊断"
       summary: Read tenant quality diagnostics from finalized access facts
       security:
         - sessionBearer: []
@@ -34,6 +35,7 @@ paths:
   /v1/admin/analytics/quality-diagnostics:
     get:
       operationId: getPlatformQualityDiagnostics
+      x-summary-zh: "以平台身份读取某租户的质量诊断"
       summary: Read one tenant's quality diagnostics from the platform scope
       security:
         - sessionBearer: []

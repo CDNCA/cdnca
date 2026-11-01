@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/certificate-issuers",
    "summary": "List the CAs a new certificate request may name",
+   "summary_zh": "列出新申请证书可选的 CA",
    "auth": [
     "bearer"
    ],

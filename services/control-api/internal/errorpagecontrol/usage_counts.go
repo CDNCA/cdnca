@@ -10,7 +10,7 @@ import (
 )
 
 // UsageCounts are the error_pages.* values for the license usage report
-// (fix-usagereport). The lease limits are enforced per object or per scope
+//. The lease limits are enforced per object or per scope
 // (asset.go, rule.go, publication.go), so each value is the largest one
 // across scopes, measured with the guard's own query: what the license
 // service compares with the limit is "the fullest scope".

@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// The site's origin auth on the leaf (fix-mktsiteconf5): the leaf opens its
+// The site's origin auth on the leaf: the leaf opens its
 // own box of each credential with its market box key, writes the rules
 // through originauthcontrol's system site write (the credential re-sealed
 // with this controller's keyring at once, no cloud verification) and wipes
@@ -155,7 +155,7 @@ func (s *Service) applyOriginAuth(ctx context.Context, tenant tenantRef, leafSit
 }
 
 // OriginAuthDelivery is the subset of edgepublish.OriginAuthDeliverer the
-// leaf drives (fix-mktsiteconf6): the credentials the leaf wrote go to the
+// leaf drives: the credentials the leaf wrote go to the
 // nodes by a system secret rollout, with no manual "publish to nodes".
 type OriginAuthDelivery interface {
 	Deliver(ctx context.Context, scopeID, ownerID uuid.UUID) (edgepublish.OriginAuthDeliveryStatus, error)

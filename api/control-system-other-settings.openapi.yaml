@@ -13,6 +13,7 @@ paths:
     get:
       summary: Read platform other settings
       operationId: getPlatformSystemOtherSettings
+      x-summary-zh: "读取平台其他设置"
       x-required-permissions: [system_configuration.read]
       responses:
         '200': {description: Current operational settings, content: {application/json: {schema: {$ref: '#/components/schemas/Document'}}}}
@@ -23,6 +24,7 @@ paths:
     put:
       summary: Update platform other settings
       operationId: updatePlatformSystemOtherSettings
+      x-summary-zh: "修改平台其他设置"
       x-required-permissions: [system_configuration.manage]
       parameters:
         - {$ref: '#/components/parameters/IfMatch'}

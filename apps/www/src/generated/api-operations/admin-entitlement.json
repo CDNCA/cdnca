@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/admin/entitlement/refresh",
    "summary": "Refresh the locally verified entitlement lease",
+   "summary_zh": "刷新本地已校验的授权租约",
    "auth": [
     "bearer"
    ],

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/user-groups",
    "summary": "List platform-scoped tenant-user groups",
+   "summary_zh": "列出平台范围的租户用户分组",
    "auth": [
     "bearer"
    ],
@@ -81,6 +82,7 @@
    "method": "POST",
    "path": "/v1/admin/user-groups",
    "summary": "Create a platform-scoped tenant-user group",
+   "summary_zh": "创建平台范围的租户用户分组",
    "auth": [
     "bearer"
    ],
@@ -191,6 +193,7 @@
    "method": "PATCH",
    "path": "/v1/admin/user-groups/{id}",
    "summary": "Rename a tenant-user group with CAS",
+   "summary_zh": "按 CAS 重命名租户用户分组",
    "auth": [
     "bearer"
    ],
@@ -317,6 +320,7 @@
    "method": "DELETE",
    "path": "/v1/admin/user-groups/{id}",
    "summary": "Delete an empty tenant-user group with CAS",
+   "summary_zh": "按 CAS 删除空的租户用户分组",
    "auth": [
     "bearer"
    ],

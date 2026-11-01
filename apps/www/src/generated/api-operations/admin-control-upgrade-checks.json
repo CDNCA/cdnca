@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/admin/control-upgrade-checks",
    "summary": "Check local control-plane upgrade eligibility",
+   "summary_zh": "检查本主控能否升级",
    "auth": [
     "bearer"
    ],

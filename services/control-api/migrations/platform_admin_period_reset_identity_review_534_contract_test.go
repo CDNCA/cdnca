@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Migration 534 (fix-dec1027): platform administrators create package period
+// Migration 534: platform administrators create package period
 // reset authority bindings and review identity verification cases for any
 // tenant under their own identity. The 533 predecessor is pinned.
 const (

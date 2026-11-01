@@ -26,7 +26,7 @@ export interface ControlBackupRun {
   ended_at?: string
   backup_id?: string
   target?: string
-  /** Migration target environment detected on the new host (fix-btenv2). */
+  /** Migration target environment detected on the new host. */
   target_env?: 'bt' | 'plain'
   error?: string
   uploads?: Record<string, string>
@@ -136,7 +136,7 @@ export interface ControlMigrationInput {
   host_key_sha256: string
   password?: string
   private_key?: string
-  /** 新主控环境（fix-btenv）：auto 检测宝塔面板，bt 与宝塔共存，plain 独占。 */
+  /** 新主控环境：auto 检测宝塔面板，bt 与宝塔共存，plain 独占。 */
   env: ControlMigrationEnv
   confirm: string
 }

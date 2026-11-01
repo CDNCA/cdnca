@@ -198,6 +198,7 @@ type Server struct {
 	nodeSSHInstallHandler                http.Handler
 	accountRegistrationHandler           http.Handler
 	accountLoginHandler                  http.Handler
+	builtInRegistration                  BuiltInRegistration
 	securityCoordinationMetricsHandler   http.Handler
 	ja4BlockHandler                      http.Handler
 	autoDefenseHandler                   http.Handler
@@ -359,6 +360,7 @@ type Config struct {
 	NodeInstallGateway                        func(context.Context) (NodeInstallGateway, bool, error)
 	AccountRegistrationHandlerFactory         MountedHandlerFactory
 	AccountLoginHandlerFactory                MountedHandlerFactory
+	BuiltInRegistration BuiltInRegistration
 	SecurityCoordinationMetricsHandlerFactory MountedHandlerFactory
 	JA4BlockHandlerFactory                    MountedHandlerFactory
 	AutoDefenseHandlerFactory                 MountedHandlerFactory
@@ -441,6 +443,7 @@ func New(pool *pgxpool.Pool, identityService *identity.Service, config Config) *
 		apiKeys:                 apikey.NewServiceWithPepperKeyring(pool, apiKeyPepper, config.Now),
 		apiKeyUsageRecorder:     config.APIKeyUsageRecorder,
 		apiKeySourceIP:          apiKeySourceIP,
+		builtInRegistration:     config.BuiltInRegistration,
 		adminInbox:              admininbox.NewStore(pool),
 		securityPolicies:        securitypolicy.NewService(securitypolicy.NewStoreWithClock(pool, config.Now)),
 		siteQuickBlocks:         sitequickblock.NewService(sitequickblock.NewStore(pool, config.Now)),
@@ -1686,7 +1689,11 @@ func (s *Server) Handler() http.Handler {
 	if s.accountLoginHandler == nil {
 		// fix-e1 #3: the sign-in page always reads the login methods; with the
 		// login/recovery runtime off it gets "nothing offered" instead of a 404.
-		mux.HandleFunc("GET /v1/auth/login-methods", handleLoginMethodsDisabled)
+		mux.HandleFunc("GET /v1/auth/login-methods", s.handleLoginMethodsDisabled)
+	}
+	if s.accountRegistrationHandler == nil && s.builtInRegistration != nil {
+		// builtin registration: no Turnstile runtime, so the built-in CAPTCHA flow.
+		mux.HandleFunc("POST /v1/auth/register", s.handleBuiltInRegister)
 	}
 	var gated http.Handler = mux
 	var full http.Handler
@@ -2199,7 +2206,7 @@ func (s *Server) handleGetNodeConfigurationScopes(w http.ResponseWriter, r *http
 	writeJSON(w, http.StatusOK, result)
 }
 
-// handleGetNodeIPLocation: 编辑节点 → IP 归属 (fix-nodeipgeo).
+// handleGetNodeIPLocation: 编辑节点 → IP 归属.
 func (s *Server) handleGetNodeIPLocation(w http.ResponseWriter, r *http.Request) {
 	principal, ok := s.requireNodePermission(w, r, "nodes.read")
 	if !ok {

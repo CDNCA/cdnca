@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/error-pages/assets",
    "summary": "List error page assets",
+   "summary_zh": "列出错误页素材",
    "auth": [
     "apiKey",
     "bearer"
@@ -86,6 +87,7 @@
    "method": "POST",
    "path": "/v1/error-pages/assets/initiate",
    "summary": "Initiate a content-addressed asset",
+   "summary_zh": "创建一个按内容寻址的素材",
    "auth": [
     "apiKey",
     "bearer"
@@ -195,6 +197,7 @@
    "method": "GET",
    "path": "/v1/error-pages/assets/{asset_id}",
    "summary": "Get an error page asset",
+   "summary_zh": "读取一个错误页素材",
    "auth": [
     "apiKey",
     "bearer"
@@ -324,6 +327,7 @@
    "method": "DELETE",
    "path": "/v1/error-pages/assets/{asset_id}",
    "summary": "Mark an unreferenced asset for reconciled deletion",
+   "summary_zh": "把未被引用的素材标记为待删除",
    "auth": [
     "apiKey",
     "bearer"
@@ -417,6 +421,7 @@
    "method": "GET",
    "path": "/v1/error-pages/assets/{asset_id}/content",
    "summary": "Read a ready asset's content",
+   "summary_zh": "读取就绪素材的内容",
    "auth": [
     "apiKey",
     "bearer"
@@ -494,6 +499,7 @@
    "method": "PUT",
    "path": "/v1/error-pages/assets/{asset_id}/content",
    "summary": "Upload bounded asset content to staging",
+   "summary_zh": "上传限定大小的素材内容到暂存区",
    "auth": [
     "apiKey",
     "bearer"
@@ -594,6 +600,7 @@
    "method": "POST",
    "path": "/v1/error-pages/assets/{asset_id}/finalize",
    "summary": "Scan and finalize staged asset content",
+   "summary_zh": "扫描并定稿暂存的素材内容",
    "auth": [
     "apiKey",
     "bearer"
@@ -680,6 +687,7 @@
    "method": "GET",
    "path": "/v1/error-pages/publication-snapshot",
    "summary": "Read the latest deterministic publication source snapshot",
+   "summary_zh": "读取最新的确定性发布源快照",
    "auth": [
     "apiKey",
     "bearer"
@@ -753,6 +761,7 @@
    "method": "GET",
    "path": "/v1/error-pages/rules",
    "summary": "List current error page rule revisions",
+   "summary_zh": "列出错误页规则的当前版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -837,6 +846,7 @@
    "method": "POST",
    "path": "/v1/error-pages/rules",
    "summary": "Create an append-only error page rule",
+   "summary_zh": "创建只追加的错误页规则",
    "auth": [
     "apiKey",
     "bearer"
@@ -935,6 +945,7 @@
    "method": "GET",
    "path": "/v1/error-pages/rules/{rule_id}",
    "summary": "Get the current rule revision",
+   "summary_zh": "读取规则当前版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -1045,6 +1056,7 @@
    "method": "PATCH",
    "path": "/v1/error-pages/rules/{rule_id}",
    "summary": "Append an updated rule revision",
+   "summary_zh": "追加规则修改版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -1171,6 +1183,7 @@
    "method": "DELETE",
    "path": "/v1/error-pages/rules/{rule_id}",
    "summary": "Append a soft-delete rule revision",
+   "summary_zh": "追加规则软删除版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -1264,6 +1277,7 @@
    "method": "POST",
    "path": "/v1/error-pages/rules/{rule_id}/disable",
    "summary": "Append a disabled rule revision",
+   "summary_zh": "追加规则停用版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -1357,6 +1371,7 @@
    "method": "POST",
    "path": "/v1/error-pages/rules/{rule_id}/enable",
    "summary": "Append an enabled rule revision",
+   "summary_zh": "追加规则启用版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -1454,6 +1469,7 @@
    "method": "GET",
    "path": "/v1/error-pages/scope-overrides",
    "summary": "List current node and region error-page overrides",
+   "summary_zh": "列出当前节点与区域的错误页覆盖",
    "auth": [
     "apiKey",
     "bearer"
@@ -1514,6 +1530,7 @@
    "method": "POST",
    "path": "/v1/error-pages/scope-overrides",
    "summary": "Create or restore a node or region override",
+   "summary_zh": "创建或恢复节点或区域覆盖",
    "auth": [
     "apiKey",
     "bearer"
@@ -1608,6 +1625,7 @@
    "method": "GET",
    "path": "/v1/error-pages/scope-overrides/{override_display_id}",
    "summary": "Read an override with verified immutable editor content",
+   "summary_zh": "读取覆盖及其已校验的不可变编辑内容",
    "auth": [
     "apiKey",
     "bearer"
@@ -1701,6 +1719,7 @@
    "method": "PATCH",
    "path": "/v1/error-pages/scope-overrides/{override_display_id}",
    "summary": "Replace an override item set using compare-and-swap",
+   "summary_zh": "按 CAS 替换覆盖的条目集合",
    "auth": [
     "apiKey",
     "bearer"
@@ -1807,6 +1826,7 @@
    "method": "DELETE",
    "path": "/v1/error-pages/scope-overrides/{override_display_id}",
    "summary": "Append a soft-delete override revision",
+   "summary_zh": "追加覆盖的软删除版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -1900,6 +1920,7 @@
    "method": "GET",
    "path": "/v1/error-pages/slots",
    "summary": "List the twelve canonical error-page slots in display order",
+   "summary_zh": "按显示顺序列出十二个标准错误页位",
    "auth": [
     "apiKey",
     "bearer"
@@ -1956,6 +1977,7 @@
    "method": "GET",
    "path": "/v1/error-pages/slots/{slot_key}",
    "summary": "Read a slot binding and its verified immutable content",
+   "summary_zh": "读取错误页位的绑定及其已校验的不可变内容",
    "auth": [
     "apiKey",
     "bearer"
@@ -2042,6 +2064,7 @@
    "method": "PUT",
    "path": "/v1/error-pages/slots/{slot_key}",
    "summary": "Append a slot revision that binds a ready immutable asset",
+   "summary_zh": "追加一个绑定就绪不可变素材的错误页位版本",
    "auth": [
     "apiKey",
     "bearer"
@@ -2148,6 +2171,7 @@
    "method": "DELETE",
    "path": "/v1/error-pages/slots/{slot_key}",
    "summary": "Append an unbound revision and restore the built-in default",
+   "summary_zh": "追加未绑定版本并恢复内置默认页",
    "auth": [
     "apiKey",
     "bearer"

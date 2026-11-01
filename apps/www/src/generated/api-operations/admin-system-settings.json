@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/system-settings",
    "summary": "Read platform system settings",
+   "summary_zh": "读取平台系统设置",
    "auth": [
     "bearer"
    ],
@@ -62,6 +63,7 @@
    "method": "PUT",
    "path": "/v1/admin/system-settings",
    "summary": "Update platform system settings",
+   "summary_zh": "修改平台系统设置",
    "auth": [
     "bearer"
    ],

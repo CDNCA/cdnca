@@ -200,7 +200,7 @@ func TestL4ForwardOpenAPIFragmentContract(t *testing.T) {
 	intent := l4OpenAPIMap(t, schemas, "StreamPublishIntent")
 	for _, identity := range []string{
 		"id", "version", "resource_revision", "configuration_source_revision", "runtime_spec",
-		"state", "automatic_request_id", "publication_id", "rollout_id",
+		"state", "automatic_request_id", "publication_id", "rollout_id", "failure_code",
 	} {
 		if !l4OpenAPIContainsRequired(intent, identity) {
 			t.Errorf("StreamPublishIntent does not require %s", identity)

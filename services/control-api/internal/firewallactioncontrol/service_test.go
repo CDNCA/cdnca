@@ -128,6 +128,11 @@ func TestPutRejectsUnsafeThresholdsAndTrustedOverlap(t *testing.T) {
 		"trusted_proxy_in_kernel_set":   func(input *PolicyInput) { input.BlockNetworks = append(input.BlockNetworks, "192.0.2.128/25") },
 		"trusted_crawler_in_kernel_set": func(input *PolicyInput) { input.BlockNetworks = append(input.BlockNetworks, "203.0.113.0/25") },
 		"scriptable_page":               func(input *PolicyInput) { input.ReturnPage.Body = "<script>" },
+		// A3-03: the audit's inputs.
+		"recover_above_engage": func(input *PolicyInput) { input.EngageThreshold, input.RecoverThreshold = 100, 200 },
+		"not_a_cidr":           func(input *PolicyInput) { input.BlockNetworks = append(input.BlockNetworks, "not-a-cidr") },
+		"ipv4_prefix_33":       func(input *PolicyInput) { input.BlockNetworks = append(input.BlockNetworks, "10.0.0.0/33") },
+		"ipv6_prefix_129":      func(input *PolicyInput) { input.BlockNetworks = append(input.BlockNetworks, "2001:db8::/129") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			input := validInput()

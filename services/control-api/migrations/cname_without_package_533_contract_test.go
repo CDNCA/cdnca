@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Migration 533 (fix-nopkg): platform default line group and CNAME intents /
+// Migration 533: platform default line group and CNAME intents /
 // frozen targets without a package. The 532 predecessor is pinned at merge.
 const (
 	migration533ID      = "533_cname_without_package"

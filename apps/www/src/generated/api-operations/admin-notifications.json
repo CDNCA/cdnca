@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/notifications/channels",
    "summary": "Read global notification channel settings",
+   "summary_zh": "读取全局通知渠道设置",
    "auth": [
     "bearer"
    ],
@@ -79,6 +80,7 @@
    "method": "PUT",
    "path": "/v1/admin/notifications/channels",
    "summary": "Update global notification channel settings",
+   "summary_zh": "修改全局通知渠道设置",
    "auth": [
     "bearer"
    ],
@@ -192,6 +194,7 @@
    "method": "GET",
    "path": "/v1/admin/notifications/deliveries",
    "summary": "List redacted notification delivery settlements",
+   "summary_zh": "列出脱敏后的通知投递结果",
    "auth": [
     "bearer"
    ],
@@ -269,6 +272,7 @@
    "method": "GET",
    "path": "/v1/admin/notifications/deliveries/{outbox_id}/attempts",
    "summary": "List redacted attempts for one notification delivery",
+   "summary_zh": "列出一次通知投递的脱敏尝试记录",
    "auth": [
     "bearer"
    ],
@@ -331,6 +335,7 @@
    "method": "GET",
    "path": "/v1/admin/notifications/delivery-history",
    "summary": "List redacted immutable notification delivery facts",
+   "summary_zh": "列出脱敏后的不可变通知投递记录",
    "auth": [
     "bearer"
    ],
@@ -457,6 +462,7 @@
    "method": "GET",
    "path": "/v1/admin/notifications/messages",
    "summary": "List the compatibility message projection",
+   "summary_zh": "列出兼容视图下的消息",
    "auth": [
     "bearer"
    ],
@@ -574,6 +580,7 @@
    "method": "GET",
    "path": "/v1/admin/notifications/policy",
    "summary": "Read notification delivery window and event policies",
+   "summary_zh": "读取通知投递时段与事件策略",
    "auth": [
     "bearer"
    ],
@@ -654,6 +661,7 @@
    "method": "PUT",
    "path": "/v1/admin/notifications/policy",
    "summary": "Update notification delivery window and event policies",
+   "summary_zh": "修改通知投递时段与事件策略",
    "auth": [
     "bearer"
    ],
@@ -789,6 +797,7 @@
    "method": "GET",
    "path": "/v1/admin/notifications/templates",
    "summary": "List immutable notification template versions",
+   "summary_zh": "列出不可变的通知模板版本",
    "auth": [
     "bearer"
    ],
@@ -834,6 +843,7 @@
    "method": "PUT",
    "path": "/v1/admin/notifications/templates/{template_id}/versions/{version}/{channel}",
    "summary": "Create an immutable notification template version",
+   "summary_zh": "创建一个不可变的通知模板版本",
    "auth": [
     "bearer"
    ],

@@ -180,7 +180,7 @@ func (s *Service) Handle(ctx context.Context, header envelope.Header, payload []
 			reply.LeafSiteID = &leafID
 			return fail(err)
 		}
-		// The credentials go to the nodes now (fix-mktsiteconf6); what does
+		// The credentials go to the nodes now; what does
 		// not reach them yet is advisory, the reconciler retries it.
 		reply.Blockers = append(reply.Blockers, s.deliverOriginAuth(ctx, tenant, req.Config)...)
 		reply.OK, reply.LeafSiteID = true, &leafID

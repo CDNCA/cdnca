@@ -31,6 +31,7 @@ paths:
     get:
       tags: [HTTP policies]
       operationId: listHTTPPolicies
+      x-summary-zh: "列出某租户范围未删除的 HTTP 策略"
       security: [{bearerAuth: []}]
       summary: List non-deleted HTTP policies in one tenant scope
       description: >-
@@ -60,6 +61,7 @@ paths:
     post:
       tags: [HTTP policies]
       operationId: createHTTPPolicy
+      x-summary-zh: "为租户自有网站创建第一个版本"
       security: [{bearerAuth: []}]
       summary: Create revision one for a tenant-owned site
       description: >-
@@ -98,6 +100,7 @@ paths:
     get:
       tags: [HTTP policy publication]
       operationId: previewHTTPPolicyPublication
+      x-summary-zh: "读取确定性的、未签名的 Edge v1 源快照"
       security: [{bearerAuth: []}]
       summary: Read a deterministic unsigned Edge v1 source snapshot
       description: >-
@@ -124,6 +127,7 @@ paths:
     get:
       tags: [HTTP policies]
       operationId: getHTTPPolicy
+      x-summary-zh: "读取一个 HTTP 策略"
       security: [{bearerAuth: []}]
       summary: Read one HTTP policy
       description: >-
@@ -141,6 +145,7 @@ paths:
     patch:
       tags: [HTTP policies]
       operationId: updateHTTPPolicy
+      x-summary-zh: "追加配置版本"
       security: [{bearerAuth: []}]
       summary: Append a configuration revision
       description: >-
@@ -170,6 +175,7 @@ paths:
     delete:
       tags: [HTTP policies]
       operationId: deleteHTTPPolicy
+      x-summary-zh: "追加删除标记版本，软删除策略"
       security: [{bearerAuth: []}]
       summary: Soft-delete a policy by appending a tombstone revision
       description: >-
@@ -201,6 +207,7 @@ paths:
     post:
       tags: [HTTP policies]
       operationId: enableHTTPPolicy
+      x-summary-zh: "按版本 CAS 启用策略"
       security: [{bearerAuth: []}]
       summary: Enable a policy with revision CAS
       description: >-
@@ -229,6 +236,7 @@ paths:
     post:
       tags: [HTTP policies]
       operationId: disableHTTPPolicy
+      x-summary-zh: "按版本 CAS 停用策略"
       security: [{bearerAuth: []}]
       summary: Disable a policy with revision CAS
       description: >-

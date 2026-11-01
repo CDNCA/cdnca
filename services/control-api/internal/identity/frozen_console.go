@@ -10,7 +10,7 @@ import (
 )
 
 // VerifyPlatformPassword checks a platform administrator's password for the
-// frozen console of a migration hold (fix-migrollback). It only reads: no
+// frozen console of a migration hold. It only reads: no
 // session, throttle row or login record is written, because a held control
 // plane must not diverge from the copy it was migrated to. The admin access
 // allow-list is enforced; the caller rate-limits attempts in memory.

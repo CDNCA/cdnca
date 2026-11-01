@@ -1104,20 +1104,7 @@ describe('UserListPage', () => {
 
   it('creates one target-bound step-up proof and resets the selected user password', async () => {
     authenticateAdmin()
-    const actor = useSessionStore.getState().principal!
-    useSessionStore.setState({ principal: { ...actor, permissions: [...actor.permissions, 'identity.self.read'] } })
-    const mfaStatus = vi.spyOn(mfaApi, 'getStatus').mockResolvedValue({ status: 'inactive' })
-    const secret = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-    const enrollment = vi.spyOn(mfaApi, 'beginEnrollment').mockImplementation(async () => {
-      mfaStatus.mockResolvedValue({
-        status: 'enrollment_pending', credential_id: managedUser.id, method: 'totp',
-        enrollment_expires_at: '2027-01-01T00:00:00Z',
-      })
-      return {
-        credential_id: managedUser.id, secret, provisioning_uri: 'otpauth://test',
-        expires_at: '2027-01-01T00:00:00Z', replayed: false,
-      }
-    })
+    vi.spyOn(mfaApi, 'getStatus').mockResolvedValue({ status: 'active', credential_id: managedUser.id, method: 'totp' })
     vi.spyOn(usersApi, 'list').mockResolvedValue(listData())
     vi.spyOn(usersApi, 'listGroups').mockImplementation(async (_token, page, limit) => ({
       items: [], page, limit, total: 0,
@@ -1146,34 +1133,7 @@ describe('UserListPage', () => {
     await user.click(within(editor).getByRole('button', { name: '确定' }))
     const dialog = await screen.findByRole('dialog', { name: '重置 Alice 的密码' })
     expect(within(dialog).getByLabelText('新密码')).toHaveValue(newPassword)
-    expect(within(dialog).getByLabelText('确认新密码')).toHaveValue(newPassword)
-    expect(mfaStatus).not.toHaveBeenCalled()
-    await user.click(within(dialog).getByRole('button', { name: '管理身份验证器' }))
-    // rc-dialog uses the same title ID for every modal in its test environment.
-    const setup = (await screen.findByText('管理身份验证器', { selector: '.ant-modal-title' }))
-      .closest<HTMLElement>('[role="dialog"]')!
-    expect(await within(setup).findByText('尚未配置身份验证器')).toBeInTheDocument()
-    expect(proof).not.toHaveBeenCalled()
-    expect(reset).not.toHaveBeenCalled()
-    await user.click(within(setup).getByRole('button', { name: '设置身份验证器' }))
-    const enrollmentDialog = (await screen.findByText('设置身份验证器', { selector: '.ant-modal-title' }))
-      .closest<HTMLElement>('[role="dialog"]')!
-    await user.click(within(enrollmentDialog).getByRole('button', { name: '确认' }))
-    const secretInput = await screen.findByDisplayValue(secret)
-    fireEvent.keyDown(secretInput, { key: 'Escape', code: 'Escape', keyCode: 27 })
-    expect(screen.getByDisplayValue(secret)).toBeInTheDocument()
-    expect(within(dialog).getByLabelText('新密码')).toHaveValue(newPassword)
-    await user.click(screen.getByRole('button', { name: '我已安全保存' }))
-    await user.click(within(setup).getByRole('button', { name: /close/i }))
-    await waitFor(() => expect(screen.queryByText('管理身份验证器', { selector: '.ant-modal-title' })).not.toBeInTheDocument())
-    expect(within(dialog).getByLabelText('新密码')).toHaveValue(newPassword)
-    await user.click(within(dialog).getByRole('button', { name: '管理身份验证器' }))
-    const reopenedSetup = (await screen.findByText('管理身份验证器', { selector: '.ant-modal-title' }))
-      .closest<HTMLElement>('[role="dialog"]')!
-    expect(await within(reopenedSetup).findByText('等待激活')).toBeInTheDocument()
-    expect(screen.queryByDisplayValue(secret)).not.toBeInTheDocument()
-    expect(enrollment).toHaveBeenCalledOnce()
-    await user.click(within(reopenedSetup).getByRole('button', { name: /close/i }))
+    expect(within(dialog).getByRole('button', { name: '管理身份验证器' })).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText('MFA 验证码'), '123456')
     await user.click(within(dialog).getByRole('button', { name: '确认重置' }))
 
@@ -1196,6 +1156,45 @@ describe('UserListPage', () => {
     }, expect.any(Object))
     expectMutationCacheNotToContain(queryClient, newPassword)
     expectMutationCacheNotToContain(queryClient, 'opaque-reset-step-up-proof')
+  })
+
+  // MFA optional：管理员没启用 MFA 时，重置密码不显示验证码和「管理身份验证器」，
+  // 不签发 step-up 证明，直接提交（后端放行并审计「操作者未启用 MFA」）。
+  it('resets the password without any MFA prompt when the administrator has not enabled MFA', async () => {
+    authenticateAdmin()
+    vi.spyOn(mfaApi, 'getStatus').mockResolvedValue({ status: 'inactive' })
+    vi.spyOn(usersApi, 'list').mockResolvedValue(listData())
+    vi.spyOn(usersApi, 'listGroups').mockImplementation(async (_token, page, limit) => ({
+      items: [], page, limit, total: 0,
+    }))
+    const proof = vi.spyOn(mfaApi, 'createStepUpProof')
+    const reset = vi.spyOn(usersApi, 'resetPassword').mockResolvedValue({ ...managedUser, revision: 2 })
+    const user = userEvent.setup({ delay: null })
+
+    renderUsersWithQueryClient(new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    }))
+    await screen.findByText('Alice')
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    const editor = await screen.findByRole('dialog', { name: '编辑用户' })
+    const newPassword = 'replacement-password-long-enough'
+    await user.type(within(editor).getByLabelText('密码'), newPassword)
+    await user.click(within(editor).getByRole('button', { name: '确定' }))
+    const dialog = await screen.findByRole('dialog', { name: '重置 Alice 的密码' })
+    await waitFor(() => expect(within(dialog).queryByLabelText('MFA 验证码')).not.toBeInTheDocument())
+    expect(within(dialog).queryByRole('button', { name: '管理身份验证器' })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: '确认重置' }))
+
+    expect(await screen.findByText('密码已重置，目标用户的现有会话已撤销')).toBeInTheDocument()
+    expect(proof).not.toHaveBeenCalled()
+    expect(reset).toHaveBeenCalledWith(expect.any(String), {
+      user_id: managedUser.id,
+      tenant_id: managedUser.tenant_id,
+      tenant_scope_id: managedUser.scope_id,
+      expected_revision: managedUser.revision,
+      new_password: newPassword,
+      step_up_token: '',
+    }, expect.any(Object))
   })
 
   it('retries an unknown password reset with the exact original request without issuing another proof', async () => {
@@ -1243,6 +1242,41 @@ describe('UserListPage', () => {
     expect(reset.mock.calls[1][2]).toBe(reset.mock.calls[0][2])
     expectMutationCacheNotToContain(queryClient, 'replacement-password-long-enough')
     expectMutationCacheNotToContain(queryClient, 'opaque-reset-retry-proof')
+  })
+
+  // user password login：管理员未启用 MFA 时 step-up 返回 412 mfa_not_active，弹窗原先只显示
+  // 「请求失败，请稍后重试（请求 ID：mfa-step-up-…）」；MFA 码错误同样落到通用失败。
+  it.each([
+    [422, 'mfa_invalid_code', 'MFA 验证码无效，请输入身份验证器上的当前验证码'],
+    [409, 'mfa_code_replayed', '该验证码已使用，请等待下一组验证码'],
+  ])('explains a %s %s step-up refusal instead of a generic failure', async (status, code, text) => {
+    authenticateAdmin()
+    vi.spyOn(mfaApi, 'getStatus').mockResolvedValue({ status: 'active', credential_id: managedUser.id, method: 'totp' })
+    vi.spyOn(usersApi, 'list').mockResolvedValue(listData())
+    vi.spyOn(usersApi, 'listGroups').mockImplementation(async (_token, page, limit) => ({
+      items: [], page, limit, total: 0,
+    }))
+    vi.spyOn(mfaApi, 'createStepUpProof')
+      .mockRejectedValue(new ApiError('API request failed', status, code, 'mfa-step-up-request-1'))
+    const reset = vi.spyOn(usersApi, 'resetPassword')
+    const user = userEvent.setup({ delay: null })
+
+    renderUsersWithQueryClient(new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    }))
+    await screen.findByText('Alice')
+    await user.click(screen.getByRole('button', { name: '编辑' }))
+    const editor = await screen.findByRole('dialog', { name: '编辑用户' })
+    await user.type(within(editor).getByLabelText('密码'), 'replacement-password-long-enough')
+    await user.click(within(editor).getByRole('button', { name: '确定' }))
+    const dialog = await screen.findByRole('dialog', { name: '重置 Alice 的密码' })
+    await user.type(within(dialog).getByLabelText('MFA 验证码'), '123456')
+    await user.click(within(dialog).getByRole('button', { name: '确认重置' }))
+
+    expect(await within(dialog).findByText(text)).toBeInTheDocument()
+    expect(within(dialog).queryByText(/请求失败，请稍后重试/)).not.toBeInTheDocument()
+    expect(reset).not.toHaveBeenCalled()
+    expect(within(dialog).getByLabelText('MFA 验证码')).toBeEnabled()
   })
 
   it('turns an authorized list 403 into a terminal boundary that cannot be reawakened', async () => {

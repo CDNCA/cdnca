@@ -25,6 +25,7 @@ paths:
         rows without observations remain null and are never backfilled from current user contacts.
         Message content retains its separate administrator message-query contract.
       operationId: listNotificationDeliveryHistory
+      x-summary-zh: "列出脱敏后的不可变通知投递记录"
       security: [{ bearerAuth: [] }]
       x-required-any-permission: [system_configuration.read, platform.admin]
       parameters:

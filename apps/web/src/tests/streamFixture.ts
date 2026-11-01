@@ -83,6 +83,7 @@ export const stream: Stream = {
     automatic_request_id: null,
     publication_id: null,
     rollout_id: null,
+    failure_code: null,
     created_at: '2026-07-22T08:00:00Z',
   },
   created_at: '2026-07-22T08:00:00Z',

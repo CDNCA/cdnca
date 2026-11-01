@@ -168,7 +168,7 @@ func (service *Service) Enable(ctx context.Context, actor Actor, pluginID string
 	switch {
 	case !confirm.RiskAcknowledged:
 		reason, err = "risk_not_acknowledged", ErrRiskNotAcknowledged
-	case service.StepUp == nil || confirm.StepUpToken == "" || confirm.SessionID == uuid.Nil || provider.TenantID == nil:
+	case service.StepUp == nil || confirm.SessionID == uuid.Nil || provider.TenantID == nil:
 		reason, err = "step_up_required", ErrStepUpRequired
 	}
 	var proofID uuid.UUID

@@ -7,6 +7,7 @@
    "method": "POST",
    "path": "/v1/observability/frontend-events",
    "summary": "Append a sanitized frontend event",
+   "summary_zh": "追加一条脱敏后的前端事件",
    "auth": [
     "bearer"
    ],
@@ -79,6 +80,7 @@
    "method": "GET",
    "path": "/v1/observability/logs",
    "summary": "List authorized observability facts",
+   "summary_zh": "列出有权查看的可观测日志",
    "auth": [
     "bearer"
    ],
@@ -222,6 +224,7 @@
    "method": "GET",
    "path": "/v1/observability/logs/export",
    "summary": "Export authorized observability facts as bounded CSV",
+   "summary_zh": "把有权查看的可观测日志导出为限定大小的 CSV",
    "auth": [
     "bearer"
    ],

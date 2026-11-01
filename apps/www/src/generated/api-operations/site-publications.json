@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/site-publications",
    "summary": "List publications in the authenticated tenant scope",
+   "summary_zh": "列出当前租户范围的发布记录",
    "auth": [
     "apiKey",
     "bearer"
@@ -84,6 +85,7 @@
    "method": "POST",
    "path": "/v1/site-publications",
    "summary": "Publish the authenticated tenant scope",
+   "summary_zh": "发布当前租户范围的配置",
    "auth": [
     "bearer"
    ],
@@ -244,6 +246,7 @@
    "method": "GET",
    "path": "/v1/site-publications/security-activations",
    "summary": "Get the authoritative security binding and latest activation candidate",
+   "summary_zh": "读取权威的安全策略绑定与最新激活候选",
    "auth": [
     "apiKey",
     "bearer"
@@ -326,6 +329,7 @@
    "method": "POST",
    "path": "/v1/site-publications/security-activations",
    "summary": "Stage a security policy candidate and start its canary rollout",
+   "summary_zh": "暂存安全策略候选并开始灰度发布",
    "auth": [
     "apiKey",
     "bearer"
@@ -467,6 +471,7 @@
    "method": "GET",
    "path": "/v1/site-publications/security-activations/rebind-status",
    "summary": "Count bound sites still behind their WAF/CC library and those the package does not entitle",
+   "summary_zh": "统计仍落后于 WAF/CC 规则库版本的已绑定网站，以及套餐未授权的网站",
    "auth": [
     "apiKey",
     "bearer"
@@ -523,6 +528,7 @@
    "method": "GET",
    "path": "/v1/site-publications/security-activations/{candidate_id}",
    "summary": "Get a security policy activation candidate",
+   "summary_zh": "读取一个安全策略激活候选",
    "auth": [
     "apiKey",
     "bearer"
@@ -671,6 +677,7 @@
    "method": "POST",
    "path": "/v1/site-publications/security-activations/{candidate_id}/reconcile",
    "summary": "Reconcile canary, expansion, recovery, and promotion",
+   "summary_zh": "推进灰度、扩量、恢复与晋升",
    "auth": [
     "apiKey",
     "bearer"
@@ -782,6 +789,7 @@
    "method": "POST",
    "path": "/v1/site-publications/security-activations/{candidate_id}/rollback",
    "summary": "Clone an old policy into a new monotonic version and stage it",
+   "summary_zh": "把旧策略复制为单调递增的新版本并暂存",
    "auth": [
     "apiKey",
     "bearer"
@@ -912,6 +920,7 @@
    "method": "GET",
    "path": "/v1/site-publications/{publication_id}",
    "summary": "Get one publication in the authenticated tenant scope",
+   "summary_zh": "读取当前租户范围的一次发布",
    "auth": [
     "apiKey",
     "bearer"

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/nodes",
    "summary": "List platform nodes with explicit inventory order and keyset pagination",
+   "summary_zh": "按明确的清单顺序与键集分页列出平台节点",
    "auth": [
     "bearer"
    ],
@@ -80,6 +81,7 @@
    "method": "POST",
    "path": "/v1/nodes",
    "summary": "Create a pending platform node",
+   "summary_zh": "创建待接入的平台节点",
    "auth": [
     "bearer"
    ],
@@ -181,6 +183,7 @@
    "method": "POST",
    "path": "/v1/nodes/batch-admin-state",
    "summary": "Update one administrative state across a batch of nodes",
+   "summary_zh": "批量修改节点的管理状态",
    "auth": [
     "bearer"
    ],
@@ -255,6 +258,7 @@
    "method": "GET",
    "path": "/v1/nodes/installation-tickets",
    "summary": "Get each node's last license service ticket and the days left",
+   "summary_zh": "读取每个节点最近的授权服务票据及剩余天数",
    "auth": [
     "bearer"
    ],
@@ -315,6 +319,7 @@
    "method": "GET",
    "path": "/v1/nodes/metrics/latest",
    "summary": "Get latest durable load samples for a bounded set of platform nodes",
+   "summary_zh": "读取一批平台节点最新的持久化负载样本",
    "auth": [
     "bearer"
    ],
@@ -458,6 +463,7 @@
    "method": "GET",
    "path": "/v1/nodes/registration-credential",
    "summary": "Get the reusable node registration credential",
+   "summary_zh": "读取可重复使用的节点注册凭据",
    "auth": [
     "bearer"
    ],
@@ -510,6 +516,7 @@
    "method": "POST",
    "path": "/v1/nodes/registration-credential/reset",
    "summary": "Reset the node registration credential",
+   "summary_zh": "重置节点注册凭据",
    "auth": [
     "bearer"
    ],
@@ -562,6 +569,7 @@
    "method": "GET",
    "path": "/v1/nodes/{id}",
    "summary": "Get one platform node",
+   "summary_zh": "读取一个平台节点",
    "auth": [
     "bearer"
    ],
@@ -682,6 +690,7 @@
    "method": "PATCH",
    "path": "/v1/nodes/{id}",
    "summary": "Update node inventory metadata or administrative state",
+   "summary_zh": "修改节点清单信息或管理状态",
    "auth": [
     "bearer"
    ],
@@ -851,6 +860,7 @@
    "method": "POST",
    "path": "/v1/nodes/{id}/enrollment-tokens",
    "summary": "Issue a one-time enrollment token",
+   "summary_zh": "签发一次性节点接入令牌",
    "auth": [
     "bearer"
    ],
@@ -954,6 +964,7 @@
    "method": "POST",
    "path": "/v1/nodes/{id}/gateway-port-transitions",
    "summary": "Start a versioned Agent Gateway communication-port transition",
+   "summary_zh": "开始一次带版本的 Agent 网关通信端口切换",
    "auth": [
     "bearer"
    ],
@@ -1128,6 +1139,7 @@
    "method": "GET",
    "path": "/v1/nodes/{id}/gateway-port-transitions/{transition_id}",
    "summary": "Get the durable communication-port transition state",
+   "summary_zh": "读取通信端口切换的持久化状态",
    "auth": [
     "bearer"
    ],
@@ -1260,6 +1272,7 @@
    "method": "POST",
    "path": "/v1/nodes/{id}/gateway-port-transitions/{transition_id}/finalize",
    "summary": "Finalize a switched Agent Gateway communication port",
+   "summary_zh": "完成已切换的 Agent 网关通信端口",
    "auth": [
     "bearer"
    ],
@@ -1413,6 +1426,7 @@
    "method": "POST",
    "path": "/v1/nodes/{id}/gateway-port-transitions/{transition_id}/rollback",
    "summary": "Roll back an Agent Gateway communication-port transition",
+   "summary_zh": "回滚 Agent 网关通信端口切换",
    "auth": [
     "bearer"
    ],
@@ -1566,6 +1580,7 @@
    "method": "GET",
    "path": "/v1/nodes/{id}/ip-location",
    "summary": "Get a node's IP location (automatic resolution and manual fields)",
+   "summary_zh": "读取节点 IP 归属地（自动解析与手工填写的字段）",
    "auth": [
     "bearer"
    ],
@@ -1638,6 +1653,7 @@
    "method": "GET",
    "path": "/v1/nodes/{id}/metrics/latest",
    "summary": "Get the latest durable load sample for one platform node",
+   "summary_zh": "读取一个平台节点最新的持久化负载样本",
    "auth": [
     "bearer"
    ],

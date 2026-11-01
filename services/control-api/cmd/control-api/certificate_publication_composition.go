@@ -83,7 +83,7 @@ func openCertificatePublicationProductionRuntime(
 // renewal failures noticed as certificate.renew_failed. It runs on the
 // automatic edge publication loop.
 // withRenewalDeliveryCanceller lets the store's user binding writes cancel the
-// in-flight renewal delivery they supersede (fix-dnscert4), in their own
+// in-flight renewal delivery they supersede, in their own
 // transaction, as the system (job:certificate_renewal).
 func withRenewalDeliveryCanceller(store *certificateasset.Store, pool *pgxpool.Pool) error {
 	rollouts, err := edgedeployment.NewStoreWithClockAndAuditor(pool, time.Now, audit.New(pool))

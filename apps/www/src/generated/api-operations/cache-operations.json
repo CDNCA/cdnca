@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/cache-operations",
    "summary": "List cache operations in a stable tenant snapshot",
+   "summary_zh": "在稳定的租户快照中列出缓存操作",
    "auth": [
     "bearer"
    ],
@@ -115,6 +116,7 @@
    "method": "POST",
    "path": "/v1/cache-operations",
    "summary": "Persist a purge or prewarm operation",
+   "summary_zh": "提交一次缓存刷新或预热",
    "auth": [
     "bearer"
    ],
@@ -304,6 +306,7 @@
    "method": "GET",
    "path": "/v1/cache-operations/daily-usage",
    "summary": "Today's cache operation quotas of the caller's account (UTC+8 day; system follow-ups not counted)",
+   "summary_zh": "调用者账号今天的缓存操作额度（按北京时间计日，系统自动跟进的不计）",
    "auth": [
     "bearer"
    ],
@@ -390,6 +393,7 @@
    "method": "GET",
    "path": "/v1/cache-operations/{operation_id}",
    "summary": "Get sanitized per-node operation progress",
+   "summary_zh": "读取脱敏后的各节点操作进度",
    "auth": [
     "bearer"
    ],
@@ -535,6 +539,7 @@
    "method": "POST",
    "path": "/v1/cache-operations/{operation_id}/cancel",
    "summary": "Cancel a queued or running cache operation",
+   "summary_zh": "取消排队中或运行中的缓存操作",
    "auth": [
     "bearer"
    ],
@@ -696,6 +701,7 @@
    "method": "POST",
    "path": "/v1/cache-operations/{operation_id}/resubmit",
    "summary": "Re-submit an operation as a new one",
+   "summary_zh": "把一次缓存操作重新提交为新操作",
    "auth": [
     "bearer"
    ],
@@ -862,6 +868,7 @@
    "method": "POST",
    "path": "/v1/cache-operations/{operation_id}/retry",
    "summary": "Requeue retryable failed projections only",
+   "summary_zh": "只把可重试的失败项重新排队",
    "auth": [
     "bearer"
    ],

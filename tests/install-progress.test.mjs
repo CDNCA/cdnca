@@ -82,6 +82,18 @@ test('a failing long step reports its tail, exit code, stage and log; the status
   assert.match(result.stderr, /✗ \[2\/3\] 乙 失败（本步骤已用 0:0\d，退出码 100）。原因与处理办法见上方 error 行；完整输出：.*cdnca-install-test-/)
 })
 
+// 预期的非零结束（节点待主控初始化）用提示色（黄）显示安装器给的文案，不标 ✗ 失败；退出码不变。
+test('an expected non-zero exit with PROGRESS_EXIT_NOTICE is shown in the notice color, not as a failure', () => {
+  const body = 'trap \'progress_on_exit $?\' EXIT; progress_init; progress_stage; progress_stage; PROGRESS_EXIT_NOTICE=安装完成，待主控初始化; exit 3'
+  const result = run(body, { tty: true })
+  assert.equal(result.status, 3)
+  assert.match(result.stderr, /\x1b\[33m! \[2\/3\] 乙 安装完成，待主控初始化（安装日志：.*cdnca-install-test-.*）\x1b\[0m/)
+  assert.doesNotMatch(result.stderr, /✗|失败|\x1b\[31m/)
+  assert.match(result.log, /! \[2\/3\] 乙 安装完成，待主控初始化/)
+  const failed = run('trap \'progress_on_exit $?\' EXIT; progress_init; progress_stage; exit 3', { tty: true })
+  assert.match(failed.stderr, /\x1b\[31m✗ \[1\/3\] 甲 失败（本步骤已用 0:0\d，退出码 3）/)
+})
+
 test('a non-terminal heartbeat appears every 15 seconds with the apt package counter', () => {
   const apt = ['0 upgraded, 3 newly installed, 0 to remove and 0 not upgraded.', 'Unpacking libpq5 (17.2-1) ...', 'Setting up libpq5 (17.2-1) ...',
     'Unpacking postgresql-17 (17.2-1) ...'].map((line) => `echo '${line}'`).join('; ')

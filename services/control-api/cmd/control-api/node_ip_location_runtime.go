@@ -13,7 +13,7 @@ import (
 )
 
 // nodeIPLocationInterval: how often nodes are checked for a new address or
-// library (fix-nodeipgeo); a check without work reads only the node rows.
+// library; a check without work reads only the node rows.
 const nodeIPLocationInterval = time.Minute
 
 // nodeIPLocationSource answers node addresses from the control plane's IP

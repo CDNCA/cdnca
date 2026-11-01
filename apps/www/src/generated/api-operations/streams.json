@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/streams",
    "summary": "List layer-four forwarding rules",
+   "summary_zh": "列出四层转发规则",
    "auth": [
     "apiKey",
     "bearer"
@@ -195,6 +196,7 @@
    "method": "POST",
    "path": "/v1/streams",
    "summary": "Create a forwarding rule and immutable publication intent",
+   "summary_zh": "创建转发规则及不可变的发布意图",
    "auth": [
     "apiKey",
     "bearer"
@@ -714,7 +716,7 @@
    "method": "POST",
    "path": "/v1/streams/batch",
    "summary": "Bulk add forwarding rules, one per line",
-   "summary_zh": "批量添加 forwarding rules, one per line",
+   "summary_zh": "批量添加转发规则，每行一条",
    "auth": [
     "apiKey",
     "bearer"
@@ -837,7 +839,7 @@
    "method": "POST",
    "path": "/v1/streams/batch-action",
    "summary": "More actions on selected forwarding rules (platform)",
-   "summary_zh": "更多操作 on selected forwarding rules (platform)",
+   "summary_zh": "对所选转发规则执行更多操作（平台）",
    "auth": [
     "apiKey",
     "bearer"
@@ -956,6 +958,7 @@
    "method": "GET",
    "path": "/v1/streams/{id}",
    "summary": "Get one layer-four forwarding rule",
+   "summary_zh": "读取一条四层转发规则",
    "auth": [
     "apiKey",
     "bearer"
@@ -1286,6 +1289,7 @@
    "method": "PATCH",
    "path": "/v1/streams/{id}",
    "summary": "Replace a rule and create an immutable publication intent",
+   "summary_zh": "替换规则并创建不可变的发布意图",
    "auth": [
     "apiKey",
     "bearer"
@@ -1819,6 +1823,7 @@
    "method": "DELETE",
    "path": "/v1/streams/{id}",
    "summary": "Soft-delete a rule and create a deletion publication intent",
+   "summary_zh": "软删除规则并创建删除发布意图",
    "auth": [
     "apiKey",
     "bearer"

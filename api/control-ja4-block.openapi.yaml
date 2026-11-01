@@ -6,6 +6,7 @@ paths:
   /v1/security/ja4-blocks:
     post:
       operationId: createTenantJA4BlockWorkflow
+      x-summary-zh: "基于一份权威排行快照创建租户范围的 JA4 封禁"
       summary: Create a tenant-scoped JA4 block from one authoritative ranking snapshot
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.manage]
@@ -31,6 +32,7 @@ paths:
   /v1/security/ja4-blocks/{workflow_id}:
     get:
       operationId: getTenantJA4BlockWorkflow
+      x-summary-zh: "读取固定的 JA4 封禁策略、绑定、发布与灰度状态"
       summary: Get fixed JA4 block policy, binding, publication, and rollout state
       security: [{bearerAuth: []}]
       x-required-permissions: [security_policies.read]
@@ -46,6 +48,7 @@ paths:
   /v1/admin/security/ja4-blocks:
     post:
       operationId: createAdminJA4BlockWorkflow
+      x-summary-zh: "以平台管理员身份创建租户/网站范围的 JA4 封禁"
       summary: Create a tenant/site-scoped JA4 block as a platform administrator
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.manage]
@@ -71,6 +74,7 @@ paths:
   /v1/admin/security/ja4-blocks/{workflow_id}:
     get:
       operationId: getAdminJA4BlockWorkflow
+      x-summary-zh: "读取一个租户 JA4 封禁流程（不含原始访问事件）"
       summary: Get one exact tenant JA4 block workflow without raw access events
       security: [{bearerAuth: []}]
       x-required-permissions: [platform.admin, security_policies.read]

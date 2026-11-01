@@ -13,6 +13,7 @@ paths:
     get:
       summary: Read global notification channel settings
       operationId: getNotificationChannels
+      x-summary-zh: "读取全局通知渠道设置"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.read]
       responses:
@@ -25,6 +26,7 @@ paths:
     put:
       summary: Update global notification channel settings
       operationId: updateNotificationChannels
+      x-summary-zh: "修改全局通知渠道设置"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.manage]
       parameters:
@@ -47,6 +49,7 @@ paths:
     get:
       summary: Read notification delivery window and event policies
       operationId: getNotificationDeliveryPolicy
+      x-summary-zh: "读取通知投递时段与事件策略"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.read]
       responses:
@@ -59,6 +62,7 @@ paths:
     put:
       summary: Update notification delivery window and event policies
       operationId: updateNotificationDeliveryPolicy
+      x-summary-zh: "修改通知投递时段与事件策略"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.manage]
       parameters:
@@ -81,6 +85,7 @@ paths:
     get:
       summary: List immutable notification template versions
       operationId: listNotificationTemplates
+      x-summary-zh: "列出不可变的通知模板版本"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.read]
       responses:
@@ -98,6 +103,7 @@ paths:
     put:
       summary: Create an immutable notification template version
       operationId: putNotificationTemplateVersion
+      x-summary-zh: "创建一个不可变的通知模板版本"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.manage]
       parameters: [{ $ref: '#/components/parameters/OptionalRequestID' }]
@@ -121,6 +127,7 @@ paths:
         Lists durable delivery state without recipient contacts, subject, body, deduplication keys,
         lease tokens, provider response bodies, or credentials. The cursor is stable for the selected filters.
       operationId: listNotificationDeliveries
+      x-summary-zh: "列出脱敏后的通知投递结果"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.read]
       parameters:
@@ -141,6 +148,7 @@ paths:
     get:
       summary: List redacted attempts for one notification delivery
       operationId: listNotificationDeliveryAttempts
+      x-summary-zh: "列出一次通知投递的脱敏尝试记录"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.read]
       responses:
@@ -163,6 +171,7 @@ paths:
         email_state/sms_state come from original generation-1 outbox facts (null = that channel was
         not generated); delivery replay does not duplicate message rows.
       operationId: listNotificationMessages
+      x-summary-zh: "列出兼容视图下的消息"
       security: [{ bearerAuth: [] }]
       x-required-permissions: [system_configuration.read]
       parameters:
@@ -192,6 +201,7 @@ paths:
         stay in the announcement inbox and system-required messages are excluded. site_id and package_id
         are facts recorded when the event was raised and remain after the resource is deleted.
       operationId: listOwnNotificationMessages
+      x-summary-zh: "列出当前用户自己的事件消息"
       security: [{ bearerAuth: [] }]
       x-required-permissions: []
       parameters:
@@ -216,6 +226,7 @@ paths:
     get:
       summary: Read the current user's event subscription
       operationId: getNotificationSubscription
+      x-summary-zh: "读取当前用户对某类事件的订阅"
       security: [{ bearerAuth: [] }]
       x-required-permissions: []
       responses:
@@ -229,6 +240,7 @@ paths:
     put:
       summary: Update the current user's event subscription
       operationId: updateNotificationSubscription
+      x-summary-zh: "修改当前用户对某类事件的订阅"
       security: [{ bearerAuth: [] }]
       x-required-permissions: []
       parameters:

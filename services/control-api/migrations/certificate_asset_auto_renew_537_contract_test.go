@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Migration 537 (fix-autorenew): certificate auto-renew moves to the asset;
+// Migration 537: certificate auto-renew moves to the asset;
 // the 048 order snapshot stays immutable. The 536 predecessor is pinned at merge.
 func TestCertificateAssetAutoRenew537Contract(t *testing.T) {
 	for _, script := range []struct {

@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/theme/assets/{sha}",
    "summary": "",
+   "summary_zh": "读取主题素材",
    "auth": [
     "bearer"
    ],
@@ -35,6 +36,7 @@
    "method": "GET",
    "path": "/v1/theme/auth-style",
    "summary": "",
+   "summary_zh": "读取登录页主题样式",
    "auth": [
     "bearer"
    ],
@@ -67,6 +69,7 @@
    "method": "GET",
    "path": "/v1/theme/auth-style/assets/{sha}",
    "summary": "",
+   "summary_zh": "读取登录页主题素材",
    "auth": [
     "bearer"
    ],
@@ -95,6 +98,7 @@
    "method": "GET",
    "path": "/v1/theme/current",
    "summary": "",
+   "summary_zh": "读取当前主题",
    "auth": [
     "bearer"
    ],
@@ -166,6 +170,7 @@
    "method": "GET",
    "path": "/v1/theme/theme.{sha}.css",
    "summary": "",
+   "summary_zh": "读取主题样式表",
    "auth": [
     "bearer"
    ],
@@ -194,6 +199,7 @@
    "method": "GET",
    "path": "/v1/theme/theme.{sha}.json",
    "summary": "",
+   "summary_zh": "读取主题设计变量",
    "auth": [
     "bearer"
    ],

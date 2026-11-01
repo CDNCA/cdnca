@@ -19,7 +19,7 @@
 8. **开发者平台复用 market-service**：开发者 = `market_sellers`；审核 worker、市场签目录、授权端同步目录、安装授权、托管结算全部沿用（§8）。清单 `entrypoint.type` 从仅 `external_https` 扩到 `rule_pack`、`theme`、`provider`。
 9. **聚合边缘是 A 档官方内置模块**（ADR 0008）：调度、拨测、切换和全部 `cdn_provider` 适配器都只由官方提供，不开放给开发者（已定（10-17 用户））。
 
-## 2. 现状核对（集成头 4a2f8a36）
+## 2. 现状核对（4a2f8a36）
 
 | 项 | 现状 | 依据 |
 |---|---|---|

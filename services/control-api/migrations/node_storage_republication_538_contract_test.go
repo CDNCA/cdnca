@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// Migration 538 (fix-nodesettings): system republication trigger
+// Migration 538: system republication trigger
 // node_storage and the node storage mark. Its guard pins 537's checksums.
 // Everything that changes with the number is here.
 const (

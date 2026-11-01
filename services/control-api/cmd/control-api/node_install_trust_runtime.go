@@ -11,7 +11,7 @@ import (
 
 // openNodeInstallTrustWatcher keeps the node install trust (upgrade-trust.json
 // and the digests in node-install-defaults / runtime-config.js) in step with
-// the control-plane domain's current resolution and control.env (fix-btenv5):
+// the control-plane domain's current resolution and control.env:
 // checked at start and every 10 minutes, republished on a difference (audited),
 // failure streaks notified to nodes.manage platform members.
 func openNodeInstallTrustWatcher(pool *pgxpool.Pool) (*nativebackup.NodeInstallTrustWatcher, error) {

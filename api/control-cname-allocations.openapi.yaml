@@ -16,6 +16,7 @@ paths:
     get:
       tags: [CNAME allocations]
       operationId: listCnameAllocations
+      x-summary-zh: "列出当前租户范围内的 CNAME 分配"
       summary: List CNAME allocation authority in the active tenant scope
       x-required-permissions: [dns.read]
       parameters:
@@ -35,6 +36,7 @@ paths:
     get:
       tags: [CNAME allocations]
       operationId: getCnameAllocation
+      x-summary-zh: "读取当前租户范围内的一条 CNAME 分配"
       summary: Get one CNAME allocation in the active tenant scope
       x-required-permissions: [dns.read]
       parameters:
@@ -53,6 +55,7 @@ paths:
     get:
       tags: [CNAME allocations]
       operationId: diagnoseCnameAllocation
+      x-summary-zh: "诊断当前租户范围内某网站的 CNAME 分配"
       summary: Diagnose CNAME authority for one site in the active tenant scope
       x-required-permissions: [dns.read]
       parameters:
@@ -73,6 +76,7 @@ paths:
     get:
       tags: [CNAME allocations]
       operationId: adminListCnameAllocations
+      x-summary-zh: "在所选租户范围内列出 CNAME 分配"
       summary: List CNAME allocation authority in a selected tenant scope
       x-required-permissions: [platform.admin]
       parameters:
@@ -93,6 +97,7 @@ paths:
     get:
       tags: [CNAME allocations]
       operationId: adminGetCnameAllocation
+      x-summary-zh: "在所选租户范围内读取一条 CNAME 分配"
       summary: Get one CNAME allocation in a selected tenant scope
       x-required-permissions: [platform.admin]
       parameters:
@@ -112,6 +117,7 @@ paths:
     get:
       tags: [CNAME allocations]
       operationId: adminDiagnoseCnameAllocation
+      x-summary-zh: "在所选租户范围内诊断某网站的 CNAME 分配"
       summary: Diagnose CNAME authority for one site in a selected tenant scope
       x-required-permissions: [platform.admin]
       parameters:

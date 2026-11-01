@@ -7,6 +7,7 @@
    "method": "GET",
    "path": "/v1/admin/dashboard",
    "summary": "Read the platform administrator dashboard",
+   "summary_zh": "读取平台管理员仪表盘",
    "auth": [
     "bearer"
    ],

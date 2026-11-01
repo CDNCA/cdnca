@@ -19,6 +19,7 @@ paths:
     get:
       tags: [SiteMonitoring]
       operationId: getTenantSiteMonitoring
+      x-summary-zh: "读取当前租户的网站监控"
       summary: Read site monitoring for the authenticated tenant
       description: >-
         Requires a tenant session with sites.read. The tenant is derived only
@@ -53,6 +54,7 @@ paths:
     get:
       tags: [SiteMonitoring]
       operationId: getPlatformSiteMonitoring
+      x-summary-zh: "以平台管理员身份读取某租户的网站监控"
       summary: Read one tenant's site monitoring as a platform administrator
       description: >-
         Requires a platform session with platform.admin and exactly one

@@ -6,6 +6,7 @@ paths:
   /v1/admin/analytics/logs/{kind}/geo-evidence/{event_id}:
     get:
       operationId: getPlatformAnalyticsGeoEvidence
+      x-summary-zh: "用已校验的 GeoIP 库核对一条租户日志"
       summary: Reconcile one tenant log fact against a verified GeoIP catalog
       security: [{bearerAuth: []}]
       x-required-permissions: [sites.read]
@@ -33,6 +34,7 @@ paths:
   /v1/analytics/logs/{kind}/geo-evidence/{event_id}:
     get:
       operationId: getTenantAnalyticsGeoEvidence
+      x-summary-zh: "用已校验的 GeoIP 库核对当前租户的一条日志"
       summary: Reconcile one authenticated tenant log fact against a verified GeoIP catalog
       description: tenant_id is forbidden; the tenant comes only from authenticated identity. The raw address is never returned.
       security: [{bearerAuth: []}, {cdncaApiKey: []}]

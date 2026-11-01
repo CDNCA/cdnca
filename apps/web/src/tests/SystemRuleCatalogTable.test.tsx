@@ -117,7 +117,7 @@ describe('SystemRuleCatalogSection', () => {
     await waitFor(() => expect(screen.queryByText('旧系统组')).not.toBeInTheDocument())
   })
 
-  // CCWAF-09（fix-tails1028b）：目录默认收起，标题条给条数与展开按钮；展开状态在 URL（刷新/深链保持）。
+  // CCWAF-09：目录默认收起，标题条给条数与展开按钮；展开状态在 URL（刷新/深链保持）。
   it('folds the catalog by default and opens it from the title bar, keeping the state in the URL', async () => {
     mockCatalog()
     const user = userEvent.setup()

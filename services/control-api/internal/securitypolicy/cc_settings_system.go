@@ -19,7 +19,7 @@ type CCSystemDefaults struct {
 	BlockSeconds int
 	WhiteSeconds int
 	AutoSwitch   CCSystemAutoSwitch
-	// Layers (fix-fwregion) are the platform's auto switch layers; AutoSwitch
+	// Layers are the platform's auto switch layers; AutoSwitch
 	// is Layers.Global once loaded.
 	Layers AutoSwitchLayers
 }
@@ -68,7 +68,7 @@ func (s *Store) OwnerCCDefaults(ctx context.Context, scopeID, ownerID uuid.UUID)
 }
 
 // CCSystemDefaults reads scopeID's global CC config (blacklist / whitelist
-// time) and the platform's auto switch layers (fix-fwregion), the tenant's
+// time) and the platform's auto switch layers, the tenant's
 // own auto_switch (the license's cc_protection) being the default of an
 // unset platform global one.
 func (s *Store) CCSystemDefaults(ctx context.Context, scopeID uuid.UUID) (CCSystemDefaults, error) {

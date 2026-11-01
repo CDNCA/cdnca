@@ -124,7 +124,7 @@ func runNativeBackup(args []string) error {
 		return nativebackup.InstallUnits(ctx, host)
 	case "publish-node-install-trust":
 		// install-control.sh publish_upgrade_trust: the same document a restore
-		// republishes (fix-btenv4); prints its SHA-256.
+		// republishes; prints its SHA-256.
 		if len(args) != 0 {
 			return errors.New(nativeBackupUsage)
 		}
@@ -550,7 +550,7 @@ func controlBackupAuditor(pool *pgxpool.Pool) controlbackuphttp.Auditor {
 }
 
 // nativeBackupCleanTarget removes a restore from a migration target that is
-// no longer wanted (fix-migrollback). Run as root on the new host.
+// no longer wanted. Run as root on the new host.
 func nativeBackupCleanTarget(ctx context.Context, host *nativebackup.Host, args []string) error {
 	flags := flag.NewFlagSet("clean-target", flag.ContinueOnError)
 	bundle := flags.String("bundle", "", "bundle directory of the migration")

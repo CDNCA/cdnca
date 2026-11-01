@@ -12,7 +12,7 @@ import '../i18n/l4Realtime'
 // whole control plane. The tenant value is tenants.id (what L4 facts carry),
 // found by searching tenant users.
 
-// The picked option's text, for the applied-filter tags (fix-advfilter).
+// The picked option's text, for the applied-filter tags.
 export function optionLabel(option: unknown): string | undefined {
   const label = (Array.isArray(option) ? option[0] : option as { label?: unknown } | undefined)?.label
   return typeof label === 'string' ? label : undefined

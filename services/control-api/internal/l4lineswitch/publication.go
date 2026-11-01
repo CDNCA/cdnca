@@ -176,7 +176,7 @@ func (coordinator *PostgresPublicationCoordinator) workloadRolloutStatus(
 			return err
 		}
 		// An ignored old release (edgedeployment.SupersededDeploymentSQL)
-		// ends its node without failing the rollout (fix-cfgflow3).
+		// ends its node without failing the rollout.
 		return tx.QueryRow(ctx, `WITH latest AS (
 			SELECT DISTINCT ON (deployment.node_id) deployment.node_id,deployment.state,
 			       `+edgedeployment.SupersededDeploymentSQL+` AS superseded

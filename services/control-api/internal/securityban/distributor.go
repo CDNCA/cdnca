@@ -330,7 +330,7 @@ func mapKeys[V any](values map[uuid.UUID]V) []uuid.UUID {
 }
 
 // banCIDRNodes: the nodes whose latest session declares BAN_CIDR v1
-// (fix-cidrban).
+//.
 func banCIDRNodes(ctx context.Context, tx pgx.Tx, nodeIDs []uuid.UUID) (map[uuid.UUID]bool, error) {
 	rows, err := tx.Query(ctx, `SELECT node.id,(SELECT facts.capabilities_snapshot FROM node_session_capabilities facts
 		WHERE facts.node_id=node.id ORDER BY facts.session_epoch DESC LIMIT 1) FROM unnest($1::uuid[]) AS node(id)`, nodeIDs)

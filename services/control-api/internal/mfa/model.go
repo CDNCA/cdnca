@@ -168,7 +168,19 @@ type Evidence struct {
 	ExpiresAt             time.Time
 	UseOrdinal            int
 	ResourceBindingDigest []byte
+	// Waived (MFA optional, 11-01 user decision): the operator has no
+	// active MFA credential, so the sensitive operation proceeds without a
+	// proof. ProofID is then the waiver ID (the mfa.step_up.waive audit
+	// resource, not a mfa_step_up_proofs row), Method is MethodNone and the
+	// audit carries step_up_note「操作者未启用 MFA」.
+	Waived bool
 }
+
+// MethodNone is the Evidence method of a waived step-up.
+const MethodNone = "none"
+
+// StepUpWaivedNote is the audit note of a waived step-up.
+const StepUpWaivedNote = "操作者未启用 MFA"
 
 type DeactivateRequest struct {
 	Authentication Authentication

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// Migration 574 (fix-apikeysimple): api_keys.scopes up to 128 so the simple
+// Migration 574: api_keys.scopes up to 128 so the simple
 // API key switch can issue an all-permissions key. Predecessor 552 is pinned
 // by checksum (re-pinned by the merge task if another 574 lands first).
 func TestAPIKeyScopeLimit574Contract(t *testing.T) {
