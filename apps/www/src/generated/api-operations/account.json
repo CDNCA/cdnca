@@ -42,6 +42,12 @@
      "in": "query",
      "type": "integer",
      "description": "Page-number access (canonical non-negative integer, 0-10000). Cannot be combined with cursor; an offset past the end returns empty items with total."
+    },
+    {
+     "name": "usable",
+     "in": "query",
+     "type": "string: true",
+     "description": "Only `true` is accepted. Keeps keys that can authenticate at the page snapshot: status active and expires_at absent or later than snapshot_at. An expired key keeps its active lifecycle status as history, so status=active alone does not mean usable. Combinable only with status=active or no status. Clients judge expiry against the response Date header (server clock), not their own clock."
     }
    ],
    "responses": [
@@ -143,6 +149,11 @@
       "name": "expires_at",
       "type": "string(date-time)",
       "description": "Must be in the future and no more than 366 days from the server clock."
+     },
+     {
+      "name": "plugin_installation_authorization_id",
+      "type": "string(uuid)",
+      "description": "Optional. Binds the key to an enabled plugin installation of the current tenant (plugin identity). The binding cannot be changed later; 409 plugin_installation_unavailable when the installation is not enabled in this tenant."
      }
     ]
    },
@@ -258,6 +269,11 @@
        "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
       },
       {
+       "name": "unavailable_scopes",
+       "type": "array<string>",
+       "description": "Read responses only (list/detail). Scopes of this key that the owner no longer holds; they are not effective when the key is used (AA-KEY-01). Omitted when every scope is still granted."
+      },
+      {
        "name": "ip_allowlist",
        "type": "array<string>",
        "required": true,
@@ -303,6 +319,19 @@
        "name": "updated_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "plugin_installation_authorization_id",
+       "type": "string(uuid)",
+       "description": "Present when the key is a plugin identity bound to this plugin installation. Its write requests are audited as actor_kind=plugin and rate limited per installation (429 + Retry-After); once the installation is disabled or uninstalled the key is refused with 401."
+      },
+      {
+       "name": "plugin_installation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "plugin_id",
+       "type": "string"
       }
      ]
     },
@@ -436,6 +465,11 @@
        "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
       },
       {
+       "name": "unavailable_scopes",
+       "type": "array<string>",
+       "description": "Read responses only (list/detail). Scopes of this key that the owner no longer holds; they are not effective when the key is used (AA-KEY-01). Omitted when every scope is still granted."
+      },
+      {
        "name": "ip_allowlist",
        "type": "array<string>",
        "required": true,
@@ -481,6 +515,19 @@
        "name": "updated_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "plugin_installation_authorization_id",
+       "type": "string(uuid)",
+       "description": "Present when the key is a plugin identity bound to this plugin installation. Its write requests are audited as actor_kind=plugin and rate limited per installation (429 + Retry-After); once the installation is disabled or uninstalled the key is refused with 401."
+      },
+      {
+       "name": "plugin_installation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "plugin_id",
+       "type": "string"
       }
      ]
     },
@@ -715,6 +762,11 @@
        "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
       },
       {
+       "name": "unavailable_scopes",
+       "type": "array<string>",
+       "description": "Read responses only (list/detail). Scopes of this key that the owner no longer holds; they are not effective when the key is used (AA-KEY-01). Omitted when every scope is still granted."
+      },
+      {
        "name": "ip_allowlist",
        "type": "array<string>",
        "required": true,
@@ -760,6 +812,19 @@
        "name": "updated_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "plugin_installation_authorization_id",
+       "type": "string(uuid)",
+       "description": "Present when the key is a plugin identity bound to this plugin installation. Its write requests are audited as actor_kind=plugin and rate limited per installation (429 + Retry-After); once the installation is disabled or uninstalled the key is refused with 401."
+      },
+      {
+       "name": "plugin_installation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "plugin_id",
+       "type": "string"
       }
      ]
     },
@@ -900,105 +965,11 @@
    ]
   },
   {
-   "operation_id": "getAccountBalance",
-   "method": "GET",
-   "path": "/v1/account/balance",
-   "summary": "Read the active tenant CNY balance",
-   "auth": [
-    "bearer"
-   ],
-   "description": "Requires billing.account.read in a tenant scope. A platform identity cannot use this tenant endpoint.",
-   "responses": [
-    {
-     "status": "200",
-     "description": "Current cached balance and optimistic revision. The balance is reconstructable from immutable postings.",
-     "fields": [
-      {
-       "name": "id",
-       "type": "string(uuid)",
-       "required": true
-      },
-      {
-       "name": "scope_id",
-       "type": "string(uuid)",
-       "required": true
-      },
-      {
-       "name": "tenant_id",
-       "type": "string(uuid)",
-       "required": true
-      },
-      {
-       "name": "tenant_name",
-       "type": "string",
-       "required": true
-      },
-      {
-       "name": "currency",
-       "type": "string",
-       "required": true
-      },
-      {
-       "name": "balance_minor",
-       "type": "integer(int64)",
-       "required": true
-      },
-      {
-       "name": "available_minor",
-       "type": "integer(int64)",
-       "required": true,
-       "description": "可用余额 = 余额 − 套餐预扣 − 退款处理中（在途充值退款），所有扣余额的操作按此判定。"
-      },
-      {
-       "name": "refunding_minor",
-       "type": "integer(int64)",
-       "required": true,
-       "description": "退款处理中（已发起、未到终态的充值退款/撤销）预留的金额。"
-      },
-      {
-       "name": "revision",
-       "type": "integer(int64)",
-       "required": true
-      },
-      {
-       "name": "created_at",
-       "type": "string(date-time)",
-       "required": true
-      },
-      {
-       "name": "updated_at",
-       "type": "string(date-time)",
-       "required": true
-      }
-     ]
-    },
-    {
-     "status": "401",
-     "description": "Authentication failed or the session is invalid.",
-     "description_zh": "认证失败或会话已失效。"
-    },
-    {
-     "status": "403",
-     "description": "The authenticated principal is not allowed to perform the action.",
-     "description_zh": "当前身份没有执行该操作的权限。"
-    },
-    {
-     "status": "404",
-     "description": "The requested resource was not found.",
-     "description_zh": "请求的资源不存在。"
-    },
-    {
-     "status": "500",
-     "description": "The request could not be completed because of an internal failure.",
-     "description_zh": "服务内部故障，请求未完成。"
-    }
-   ]
-  },
-  {
    "operation_id": "listAccountInbox",
    "method": "GET",
    "path": "/v1/account/inbox",
-   "summary": "List the tenant member's in-app messages (站内信), newest first",
+   "summary": "List the tenant member's in-app messages, newest first",
+   "summary_zh": "List the tenant member's in-app messages (站内信), newest first",
    "auth": [
     "bearer"
    ],
@@ -1142,76 +1113,6 @@
     {
      "status": "404",
      "description": "admin_inbox_message_not_found (not the caller's message)."
-    }
-   ]
-  },
-  {
-   "operation_id": "listAccountLedger",
-   "method": "GET",
-   "path": "/v1/account/ledger",
-   "summary": "List immutable entries for the active tenant CNY balance",
-   "auth": [
-    "bearer"
-   ],
-   "description": "Requires billing.account.read and always derives scope from the authenticated tenant principal.",
-   "params": [
-    {
-     "name": "page",
-     "in": "query",
-     "type": "integer"
-    },
-    {
-     "name": "limit",
-     "in": "query",
-     "type": "integer"
-    }
-   ],
-   "responses": [
-    {
-     "status": "200",
-     "description": "Newest-first tenant ledger page.",
-     "fields": [
-      {
-       "name": "items",
-       "type": "array<BillingLedgerEntry>",
-       "required": true
-      },
-      {
-       "name": "total",
-       "type": "integer(int64)",
-       "required": true
-      },
-      {
-       "name": "page",
-       "type": "integer",
-       "required": true
-      },
-      {
-       "name": "limit",
-       "type": "integer",
-       "required": true
-      }
-     ]
-    },
-    {
-     "status": "400",
-     "description": "The request body or parameters are invalid.",
-     "description_zh": "请求体或参数不合法。"
-    },
-    {
-     "status": "401",
-     "description": "Authentication failed or the session is invalid.",
-     "description_zh": "认证失败或会话已失效。"
-    },
-    {
-     "status": "403",
-     "description": "The authenticated principal is not allowed to perform the action.",
-     "description_zh": "当前身份没有执行该操作的权限。"
-    },
-    {
-     "status": "500",
-     "description": "The request could not be completed because of an internal failure.",
-     "description_zh": "服务内部故障，请求未完成。"
     }
    ]
   },
@@ -2248,6 +2149,16 @@
        "description": "Ticket events only (546): the in-app message-center copy (default true). Absent for every other event."
       },
       {
+       "name": "email_bound",
+       "type": "boolean",
+       "description": "Account subscriptions only: the caller's own email is a deliverable mailbox; false means email notices end as recipient_unavailable. Read from the current profile, never the address. Absent on channel settings."
+      },
+      {
+       "name": "phone_bound",
+       "type": "boolean",
+       "description": "Account subscriptions only: the caller's own phone number is deliverable for SMS; false means SMS notices end as recipient_unavailable. Read from the current profile, never the number."
+      },
+      {
        "name": "revision",
        "type": "integer(int64)",
        "required": true
@@ -2374,6 +2285,16 @@
        "description": "Ticket events only (546): the in-app message-center copy (default true). Absent for every other event."
       },
       {
+       "name": "email_bound",
+       "type": "boolean",
+       "description": "Account subscriptions only: the caller's own email is a deliverable mailbox; false means email notices end as recipient_unavailable. Read from the current profile, never the address. Absent on channel settings."
+      },
+      {
+       "name": "phone_bound",
+       "type": "boolean",
+       "description": "Account subscriptions only: the caller's own phone number is deliverable for SMS; false means SMS notices end as recipient_unavailable. Read from the current profile, never the number."
+      },
+      {
        "name": "revision",
        "type": "integer(int64)",
        "required": true
@@ -2416,104 +2337,6 @@
     {
      "status": "500",
      "description": "Stable error envelope. Clients map code through locale resources and do not render message directly."
-    }
-   ]
-  },
-  {
-   "operation_id": "listAccountOrders",
-   "method": "GET",
-   "path": "/v1/account/orders",
-   "summary": "List tenant consumption records",
-   "auth": [
-    "bearer"
-   ],
-   "description": "Requires billing.account.read. Callers with billing.order_records.read (tenant_owner) see all tenant users; other callers are restricted to their own user ID. Tenant rows are never editable.",
-   "params": [
-    {
-     "name": "page",
-     "in": "query",
-     "type": "integer"
-    },
-    {
-     "name": "limit",
-     "in": "query",
-     "type": "integer"
-    },
-    {
-     "name": "type",
-     "in": "query",
-     "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change"
-    },
-    {
-     "name": "status",
-     "in": "query",
-     "type": "string: paid / unpaid"
-    },
-    {
-     "name": "search",
-     "in": "query",
-     "type": "string",
-     "description": "Exact-page substring search over source-local display ID, UUID, user ID, username, email, or phone."
-    },
-    {
-     "name": "created_from",
-     "in": "query",
-     "type": "string(date-time)"
-    },
-    {
-     "name": "created_to",
-     "in": "query",
-     "type": "string(date-time)",
-     "description": "Exclusive upper bound."
-    }
-   ],
-   "responses": [
-    {
-     "status": "200",
-     "description": "Consumption record page",
-     "fields": [
-      {
-       "name": "items",
-       "type": "array<AccountOrder>",
-       "required": true
-      },
-      {
-       "name": "total",
-       "type": "integer",
-       "required": true
-      },
-      {
-       "name": "page",
-       "type": "integer",
-       "required": true
-      },
-      {
-       "name": "limit",
-       "type": "integer",
-       "required": true
-      },
-      {
-       "name": "can_manage",
-       "type": "boolean",
-       "required": true
-      }
-     ]
-    },
-    {
-     "status": "400",
-     "description": "Invalid request fields"
-    },
-    {
-     "status": "401",
-     "description": "Authentication is required"
-    },
-    {
-     "status": "403",
-     "description": "Required permission is absent"
-    },
-    {
-     "status": "503",
-     "description": "Account order service unavailable"
     }
    ]
   },
@@ -2770,93 +2593,6 @@
      "status": "500",
      "description": "The request could not be completed because of an internal failure.",
      "description_zh": "服务内部故障，请求未完成。"
-    }
-   ]
-  },
-  {
-   "operation_id": "listAccountStatement",
-   "method": "GET",
-   "path": "/v1/account/statement",
-   "summary": "List the caller's merged consumption statement (orders, recharges and balance ledger entries)",
-   "auth": [
-    "bearer"
-   ],
-   "description": "Requires billing.account.read in the caller's own tenant scope. Merges manual order records, package and traffic-package orders, recharge orders and balance ledger postings that have no order row (manual adjustments, migration import credits, refund/void reversals, reseller sale/wholesale) into one newest-first page. Order-like rows are restricted to the caller's own user unless the caller holds billing.order_records.read; ledger rows belong to the tenant balance and follow the same visibility as GET /v1/account/ledger. Ledger operations that already have an order row (checkout debit, provider payment, recharge payment) are not repeated.",
-   "params": [
-    {
-     "name": "page",
-     "in": "query",
-     "type": "integer"
-    },
-    {
-     "name": "limit",
-     "in": "query",
-     "type": "integer"
-    },
-    {
-     "name": "type",
-     "in": "query",
-     "type": "string: recharge / deduction / upgrade / purchase / renewal / package_change / traffic_package / refund / income"
-    },
-    {
-     "name": "status",
-     "in": "query",
-     "type": "string: paid / unpaid"
-    },
-    {
-     "name": "created_from",
-     "in": "query",
-     "type": "string(date-time)"
-    },
-    {
-     "name": "created_to",
-     "in": "query",
-     "type": "string(date-time)",
-     "description": "Exclusive upper bound."
-    }
-   ],
-   "responses": [
-    {
-     "status": "200",
-     "description": "Statement page",
-     "fields": [
-      {
-       "name": "items",
-       "type": "array<AccountStatementEntry>",
-       "required": true
-      },
-      {
-       "name": "total",
-       "type": "integer(int64)",
-       "required": true
-      },
-      {
-       "name": "page",
-       "type": "integer",
-       "required": true
-      },
-      {
-       "name": "limit",
-       "type": "integer",
-       "required": true
-      }
-     ]
-    },
-    {
-     "status": "400",
-     "description": "Invalid request fields"
-    },
-    {
-     "status": "401",
-     "description": "Authentication is required"
-    },
-    {
-     "status": "403",
-     "description": "Required permission is absent"
-    },
-    {
-     "status": "503",
-     "description": "Account order service unavailable"
     }
    ]
   }

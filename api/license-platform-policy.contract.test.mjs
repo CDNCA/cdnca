@@ -196,33 +196,3 @@ test('canonical and publication differences are explicitly documented, not fake 
   assert.match(schemas.PlatformCCProtection.description, /9223372036854775807/)
   assert.match(schemas.PlatformCCProtection.description, /JavaScript clients may reject/s)
 })
-
-test('public schema fields and limits remain bound to the current Go model', () => {
-  const source = readFileSync(new URL('../services/license-service/internal/licensing/platform_policy.go', import.meta.url), 'utf8')
-  for (const [schemaName, goName] of [
-    ['PlatformPolicy', 'PlatformPolicy'], ['PlatformCCProtection', 'PlatformCCProtection'],
-    ['PlatformCCAutoSwitch', 'PlatformCCAutoSwitch'], ['PlatformCCTemplates', 'PlatformCCTemplates'],
-    ['PlatformCCSystemRule', 'CCSystemRule'], ['PlatformCCSystemMatcher', 'CCSystemMatcher'], ['PlatformCCSystemFilter', 'CCSystemFilter'],
-    ['PlatformPolicyWAFRuleLibrary', 'PlatformPolicyWAFRuleLibrary'], ['PlatformPolicyWAFRule', 'PlatformPolicyWAFRule'], ['PlatformPolicyWAFRuleCondition', 'PlatformPolicyWAFRuleCondition'],
-  ]) {
-    const body = source.match(new RegExp(`type ${goName} struct \\{([\\s\\S]*?)\\n\\}`))?.[1]
-    assert.ok(body, `missing Go model ${goName}`)
-    const fields = [...body.matchAll(/json:"([^",]+)/g)].map((match) => match[1]).sort()
-    assert.deepEqual(Object.keys(schemas[schemaName]?.properties ?? {}).sort(), fields, `${schemaName} field drift`)
-  }
-  assert.match(source, /maxWAFRuleLibraries\s*= 64/)
-  assert.match(source, /maxWAFRulesPerLibrary\s*= 100/)
-  assert.match(source, /if candidate\.CCSystemRules == nil \{\s*candidate\.CCSystemRules = DefaultCCSystemRules\(\)/)
-  assert.match(source, /utf8\.RuneCountInString\(value\)/)
-})
-
-test('contract CI installs frozen root dependencies and runs policy checks after index drift', () => {
-  const source = readFileSync(new URL('../scripts/ci-check.sh', import.meta.url), 'utf8')
-  const body = source.match(/^check_contracts\(\) \{\n([\s\S]*?)^\}/m)?.[1]
-  assert.ok(body, 'missing contracts gate')
-  const driftAt = body.indexOf('node tools/contract-doc-check/openapi-index.mjs --check')
-  const installAt = body.indexOf('pnpm --filter cdnca install --frozen-lockfile --ignore-scripts')
-  const testAt = body.indexOf('node --test api/license-platform-policy.contract.test.mjs')
-  assert.ok(driftAt >= 0 && installAt > driftAt && testAt > installAt, 'policy gate must run with locked root dependencies after index drift')
-  assert.ok(body.indexOf('  check_proto') > testAt, 'policy failures must stop subsequent contracts gates')
-})

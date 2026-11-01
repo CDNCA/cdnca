@@ -140,18 +140,18 @@
    "operation_id": "exportControlBackupRecoveryKit",
    "method": "POST",
    "path": "/v1/admin/control-backup/recovery-kit",
-   "summary": "Download the backup identity sealed with a passphrase (scrypt) for off-host disaster recovery",
+   "summary": "Download the backup identity for off-host disaster recovery; an empty passphrase (default) stores it as is, otherwise it is sealed with the passphrase (scrypt)",
    "auth": [
     "bearer"
    ],
    "responses": [
     {
      "status": "200",
-     "description": "Recovery kit JSON"
+     "description": "Recovery kit JSON (has_passphrase tells whether restore asks for a passphrase)"
     },
     {
      "status": "400",
-     "description": "Passphrase shorter than 12 characters"
+     "description": "Passphrase given but not 12 to 1024 characters"
     }
    ]
   },

@@ -6,7 +6,8 @@
    "operation_id": "listNodeLineGroups",
    "method": "GET",
    "path": "/v1/node-line-groups",
-   "summary": "查询线路组当前修订列表",
+   "summary": "List the current revisions of line groups",
+   "summary_zh": "查询线路组当前修订列表",
    "auth": [
     "bearer"
    ],
@@ -44,11 +45,13 @@
    "operation_id": "createNodeLineGroup",
    "method": "POST",
    "path": "/v1/node-line-groups",
-   "summary": "创建线路组首个不可变修订",
+   "summary": "Create the first immutable revision of a line group",
+   "summary_zh": "创建线路组首个不可变修订",
    "auth": [
     "bearer"
    ],
-   "description": "租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。",
+   "description": "A tenant session manages its own scope; a platform session without target_scope_id manages this control plane's platform scope, and writes naming a tenant scope are refused.",
+   "description_zh": "租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。",
    "params": [
     {
      "name": "target_scope_id",
@@ -94,22 +97,26 @@
      {
       "name": "resolved_value",
       "type": "string",
-      "description": "留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。"
+      "description": "When empty the server generates a stable lower-case DNS label; do not enter a domain suffix, port or IP.",
+      "description_zh": "留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。"
      },
      {
       "name": "ipv4_resolved_value",
       "type": "string",
-      "description": "IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。"
+      "description": "Record value for IPv4 only; when empty the server generates a stable lower-case DNS label from the line group ID.",
+      "description_zh": "IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。"
      },
      {
       "name": "l2_config_id",
       "type": "string(uuid) | null(uuid)",
-      "description": "同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。"
+      "description": "An active line group in the same scope and region that is not referenced by another L2 configuration; empty means a standalone line group.",
+      "description_zh": "同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。"
      },
      {
       "name": "failover_mode",
       "type": "string: primary_offline / online_less_than_backup_count",
-      "description": "有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。"
+      "description": "When a primary IP goes offline its backup IPs are enabled one by one, or all backup IPs are enabled when fewer primary IPs are online than there are backup IPs.",
+      "description_zh": "有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。"
      },
      {
       "name": "note",
@@ -166,7 +173,8 @@
    "operation_id": "getNodeLineGroup",
    "method": "GET",
    "path": "/v1/node-line-groups/{id}",
-   "summary": "查询线路组当前修订",
+   "summary": "Read the current revision of a line group",
+   "summary_zh": "查询线路组当前修订",
    "auth": [
     "bearer"
    ],
@@ -262,7 +270,8 @@
       {
        "name": "statistics",
        "type": "LineGroupStatistics",
-       "description": "仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。"
+       "description": "Current resource counts, in list responses only; detail, write and history revision responses may omit them.",
+       "description_zh": "仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。"
       },
       {
        "name": "configuration_digest",
@@ -287,12 +296,14 @@
       {
        "name": "is_platform_default",
        "type": "boolean",
-       "description": "平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。"
+       "description": "Platform default line group; websites without a package use it to freeze their CNAME target IPs (at most one on the platform).",
+       "description_zh": "平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。"
       },
       {
        "name": "backup_states",
        "type": "array<LineBackupState>",
-       "description": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
+       "description": "Whether each address family is currently resolving to backup IPs; returned only by the list and the current revision detail. Address families that never used backups are absent (that is, normal).",
+       "description_zh": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
       }
      ]
     },
@@ -310,11 +321,13 @@
    "operation_id": "updateNodeLineGroup",
    "method": "PUT",
    "path": "/v1/node-line-groups/{id}",
-   "summary": "创建线路组下一不可变修订",
+   "summary": "Create the next immutable revision of a line group",
+   "summary_zh": "创建线路组下一不可变修订",
    "auth": [
     "bearer"
    ],
-   "description": "租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。",
+   "description": "A tenant session manages its own scope; a platform session without target_scope_id manages this control plane's platform scope, and writes naming a tenant scope are refused.",
+   "description_zh": "租户会话管理自身作用域；平台会话未指定 target_scope_id 时管理本主控平台作用域，显式指定租户作用域时拒绝写入。",
    "params": [
     {
      "name": "id",
@@ -366,22 +379,26 @@
      {
       "name": "resolved_value",
       "type": "string",
-      "description": "留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。"
+      "description": "When empty the server generates a stable lower-case DNS label; do not enter a domain suffix, port or IP.",
+      "description_zh": "留空时由服务端生成稳定的小写 DNS 标签；不要填写域名后缀、端口或 IP。"
      },
      {
       "name": "ipv4_resolved_value",
       "type": "string",
-      "description": "IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。"
+      "description": "Record value for IPv4 only; when empty the server generates a stable lower-case DNS label from the line group ID.",
+      "description_zh": "IPv4 专用解析值；留空时由服务端按线路组 ID 生成稳定的小写 DNS 标签。"
      },
      {
       "name": "l2_config_id",
       "type": "string(uuid) | null(uuid)",
-      "description": "同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。"
+      "description": "An active line group in the same scope and region that is not referenced by another L2 configuration; empty means a standalone line group.",
+      "description_zh": "同一作用域、同一区域且未引用其他 L2 配置的活动线路组；为空表示独立线路组。"
      },
      {
       "name": "failover_mode",
       "type": "string: primary_offline / online_less_than_backup_count",
-      "description": "有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。"
+      "description": "When a primary IP goes offline its backup IPs are enabled one by one, or all backup IPs are enabled when fewer primary IPs are online than there are backup IPs.",
+      "description_zh": "有主IP下线时逐个启用备用IP，或在线主IP数少于备用IP数时启用全部备用IP。"
      },
      {
       "name": "note",
@@ -438,11 +455,13 @@
    "operation_id": "deleteNodeLineGroup",
    "method": "DELETE",
    "path": "/v1/node-line-groups/{id}",
-   "summary": "软删除线路组并保留不可变修订历史",
+   "summary": "Soft-delete a line group and keep its immutable revision history",
+   "summary_zh": "软删除线路组并保留不可变修订历史",
    "auth": [
     "bearer"
    ],
-   "description": "租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。",
+   "description": "A tenant session deletes line groups of its own scope; a platform session without target_scope_id deletes line groups of this control plane's platform scope, and naming a tenant scope returns 403. After deletion the line group is hidden from the list, current detail, history detail, probes and new topology snapshots; the same idempotency key can be replayed.",
+   "description_zh": "租户会话删除自身作用域线路组；平台会话未指定 target_scope_id 时删除本主控平台作用域线路组，显式指定租户作用域时返回 403。删除后列表、当前详情、历史详情、探测与新拓扑快照入口均不可见；同一幂等键可重放。",
    "params": [
     {
      "name": "id",
@@ -511,7 +530,8 @@
    "operation_id": "decideNodeLineGroupEndpoint",
    "method": "POST",
    "path": "/v1/node-line-groups/{id}/decisions",
-   "summary": "计算可审计的区域健康调度决策",
+   "summary": "Compute an auditable region health scheduling decision",
+   "summary_zh": "计算可审计的区域健康调度决策",
    "auth": [
     "bearer"
    ],
@@ -621,14 +641,84 @@
    ]
   },
   {
+   "operation_id": "getNodeLineGroupLatencyMatrix",
+   "method": "GET",
+   "path": "/v1/node-line-groups/{id}/latency-matrix",
+   "summary": "Read the latency matrix of a line group",
+   "summary_zh": "查询线路组延迟矩阵",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "p50 latency of every endpoint per province and carrier over the window (minutes, 1-60, default 15). province is empty for checkpoints of unknown province.",
+   "description_zh": "窗口内（分钟，1-60，默认 15）各端点按省份与运营商的 p50 延迟。检查点省份未知时 province 为空。",
+   "permissions": [
+    "node_scheduling.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "window",
+     "in": "query",
+     "type": "integer"
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Latency matrix; rows is an empty array without samples.",
+     "fields": [
+      {
+       "name": "rows",
+       "type": "array<object>",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
    "operation_id": "setNodeLineGroupPlatformDefault",
    "method": "POST",
    "path": "/v1/node-line-groups/{id}/platform-default",
-   "summary": "设为或取消平台默认线路组",
+   "summary": "Set or clear the platform default line group",
+   "summary_zh": "设为或取消平台默认线路组",
    "auth": [
     "bearer"
    ],
-   "description": "只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。",
+   "description": "Normal line groups of the platform scope only; setting a default clears the previous one. Does not advance the line group revision. Websites without a package use it to freeze their CNAME target IPs.",
+   "description_zh": "只限平台作用域普通线路组；设为默认会取消原默认。不推进线路组修订。没选套餐的网站用它冻结 CNAME 目标 IP。",
    "params": [
     {
      "name": "id",
@@ -696,7 +786,8 @@
    "operation_id": "getNodeLineGroupRevision",
    "method": "GET",
    "path": "/v1/node-line-groups/{id}/revisions/{revision}",
-   "summary": "查询线路组历史修订",
+   "summary": "Read a historical revision of a line group",
+   "summary_zh": "查询线路组历史修订",
    "auth": [
     "bearer"
    ],
@@ -798,7 +889,8 @@
       {
        "name": "statistics",
        "type": "LineGroupStatistics",
-       "description": "仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。"
+       "description": "Current resource counts, in list responses only; detail, write and history revision responses may omit them.",
+       "description_zh": "仅列表响应提供的当前资源计数；详情、写入和历史修订响应可省略。"
       },
       {
        "name": "configuration_digest",
@@ -823,12 +915,14 @@
       {
        "name": "is_platform_default",
        "type": "boolean",
-       "description": "平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。"
+       "description": "Platform default line group; websites without a package use it to freeze their CNAME target IPs (at most one on the platform).",
+       "description_zh": "平台默认线路组；没选套餐的网站用它冻结 CNAME 目标 IP（全平台至多一个）。"
       },
       {
        "name": "backup_states",
        "type": "array<LineBackupState>",
-       "description": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
+       "description": "Whether each address family is currently resolving to backup IPs; returned only by the list and the current revision detail. Address families that never used backups are absent (that is, normal).",
+       "description_zh": "各地址族当前是否在解析备用 IP（node_line_group_backup_states，迁移 571）；仅列表与当前版本详情返回，从未启用过备用的地址族不返回（即正常）。"
       }
      ]
     },
@@ -846,7 +940,8 @@
    "operation_id": "rollbackNodeLineGroup",
    "method": "POST",
    "path": "/v1/node-line-groups/{id}/rollback",
-   "summary": "将历史配置复制为新的当前修订",
+   "summary": "Copy a historical configuration as the new current revision",
+   "summary_zh": "将历史配置复制为新的当前修订",
    "auth": [
     "bearer"
    ],
@@ -928,10 +1023,274 @@
    ]
   },
   {
+   "operation_id": "getNodeLineGroupSmartSchedule",
+   "method": "GET",
+   "path": "/v1/node-line-groups/{id}/smart-schedule",
+   "summary": "Read the smart scheduling configuration and current line selections",
+   "summary_zh": "查询线路组智能调度配置与各线路当前选中节点",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Defaults (disabled) when never configured. Each line lists the selected endpoints with p50 latency, health and load; fallback_from names the level a line fell back from. probe_source says whether dnspup checkpoints and peer node probes produced latency in the last hour; with neither, every line keeps its static endpoints.",
+   "description_zh": "从未配置时返回默认值（关闭）。每条线路列出选中端点及 p50 延迟、健康、负载；fallback_from 表示该线路从哪一级回退。probe_source 表示最近一小时 dnspup 检查点与对端节点探测是否产生了延迟数据；两者都没有时各线路沿用静态端点。",
+   "permissions": [
+    "node_scheduling.read"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    }
+   ],
+   "responses": [
+    {
+     "status": "200",
+     "description": "Smart schedule view.",
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "top_n",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "granularity",
+       "type": "string: carrier / province_carrier",
+       "required": true
+      },
+      {
+       "name": "latency_window_minutes",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_load_percent",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "fallback",
+       "type": "string: carrier_then_default",
+       "required": true
+      },
+      {
+       "name": "province_lines_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "False when a DNS provider of the line group's sites cannot write province lines; only carrier lines are written then."
+      },
+      {
+       "name": "lines",
+       "type": "array<SmartScheduleLine>",
+       "required": true
+      },
+      {
+       "name": "probe_source",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
+   "operation_id": "putNodeLineGroupSmartSchedule",
+   "method": "PUT",
+   "path": "/v1/node-line-groups/{id}/smart-schedule",
+   "summary": "Configure smart scheduling of a line group",
+   "summary_zh": "配置线路组智能调度",
+   "auth": [
+    "apiKey",
+    "bearer"
+   ],
+   "description": "Replaces the configuration (audited as node_scheduling.group.smart_schedule). Disabling drops the selections at once; the DNS lines return to the static endpoint sets on the next publication tick, identical to a line group that never enabled it. fallback is always carrier_then_default.",
+   "description_zh": "整体替换配置（审计动作 node_scheduling.group.smart_schedule）。关闭时立即清除选中结果，DNS 线路在下一轮发布时恢复静态端点集合，与从未开启一致。fallback 固定为 carrier_then_default。",
+   "permissions": [
+    "node_scheduling.manage"
+   ],
+   "params": [
+    {
+     "name": "id",
+     "in": "path",
+     "type": "string(uuid)",
+     "required": true
+    },
+    {
+     "name": "target_scope_id",
+     "in": "query",
+     "type": "string(uuid)",
+     "description": "Tenant credentials may omit this value or repeat their own scope. Platform Bearer credentials omit it to target the platform scope; an explicit tenant scope is allowed only on read or decision operations."
+    },
+    {
+     "name": "Idempotency-Key",
+     "in": "header",
+     "type": "string",
+     "required": true
+    },
+    {
+     "name": "X-Request-ID",
+     "in": "header",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "body": {
+    "content_types": [
+     "application/json"
+    ],
+    "required": true,
+    "fields": [
+     {
+      "name": "enabled",
+      "type": "boolean",
+      "required": true
+     },
+     {
+      "name": "top_n",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "granularity",
+      "type": "string: carrier / province_carrier",
+      "required": true
+     },
+     {
+      "name": "latency_window_minutes",
+      "type": "integer",
+      "required": true
+     },
+     {
+      "name": "max_load_percent",
+      "type": "integer",
+      "required": true
+     }
+    ]
+   },
+   "responses": [
+    {
+     "status": "200",
+     "description": "Smart schedule view after the change.",
+     "fields": [
+      {
+       "name": "enabled",
+       "type": "boolean",
+       "required": true
+      },
+      {
+       "name": "top_n",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "granularity",
+       "type": "string: carrier / province_carrier",
+       "required": true
+      },
+      {
+       "name": "latency_window_minutes",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "max_load_percent",
+       "type": "integer",
+       "required": true
+      },
+      {
+       "name": "fallback",
+       "type": "string: carrier_then_default",
+       "required": true
+      },
+      {
+       "name": "province_lines_supported",
+       "type": "boolean",
+       "required": true,
+       "description": "False when a DNS provider of the line group's sites cannot write province lines; only carrier lines are written then."
+      },
+      {
+       "name": "lines",
+       "type": "array<SmartScheduleLine>",
+       "required": true
+      },
+      {
+       "name": "probe_source",
+       "type": "object",
+       "required": true
+      },
+      {
+       "name": "revision",
+       "type": "integer",
+       "required": true
+      }
+     ]
+    },
+    {
+     "status": "400",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "401",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "403",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "404",
+     "description": "Stable error envelope; messages are not localization keys."
+    },
+    {
+     "status": "503",
+     "description": "Stable error envelope; messages are not localization keys."
+    }
+   ]
+  },
+  {
    "operation_id": "getNodeLineGroupTargetSnapshot",
    "method": "GET",
    "path": "/v1/node-line-groups/{id}/target-snapshots",
-   "summary": "按来源修订查询 L1/L2 拓扑快照",
+   "summary": "Read the L1/L2 topology snapshot by source revision",
+   "summary_zh": "按来源修订查询 L1/L2 拓扑快照",
    "auth": [
     "bearer"
    ],
@@ -1025,7 +1384,8 @@
    "operation_id": "createNodeLineGroupTargetSnapshot",
    "method": "POST",
    "path": "/v1/node-line-groups/{id}/target-snapshots",
-   "summary": "创建 L1 目标与 L2 候选拓扑快照",
+   "summary": "Create an L1 target and L2 candidate topology snapshot",
+   "summary_zh": "创建 L1 目标与 L2 候选拓扑快照",
    "auth": [
     "bearer"
    ],

@@ -1350,6 +1350,12 @@
      "in": "query",
      "type": "integer",
      "description": "Page-number access (canonical non-negative integer, 0-10000). Cannot be combined with cursor; an offset past the end returns empty items with total."
+    },
+    {
+     "name": "usable",
+     "in": "query",
+     "type": "string: true",
+     "description": "Only `true` is accepted. Keeps keys that can authenticate at the page snapshot: status active and expires_at absent or later than snapshot_at. An expired key keeps its active lifecycle status as history, so status=active alone does not mean usable. Combinable only with status=active or no status. Clients judge expiry against the response Date header (server clock), not their own clock."
     }
    ],
    "responses": [
@@ -1523,6 +1529,11 @@
        "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
       },
       {
+       "name": "unavailable_scopes",
+       "type": "array<string>",
+       "description": "Read responses only (list/detail). Scopes of this key that the owner no longer holds; they are not effective when the key is used (AA-KEY-01). Omitted when every scope is still granted."
+      },
+      {
        "name": "ip_allowlist",
        "type": "array<string>",
        "required": true,
@@ -1568,6 +1579,19 @@
        "name": "updated_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "plugin_installation_authorization_id",
+       "type": "string(uuid)",
+       "description": "Present when the key is a plugin identity bound to this plugin installation. Its write requests are audited as actor_kind=plugin and rate limited per installation (429 + Retry-After); once the installation is disabled or uninstalled the key is refused with 401."
+      },
+      {
+       "name": "plugin_installation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "plugin_id",
+       "type": "string"
       }
      ]
     },
@@ -1714,6 +1738,11 @@
        "description": "Strict safe subset of the owner's current RBAC permissions. platform.admin, identity.*, and api_keys.* are forbidden."
       },
       {
+       "name": "unavailable_scopes",
+       "type": "array<string>",
+       "description": "Read responses only (list/detail). Scopes of this key that the owner no longer holds; they are not effective when the key is used (AA-KEY-01). Omitted when every scope is still granted."
+      },
+      {
        "name": "ip_allowlist",
        "type": "array<string>",
        "required": true,
@@ -1759,6 +1788,19 @@
        "name": "updated_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "plugin_installation_authorization_id",
+       "type": "string(uuid)",
+       "description": "Present when the key is a plugin identity bound to this plugin installation. Its write requests are audited as actor_kind=plugin and rate limited per installation (429 + Retry-After); once the installation is disabled or uninstalled the key is refused with 401."
+      },
+      {
+       "name": "plugin_installation_id",
+       "type": "string(uuid)"
+      },
+      {
+       "name": "plugin_id",
+       "type": "string"
       }
      ]
     },

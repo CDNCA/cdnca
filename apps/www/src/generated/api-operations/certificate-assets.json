@@ -513,6 +513,11 @@
       {
        "name": "deleted_at",
        "type": "string(date-time)"
+      },
+      {
+       "name": "sync",
+       "type": "CertificateAssetSync",
+       "description": "On list rows and the detail. Publication of the asset's current site bindings, as the sync filter decides it; absent for an asset bound to no site."
       }
      ]
     },
@@ -714,6 +719,11 @@
       {
        "name": "deleted_at",
        "type": "string(date-time)"
+      },
+      {
+       "name": "sync",
+       "type": "CertificateAssetSync",
+       "description": "On list rows and the detail. Publication of the asset's current site bindings, as the sync filter decides it; absent for an asset bound to no site."
       }
      ]
     },
@@ -938,6 +948,11 @@
        "name": "changed_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "sync",
+       "type": "CertificateAssetSync",
+       "description": "On the binding list only, for a current bound row. Publication of this binding, by the rule of the asset sync state; failure_code is this site's permanent failure code."
       }
      ]
     },
@@ -1085,6 +1100,11 @@
        "name": "changed_at",
        "type": "string(date-time)",
        "required": true
+      },
+      {
+       "name": "sync",
+       "type": "CertificateAssetSync",
+       "description": "On the binding list only, for a current bound row. Publication of this binding, by the rule of the asset sync state; failure_code is this site's permanent failure code."
       }
      ]
     },
@@ -1286,6 +1306,11 @@
       {
        "name": "deleted_at",
        "type": "string(date-time)"
+      },
+      {
+       "name": "sync",
+       "type": "CertificateAssetSync",
+       "description": "On list rows and the detail. Publication of the asset's current site bindings, as the sync filter decides it; absent for an asset bound to no site."
       }
      ]
     },
@@ -1335,7 +1360,8 @@
    "auth": [
     "bearer"
    ],
-   "description": "下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the latest activated version. Requires certificates.manage; a tenant downloads only its own certificates. Audited as certificate.asset.download in the same transaction before the key is returned. A revoked current version returns 409 certificate_asset_download_unavailable.",
+   "description": "Download certificate. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the latest activated version. Requires certificates.manage; a tenant downloads only its own certificates. Audited as certificate.asset.download in the same transaction before the key is returned. A revoked current version returns 409 certificate_asset_download_unavailable.",
+   "description_zh": "下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the latest activated version. Requires certificates.manage; a tenant downloads only its own certificates. Audited as certificate.asset.download in the same transaction before the key is returned. A revoked current version returns 409 certificate_asset_download_unavailable.",
    "permissions": [
     "certificates.manage"
    ],

@@ -6,11 +6,13 @@
    "operation_id": "revokeCurrentIdentitySessionFamily",
    "method": "DELETE",
    "path": "/v1/identity/session-families/{family_id}",
-   "summary": "撤销当前用户的一个设备会话族",
+   "summary": "Revoke one device session family of the current user",
+   "summary_zh": "撤销当前用户的一个设备会话族",
    "auth": [
     "bearer"
    ],
-   "description": "目标必须属于当前已认证 principal 的同一 scope/user。服务端在同一事务中重新锁定并校验 caller session、账户、membership 和 scope 后锁定整个 family。原 caller 仍有效时，精确重试 返回原响应；相同 Idempotency-Key 改变 family、revision、caller 或 request identity 返回 409。 撤销当前会话时，本次响应成功后当前 Bearer token 立即失效，后续请求先返回 401，不能绕过 caller 认证读取幂等收据。",
+   "description": "The target must belong to the same scope/user as the authenticated principal. In one transaction the server re-locks and checks the caller session, account, membership and scope, then locks the whole family. While the caller is still valid an exact retry returns the original response; the same Idempotency-Key with a different family, revision, caller or request identity returns 409. When the current session is revoked, the current Bearer token stops working as soon as this response succeeds: later requests get 401 first and cannot read the idempotency receipt without caller authentication.",
+   "description_zh": "目标必须属于当前已认证 principal 的同一 scope/user。服务端在同一事务中重新锁定并校验 caller session、账户、membership 和 scope 后锁定整个 family。原 caller 仍有效时，精确重试 返回原响应；相同 Idempotency-Key 改变 family、revision、caller 或 request identity 返回 409。 撤销当前会话时，本次响应成功后当前 Bearer token 立即失效，后续请求先返回 401，不能绕过 caller 认证读取幂等收据。",
    "params": [
     {
      "name": "family_id",
@@ -29,7 +31,8 @@
      "in": "header",
      "type": "string",
      "required": true,
-     "description": "列表返回的当前 family revision，必须使用强 ETag 形式"
+     "description": "The current family revision returned by the list, as a strong ETag",
+     "description_zh": "列表返回的当前 family revision，必须使用强 ETag 形式"
     },
     {
      "name": "Idempotency-Key",
@@ -41,7 +44,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "已撤销或精确幂等重放",
+     "description": "Revoked, or an exact idempotent replay",
+     "description_zh": "已撤销或精确幂等重放",
      "fields": [
       {
        "name": "family_id",
@@ -71,31 +75,38 @@
     },
     {
      "status": "400",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "401",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "404",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "405",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "409",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "500",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "503",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     }
    ]
   },
@@ -103,7 +114,8 @@
    "operation_id": "listCurrentIdentitySessionFamilies",
    "method": "GET",
    "path": "/v1/identity/sessions",
-   "summary": "按设备会话族列出当前用户的登录会话",
+   "summary": "List the current user's sign-in sessions by device session family",
+   "summary_zh": "按设备会话族列出当前用户的登录会话",
    "auth": [
     "bearer"
    ],
@@ -123,13 +135,15 @@
      "name": "cursor",
      "in": "query",
      "type": "string",
-     "description": "绑定当前 scope/user 和首次请求快照的稳定不透明游标"
+     "description": "Stable opaque cursor bound to the current scope/user and the first request's snapshot",
+     "description_zh": "绑定当前 scope/user 和首次请求快照的稳定不透明游标"
     }
    ],
    "responses": [
     {
      "status": "200",
-     "description": "当前 principal 的会话族，按最新会话创建时间和 family_id 稳定倒序",
+     "description": "Session families of the current principal, in stable descending order of newest session creation time and family_id",
+     "description_zh": "当前 principal 的会话族，按最新会话创建时间和 family_id 稳定倒序",
      "fields": [
       {
        "name": "items",
@@ -144,23 +158,28 @@
     },
     {
      "status": "400",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "401",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "405",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "500",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     },
     {
      "status": "503",
-     "description": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
+     "description": "Stable error code and default Chinese message; carries no raw server error or sensitive session data",
+     "description_zh": "稳定错误码和默认中文消息；不包含服务端原始错误或敏感会话数据"
     }
    ]
   }

@@ -6,7 +6,8 @@
    "operation_id": "listNodeIsolationStates",
    "method": "GET",
    "path": "/v1/admin/node-isolations",
-   "summary": "查询当前作用域内持久化的节点配置同步隔离状态",
+   "summary": "Read the persisted node configuration sync isolation states in the current scope",
+   "summary_zh": "查询当前作用域内持久化的节点配置同步隔离状态",
    "auth": [
     "bearer"
    ],
@@ -15,7 +16,8 @@
      "name": "node_id",
      "in": "query",
      "type": "array<string(uuid)>",
-     "description": "可重复；省略时返回当前作用域内全部已有隔离状态事实。"
+     "description": "Repeatable; omitted returns every existing isolation state in the current scope.",
+     "description_zh": "可重复；省略时返回当前作用域内全部已有隔离状态事实。"
     },
     {
      "name": "X-Request-ID",
@@ -26,7 +28,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "状态按节点 ID 稳定排序；没有状态事实的节点不在结果中。",
+     "description": "States are sorted by node ID; nodes without a state are not in the result.",
+     "description_zh": "状态按节点 ID 稳定排序；没有状态事实的节点不在结果中。",
      "fields": [
       {
        "name": "items",
@@ -37,23 +40,28 @@
     },
     {
      "status": "400",
-     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+     "description": "Stable error code; the UI must map it by locale and must not show message directly.",
+     "description_zh": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
     },
     {
      "status": "401",
-     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+     "description": "Stable error code; the UI must map it by locale and must not show message directly.",
+     "description_zh": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
     },
     {
      "status": "403",
-     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+     "description": "Stable error code; the UI must map it by locale and must not show message directly.",
+     "description_zh": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
     },
     {
      "status": "503",
-     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+     "description": "Stable error code; the UI must map it by locale and must not show message directly.",
+     "description_zh": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
     },
     {
      "status": "default",
-     "description": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
+     "description": "Stable error code; the UI must map it by locale and must not show message directly.",
+     "description_zh": "稳定错误码；界面必须按 locale 映射，不得直接展示 message。"
     }
    ]
   }

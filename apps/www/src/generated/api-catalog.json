@@ -4,8 +4,8 @@
   "api/openapi/v1/sites.yaml",
   "api/openapi/v1/dns-acme.yaml"
  ],
- "total": 923,
- "api_key_count": 136,
+ "total": 641,
+ "api_key_count": 141,
  "groups": [
   {
    "id": "-health-live",
@@ -48,7 +48,7 @@
   {
    "id": "account",
    "prefix": "/v1/account",
-   "count": 30,
+   "count": 26,
    "api_key_count": 0,
    "operations": [
     {
@@ -130,19 +130,9 @@
     },
     {
      "method": "GET",
-     "path": "/v1/account/balance",
-     "summary": "Read the active tenant CNY balance",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getAccountBalance"
-    },
-    {
-     "method": "GET",
      "path": "/v1/account/inbox",
-     "summary": "List the tenant member's in-app messages (站内信), newest first",
+     "summary": "List the tenant member's in-app messages, newest first",
+     "summary_zh": "List the tenant member's in-app messages (站内信), newest first",
      "auth": [
       "bearer"
      ],
@@ -182,17 +172,6 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "markAccountInboxMessageRead"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/account/ledger",
-     "summary": "List immutable entries for the active tenant CNY balance",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listAccountLedger"
     },
     {
      "method": "GET",
@@ -345,17 +324,6 @@
      "operation_id": "updateNotificationSubscription"
     },
     {
-     "method": "GET",
-     "path": "/v1/account/orders",
-     "summary": "List tenant consumption records",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-account-orders.openapi.yaml",
-     "operation_id": "listAccountOrders"
-    },
-    {
      "method": "POST",
      "path": "/v1/account/password",
      "summary": "Re-authenticate and change the current tenant user's password",
@@ -387,17 +355,6 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "updateAccountProfile"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/account/statement",
-     "summary": "List the caller's merged consumption statement (orders, recharges and balance ledger entries)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-account-orders.openapi.yaml",
-     "operation_id": "listAccountStatement"
     }
    ]
   },
@@ -434,58 +391,6 @@
      ],
      "source": "api/account-recovery.openapi.yaml",
      "operation_id": "requestAccountRecovery"
-    }
-   ]
-  },
-  {
-   "id": "admin-account",
-   "prefix": "/v1/admin/account",
-   "count": 4,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/account/order-users",
-     "summary": "Search active users for order entry",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-account-orders.openapi.yaml",
-     "operation_id": "listAccountOrderUsers"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/account/orders",
-     "summary": "Enter an audited compatibility order record",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-account-orders.openapi.yaml",
-     "operation_id": "createAccountOrder"
-    },
-    {
-     "method": "PATCH",
-     "path": "/v1/admin/account/orders/{id}",
-     "summary": "Edit an audited compatibility order record",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-account-orders.openapi.yaml",
-     "operation_id": "updateAccountOrder"
-    },
-    {
-     "method": "DELETE",
-     "path": "/v1/admin/account/orders/{id}",
-     "summary": "Archive an audited compatibility order record",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-account-orders.openapi.yaml",
-     "operation_id": "deleteAccountOrder"
     }
    ]
   },
@@ -1078,187 +983,6 @@
    ]
   },
   {
-   "id": "admin-billing",
-   "prefix": "/v1/admin/billing",
-   "count": 8,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/billing/accounts",
-     "summary": "List tenant balances for manual administration",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listBillingAccounts"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/billing/accounts/{id}/ledger",
-     "summary": "List immutable entries for a selected tenant balance",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listBillingAccountLedger"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/billing/adjustments",
-     "summary": "List manual billing adjustment approval requests",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listBillingAdjustments"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/billing/adjustments",
-     "summary": "Propose an MFA-bound manual tenant balance adjustment",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "proposeBillingAdjustment"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/billing/adjustments/{id}",
-     "summary": "Read one billing adjustment approval request",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getBillingAdjustment"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/billing/adjustments/{id}/approve",
-     "summary": "Approve and atomically post another operator's adjustment",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "approveBillingAdjustment"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/billing/adjustments/{id}/cancel",
-     "summary": "Cancel a pending adjustment from the original proposal session",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "cancelBillingAdjustment"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/billing/adjustments/{id}/reject",
-     "summary": "Reject another operator's adjustment",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "rejectBillingAdjustment"
-    }
-   ]
-  },
-  {
-   "id": "admin-billing-bridge",
-   "prefix": "/v1/admin/billing-bridge",
-   "count": 7,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/billing-bridge/keys",
-     "summary": "List the platform billing bridge keys",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listPlatformBillingBridgeKeys"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/billing-bridge/keys",
-     "summary": "Create a platform billing bridge key",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "createPlatformBillingBridgeKey"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/billing-bridge/keys/{id}/revoke",
-     "summary": "Revoke a platform billing bridge key",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "revokePlatformBillingBridgeKey"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/billing-bridge/keys/{id}/rotate",
-     "summary": "Rotate the secret of a platform billing bridge key",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "rotatePlatformBillingBridgeKey"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/billing-bridge/logs",
-     "summary": "List the platform billing bridge call log",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listPlatformBillingBridgeLogs"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/billing-bridge/settings",
-     "summary": "Read the platform billing bridge plugin settings",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getPlatformBillingBridgeSettings"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/billing-bridge/settings",
-     "summary": "Change the platform billing bridge plugin settings",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "putPlatformBillingBridgeSettings"
-    }
-   ]
-  },
-  {
    "id": "admin-brand-assets",
    "prefix": "/v1/admin/brand-assets",
    "count": 3,
@@ -1591,7 +1315,7 @@
     {
      "method": "POST",
      "path": "/v1/admin/control-backup/recovery-kit",
-     "summary": "Download the backup identity sealed with a passphrase (scrypt) for off-host disaster recovery",
+     "summary": "Download the backup identity for off-host disaster recovery; an empty passphrase (default) stores it as is, otherwise it is sealed with the passphrase (scrypt)",
      "auth": [
       "bearer"
      ],
@@ -1631,135 +1355,6 @@
      "api_key": false,
      "source": "api/control-native-backup.openapi.yaml",
      "operation_id": "probeControlBackupTarget"
-    }
-   ]
-  },
-  {
-   "id": "admin-control-site",
-   "prefix": "/v1/admin/control-site",
-   "count": 11,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/control-site",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "getControlSite"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/control-site",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "saveControlSiteDraft"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/control-site/assets",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "uploadControlSiteAsset"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/control-site/publish",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "publishControlSite"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/control-site/themes",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "listWebsiteThemes"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/control-site/themes",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "uploadWebsiteTheme"
-    },
-    {
-     "method": "DELETE",
-     "path": "/v1/admin/control-site/themes/{theme_id}",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "uninstallWebsiteTheme"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/control-site/themes/{theme_id}/activate",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "activateWebsiteTheme"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/control-site/themes/{theme_id}/customization",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "customizeWebsiteTheme"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/control-site/themes/{theme_id}/install",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "installWebsiteTheme"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/control-site/themes/{theme_id}/seed",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "readWebsiteThemeSeed"
     }
    ]
   },
@@ -2317,7 +1912,8 @@
     {
      "method": "GET",
      "path": "/v1/admin/node-isolations",
-     "summary": "查询当前作用域内持久化的节点配置同步隔离状态",
+     "summary": "Read the persisted node configuration sync isolation states in the current scope",
+     "summary_zh": "查询当前作用域内持久化的节点配置同步隔离状态",
      "auth": [
       "bearer"
      ],
@@ -2446,603 +2042,6 @@
    ]
   },
   {
-   "id": "admin-package-addons",
-   "prefix": "/v1/admin/package-addons",
-   "count": 6,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-addons",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-addons.openapi.yaml",
-     "operation_id": "listPackageAddons"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-addons/assignments",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-addons.openapi.yaml",
-     "operation_id": "listPackageAddonAssignments"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-addons/bindings",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-addons.openapi.yaml",
-     "operation_id": "listPackageAddonBindings"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-addons/commands",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-addons.openapi.yaml",
-     "operation_id": "commandPackageAddon"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-addons/quote",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-addons.openapi.yaml",
-     "operation_id": "quotePackageAddonPurchase"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-addons/subscriptions",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-addons.openapi.yaml",
-     "operation_id": "listPackageAddonEligibleSubscriptions"
-    }
-   ]
-  },
-  {
-   "id": "admin-package-commerce",
-   "prefix": "/v1/admin/package-commerce",
-   "count": 15,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/orders",
-     "summary": "List all package orders for one explicit tenant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "listTenantPackageOrdersAsPlatform"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/orders/{order_id}",
-     "summary": "Get one order in an explicit tenant scope",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "getTenantPackageOrderAsPlatform"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/orders/{order_id}/events",
-     "summary": "List sanitized events for one tenant order",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "listTenantPackageOrderEventsAsPlatform"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-commerce/orders/{order_id}/refund",
-     "summary": "Apply an approved partial or cumulative refund",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "refundPackageOrder"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-commerce/orders/{order_id}/void",
-     "summary": "Void an eligible order using a one-time approval fact",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "voidPackageOrder"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/sold",
-     "summary": "List sold packages across tenants",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-sold.openapi.yaml",
-     "operation_id": "listAdminSoldPackages"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-commerce/sold/commands",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-sold.openapi.yaml",
-     "operation_id": "administerSoldPackages"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/sold/{subscription_id}",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-sold.openapi.yaml",
-     "operation_id": "getAdminSoldPackage"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/sold/{subscription_id}/sync",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-sold.openapi.yaml",
-     "operation_id": "getAdminSoldPackageSync"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/subscriptions",
-     "summary": "List effective sold subscriptions for one explicit tenant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "listSoldPackageSubscriptionsAsPlatform"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-commerce/subscriptions",
-     "summary": "Open a package subscription for an active tenant member without an order",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "openPackageSubscriptionAsPlatform"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-commerce/subscriptions/{subscription_id}/cancel",
-     "summary": "Cancel a tenant subscription as administrator",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "cancelPackageSubscriptionAsPlatform"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-commerce/subscriptions/{subscription_id}/suspend",
-     "summary": "Suspend one package subscription as an administrator",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "suspendPackageSubscriptionAsPlatform"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-commerce/subscriptions/{subscription_id}/unsuspend",
-     "summary": "Unsuspend one package subscription as an administrator",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "unsuspendPackageSubscriptionAsPlatform"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-commerce/traffic-purchases/{order_id}",
-     "summary": "Get one sanitized traffic-purchase result for an explicit tenant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "getTenantTrafficPackagePurchaseAsPlatform"
-    }
-   ]
-  },
-  {
-   "id": "admin-package-groups",
-   "prefix": "/v1/admin/package-groups",
-   "count": 4,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-groups",
-     "summary": "List package catalog groups",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listPackageGroups"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/package-groups",
-     "summary": "Create a package catalog group",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "createPackageGroup"
-    },
-    {
-     "method": "PATCH",
-     "path": "/v1/admin/package-groups/{id}",
-     "summary": "Replace package group fields using optimistic concurrency",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "updatePackageGroup"
-    },
-    {
-     "method": "DELETE",
-     "path": "/v1/admin/package-groups/{id}",
-     "summary": "Soft-delete an unused package group",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "deletePackageGroup"
-    }
-   ]
-  },
-  {
-   "id": "admin-package-monitor",
-   "prefix": "/v1/admin/package-monitor",
-   "count": 4,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-monitor/alerts",
-     "summary": "List current package-monitor alert heads in an explicit tenant scope",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "listAdminPackageMonitorAlerts"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-monitor/alerts/{alert_id}/transitions",
-     "summary": "List immutable transition facts in an explicit tenant scope",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "listAdminPackageMonitorTransitions"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-monitor/alerts/{alert_id}/transitions/{revision}",
-     "summary": "Get one immutable transition fact in an explicit tenant scope",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "getAdminPackageMonitorTransition"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-monitor/policies",
-     "summary": "List current package-monitor policies in an explicit tenant scope",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "listAdminPackageMonitorPolicies"
-    }
-   ]
-  },
-  {
-   "id": "admin-package-resource-monitor",
-   "prefix": "/v1/admin/package-resource-monitor",
-   "count": 2,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-resource-monitor",
-     "summary": "查询所有当前有效用户套餐的带宽与连接数资源状态",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-usage.openapi.yaml",
-     "operation_id": "listAdminPackageResources"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-resource-monitor/nodes",
-     "summary": "查询一个当前有效用户套餐的节点资源状态",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-usage.openapi.yaml",
-     "operation_id": "listAdminPackageResourceNodes"
-    }
-   ]
-  },
-  {
-   "id": "admin-package-resource-options",
-   "prefix": "/v1/admin/package-resource-options",
-   "count": 1,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-resource-options",
-     "summary": "List named resources available to the current platform package catalog",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-resources.openapi.yaml",
-     "operation_id": "listPackageResourceOptions"
-    }
-   ]
-  },
-  {
-   "id": "admin-package-traffic-coverage",
-   "prefix": "/v1/admin/package-traffic-coverage",
-   "count": 1,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-traffic-coverage",
-     "summary": "查询用户套餐每个周期由全局流量包覆盖的流量（最近周期在前）",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-usage.openapi.yaml",
-     "operation_id": "listAdminPackageTrafficCoverage"
-    }
-   ]
-  },
-  {
-   "id": "admin-package-usage",
-   "prefix": "/v1/admin/package-usage",
-   "count": 1,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/package-usage",
-     "summary": "查询指定租户套餐用量",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-usage.openapi.yaml",
-     "operation_id": "queryAdminPackageUsage"
-    }
-   ]
-  },
-  {
-   "id": "admin-packages",
-   "prefix": "/v1/admin/packages",
-   "count": 11,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/packages",
-     "summary": "List and filter package products",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listPackages"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/packages",
-     "summary": "Create a versioned package product",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "createPackage"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/packages/{id}",
-     "summary": "Get one active package product",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getPackage"
-    },
-    {
-     "method": "PATCH",
-     "path": "/v1/admin/packages/{id}",
-     "summary": "Replace a package specification, including enable or disable state",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "updatePackage"
-    },
-    {
-     "method": "DELETE",
-     "path": "/v1/admin/packages/{id}",
-     "summary": "Soft-delete a package product",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "deletePackage"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/packages/{id}/cname-sync/{job_id}",
-     "summary": "Progress of the sync of a package CNAME change to its sold subscriptions",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getPackageCNAMESync"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/packages/{id}/cname-sync/{job_id}/retry",
-     "summary": "Retry a failed package CNAME sync with the caller's session",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "retryPackageCNAMESync"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/packages/{id}/publish",
-     "summary": "Publish the current immutable package product revision",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Package offer publication"
-     ],
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "publishPackageOffer"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/packages/{id}/withdraw",
-     "summary": "Withdraw the exact immutable package revision named by If-Match",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Package offer publication"
-     ],
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "withdrawPackageOffer"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/packages/{product_id}/escalate-policy",
-     "summary": "Read a package's attack escalation policy",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "getPackageEscalatePolicy"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/packages/{product_id}/escalate-policy",
-     "summary": "Write a package's B/C line groups, Cloudflare and blackhole switches and threshold ranges",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "putPackageEscalatePolicy"
-    }
-   ]
-  },
-  {
    "id": "admin-plugin-providers",
    "prefix": "/v1/admin/plugin-providers",
    "count": 2,
@@ -3073,950 +2072,11 @@
    ]
   },
   {
-   "id": "admin-recharge-identity-policy",
-   "prefix": "/v1/admin/recharge-identity-policy",
-   "count": 2,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharge-identity-policy/{tenant_scope_id}",
-     "summary": "Read a tenant recharge identity policy as a platform administrator",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/recharge-identity-policy.yaml",
-     "operation_id": "getPlatformRechargeIdentityPolicy"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/recharge-identity-policy/{tenant_scope_id}",
-     "summary": "CAS update a tenant recharge identity policy as a platform administrator",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/recharge-identity-policy.yaml",
-     "operation_id": "updatePlatformRechargeIdentityPolicy"
-    }
-   ]
-  },
-  {
-   "id": "admin-recharge-payment-approvals",
-   "prefix": "/v1/admin/recharge-payment-approvals",
-   "count": 7,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharge-payment-approvals",
-     "summary": "稳定快照分页读取充值审批",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-approvals.openapi.yaml",
-     "operation_id": "listRechargePaymentApprovals"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/recharge-payment-approvals",
-     "summary": "创建充值退款或撤销审批提议",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-approvals.openapi.yaml",
-     "operation_id": "proposeRechargePaymentApproval"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharge-payment-approvals/export",
-     "summary": "导出充值审批 CSV",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-approvals.openapi.yaml",
-     "operation_id": "exportRechargePaymentApprovals"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharge-payment-approvals/statistics",
-     "summary": "读取充值审批金额统计",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-approvals.openapi.yaml",
-     "operation_id": "rechargePaymentApprovalStatistics"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharge-payment-approvals/{approval_id}",
-     "summary": "读取单条充值审批事实",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-approvals.openapi.yaml",
-     "operation_id": "getRechargePaymentApproval"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/recharge-payment-approvals/{approval_id}/approve",
-     "summary": "由不同 operator 批准充值补偿",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-approvals.openapi.yaml",
-     "operation_id": "approveRechargePaymentApproval"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/recharge-payment-approvals/{approval_id}/reject",
-     "summary": "拒绝充值补偿提议",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-approvals.openapi.yaml",
-     "operation_id": "rejectRechargePaymentApproval"
-    }
-   ]
-  },
-  {
-   "id": "admin-recharge-payment-runtime-status",
-   "prefix": "/v1/admin/recharge-payment-runtime-status",
-   "count": 1,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharge-payment-runtime-status",
-     "summary": "Read non-secret recharge payment runtime status",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payment-runtime-status.openapi.yaml",
-     "operation_id": "getRechargePaymentRuntimeStatus"
-    }
-   ]
-  },
-  {
-   "id": "admin-recharge-payments",
-   "prefix": "/v1/admin/recharge-payments",
-   "count": 3,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "POST",
-     "path": "/v1/admin/recharge-payments/orders/{order_id}/reconciliation",
-     "summary": "向支付渠道查询并应用确定状态",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payments.openapi.yaml",
-     "operation_id": "reconcileRechargePayment"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/recharge-payments/orders/{order_id}/refunds",
-     "summary": "执行已批准的退款（意图先持久化，按稳定退款单号外调，结果事务化入账）",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payments.openapi.yaml",
-     "operation_id": "requestRechargePaymentRefund"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/recharge-payments/orders/{order_id}/voids",
-     "summary": "执行已批准的撤销（意图先持久化，按稳定退款单号外调，结果事务化入账）",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payments.openapi.yaml",
-     "operation_id": "requestRechargePaymentVoid"
-    }
-   ]
-  },
-  {
-   "id": "admin-recharges",
-   "prefix": "/v1/admin/recharges",
+   "id": "admin-security",
+   "prefix": "/v1/admin/security",
    "count": 4,
    "api_key_count": 0,
    "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharges/orders",
-     "summary": "List reconciled recharge order heads",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharges.openapi.yaml",
-     "operation_id": "listAdminRechargeOrders"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharges/orders/{order_id}/reconciliation",
-     "summary": "Read exact order, callback, ledger and statistics identities",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharges.openapi.yaml",
-     "operation_id": "getRechargeReconciliation"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharges/statistics",
-     "summary": "List immutable settlement statistics facts",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharges.openapi.yaml",
-     "operation_id": "listRechargeStatistics"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/recharges/statistics.csv",
-     "summary": "Export the same bounded settlement snapshot as CSV",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharges.openapi.yaml",
-     "operation_id": "exportRechargeStatistics"
-    }
-   ]
-  },
-  {
-   "id": "admin-reseller-wholesale-prices",
-   "prefix": "/v1/admin/reseller-wholesale-prices",
-   "count": 3,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/reseller-wholesale-prices",
-     "summary": "List wholesale prices",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listResellerWholesalePrices"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/reseller-wholesale-prices/{price_list}/{line_group_id}/{period}",
-     "summary": "Set one wholesale price (audited reseller.wholesale_price.put)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "putResellerWholesalePrice"
-    },
-    {
-     "method": "DELETE",
-     "path": "/v1/admin/reseller-wholesale-prices/{price_list}/{line_group_id}/{period}",
-     "summary": "Remove one wholesale price (audited reseller.wholesale_price.delete)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "deleteResellerWholesalePrice"
-    }
-   ]
-  },
-  {
-   "id": "admin-resellers",
-   "prefix": "/v1/admin/resellers",
-   "count": 3,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/resellers",
-     "summary": "List reseller profiles",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listResellers"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/resellers/{scope_id}",
-     "summary": "Read a reseller profile",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getReseller"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/resellers/{scope_id}",
-     "summary": "Open a tenant as a reseller, suspend or resume it, set its parameters",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "putReseller"
-    }
-   ]
-  },
-  {
-   "id": "admin-security",
-   "prefix": "/v1/admin/security",
-   "count": 54,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/blocks",
-     "summary": "Ban list entries with source autodefense",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseBlocks"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/blocks/{block_id}/release",
-     "summary": "Unblock (Lua and kernel), optionally whitelist and report a false positive",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminReleaseAutoDefenseBlock"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/events",
-     "summary": "Attack event timeline, newest first",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseEvents"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/false-positives",
-     "summary": "False positive reports",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseFalsePositives"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/false-positives",
-     "summary": "Report a verdict or signature as a false positive (the signature is withdrawn at once)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminReportAutoDefenseFalsePositive"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/metrics",
-     "summary": "Per site report figures of the last 30 days (mitigations, false positive reports, attack events)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseSiteMetrics"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups",
-     "summary": "Layer 4 port groups the control plane derives for a node (website TCP ports, one per forward)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefensePortGroups"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules",
-     "summary": "Layer 4 overlay of one node port group (platform only)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefensePortGroupModules"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/history",
-     "summary": "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefensePortGroupModuleHistory"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}",
-     "summary": "A person sets an l4 item (manual until resumed)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "lockAutoDefensePortGroupItem"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/range",
-     "summary": "Narrow the item's automatic range (上下限); state and manual value unchanged",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "setAutoDefensePortGroupItemRange"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/items/{field}/resume",
-     "summary": "恢复自动 for one l4 item",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "resumeAutoDefensePortGroupItem"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/mode",
-     "summary": "manual / auto / suggest of l4; auto needs module.autodefense.auto",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "setAutoDefensePortGroupModuleMode"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/resume",
-     "summary": "全部恢复自动 of l4",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "resumeAutoDefensePortGroupModule"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/nodes/{node_id}/port-groups/{port_group_id}/modules/{module}/values",
-     "summary": "Each node's newest value of every item (in force or suggested) and its reason",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefensePortGroupModuleValues"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/platform-settings",
-     "summary": "Platform defaults, budgets and breaker thresholds (platform.admin)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "getAutoDefensePlatformSettings"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/platform-settings",
-     "summary": "Replace the platform settings (revision guarded, platform.admin); default_mode protect needs module.autodefense.auto and applies to every following site",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "putAutoDefensePlatformSettings"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/signatures",
-     "summary": "Automatic rules (signatures)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseSignatures"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/signatures/{signature_id}/revoke",
-     "summary": "禁用此签名",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminRevokeAutoDefenseSignature"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/signatures/{signature_id}/solidify",
-     "summary": "固化为我的规则 is the tenant's own decision: platform administrators get 403 autodefense_permission_denied",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminSolidifyAutoDefenseSignature"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites",
-     "summary": "Sites with mode, baseline maturity, circuit, overlay and the auto-mitigation grant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseSites"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/mode",
-     "summary": "Batch 开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台 (follow); protect needs module.autodefense.auto; one audit event per site",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminSetAutoDefenseSiteModes"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}",
-     "summary": "One site with its overlay",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminGetAutoDefenseSite"
-    },
-    {
-     "method": "PATCH",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}",
-     "summary": "Sensitivity and cross-site federation (revision guarded)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminUpdateAutoDefenseSite"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/allows",
-     "summary": "白名单: the site's allow list as the nodes get it (ACL allow rules = user, 解除并加白 = release, admin sign-in sources = admin_login); never mitigated",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseSiteAllows"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/allows/remove",
-     "summary": "移出白名单: remove one 解除并加白 entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminRemoveAutoDefenseSiteAllow"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/circuit/resume",
-     "summary": "恢复自动防护: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminResumeAutoDefenseSiteCircuit"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/drifts/confirm",
-     "summary": "确认基线漂移: confirm the site's pending baseline drifts (node baselines are not changed)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminConfirmAutoDefenseSiteDrifts"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules",
-     "summary": "Modules site (site.max_level), bot, cc, scan, waf with every item state 自动/人工",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseSiteModules"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/history",
-     "summary": "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseSiteModuleHistory"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}",
-     "summary": "A person sets the item: it becomes manual and runs on this value until resumed (Q3)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminLockAutoDefenseSiteItem"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range",
-     "summary": "Narrow the item's automatic range (上下限); state and manual value unchanged",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminSetAutoDefenseSiteItemRange"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume",
-     "summary": "恢复自动 for one item",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminResumeAutoDefenseSiteItem"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/mode",
-     "summary": "manual / auto / suggest; auto needs module.autodefense.auto",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminSetAutoDefenseSiteModuleMode"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/resume",
-     "summary": "全部恢复自动: every manual item of the module returns to automatic",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminResumeAutoDefenseSiteModule"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/modules/{module}/values",
-     "summary": "Each node's newest value of every item (in force or suggested) and its reason",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseSiteModuleValues"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/release",
-     "summary": "一键解除: undo every automatic mitigation and hold the site in observe only (default 30 minutes)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminReleaseAutoDefenseSite"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/releases/retry",
-     "summary": "重试: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminRetryAutoDefenseRelease"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/releases/status",
-     "summary": "解除状态: per node delivery of the site's single release of one target (已保存 → 待节点 → 全部节点已生效 / 部分失败)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminGetAutoDefenseReleaseStatus"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt",
-     "summary": "Adaptive WAF (智能自动): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminGetAutoDefenseSiteWAFAdapt"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}",
-     "summary": "A person's decision: adopt (采纳, a manual exclusion), reject (驳回), revoke (撤销), manual (设为人工), resume (恢复自动); module.autodefense only",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminDecideAutoDefenseSiteWAFExclusion"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge",
-     "summary": "Grey zone challenge inherit / on / off (only 严格 / 极严格 tiers challenge)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminSetAutoDefenseSiteGreyChallenge"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat",
-     "summary": "Repeated grey zone source threshold / window of the site (null = node defaults 20 / 60 s)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminSetAutoDefenseSiteGreyRepeat"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/autodefense/verdicts",
-     "summary": "Recent individual verdicts",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminListAutoDefenseVerdicts"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/autodefense/verdicts/{verdict_id}/release",
-     "summary": "解除 / 解除并加白 / 标记误判",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "adminReleaseAutoDefenseVerdict"
-    },
     {
      "method": "GET",
      "path": "/v1/admin/security/cc-stats",
@@ -4038,61 +2098,6 @@
      "api_key": false,
      "source": "api/control-security-coordination-metrics.openapi.yaml",
      "operation_id": "getSecurityCoordinationMetrics"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/escalate/sites/{site_id}",
-     "summary": "Read a site of any tenant scope",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "getAdminEscalateSite"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/security/escalate/sites/{site_id}/events",
-     "summary": "List the level history of a site of any tenant scope",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "listAdminEscalateSiteEvents"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/escalate/sites/{site_id}/lock",
-     "summary": "Hold a site at a level (管理员锁定) until unlocked",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "lockEscalateSite"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/escalate/sites/{site_id}/reset",
-     "summary": "Send a site back to level A now (一键回切), unlocking it",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "resetEscalateSite"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/security/escalate/sites/{site_id}/unlock",
-     "summary": "Release a site's lock (automatic levels resume)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "unlockEscalateSite"
     },
     {
      "method": "POST",
@@ -4522,58 +2527,6 @@
    ]
   },
   {
-   "id": "admin-tcp-billing",
-   "prefix": "/v1/admin/tcp-billing",
-   "count": 4,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/tcp-billing",
-     "summary": "读取 TCP 流量计费策略与不可变结算快照",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-tcp-billing.openapi.yaml",
-     "operation_id": "getTCPBillingOverview"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/tcp-billing/factor-revisions",
-     "summary": "新建仅在目标结算周期开始时生效的 TCP 系数修订",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-tcp-billing.openapi.yaml",
-     "operation_id": "scheduleTCPBillingFactorRevision"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/tcp-billing/settlements",
-     "summary": "使用已冻结的最终计量证据结算一个 TCP 流量周期",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-tcp-billing.openapi.yaml",
-     "operation_id": "settleTCPBillingCycle"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/tcp-billing/settlements/{settlement_id}/adjustments",
-     "summary": "追加退款或全额撤销事实，不修改原结算",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-tcp-billing.openapi.yaml",
-     "operation_id": "adjustTCPBillingSettlement"
-    }
-   ]
-  },
-  {
    "id": "admin-tenant-scopes",
    "prefix": "/v1/admin/tenant-scopes",
    "count": 2,
@@ -4606,7 +2559,7 @@
   {
    "id": "admin-themes",
    "prefix": "/v1/admin/themes",
-   "count": 12,
+   "count": 6,
    "api_key_count": 0,
    "operations": [
     {
@@ -4674,262 +2627,6 @@
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",
      "operation_id": "activateTheme"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/themes/tenant-policy",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "getTenantThemePolicy"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/themes/tenant-policy",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "updateTenantThemePolicy"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/themes/tenants/{tenant_scope_id}",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "getTenantThemeForPlatform"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/themes/tenants/{tenant_scope_id}",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "updateTenantThemeForPlatform"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "bindTenantThemeDomain"
-    },
-    {
-     "method": "DELETE",
-     "path": "/v1/admin/themes/tenants/{tenant_scope_id}/domains/{hostname}",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "unbindTenantThemeDomain"
-    }
-   ]
-  },
-  {
-   "id": "admin-traffic-packages",
-   "prefix": "/v1/admin/traffic-packages",
-   "count": 13,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/admin/traffic-packages/grants",
-     "summary": "List grants for one explicit tenant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform traffic package operations"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listTenantTrafficPackageGrants"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/traffic-packages/grants/{grant_id}/disable",
-     "summary": "Pause deduction without changing remaining bytes or expiry",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "disableSoldTrafficPackage"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/traffic-packages/grants/{grant_id}/enable",
-     "summary": "Resume deduction for an unexpired active grant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "enableSoldTrafficPackage"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/traffic-packages/grants/{grant_id}/reconciliation",
-     "summary": "Compare one grant's cached and ledger-recomputed balance",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Platform traffic package operations"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "reconcileTenantTrafficPackageGrant"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/traffic-packages/options",
-     "summary": "Search base or traffic product names for management selectors",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listTrafficPackageManagementOptions"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/traffic-packages/products",
-     "summary": "List current product revisions",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listCurrentTrafficPackageProducts"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/traffic-packages/products/{product_id}",
-     "summary": "Get the current revision of one product",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "getCurrentTrafficPackageProduct"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/traffic-packages/products/{product_id}/archive",
-     "summary": "Remove a product from sale while preserving sold entitlements and history",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "archiveTrafficPackageProduct"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/traffic-packages/products/{product_id}/disable",
-     "summary": "Disable a product",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "disableTrafficPackageProduct"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/traffic-packages/products/{product_id}/enable",
-     "summary": "Enable a product",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "enableTrafficPackageProduct"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/traffic-packages/products/{product_id}/revisions",
-     "summary": "List immutable product revision history",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listTrafficPackageProductRevisions"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/admin/traffic-packages/products/{product_id}/revisions",
-     "summary": "Create an immutable product revision",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "createTrafficPackageProductRevision"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/admin/traffic-packages/sold",
-     "summary": "List sold grants across tenants with server-side filters and count",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listSoldTrafficPackages"
     }
    ]
   },
@@ -5492,20 +3189,9 @@
   {
    "id": "auth",
    "prefix": "/v1/auth",
-   "count": 13,
+   "count": 12,
    "api_key_count": 2,
    "operations": [
-    {
-     "method": "POST",
-     "path": "/v1/auth/bridge-sso",
-     "summary": "Exchange a billing bridge one-time ticket for a console session",
-     "auth": [
-      "none"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "exchangeBillingBridgeSso"
-    },
     {
      "method": "POST",
      "path": "/v1/auth/login",
@@ -5655,212 +3341,6 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "verifySessionRegion"
-    }
-   ]
-  },
-  {
-   "id": "billing-bridge",
-   "prefix": "/v1/billing-bridge",
-   "count": 18,
-   "api_key_count": 11,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/billing-bridge/keys",
-     "summary": "List the reseller billing bridge keys",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listResellerBillingBridgeKeys"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/keys",
-     "summary": "Create a reseller billing bridge key",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "createResellerBillingBridgeKey"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/keys/{id}/revoke",
-     "summary": "Revoke a reseller billing bridge key",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "revokeResellerBillingBridgeKey"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/keys/{id}/rotate",
-     "summary": "Rotate the secret of a reseller billing bridge key",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "rotateResellerBillingBridgeKey"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/billing-bridge/logs",
-     "summary": "List the reseller billing bridge call log",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listResellerBillingBridgeLogs"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/billing-bridge/ping",
-     "summary": "Billing system TestConnection with a signed bridge key",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "pingBillingBridge"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/billing-bridge/products",
-     "summary": "Billing system ConfigOptions — the key owner's published packages",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listBillingBridgeProducts"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/services",
-     "summary": "Billing system CreateAccount — open a CDN service for a billing service",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "createBillingBridgeService"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/billing-bridge/services/{system}/{service_id}",
-     "summary": "Billing system ClientArea — one service of the key owner",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getBillingBridgeService"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/services/{system}/{service_id}/change",
-     "summary": "Billing system ChangePackage",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "changeBillingBridgeService"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/services/{system}/{service_id}/renew",
-     "summary": "Billing system Renew",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "renewBillingBridgeService"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/services/{system}/{service_id}/sso",
-     "summary": "Billing system ServiceSingleSignOn — one-time console sign-in link",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "issueBillingBridgeSso"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/services/{system}/{service_id}/suspend",
-     "summary": "Billing system Suspend — stop this service only",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "suspendBillingBridgeService"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/services/{system}/{service_id}/terminate",
-     "summary": "Billing system Terminate",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "terminateBillingBridgeService"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/billing-bridge/services/{system}/{service_id}/unsuspend",
-     "summary": "Billing system Unsuspend",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "unsuspendBillingBridgeService"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/billing-bridge/settings",
-     "summary": "Read the reseller billing bridge plugin settings",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getResellerBillingBridgeSettings"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/billing-bridge/settings",
-     "summary": "Change the reseller billing bridge plugin settings",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "putResellerBillingBridgeSettings"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/billing-bridge/usage",
-     "summary": "Billing system UsageUpdate — current billing cycle usage",
-     "auth": [
-      "apiKey"
-     ],
-     "api_key": true,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "getBillingBridgeUsage"
     }
    ]
   },
@@ -6397,47 +3877,6 @@
    ]
   },
   {
-   "id": "control-site",
-   "prefix": "/v1/control-site",
-   "count": 3,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/control-site/assets/{sha256}",
-     "summary": "",
-     "auth": [
-      "none"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "readControlSiteAsset"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/control-site/content",
-     "summary": "",
-     "auth": [
-      "none"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "readControlSiteContent"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/control-site/packages",
-     "summary": "",
-     "auth": [
-      "none"
-     ],
-     "api_key": false,
-     "source": "api/control-site-website.openapi.yaml",
-     "operation_id": "listControlSitePackages"
-    }
-   ]
-  },
-  {
    "id": "custom-rbac",
    "prefix": "/v1/custom-rbac",
    "count": 10,
@@ -6611,16 +4050,17 @@
    "id": "dns",
    "prefix": "/v1/dns",
    "count": 31,
-   "api_key_count": 0,
+   "api_key_count": 7,
    "operations": [
     {
      "method": "GET",
      "path": "/v1/dns/hub/domains",
      "summary": "Own DNS accounts and one page of their cached hosted domains",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/control-dns-hub.openapi.yaml",
      "operation_id": "listTenantDNSHubDomains"
     },
@@ -6629,9 +4069,10 @@
      "path": "/v1/dns/hub/domains/refresh",
      "summary": "Re-list hosted domains (each account at most once a minute)",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/control-dns-hub.openapi.yaml",
      "operation_id": "refreshTenantDNSHubDomains"
     },
@@ -6640,9 +4081,10 @@
      "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
      "summary": "Live A/AAAA/CNAME/TXT records of a hosted domain",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/control-dns-hub.openapi.yaml",
      "operation_id": "listTenantDNSHubRecords"
     },
@@ -6651,9 +4093,10 @@
      "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
      "summary": "Create a record and read it back",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/control-dns-hub.openapi.yaml",
      "operation_id": "createTenantDNSHubRecord"
     },
@@ -6662,9 +4105,10 @@
      "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
      "summary": "Change a record if it still holds expected",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/control-dns-hub.openapi.yaml",
      "operation_id": "updateTenantDNSHubRecord"
     },
@@ -6673,9 +4117,10 @@
      "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
      "summary": "Delete a record if it still holds expected",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/control-dns-hub.openapi.yaml",
      "operation_id": "deleteTenantDNSHubRecord"
     },
@@ -6684,16 +4129,18 @@
      "path": "/v1/dns/hub/records/batch",
      "summary": "Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/control-dns-hub.openapi.yaml",
      "operation_id": "batchTenantDNSHubRecords"
     },
     {
      "method": "GET",
      "path": "/v1/dns/platform-config",
-     "summary": "Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)",
+     "summary": "Read the installation-wide DNS configuration (Node management > DNS settings, platform administrator)",
+     "summary_zh": "Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)",
      "auth": [
       "bearer"
      ],
@@ -6715,7 +4162,8 @@
     {
      "method": "POST",
      "path": "/v1/dns/platform-config/connection-test",
-     "summary": "连接测试 - verify DNS credentials and the CNAME domains they host (read-only)",
+     "summary": "Connection test - verify DNS credentials and the CNAME domains they host (read-only)",
+     "summary_zh": "连接测试 - verify DNS credentials and the CNAME domains they host (read-only)",
      "auth": [
       "bearer"
      ],
@@ -6726,7 +4174,8 @@
     {
      "method": "POST",
      "path": "/v1/dns/platform-config/{kind}",
-     "summary": "Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs",
+     "summary": "Start record repair (repair) or remove non-CDN records (cleanup) as background jobs",
+     "summary_zh": "Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs",
      "auth": [
       "bearer"
      ],
@@ -6737,7 +4186,8 @@
     {
      "method": "GET",
      "path": "/v1/dns/platform-zones",
-     "summary": "List the CNAME domains (CNAME域名)",
+     "summary": "List the CNAME domains",
+     "summary_zh": "List the CNAME domains (CNAME域名)",
      "auth": [
       "bearer"
      ],
@@ -7325,89 +4775,37 @@
    ]
   },
   {
-   "id": "escalate",
-   "prefix": "/v1/escalate",
-   "count": 6,
+   "id": "firewall-actions",
+   "prefix": "/v1/firewall-actions",
+   "count": 7,
    "api_key_count": 0,
    "operations": [
     {
      "method": "GET",
-     "path": "/v1/escalate/grantees",
-     "summary": "Active resellers the session scope may grant line groups to",
+     "path": "/v1/firewall-actions/default",
+     "summary": "Read the tenant default firewall action",
      "auth": [
       "bearer"
      ],
      "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "listEscalateGrantees"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/escalate/line-groups",
-     "summary": "List the line groups the session scope may use for B/C (own and granted) with their tier",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "listEscalateLineGroups"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/escalate/line-groups/grants",
-     "summary": "The grants the session scope made, newest first, revoked ones included",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "listEscalateLineGroupGrants"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/escalate/line-groups/grants",
-     "summary": "Grant a platform line group to an active reseller",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "grantEscalateLineGroup"
-    },
-    {
-     "method": "DELETE",
-     "path": "/v1/escalate/line-groups/grants/{grant_id}",
-     "summary": "Revoke a grant; the reseller's packages using the line group are withdrawn and their B/C cleared",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "revokeEscalateLineGroupGrant"
+     "source": "api/control-firewall-actions.openapi.yaml",
+     "operation_id": "getFirewallActionTenantDefault"
     },
     {
      "method": "PUT",
-     "path": "/v1/escalate/line-groups/{line_group_id}/tier",
-     "summary": "Mark one of the session scope's own line groups 普通 / 高防 / 无限防",
+     "path": "/v1/firewall-actions/default",
+     "summary": "Save the tenant default firewall action",
      "auth": [
       "bearer"
      ],
      "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "putEscalateLineGroupTier"
-    }
-   ]
-  },
-  {
-   "id": "firewall-actions",
-   "prefix": "/v1/firewall-actions",
-   "count": 3,
-   "api_key_count": 0,
-   "operations": [
+     "source": "api/control-firewall-actions.openapi.yaml",
+     "operation_id": "putFirewallActionTenantDefault"
+    },
     {
      "method": "GET",
      "path": "/v1/firewall-actions/policy",
-     "summary": "Read the desired, active, and last-known-good firewall action policy",
+     "summary": "Read the site's effective firewall action policy",
      "auth": [
       "bearer"
      ],
@@ -7418,13 +4816,35 @@
     {
      "method": "PUT",
      "path": "/v1/firewall-actions/policy",
-     "summary": "Create the next immutable firewall action policy candidate",
+     "summary": "Override the site with its own immutable firewall action policy candidate",
      "auth": [
       "bearer"
      ],
      "api_key": false,
      "source": "api/control-firewall-actions.openapi.yaml",
      "operation_id": "putFirewallActionPolicy"
+    },
+    {
+     "method": "PATCH",
+     "path": "/v1/firewall-actions/policy",
+     "summary": "Enable or disable the site's firewall action policy",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-firewall-actions.openapi.yaml",
+     "operation_id": "setFirewallActionPolicyEnabled"
+    },
+    {
+     "method": "DELETE",
+     "path": "/v1/firewall-actions/policy",
+     "summary": "Drop the site's own policy and inherit the tenant default again",
+     "auth": [
+      "bearer"
+     ],
+     "api_key": false,
+     "source": "api/control-firewall-actions.openapi.yaml",
+     "operation_id": "inheritFirewallActionPolicy"
     },
     {
      "method": "POST",
@@ -7467,7 +4887,8 @@
     {
      "method": "DELETE",
      "path": "/v1/identity/session-families/{family_id}",
-     "summary": "撤销当前用户的一个设备会话族",
+     "summary": "Revoke one device session family of the current user",
+     "summary_zh": "撤销当前用户的一个设备会话族",
      "auth": [
       "bearer"
      ],
@@ -7478,7 +4899,8 @@
     {
      "method": "GET",
      "path": "/v1/identity/sessions",
-     "summary": "按设备会话族列出当前用户的登录会话",
+     "summary": "List the current user's sign-in sessions by device session family",
+     "summary_zh": "按设备会话族列出当前用户的登录会话",
      "auth": [
       "bearer"
      ],
@@ -7831,7 +5253,8 @@
     {
      "method": "GET",
      "path": "/v1/l2-conds",
-     "summary": "查询 L2 匹配条件列表",
+     "summary": "List L2 match conditions",
+     "summary_zh": "查询 L2 匹配条件列表",
      "auth": [
       "apiKey",
       "bearer"
@@ -7843,7 +5266,8 @@
     {
      "method": "POST",
      "path": "/v1/l2-conds",
-     "summary": "创建 L2 匹配条件",
+     "summary": "Create an L2 match condition",
+     "summary_zh": "创建 L2 匹配条件",
      "auth": [
       "apiKey",
       "bearer"
@@ -7855,7 +5279,8 @@
     {
      "method": "PUT",
      "path": "/v1/l2-conds/{id}",
-     "summary": "替换 L2 匹配条件",
+     "summary": "Replace an L2 match condition",
+     "summary_zh": "替换 L2 匹配条件",
      "auth": [
       "apiKey",
       "bearer"
@@ -7867,7 +5292,8 @@
     {
      "method": "DELETE",
      "path": "/v1/l2-conds/{id}",
-     "summary": "删除 L2 匹配条件",
+     "summary": "Delete an L2 match condition",
+     "summary_zh": "删除 L2 匹配条件",
      "auth": [
       "apiKey",
       "bearer"
@@ -7887,7 +5313,8 @@
     {
      "method": "GET",
      "path": "/v1/l2-configs",
-     "summary": "查询 L2 配置列表",
+     "summary": "List L2 configurations",
+     "summary_zh": "查询 L2 配置列表",
      "auth": [
       "apiKey",
       "bearer"
@@ -7899,7 +5326,8 @@
     {
      "method": "POST",
      "path": "/v1/l2-configs",
-     "summary": "创建 L2 配置",
+     "summary": "Create an L2 configuration",
+     "summary_zh": "创建 L2 配置",
      "auth": [
       "apiKey",
       "bearer"
@@ -7911,7 +5339,8 @@
     {
      "method": "GET",
      "path": "/v1/l2-configs/{id}",
-     "summary": "查询 L2 配置",
+     "summary": "Read an L2 configuration",
+     "summary_zh": "查询 L2 配置",
      "auth": [
       "apiKey",
       "bearer"
@@ -7923,7 +5352,8 @@
     {
      "method": "PUT",
      "path": "/v1/l2-configs/{id}",
-     "summary": "替换 L2 配置",
+     "summary": "Replace an L2 configuration",
+     "summary_zh": "替换 L2 配置",
      "auth": [
       "apiKey",
       "bearer"
@@ -7935,7 +5365,8 @@
     {
      "method": "DELETE",
      "path": "/v1/l2-configs/{id}",
-     "summary": "删除 L2 配置",
+     "summary": "Delete an L2 configuration",
+     "summary_zh": "删除 L2 配置",
      "auth": [
       "apiKey",
       "bearer"
@@ -7955,7 +5386,8 @@
     {
      "method": "GET",
      "path": "/v1/l2-nodes",
-     "summary": "查询 L2 节点成员或可添加节点",
+     "summary": "List L2 node members or nodes that can be added",
+     "summary_zh": "查询 L2 节点成员或可添加节点",
      "auth": [
       "apiKey",
       "bearer"
@@ -7967,7 +5399,8 @@
     {
      "method": "POST",
      "path": "/v1/l2-nodes",
-     "summary": "批量添加 L2 节点成员",
+     "summary": "Bulk add L2 node members",
+     "summary_zh": "批量添加 L2 节点成员",
      "auth": [
       "apiKey",
       "bearer"
@@ -7979,7 +5412,8 @@
     {
      "method": "PUT",
      "path": "/v1/l2-nodes/{id}",
-     "summary": "替换 L2 节点成员设置",
+     "summary": "Replace an L2 node member's settings",
+     "summary_zh": "替换 L2 节点成员设置",
      "auth": [
       "apiKey",
       "bearer"
@@ -7991,7 +5425,8 @@
     {
      "method": "DELETE",
      "path": "/v1/l2-nodes/{id}",
-     "summary": "删除 L2 节点成员",
+     "summary": "Delete an L2 node member",
+     "summary_zh": "删除 L2 节点成员",
      "auth": [
       "apiKey",
       "bearer"
@@ -8054,13 +5489,14 @@
   {
    "id": "node-line-groups",
    "prefix": "/v1/node-line-groups",
-   "count": 11,
-   "api_key_count": 0,
+   "count": 14,
+   "api_key_count": 3,
    "operations": [
     {
      "method": "GET",
      "path": "/v1/node-line-groups",
-     "summary": "查询线路组当前修订列表",
+     "summary": "List the current revisions of line groups",
+     "summary_zh": "查询线路组当前修订列表",
      "auth": [
       "bearer"
      ],
@@ -8071,7 +5507,8 @@
     {
      "method": "POST",
      "path": "/v1/node-line-groups",
-     "summary": "创建线路组首个不可变修订",
+     "summary": "Create the first immutable revision of a line group",
+     "summary_zh": "创建线路组首个不可变修订",
      "auth": [
       "bearer"
      ],
@@ -8082,7 +5519,8 @@
     {
      "method": "GET",
      "path": "/v1/node-line-groups/{id}",
-     "summary": "查询线路组当前修订",
+     "summary": "Read the current revision of a line group",
+     "summary_zh": "查询线路组当前修订",
      "auth": [
       "bearer"
      ],
@@ -8093,7 +5531,8 @@
     {
      "method": "PUT",
      "path": "/v1/node-line-groups/{id}",
-     "summary": "创建线路组下一不可变修订",
+     "summary": "Create the next immutable revision of a line group",
+     "summary_zh": "创建线路组下一不可变修订",
      "auth": [
       "bearer"
      ],
@@ -8104,7 +5543,8 @@
     {
      "method": "DELETE",
      "path": "/v1/node-line-groups/{id}",
-     "summary": "软删除线路组并保留不可变修订历史",
+     "summary": "Soft-delete a line group and keep its immutable revision history",
+     "summary_zh": "软删除线路组并保留不可变修订历史",
      "auth": [
       "bearer"
      ],
@@ -8115,7 +5555,8 @@
     {
      "method": "POST",
      "path": "/v1/node-line-groups/{id}/decisions",
-     "summary": "计算可审计的区域健康调度决策",
+     "summary": "Compute an auditable region health scheduling decision",
+     "summary_zh": "计算可审计的区域健康调度决策",
      "auth": [
       "bearer"
      ],
@@ -8124,9 +5565,23 @@
      "operation_id": "decideNodeLineGroupEndpoint"
     },
     {
+     "method": "GET",
+     "path": "/v1/node-line-groups/{id}/latency-matrix",
+     "summary": "Read the latency matrix of a line group",
+     "summary_zh": "查询线路组延迟矩阵",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/control-node-scheduling.openapi.yaml",
+     "operation_id": "getNodeLineGroupLatencyMatrix"
+    },
+    {
      "method": "POST",
      "path": "/v1/node-line-groups/{id}/platform-default",
-     "summary": "设为或取消平台默认线路组",
+     "summary": "Set or clear the platform default line group",
+     "summary_zh": "设为或取消平台默认线路组",
      "auth": [
       "bearer"
      ],
@@ -8137,7 +5592,8 @@
     {
      "method": "GET",
      "path": "/v1/node-line-groups/{id}/revisions/{revision}",
-     "summary": "查询线路组历史修订",
+     "summary": "Read a historical revision of a line group",
+     "summary_zh": "查询线路组历史修订",
      "auth": [
       "bearer"
      ],
@@ -8148,7 +5604,8 @@
     {
      "method": "POST",
      "path": "/v1/node-line-groups/{id}/rollback",
-     "summary": "将历史配置复制为新的当前修订",
+     "summary": "Copy a historical configuration as the new current revision",
+     "summary_zh": "将历史配置复制为新的当前修订",
      "auth": [
       "bearer"
      ],
@@ -8158,8 +5615,35 @@
     },
     {
      "method": "GET",
+     "path": "/v1/node-line-groups/{id}/smart-schedule",
+     "summary": "Read the smart scheduling configuration and current line selections",
+     "summary_zh": "查询线路组智能调度配置与各线路当前选中节点",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/control-node-scheduling.openapi.yaml",
+     "operation_id": "getNodeLineGroupSmartSchedule"
+    },
+    {
+     "method": "PUT",
+     "path": "/v1/node-line-groups/{id}/smart-schedule",
+     "summary": "Configure smart scheduling of a line group",
+     "summary_zh": "配置线路组智能调度",
+     "auth": [
+      "apiKey",
+      "bearer"
+     ],
+     "api_key": true,
+     "source": "api/control-node-scheduling.openapi.yaml",
+     "operation_id": "putNodeLineGroupSmartSchedule"
+    },
+    {
+     "method": "GET",
      "path": "/v1/node-line-groups/{id}/target-snapshots",
-     "summary": "按来源修订查询 L1/L2 拓扑快照",
+     "summary": "Read the L1/L2 topology snapshot by source revision",
+     "summary_zh": "按来源修订查询 L1/L2 拓扑快照",
      "auth": [
       "bearer"
      ],
@@ -8170,7 +5654,8 @@
     {
      "method": "POST",
      "path": "/v1/node-line-groups/{id}/target-snapshots",
-     "summary": "创建 L1 目标与 L2 候选拓扑快照",
+     "summary": "Create an L1 target and L2 candidate topology snapshot",
+     "summary_zh": "创建 L1 目标与 L2 候选拓扑快照",
      "auth": [
       "bearer"
      ],
@@ -8293,7 +5778,8 @@
     {
      "method": "GET",
      "path": "/v1/nodes/monitoring/latest",
-     "summary": "批量读取节点本机 TCP 探测事实与当前生效策略",
+     "summary": "Batch read nodes' local TCP probe facts and the policy in force",
+     "summary_zh": "批量读取节点本机 TCP 探测事实与当前生效策略",
      "auth": [
       "bearer"
      ],
@@ -8573,403 +6059,6 @@
    ]
   },
   {
-   "id": "package-commerce",
-   "prefix": "/v1/package-commerce",
-   "count": 21,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/catalog",
-     "summary": "List package products purchasable by the authenticated tenant user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listPublishedPackageOffers"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/orders",
-     "summary": "List the authenticated tenant user's package orders",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "listMyPackageOrders"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/orders/{order_id}",
-     "summary": "Get one visible package order",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "getMyPackageOrder"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/orders/{order_id}/events",
-     "summary": "List sanitized order state events in revision order",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "listMyPackageOrderEvents"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/provider-callbacks/{provider}",
-     "summary": "Authenticate and apply one raw payment-provider callback",
-     "auth": [
-      "none"
-     ],
-     "api_key": false,
-     "tags": [
-      "Payment provider callbacks"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "applyVerifiedPaymentProviderCallback"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/purchases",
-     "summary": "Purchase a package subscription for the authenticated tenant user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "purchasePackageSubscription"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/orders",
-     "summary": "A reseller lists one of its customers' package orders",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerListCustomerOrders"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/purchases",
-     "summary": "A reseller buys one of its packages for its own customer",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerPurchaseForCustomer"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions",
-     "summary": "A reseller lists one of its customers' package subscriptions",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerListCustomerSubscriptions"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/cancel",
-     "summary": "A reseller cancels its customer's subscription",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerCancelCustomerSubscription"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/downgrade",
-     "summary": "A reseller downgrades its customer's subscription to another of its packages",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerDowngradeForCustomer"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/renew",
-     "summary": "A reseller renews its customer's subscription to one of its packages",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerRenewForCustomer"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/suspend",
-     "summary": "Suspend one package subscription as the customer's reseller",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerSuspendCustomerSubscription"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/unsuspend",
-     "summary": "Unsuspend one package subscription as the customer's reseller",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerUnsuspendCustomerSubscription"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/reseller/customers/{customer_scope_id}/subscriptions/{subscription_id}/upgrade",
-     "summary": "A reseller upgrades its customer's subscription to another of its packages",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "resellerUpgradeForCustomer"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/subscriptions",
-     "summary": "List effective sold-subscription projections owned by the current user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "listMySoldPackageSubscriptions"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/subscriptions/{subscription_id}/downgrade",
-     "summary": "Downgrade a package immediately or at the next cycle",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "downgradePackageSubscription"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/subscriptions/{subscription_id}/renew",
-     "summary": "Renew an active package subscription",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "renewPackageSubscription"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/subscriptions/{subscription_id}/upgrade",
-     "summary": "Upgrade a package immediately or at the next cycle",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "upgradePackageSubscription"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/package-commerce/traffic-purchases",
-     "summary": "Purchase a versioned traffic package snapshot",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "purchaseTrafficPackage"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-commerce/traffic-purchases/{order_id}",
-     "summary": "Get a sanitized traffic-purchase order and grant result",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant package commerce"
-     ],
-     "source": "api/control-package-commerce.openapi.yaml",
-     "operation_id": "getMyTrafficPackagePurchase"
-    }
-   ]
-  },
-  {
-   "id": "package-monitor",
-   "prefix": "/v1/package-monitor",
-   "count": 4,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/package-monitor/alerts",
-     "summary": "List the current package-monitor alert heads owned by the tenant user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "listTenantPackageMonitorAlerts"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-monitor/alerts/{alert_id}/transitions",
-     "summary": "List immutable transition facts for a tenant-owned alert",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "listTenantPackageMonitorTransitions"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-monitor/alerts/{alert_id}/transitions/{revision}",
-     "summary": "Get one immutable transition fact for a tenant-owned alert",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "getTenantPackageMonitorTransition"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-monitor/policies",
-     "summary": "List the current package-monitor policies owned by the tenant user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-monitor.openapi.yaml",
-     "operation_id": "listTenantPackageMonitorPolicies"
-    }
-   ]
-  },
-  {
-   "id": "package-traffic-coverage",
-   "prefix": "/v1/package-traffic-coverage",
-   "count": 1,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/package-traffic-coverage",
-     "summary": "查询本人套餐每个周期由全局流量包覆盖的流量（最近周期在前）",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-usage.openapi.yaml",
-     "operation_id": "listTenantPackageTrafficCoverage"
-    }
-   ]
-  },
-  {
-   "id": "package-usage",
-   "prefix": "/v1/package-usage",
-   "count": 2,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/package-usage",
-     "summary": "查询当前用户套餐用量",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-usage.openapi.yaml",
-     "operation_id": "queryTenantPackageUsage"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/package-usage/search",
-     "summary": "当前租户整体用量曲线（带宽/流量按时间桶聚合）",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-package-usage.openapi.yaml",
-     "operation_id": "searchTenantPackageUsage"
-    }
-   ]
-  },
-  {
    "id": "plugin-ui",
    "prefix": "/v1/plugin-ui",
    "count": 3,
@@ -9007,107 +6096,6 @@
      "api_key": false,
      "source": "api/openapi/v1/control.yaml",
      "operation_id": "proxyPluginUIRequest"
-    }
-   ]
-  },
-  {
-   "id": "recharge-identity-policy",
-   "prefix": "/v1/recharge-identity-policy",
-   "count": 2,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/recharge-identity-policy",
-     "summary": "Read the current tenant recharge identity policy",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/recharge-identity-policy.yaml",
-     "operation_id": "getTenantRechargeIdentityPolicy"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/recharge-identity-policy",
-     "summary": "CAS update the current tenant recharge identity policy",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/recharge-identity-policy.yaml",
-     "operation_id": "updateTenantRechargeIdentityPolicy"
-    }
-   ]
-  },
-  {
-   "id": "recharge-payments",
-   "prefix": "/v1/recharge-payments",
-   "count": 2,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "POST",
-     "path": "/v1/recharge-payments/checkouts",
-     "summary": "为已认证租户充值订单创建签名收银台",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payments.openapi.yaml",
-     "operation_id": "createRechargePaymentCheckout"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/recharge-payments/orders/{order_id}/cancellation",
-     "summary": "取消当前租户自己的待支付充值订单",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharge-payments.openapi.yaml",
-     "operation_id": "cancelRechargePayment"
-    }
-   ]
-  },
-  {
-   "id": "recharges",
-   "prefix": "/v1/recharges",
-   "count": 3,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/recharges/orders",
-     "summary": "List recharge orders owned by the authenticated tenant user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharges.openapi.yaml",
-     "operation_id": "listOwnRechargeOrders"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/recharges/orders",
-     "summary": "Create an authenticated tenant recharge order",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharges.openapi.yaml",
-     "operation_id": "createRechargeOrder"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/recharges/policy",
-     "summary": "Read the effective platform recharge policy for an authenticated tenant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-recharges.openapi.yaml",
-     "operation_id": "getRechargePolicy"
     }
    ]
   },
@@ -9186,58 +6174,6 @@
    ]
   },
   {
-   "id": "reseller",
-   "prefix": "/v1/reseller",
-   "count": 4,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/reseller/customers",
-     "summary": "A reseller lists its own customers",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listResellerCustomers"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/reseller/customers",
-     "summary": "A reseller opens a customer tenant under itself",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "createResellerCustomer"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/reseller/customers/{scope_id}/sites",
-     "summary": "A reseller lists one of its customers' sites (read only)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "listResellerCustomerSites"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/reseller/customers/{user_id}/status",
-     "summary": "A reseller suspends (disabled) or resumes (active) one of its customers",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/openapi/v1/control.yaml",
-     "operation_id": "setResellerCustomerStatus"
-    }
-   ]
-  },
-  {
    "id": "runtime-features",
    "prefix": "/v1/runtime-features",
    "count": 1,
@@ -9259,485 +6195,9 @@
   {
    "id": "security",
    "prefix": "/v1/security",
-   "count": 41,
+   "count": 3,
    "api_key_count": 0,
    "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/blocks",
-     "summary": "Ban list entries with source autodefense",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseBlocks"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/blocks/{block_id}/release",
-     "summary": "Unblock (Lua and kernel), optionally whitelist and report a false positive",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "releaseAutoDefenseBlock"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/events",
-     "summary": "Attack event timeline, newest first",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseEvents"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/false-positives",
-     "summary": "False positive reports",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseFalsePositives"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/false-positives",
-     "summary": "Report a verdict or signature as a false positive (the signature is withdrawn at once)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "reportAutoDefenseFalsePositive"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/metrics",
-     "summary": "Per site report figures of the last 30 days (mitigations, false positive reports, attack events)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseSiteMetrics"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/signatures",
-     "summary": "Automatic rules (signatures)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseSignatures"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/signatures/{signature_id}/revoke",
-     "summary": "禁用此签名",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "revokeAutoDefenseSignature"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/signatures/{signature_id}/solidify",
-     "summary": "固化为我的规则: becomes a user WAF/CC rule and leaves automatic management",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "solidifyAutoDefenseSignature"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites",
-     "summary": "Sites with mode, baseline maturity, circuit, overlay and the auto-mitigation grant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseSites"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/mode",
-     "summary": "Batch 开始学习 / 仅观察 / 开始防护 / 关闭 / 恢复跟随平台 (follow); protect needs module.autodefense.auto; one audit event per site",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "setAutoDefenseSiteModes"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites/{site_id}",
-     "summary": "One site with its overlay",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "getAutoDefenseSite"
-    },
-    {
-     "method": "PATCH",
-     "path": "/v1/security/autodefense/sites/{site_id}",
-     "summary": "Sensitivity and cross-site federation (revision guarded)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "updateAutoDefenseSite"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites/{site_id}/allows",
-     "summary": "白名单: the site's allow list as the nodes get it (ACL allow rules = user, 解除并加白 = release, admin sign-in sources = admin_login); never mitigated",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseSiteAllows"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/allows/remove",
-     "summary": "移出白名单: remove one 解除并加白 entry (ACL allows are edited in the ACL policy; admin sign-in sources expire)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "removeAutoDefenseSiteAllow"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/circuit/resume",
-     "summary": "恢复自动防护: close the site circuit the nodes reported open (Q6: a second break within 24 hours needs a person)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "resumeAutoDefenseSiteCircuit"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/drifts/confirm",
-     "summary": "确认基线漂移: confirm the site's pending baseline drifts (node baselines are not changed)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "confirmAutoDefenseSiteDrifts"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules",
-     "summary": "Modules site (site.max_level), bot, cc, scan, waf with every item state 自动/人工",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseSiteModules"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules/{module}/history",
-     "summary": "Item changes, newest first: node adjustments, 人工 locks, 恢复自动, range edits",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseSiteModuleHistory"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}",
-     "summary": "A person sets the item: it becomes manual and runs on this value until resumed (Q3)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "lockAutoDefenseSiteItem"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/range",
-     "summary": "Narrow the item's automatic range (上下限); state and manual value unchanged",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "setAutoDefenseSiteItemRange"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules/{module}/items/{field}/resume",
-     "summary": "恢复自动 for one item",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "resumeAutoDefenseSiteItem"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules/{module}/mode",
-     "summary": "manual / auto / suggest; auto needs module.autodefense.auto",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "setAutoDefenseSiteModuleMode"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules/{module}/resume",
-     "summary": "全部恢复自动: every manual item of the module returns to automatic",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "resumeAutoDefenseSiteModule"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites/{site_id}/modules/{module}/values",
-     "summary": "Each node's newest value of every item (in force or suggested) and its reason",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseSiteModuleValues"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/release",
-     "summary": "一键解除: undo every automatic mitigation and hold the site in observe only (default 30 minutes)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "releaseAutoDefenseSite"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/releases/retry",
-     "summary": "重试: every serving node applies and answers the release again (retry + 1, at most 100; audited release_retry)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "retryAutoDefenseRelease"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites/{site_id}/releases/status",
-     "summary": "解除状态: per node delivery of the site's single release of one target (已保存 → 待节点 → 全部节点已生效 / 部分失败)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "getAutoDefenseReleaseStatus"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/sites/{site_id}/waf-adapt",
-     "summary": "Adaptive WAF (智能自动): exclusions by stage with merged evidence, typed parameters, grey zone challenge, rule advice",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "getAutoDefenseSiteWAFAdapt"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/sites/{site_id}/waf-adapt/exclusions/{exclusion_id}/{action}",
-     "summary": "A person's decision: adopt (采纳, a manual exclusion), reject (驳回), revoke (撤销), manual (设为人工), resume (恢复自动); module.autodefense only",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "decideAutoDefenseSiteWAFExclusion"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/security/autodefense/sites/{site_id}/waf-adapt/grey-challenge",
-     "summary": "Grey zone challenge inherit / on / off (only 严格 / 极严格 tiers challenge)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "setAutoDefenseSiteGreyChallenge"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/security/autodefense/sites/{site_id}/waf-adapt/grey-repeat",
-     "summary": "Repeated grey zone source threshold / window of the site (null = node defaults 20 / 60 s)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "setAutoDefenseSiteGreyRepeat"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/autodefense/verdicts",
-     "summary": "Recent individual verdicts",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "listAutoDefenseVerdicts"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/autodefense/verdicts/{verdict_id}/release",
-     "summary": "解除 / 解除并加白 / 标记误判",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "autodefense"
-     ],
-     "source": "api/control-autodefense.openapi.yaml",
-     "operation_id": "releaseAutoDefenseVerdict"
-    },
     {
      "method": "GET",
      "path": "/v1/security/cc-stats",
@@ -9748,50 +6208,6 @@
      "api_key": false,
      "source": "api/control-cc-stats.openapi.yaml",
      "operation_id": "getSiteCCStats"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/escalate/sites/{site_id}",
-     "summary": "Read a site's attack escalation settings, thresholds in force and state",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "getEscalateSite"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/security/escalate/sites/{site_id}",
-     "summary": "Switch attack escalation on or off for a site and set its thresholds inside the package ranges",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "putEscalateSite"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/security/escalate/sites/{site_id}/cname-changed",
-     "summary": "Confirm the site's domain now points at the CNAME split off for escalation",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "confirmEscalateCNAMEChange"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/security/escalate/sites/{site_id}/events",
-     "summary": "List a site's level history, newest first (100 rows)",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-escalate.openapi.yaml",
-     "operation_id": "listEscalateSiteEvents"
     },
     {
      "method": "POST",
@@ -10163,7 +6579,8 @@
     {
      "method": "GET",
      "path": "/v1/site-defaults",
-     "summary": "网站列表 > 默认设置 (the caller's defaults for new sites)",
+     "summary": "Website list > Default settings (the caller's defaults for new sites)",
+     "summary_zh": "网站列表 > 默认设置 (the caller's defaults for new sites)",
      "auth": [
       "bearer"
      ],
@@ -10432,16 +6849,17 @@
    "id": "sites",
    "prefix": "/v1/sites",
    "count": 28,
-   "api_key_count": 0,
+   "api_key_count": 6,
    "operations": [
     {
      "method": "GET",
      "path": "/v1/sites",
      "summary": "List websites visible in the authenticated scope",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "listSites"
     },
@@ -10483,9 +6901,10 @@
      "path": "/v1/sites/{id}",
      "summary": "Get one website and its basic settings",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "getSite"
     },
@@ -10494,9 +6913,10 @@
      "path": "/v1/sites/{id}",
      "summary": "Replace the complete basic or origin settings section",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "updateSiteSettings"
     },
@@ -10514,7 +6934,8 @@
     {
      "method": "POST",
      "path": "/v1/sites/{id}/access-check",
-     "summary": "接入状态 > 立即检查 (resolve the site's domains now)",
+     "summary": "Access status > Check now (resolve the site's domains now)",
+     "summary_zh": "接入状态 > 立即检查 (resolve the site's domains now)",
      "auth": [
       "bearer"
      ],
@@ -10525,7 +6946,8 @@
     {
      "method": "POST",
      "path": "/v1/sites/{id}/auto-dns/sync",
-     "summary": "解析检测 > 同步解析 (run the site's automatic DNS records again)",
+     "summary": "DNS check > Sync records (run the site's automatic DNS records again)",
+     "summary_zh": "解析检测 > 同步解析 (run the site's automatic DNS records again)",
      "auth": [
       "bearer"
      ],
@@ -10560,9 +6982,10 @@
      "path": "/v1/sites/{id}/origin-routing",
      "summary": "Get the normalized conditional origin-routing document",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "getSiteOriginRouting"
     },
@@ -10571,9 +6994,10 @@
      "path": "/v1/sites/{id}/origin-routing",
      "summary": "Replace the complete conditional origin-routing document",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "replaceSiteOriginRouting"
     },
@@ -10582,9 +7006,10 @@
      "path": "/v1/sites/{id}/origin-status",
      "summary": "Origin pool probe state and the active origin level",
      "auth": [
+      "apiKey",
       "bearer"
      ],
-     "api_key": false,
+     "api_key": true,
      "source": "api/openapi/v1/sites.yaml",
      "operation_id": "getSiteOriginStatus"
     },
@@ -10857,7 +7282,8 @@
     {
      "method": "POST",
      "path": "/v1/streams/batch",
-     "summary": "批量添加 forwarding rules, one per line",
+     "summary": "Bulk add forwarding rules, one per line",
+     "summary_zh": "批量添加 forwarding rules, one per line",
      "auth": [
       "apiKey",
       "bearer"
@@ -10869,7 +7295,8 @@
     {
      "method": "POST",
      "path": "/v1/streams/batch-action",
-     "summary": "更多操作 on selected forwarding rules (platform)",
+     "summary": "More actions on selected forwarding rules (platform)",
+     "summary_zh": "更多操作 on selected forwarding rules (platform)",
      "auth": [
       "apiKey",
       "bearer"
@@ -10969,7 +7396,7 @@
   {
    "id": "tenant-scopes",
    "prefix": "/v1/tenant-scopes",
-   "count": 64,
+   "count": 62,
    "api_key_count": 0,
    "operations": [
     {
@@ -11187,7 +7614,8 @@
     {
      "method": "POST",
      "path": "/v1/tenant-scopes/{tenant_scope_id}/error-page-publications",
-     "summary": "发布租户作用域的错误页配置",
+     "summary": "Publish the tenant scope's error page configuration",
+     "summary_zh": "发布租户作用域的错误页配置",
      "auth": [
       "bearer"
      ],
@@ -11198,7 +7626,8 @@
     {
      "method": "GET",
      "path": "/v1/tenant-scopes/{tenant_scope_id}/error-page-publications/{publication_id}",
-     "summary": "读取一个不可变错误页发布结果",
+     "summary": "Read one immutable error page publication",
+     "summary_zh": "读取一个不可变错误页发布结果",
      "auth": [
       "bearer"
      ],
@@ -11419,7 +7848,8 @@
     {
      "method": "POST",
      "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications",
-     "summary": "发布租户作用域的源站鉴权配置",
+     "summary": "Publish the tenant scope's origin authentication configuration",
+     "summary_zh": "发布租户作用域的源站鉴权配置",
      "auth": [
       "bearer"
      ],
@@ -11430,7 +7860,8 @@
     {
      "method": "GET",
      "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications/{publication_id}",
-     "summary": "读取一个不可变源站鉴权发布结果",
+     "summary": "Read one immutable origin authentication publication",
+     "summary_zh": "读取一个不可变源站鉴权发布结果",
      "auth": [
       "bearer"
      ],
@@ -11797,28 +8228,6 @@
      ],
      "source": "api/control-plugin-webhooks.openapi.yaml",
      "operation_id": "createPluginWebhookTestDelivery"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/tenant-scopes/{tenant_scope_id}/theme",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "getTenantTheme"
-    },
-    {
-     "method": "PUT",
-     "path": "/v1/tenant-scopes/{tenant_scope_id}/theme",
-     "summary": "",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "source": "api/control-themes.openapi.yaml",
-     "operation_id": "selectTenantTheme"
     }
    ]
   },
@@ -11893,112 +8302,6 @@
      "api_key": false,
      "source": "api/control-themes.openapi.yaml",
      "operation_id": "getThemeTokens"
-    }
-   ]
-  },
-  {
-   "id": "traffic-packages",
-   "prefix": "/v1/traffic-packages",
-   "count": 7,
-   "api_key_count": 0,
-   "operations": [
-    {
-     "method": "GET",
-     "path": "/v1/traffic-packages/balances",
-     "summary": "List current-user balances grouped by metering bucket",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant traffic packages"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listMyTrafficPackageBalances"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/traffic-packages/grants",
-     "summary": "List grants purchased by the authenticated tenant user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant traffic packages"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listMyTrafficPackageGrants"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/traffic-packages/grants/{grant_id}",
-     "summary": "Read one grant purchased by the authenticated tenant user",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant traffic packages"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "getMyTrafficPackageGrant"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/traffic-packages/products",
-     "summary": "List current products visible to the authenticated tenant",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Traffic package products"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listAvailableTrafficPackageProducts"
-    },
-    {
-     "method": "POST",
-     "path": "/v1/traffic-packages/purchases",
-     "summary": "Traffic package purchase boundary",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant traffic packages"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "purchaseTrafficPackageThroughCommerce"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/traffic-packages/usage-events",
-     "summary": "List current-user consumption and refund results",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant traffic packages"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listMyTrafficPackageUsageEvents"
-    },
-    {
-     "method": "GET",
-     "path": "/v1/traffic-packages/usage-events/{event_id}/allocations",
-     "summary": "List bounded allocation details for one visible usage event",
-     "auth": [
-      "bearer"
-     ],
-     "api_key": false,
-     "tags": [
-      "Tenant traffic packages"
-     ],
-     "source": "api/control-traffic-packages.openapi.yaml",
-     "operation_id": "listMyTrafficPackageUsageAllocations"
     }
    ]
   },

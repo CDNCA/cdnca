@@ -6,12 +6,14 @@
    "operation_id": "listL2Configs",
    "method": "GET",
    "path": "/v1/l2-configs",
-   "summary": "查询 L2 配置列表",
+   "summary": "List L2 configurations",
+   "summary_zh": "查询 L2 配置列表",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "返回当前作用域未删除的全部配置，按 display_id 排序，不分页。",
+   "description": "Returns every undeleted configuration of the current scope, ordered by display_id, without paging.",
+   "description_zh": "返回当前作用域未删除的全部配置，按 display_id 排序，不分页。",
    "permissions": [
     "node_scheduling.read"
    ],
@@ -26,7 +28,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "L2 配置列表；无数据时 items 为空数组。",
+     "description": "L2 configurations; items is an empty array when there are none.",
+     "description_zh": "L2 配置列表；无数据时 items 为空数组。",
      "fields": [
       {
        "name": "items",
@@ -57,12 +60,14 @@
    "operation_id": "createL2Config",
    "method": "POST",
    "path": "/v1/l2-configs",
-   "summary": "创建 L2 配置",
+   "summary": "Create an L2 configuration",
+   "summary_zh": "创建 L2 配置",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，须为单个 UTF-8 JSON 对象，拒绝未知字段。",
+   "description": "Writes to the caller's own scope; a platform session cannot write to another tenant's scope. The same idempotency key with the same normalised request replays the original result. The body is limited to 128 KiB and must be a single UTF-8 JSON object; unknown fields are rejected.",
+   "description_zh": "写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，须为单个 UTF-8 JSON 对象，拒绝未知字段。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -103,18 +108,21 @@
       "name": "name",
       "type": "string",
       "required": true,
-      "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+      "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+      "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
      },
      {
       "name": "region",
       "type": "string",
       "required": true,
-      "description": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
+      "description": "Required region name; an explicit empty string is the default region, the same as a line group's default region, not a region UUID. A non-empty string of only whitespace is invalid; other names are trimmed on write, then checked by Unicode character count; control characters are rejected. An existing non-empty name (including the built-in default region name) keeps its value and is not the same as the empty string.",
+      "description_zh": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
      },
      {
       "name": "remark",
       "type": "string",
-      "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+      "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+      "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
      },
      {
       "name": "mode",
@@ -131,7 +139,8 @@
    "responses": [
     {
      "status": "201",
-     "description": "返回修订 1 的配置对象；名称或幂等键冲突返回 409。",
+     "description": "Returns the configuration at revision 1; a name or idempotency key conflict returns 409.",
+     "description_zh": "返回修订 1 的配置对象；名称或幂等键冲突返回 409。",
      "fields": [
       {
        "name": "id",
@@ -157,19 +166,22 @@
        "name": "name",
        "type": "string",
        "required": true,
-       "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+       "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+       "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
       },
       {
        "name": "region",
        "type": "string",
        "required": true,
-       "description": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
+       "description": "Required region name; an explicit empty string is the default region, the same as a line group's default region, not a region UUID. A non-empty string of only whitespace is invalid; other names are trimmed on write, then checked by Unicode character count; control characters are rejected. An existing non-empty name (including the built-in default region name) keeps its value and is not the same as the empty string.",
+       "description_zh": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
       },
       {
        "name": "remark",
        "type": "string",
        "required": true,
-       "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+       "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+       "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
       },
       {
        "name": "mode",
@@ -219,7 +231,8 @@
    "operation_id": "getL2Config",
    "method": "GET",
    "path": "/v1/l2-configs/{id}",
-   "summary": "查询 L2 配置",
+   "summary": "Read an L2 configuration",
+   "summary_zh": "查询 L2 配置",
    "auth": [
     "apiKey",
     "bearer"
@@ -233,7 +246,8 @@
      "in": "path",
      "type": "string(uuid)",
      "required": true,
-     "description": "非零 L2 配置 UUID。"
+     "description": "Non-zero L2 configuration UUID.",
+     "description_zh": "非零 L2 配置 UUID。"
     },
     {
      "name": "target_scope_id",
@@ -245,7 +259,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "返回当前配置对象及其修订。",
+     "description": "Returns the current configuration and its revision.",
+     "description_zh": "返回当前配置对象及其修订。",
      "fields": [
       {
        "name": "id",
@@ -271,19 +286,22 @@
        "name": "name",
        "type": "string",
        "required": true,
-       "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+       "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+       "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
       },
       {
        "name": "region",
        "type": "string",
        "required": true,
-       "description": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
+       "description": "Required region name; an explicit empty string is the default region, the same as a line group's default region, not a region UUID. A non-empty string of only whitespace is invalid; other names are trimmed on write, then checked by Unicode character count; control characters are rejected. An existing non-empty name (including the built-in default region name) keeps its value and is not the same as the empty string.",
+       "description_zh": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
       },
       {
        "name": "remark",
        "type": "string",
        "required": true,
-       "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+       "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+       "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
       },
       {
        "name": "mode",
@@ -333,12 +351,14 @@
    "operation_id": "updateL2Config",
    "method": "PUT",
    "path": "/v1/l2-configs/{id}",
-   "summary": "替换 L2 配置",
+   "summary": "Replace an L2 configuration",
+   "summary_zh": "替换 L2 配置",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "完整替换可编辑字段并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。",
+   "description": "Replaces every editable field and increments the revision; omitting remark clears it. Writes are bound by the caller's own scope, live manage permission, revision and idempotency key. Known limitation: a missing resource and a stale revision both return 404/node_scheduling_not_found and cannot be told apart, unlike the 412 revision conflict of the node update and delete endpoints.",
+   "description_zh": "完整替换可编辑字段并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -348,7 +368,8 @@
      "in": "path",
      "type": "string(uuid)",
      "required": true,
-     "description": "非零 L2 配置 UUID。"
+     "description": "Non-zero L2 configuration UUID.",
+     "description_zh": "非零 L2 配置 UUID。"
     },
     {
      "name": "target_scope_id",
@@ -386,18 +407,21 @@
       "name": "name",
       "type": "string",
       "required": true,
-      "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+      "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+      "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
      },
      {
       "name": "region",
       "type": "string",
       "required": true,
-      "description": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
+      "description": "Required region name; an explicit empty string is the default region, the same as a line group's default region, not a region UUID. A non-empty string of only whitespace is invalid; other names are trimmed on write, then checked by Unicode character count; control characters are rejected. An existing non-empty name (including the built-in default region name) keeps its value and is not the same as the empty string.",
+      "description_zh": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
      },
      {
       "name": "remark",
       "type": "string",
-      "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+      "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+      "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
      },
      {
       "name": "mode",
@@ -414,7 +438,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "返回更新后的配置对象或已完成请求的原结果。",
+     "description": "Returns the updated configuration or the original result of a completed request.",
+     "description_zh": "返回更新后的配置对象或已完成请求的原结果。",
      "fields": [
       {
        "name": "id",
@@ -440,19 +465,22 @@
        "name": "name",
        "type": "string",
        "required": true,
-       "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+       "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+       "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
       },
       {
        "name": "region",
        "type": "string",
        "required": true,
-       "description": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
+       "description": "Required region name; an explicit empty string is the default region, the same as a line group's default region, not a region UUID. A non-empty string of only whitespace is invalid; other names are trimmed on write, then checked by Unicode character count; control characters are rejected. An existing non-empty name (including the built-in default region name) keeps its value and is not the same as the empty string.",
+       "description_zh": "必填区域名称；显式空字符串表示默认区域，与线路组默认区域相同，不是区域 UUID。仅含空白的非空字符串非法；其余名称写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。已有非空名称（包括“默认”）保持原值，不等同于空字符串。"
       },
       {
        "name": "remark",
        "type": "string",
        "required": true,
-       "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+       "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+       "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
       },
       {
        "name": "mode",
@@ -506,12 +534,14 @@
    "operation_id": "deleteL2Config",
    "method": "DELETE",
    "path": "/v1/l2-configs/{id}",
-   "summary": "删除 L2 配置",
+   "summary": "Delete an L2 configuration",
+   "summary_zh": "删除 L2 配置",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
+   "description": "Returns 409 while undeleted L2 node members reference it; nothing is deleted in cascade. Success or an idempotent replay returns 204 with no body; ETag keeps the revision at deletion. A missing resource returns 404, a revision conflict 412.",
+   "description_zh": "存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -521,7 +551,8 @@
      "in": "path",
      "type": "string(uuid)",
      "required": true,
-     "description": "非零 L2 配置 UUID。"
+     "description": "Non-zero L2 configuration UUID.",
+     "description_zh": "非零 L2 配置 UUID。"
     },
     {
      "name": "target_scope_id",
@@ -552,7 +583,8 @@
    "responses": [
     {
      "status": "204",
-     "description": "软删除完成或已完成请求的结果被重放。"
+     "description": "Soft-deleted, or the result of a completed request replayed.",
+     "description_zh": "软删除完成或已完成请求的结果被重放。"
     },
     {
      "status": "400",

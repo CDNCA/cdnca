@@ -6,7 +6,8 @@
    "operation_id": "listSiteDefaults",
    "method": "GET",
    "path": "/v1/site-defaults",
-   "summary": "网站列表 > 默认设置 (the caller's defaults for new sites)",
+   "summary": "Website list > Default settings (the caller's defaults for new sites)",
+   "summary_zh": "网站列表 > 默认设置 (the caller's defaults for new sites)",
    "auth": [
     "bearer"
    ],

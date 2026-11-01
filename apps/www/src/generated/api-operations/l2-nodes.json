@@ -6,12 +6,14 @@
    "operation_id": "listL2Nodes",
    "method": "GET",
    "path": "/v1/l2-nodes",
-   "summary": "查询 L2 节点成员或可添加节点",
+   "summary": "List L2 node members or nodes that can be added",
+   "summary_zh": "查询 L2 节点成员或可添加节点",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "未指定 available 或值为空时，按 sort、display_id 返回该配置的成员（不存在的配置得到空列表）；available=true 时，配置必须存在，返回本作用域未退役且尚未加入任何 L2 配置的节点，按 display_id 排序。两种模式均不分页；available=false 不合法。",
+   "description": "Without available, or with it empty, returns the configuration's members ordered by sort and display_id (a missing configuration gives an empty list); with available=true the configuration must exist and the result is the scope's nodes that are not retired and not yet in any L2 configuration, ordered by display_id. Neither mode pages; available=false is invalid.",
+   "description_zh": "未指定 available 或值为空时，按 sort、display_id 返回该配置的成员（不存在的配置得到空列表）；available=true 时，配置必须存在，返回本作用域未退役且尚未加入任何 L2 配置的节点，按 display_id 排序。两种模式均不分页；available=false 不合法。",
    "permissions": [
     "node_scheduling.read"
    ],
@@ -27,19 +29,22 @@
      "in": "query",
      "type": "string(uuid)",
      "required": true,
-     "description": "只允许一个非零配置 UUID。"
+     "description": "Exactly one non-zero configuration UUID.",
+     "description_zh": "只允许一个非零配置 UUID。"
     },
     {
      "name": "available",
      "in": "query",
      "type": "string: true / ",
-     "description": "最多出现一次；仅 true 或空字符串合法。"
+     "description": "At most once; only true or an empty string is valid.",
+     "description_zh": "最多出现一次；仅 true 或空字符串合法。"
     }
    ],
    "responses": [
     {
      "status": "200",
-     "description": "available=true 返回候选节点列表，否则返回成员列表；无数据时 items 为空数组。"
+     "description": "available=true returns the candidate nodes, otherwise the members; items is an empty array when there are none.",
+     "description_zh": "available=true 返回候选节点列表，否则返回成员列表；无数据时 items 为空数组。"
     },
     {
      "status": "400",
@@ -67,12 +72,14 @@
    "operation_id": "addL2Nodes",
    "method": "POST",
    "path": "/v1/l2-nodes",
-   "summary": "批量添加 L2 节点成员",
+   "summary": "Bulk add L2 node members",
+   "summary_zh": "批量添加 L2 节点成员",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "原子添加 1 至 512 个不重复节点；配置、可选条件和未退役节点必须属于自身作用域。已加入任一 L2 配置的节点冲突返回 409。每个成员初始 revision=1、enabled=true、weight=100，node_ids 排序后 sort 从 0 按 10 递增；不返回 ETag 或 Location。写入受实时管理权限和幂等键约束，If-Match 必须为 \"0\"。",
+   "description": "Atomically adds 1 to 512 distinct nodes; the configuration, the optional condition and the non-retired nodes must belong to the caller's own scope. A node already in any L2 configuration returns 409. Each member starts at revision=1, enabled=true, weight=100, with sort from 0 in steps of 10 over the sorted node_ids; no ETag or Location is returned. Writes are bound by live manage permission and the idempotency key; If-Match must be \"0\".",
+   "description_zh": "原子添加 1 至 512 个不重复节点；配置、可选条件和未退役节点必须属于自身作用域。已加入任一 L2 配置的节点冲突返回 409。每个成员初始 revision=1、enabled=true、weight=100，node_ids 排序后 sort 从 0 按 10 递增；不返回 ETag 或 Location。写入受实时管理权限和幂等键约束，If-Match 必须为 \"0\"。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -122,14 +129,16 @@
      {
       "name": "condition_id",
       "type": "string(uuid) | null",
-      "description": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
+      "description": "An undeleted match condition in the same scope; omitted or null means no condition, a zero UUID is invalid.",
+      "description_zh": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
      }
     ]
    },
    "responses": [
     {
      "status": "201",
-     "description": "返回创建的成员列表或已完成请求的原结果。",
+     "description": "Returns the created members or the original result of a completed request.",
+     "description_zh": "返回创建的成员列表或已完成请求的原结果。",
      "fields": [
       {
        "name": "items",
@@ -164,12 +173,14 @@
    "operation_id": "updateL2Node",
    "method": "PUT",
    "path": "/v1/l2-nodes/{id}",
-   "summary": "替换 L2 节点成员设置",
+   "summary": "Replace an L2 node member's settings",
+   "summary_zh": "替换 L2 节点成员设置",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "id 为成员 UUID，不是 node_id。完整替换条件、启用状态、权重和排序并递增修订；省略或传 null 的 condition_id 清除条件。enabled、weight、sort 不可省略或为 null；写入受自身作用域、实时管理权限、修订和幂等键约束。此单项路径不支持 GET。",
+   "description": "id is the member UUID, not node_id. Replaces the condition, enabled state, weight and sort and increments the revision; an omitted or null condition_id clears the condition. enabled, weight and sort may not be omitted or null; writes are bound by the caller's own scope, live manage permission, revision and idempotency key. This item path does not support GET.",
+   "description_zh": "id 为成员 UUID，不是 node_id。完整替换条件、启用状态、权重和排序并递增修订；省略或传 null 的 condition_id 清除条件。enabled、weight、sort 不可省略或为 null；写入受自身作用域、实时管理权限、修订和幂等键约束。此单项路径不支持 GET。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -179,7 +190,8 @@
      "in": "path",
      "type": "string(uuid)",
      "required": true,
-     "description": "非零 L2 节点成员 UUID；不同于节点 node_id。"
+     "description": "Non-zero L2 node member UUID; not the node's node_id.",
+     "description_zh": "非零 L2 节点成员 UUID；不同于节点 node_id。"
     },
     {
      "name": "target_scope_id",
@@ -216,7 +228,8 @@
      {
       "name": "condition_id",
       "type": "string(uuid) | null",
-      "description": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
+      "description": "An undeleted match condition in the same scope; omitted or null means no condition, a zero UUID is invalid.",
+      "description_zh": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
      },
      {
       "name": "enabled",
@@ -238,7 +251,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "返回更新后的成员对象或已完成请求的原结果。",
+     "description": "Returns the updated member or the original result of a completed request.",
+     "description_zh": "返回更新后的成员对象或已完成请求的原结果。",
      "fields": [
       {
        "name": "id",
@@ -269,7 +283,8 @@
        "name": "condition_id",
        "type": "string(uuid) | null",
        "required": true,
-       "description": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
+       "description": "An undeleted match condition in the same scope; omitted or null means no condition, a zero UUID is invalid.",
+       "description_zh": "同一作用域内未删除的匹配条件；省略或 null 表示不关联条件，零 UUID 不合法。"
       },
       {
        "name": "condition_name",
@@ -290,7 +305,8 @@
        "name": "ip_address",
        "type": "string",
        "required": true,
-       "description": "优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。"
+       "description": "IPv4 first, then IPv6; an empty string when there is neither.",
+       "description_zh": "优先返回 IPv4，其次 IPv6；两者皆无时为空字符串。"
       },
       {
        "name": "admin_state",
@@ -353,12 +369,14 @@
    "operation_id": "deleteL2Node",
    "method": "DELETE",
    "path": "/v1/l2-nodes/{id}",
-   "summary": "删除 L2 节点成员",
+   "summary": "Delete an L2 node member",
+   "summary_zh": "删除 L2 节点成员",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "id 为成员 UUID，只软删除成员关系，不删除节点。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
+   "description": "id is the member UUID; only the membership is soft-deleted, not the node. Success or an idempotent replay returns 204 with no body; ETag keeps the revision at deletion. A missing resource returns 404, a revision conflict 412.",
+   "description_zh": "id 为成员 UUID，只软删除成员关系，不删除节点。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -368,7 +386,8 @@
      "in": "path",
      "type": "string(uuid)",
      "required": true,
-     "description": "非零 L2 节点成员 UUID；不同于节点 node_id。"
+     "description": "Non-zero L2 node member UUID; not the node's node_id.",
+     "description_zh": "非零 L2 节点成员 UUID；不同于节点 node_id。"
     },
     {
      "name": "target_scope_id",
@@ -399,7 +418,8 @@
    "responses": [
     {
      "status": "204",
-     "description": "软删除完成或已完成请求的结果被重放。"
+     "description": "Soft-deleted, or the result of a completed request replayed.",
+     "description_zh": "软删除完成或已完成请求的结果被重放。"
     },
     {
      "status": "400",

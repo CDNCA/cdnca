@@ -1114,7 +1114,29 @@
        "name": "filter",
        "type": "AccessExportFilter | null",
        "required": true,
-       "description": "申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。"
+       "description": "The original query conditions frozen at request time; null when the stored document version is not recognised.",
+       "description_zh": "申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。"
+      },
+      {
+       "name": "requested_by",
+       "type": "AccessExportUser",
+       "required": true
+      },
+      {
+       "name": "download_count",
+       "type": "integer",
+       "required": true,
+       "description": "已消费的一次性下载授权数（每次成功下载 1 次）。"
+      },
+      {
+       "name": "last_downloaded_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "last_downloaded_by",
+       "type": "AccessExportUser | null",
+       "required": true
       }
      ]
     },
@@ -1221,7 +1243,29 @@
        "name": "filter",
        "type": "AccessExportFilter | null",
        "required": true,
-       "description": "申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。"
+       "description": "The original query conditions frozen at request time; null when the stored document version is not recognised.",
+       "description_zh": "申请时冻结的原查询条件（LOG-02），null 表示存储文档版本不可识别。"
+      },
+      {
+       "name": "requested_by",
+       "type": "AccessExportUser",
+       "required": true
+      },
+      {
+       "name": "download_count",
+       "type": "integer",
+       "required": true,
+       "description": "已消费的一次性下载授权数（每次成功下载 1 次）。"
+      },
+      {
+       "name": "last_downloaded_at",
+       "type": "string(date-time) | null(date-time)",
+       "required": true
+      },
+      {
+       "name": "last_downloaded_by",
+       "type": "AccessExportUser | null",
+       "required": true
       }
      ]
     },

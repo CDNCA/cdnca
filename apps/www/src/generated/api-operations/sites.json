@@ -8,9 +8,13 @@
    "path": "/v1/sites",
    "summary": "List websites visible in the authenticated scope",
    "auth": [
+    "apiKey",
     "bearer"
    ],
    "description": "Platform administrators can list all tenant scopes. Tenant principals are always restricted by the server to their active tenant scope, and owner and region are redacted in their response. The owner, region_id, and node_group_id filters are platform-only to prevent count-based disclosure of redacted metadata.",
+   "permissions": [
+    "sites.read"
+   ],
    "params": [
     {
      "name": "page",
@@ -218,7 +222,8 @@
      {
       "name": "dns_provider_id",
       "type": "string(uuid)",
-      "description": "建站「DNS API（自动添加记录）」: a verified DNS API account of the owner (needs dns.manage). After the site is created, every domain gets a CNAME to the site CNAME through it (site.auto_dns). A failure there never fails the create; it shows in auto_dns and is retried. 422 dns_provider_unusable: not a verified account of the owner."
+      "description": "Create site \"DNS API (add records automatically)\": a verified DNS API account of the owner (needs dns.manage). After the site is created, every domain gets a CNAME to the site CNAME through it (site.auto_dns). A failure there never fails the create; it shows in auto_dns and is retried. 422 dns_provider_unusable: not a verified account of the owner.",
+      "description_zh": "建站「DNS API（自动添加记录）」: a verified DNS API account of the owner (needs dns.manage). After the site is created, every domain gets a CNAME to the site CNAME through it (site.auto_dns). A failure there never fails the create; it shows in auto_dns and is retried. 422 dns_provider_unusable: not a verified account of the owner."
      }
     ]
    },
@@ -301,12 +306,14 @@
       {
        "name": "package_remaining_days",
        "type": "integer | null",
-       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+       "description": "N days left: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription.",
+       "description_zh": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
       },
       {
        "name": "access_readiness",
        "type": "SiteAccessReadiness | null",
-       "description": "接入状态 (same as the list item's)."
+       "description": "Access status (same as the list item's).",
+       "description_zh": "接入状态 (same as the list item's)."
       },
       {
        "name": "package_unavailable_reason",
@@ -345,7 +352,8 @@
    "auth": [
     "bearer"
    ],
-   "description": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (网站协议批量设置) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
+   "description": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (bulk website protocol settings) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
+   "description_zh": "Requires sites.manage and Idempotency-Key. The response preserves input order while rows are locked in UUID order. Business failures are reported per item and do not undo successful items; a database or audit failure rolls back the complete batch. Tenant principals see resources outside their active scope as site_not_found. Tenant actions against a platform-locked site fail with site_locked, while platform principals retain maintenance access. Enable performs the same local entitlement feature, state, and domains.count checks as a single website update. Disable and delete remain available while entitlement is in grace or expired state. These actions change control-plane desired state only and do not claim that an edge configuration has been activated. regenerate_cname applies only to failed CNAME allocations, requires sites.manage and dns.manage, and transactionally creates one durable CNAME job per accepted site. Its per-item result is queued; the returned site.cname_task_id is the durable task identity and site.cname_state remains pending until provider reconciliation plus authoritative and public recursive convergence completes. set_protocols (网站协议批量设置) writes basic.http2_enabled, basic.http3_enabled and basic.tls_prefer_server_ciphers of each selected site at its expected_version, as a single-site basic update would; keys left out of protocols keep each site's value. Each changed site records site.tls_profile.update, and every scope with an updated site queues its automatic publication (site.update). Its per-item result is updated.",
    "params": [
     {
      "name": "Idempotency-Key",
@@ -564,7 +572,11 @@
    "path": "/v1/sites/{id}",
    "summary": "Get one website and its basic settings",
    "auth": [
+    "apiKey",
     "bearer"
+   ],
+   "permissions": [
+    "sites.read"
    ],
    "params": [
     {
@@ -653,12 +665,14 @@
       {
        "name": "package_remaining_days",
        "type": "integer | null",
-       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+       "description": "N days left: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription.",
+       "description_zh": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
       },
       {
        "name": "access_readiness",
        "type": "SiteAccessReadiness | null",
-       "description": "接入状态 (same as the list item's)."
+       "description": "Access status (same as the list item's).",
+       "description_zh": "接入状态 (same as the list item's)."
       },
       {
        "name": "package_unavailable_reason",
@@ -695,9 +709,13 @@
    "path": "/v1/sites/{id}",
    "summary": "Replace the complete basic or origin settings section",
    "auth": [
+    "apiKey",
     "bearer"
    ],
    "description": "section=basic and section=origin are writable discriminated variants. expected_version is a shared optimistic concurrency guard, so basic and origin writes against one website serialize on the same version. The complete selected section is required. Origin writes update control-plane desired state and the legacy basic.origins compatibility projection in one transaction; no edge configuration is generated or activated in this slice. A basic write may preserve an identical rich origin projection, but replacing origins while non-default origin metadata exists returns 409 origin_section_conflict. Identical retries require the same normalized payload and Idempotency-Key.",
+   "permissions": [
+    "sites.manage"
+   ],
    "params": [
     {
      "name": "id",
@@ -798,12 +816,14 @@
       {
        "name": "package_remaining_days",
        "type": "integer | null",
-       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+       "description": "N days left: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription.",
+       "description_zh": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
       },
       {
        "name": "access_readiness",
        "type": "SiteAccessReadiness | null",
-       "description": "接入状态 (same as the list item's)."
+       "description": "Access status (same as the list item's).",
+       "description_zh": "接入状态 (same as the list item's)."
       },
       {
        "name": "package_unavailable_reason",
@@ -903,7 +923,8 @@
    "operation_id": "checkSiteAccess",
    "method": "POST",
    "path": "/v1/sites/{id}/access-check",
-   "summary": "接入状态 > 立即检查 (resolve the site's domains now)",
+   "summary": "Access status > Check now (resolve the site's domains now)",
+   "summary_zh": "接入状态 > 立即检查 (resolve the site's domains now)",
    "auth": [
     "bearer"
    ],
@@ -963,7 +984,8 @@
    "operation_id": "syncSiteAutoDNS",
    "method": "POST",
    "path": "/v1/sites/{id}/auto-dns/sync",
-   "summary": "解析检测 > 同步解析 (run the site's automatic DNS records again)",
+   "summary": "DNS check > Sync records (run the site's automatic DNS records again)",
+   "summary_zh": "解析检测 > 同步解析 (run the site's automatic DNS records again)",
    "auth": [
     "bearer"
    ],
@@ -1180,12 +1202,14 @@
       {
        "name": "package_remaining_days",
        "type": "integer | null",
-       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+       "description": "N days left: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription.",
+       "description_zh": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
       },
       {
        "name": "access_readiness",
        "type": "SiteAccessReadiness | null",
-       "description": "接入状态 (same as the list item's)."
+       "description": "Access status (same as the list item's).",
+       "description_zh": "接入状态 (same as the list item's)."
       },
       {
        "name": "package_unavailable_reason",
@@ -1326,9 +1350,13 @@
    "path": "/v1/sites/{id}/origin-routing",
    "summary": "Get the normalized conditional origin-routing document",
    "auth": [
+    "apiKey",
     "bearer"
    ],
    "description": "Requires sites.read. Tenant principals can only read sites in their active scope. The document is ordered deterministically and represents control-plane desired state, not proof of edge activation. The response-only effective_retry and effective_l2_fallback objects expose the fixed fail-safe edge retry and L1-to-L2 direct-origin fallback guards. These guards are not caller-configurable and do not indicate that L2 routing is enabled for this site.",
+   "permissions": [
+    "sites.read"
+   ],
    "params": [
     {
      "name": "id",
@@ -1403,9 +1431,13 @@
    "path": "/v1/sites/{id}/origin-routing",
    "summary": "Replace the complete conditional origin-routing document",
    "auth": [
+    "apiKey",
     "bearer"
    ],
    "description": "Requires sites.manage, Idempotency-Key, and a strong If-Match value for the shared site version. The update, idempotency claim, automatic edge publication request, and site.origin_route.update audit event commit in one transaction. Identical semantic input is normalized before the idempotency digest is calculated. effective_retry and effective_l2_fallback are response-only and are rejected if supplied in this request document.",
+   "permissions": [
+    "sites.manage"
+   ],
    "params": [
     {
      "name": "id",
@@ -1540,9 +1572,13 @@
    "path": "/v1/sites/{id}/origin-status",
    "summary": "Origin pool probe state and the active origin level",
    "auth": [
+    "apiKey",
     "bearer"
    ],
    "description": "Requires sites.read. The control plane probes every origin of the pool (origin address with the pool's origin Host / SNI and health check path, from the tenant's own nodes when they can, else from the control plane). An origin is unhealthy after 3 consecutive failures, healthy after 2 consecutive successes, unknown before that or when it cannot be probed. Aggregated edge scheduling reads overall.",
+   "permissions": [
+    "sites.read"
+   ],
    "params": [
     {
      "name": "id",
@@ -2069,12 +2105,14 @@
       {
        "name": "package_remaining_days",
        "type": "integer | null",
-       "description": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
+       "description": "N days left: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription.",
+       "description_zh": "剩余 N 天: the 24-hour days left until package_expires_at, rounded up (0 once it has passed); counted from elapsed time, so it does not depend on the display time zone. Null without a subscription."
       },
       {
        "name": "access_readiness",
        "type": "SiteAccessReadiness | null",
-       "description": "接入状态 (same as the list item's)."
+       "description": "Access status (same as the list item's).",
+       "description_zh": "接入状态 (same as the list item's)."
       },
       {
        "name": "package_unavailable_reason",

@@ -2692,7 +2692,8 @@
    "operation_id": "publishErrorPageConfiguration",
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/error-page-publications",
-   "summary": "发布租户作用域的错误页配置",
+   "summary": "Publish the tenant scope's error page configuration",
+   "summary_zh": "发布租户作用域的错误页配置",
    "auth": [
     "bearer"
    ],
@@ -2712,7 +2713,8 @@
      "in": "header",
      "type": "string",
      "required": true,
-     "description": "当前源配置 revision 的强 ETag，例如 \"7\"。"
+     "description": "Strong ETag of the current source configuration revision, e.g. \"7\".",
+     "description_zh": "当前源配置 revision 的强 ETag，例如 \"7\"。"
     },
     {
      "name": "Idempotency-Key",
@@ -2774,7 +2776,8 @@
    "responses": [
     {
      "status": "201",
-     "description": "创建成功，或返回完全相同请求的持久化结果",
+     "description": "Created, or the persisted result of the exact same request",
+     "description_zh": "创建成功，或返回完全相同请求的持久化结果",
      "fields": [
       {
        "name": "tenant_id",
@@ -2839,39 +2842,48 @@
     },
     {
      "status": "400",
-     "description": "请求或强前置条件格式无效"
+     "description": "The request or strong precondition is malformed",
+     "description_zh": "请求或强前置条件格式无效"
     },
     {
      "status": "401",
-     "description": "会话无效或已撤销"
+     "description": "The session is invalid or revoked",
+     "description_zh": "会话无效或已撤销"
     },
     {
      "status": "403",
-     "description": "当前实时 RBAC 或作用域绑定拒绝访问"
+     "description": "Live RBAC or scope binding denies access",
+     "description_zh": "当前实时 RBAC 或作用域绑定拒绝访问"
     },
     {
      "status": "405",
-     "description": "方法不受支持"
+     "description": "Method not supported",
+     "description_zh": "方法不受支持"
     },
     {
      "status": "409",
-     "description": "幂等或目标快照冲突"
+     "description": "Idempotency or target snapshot conflict",
+     "description_zh": "幂等或目标快照冲突"
     },
     {
      "status": "412",
-     "description": "If-Match 与当前源 revision 不一致"
+     "description": "If-Match does not match the current source revision",
+     "description_zh": "If-Match 与当前源 revision 不一致"
     },
     {
      "status": "422",
-     "description": "节点状态或 entitlement 不允许发布"
+     "description": "Node state or entitlement does not allow publishing",
+     "description_zh": "节点状态或 entitlement 不允许发布"
     },
     {
      "status": "502",
-     "description": "生产发布器或持久化 readback 身份不一致"
+     "description": "Production publisher or persisted readback identity mismatch",
+     "description_zh": "生产发布器或持久化 readback 身份不一致"
     },
     {
      "status": "503",
-     "description": "写入结果未知。客户端只可使用响应 retry 中的 method、path、 if_match、idempotency_key 和 body_sha256 原样重试。"
+     "description": "The write outcome is unknown. Retry only with the method, path, if_match, idempotency_key and body_sha256 from the response's retry, unchanged.",
+     "description_zh": "写入结果未知。客户端只可使用响应 retry 中的 method、path、 if_match、idempotency_key 和 body_sha256 原样重试。"
     }
    ]
   },
@@ -2879,7 +2891,8 @@
    "operation_id": "getErrorPagePublication",
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/error-page-publications/{publication_id}",
-   "summary": "读取一个不可变错误页发布结果",
+   "summary": "Read one immutable error page publication",
+   "summary_zh": "读取一个不可变错误页发布结果",
    "auth": [
     "bearer"
    ],
@@ -2909,7 +2922,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "不可变发布结果",
+     "description": "Immutable publication result",
+     "description_zh": "不可变发布结果",
      "fields": [
       {
        "name": "tenant_id",
@@ -2974,31 +2988,38 @@
     },
     {
      "status": "400",
-     "description": "请求或强前置条件格式无效"
+     "description": "The request or strong precondition is malformed",
+     "description_zh": "请求或强前置条件格式无效"
     },
     {
      "status": "401",
-     "description": "会话无效或已撤销"
+     "description": "The session is invalid or revoked",
+     "description_zh": "会话无效或已撤销"
     },
     {
      "status": "403",
-     "description": "当前实时 RBAC 或作用域绑定拒绝访问"
+     "description": "Live RBAC or scope binding denies access",
+     "description_zh": "当前实时 RBAC 或作用域绑定拒绝访问"
     },
     {
      "status": "404",
-     "description": "该作用域中不存在指定的错误页发布"
+     "description": "No such error page publication in this scope",
+     "description_zh": "该作用域中不存在指定的错误页发布"
     },
     {
      "status": "405",
-     "description": "方法不受支持"
+     "description": "Method not supported",
+     "description_zh": "方法不受支持"
     },
     {
      "status": "502",
-     "description": "生产发布器或持久化 readback 身份不一致"
+     "description": "Production publisher or persisted readback identity mismatch",
+     "description_zh": "生产发布器或持久化 readback 身份不一致"
     },
     {
      "status": "503",
-     "description": "依赖暂不可用；GET 可安全重试"
+     "description": "A dependency is temporarily unavailable; GET is safe to retry",
+     "description_zh": "依赖暂不可用；GET 可安全重试"
     }
    ]
   },
@@ -5358,7 +5379,8 @@
    "operation_id": "publishOriginAuthEdgeConfiguration",
    "method": "POST",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications",
-   "summary": "发布租户作用域的源站鉴权配置",
+   "summary": "Publish the tenant scope's origin authentication configuration",
+   "summary_zh": "发布租户作用域的源站鉴权配置",
    "auth": [
     "bearer"
    ],
@@ -5379,7 +5401,8 @@
      "in": "header",
      "type": "string",
      "required": true,
-     "description": "当前源配置 revision 的强 ETag，例如 \"7\"。"
+     "description": "Strong ETag of the current source configuration revision, e.g. \"7\".",
+     "description_zh": "当前源配置 revision 的强 ETag，例如 \"7\"。"
     },
     {
      "name": "Idempotency-Key",
@@ -5436,7 +5459,8 @@
    "responses": [
     {
      "status": "201",
-     "description": "创建成功，或返回完全相同请求的持久化结果",
+     "description": "Created, or the persisted result of the exact same request",
+     "description_zh": "创建成功，或返回完全相同请求的持久化结果",
      "fields": [
       {
        "name": "tenant_id",
@@ -5506,39 +5530,48 @@
     },
     {
      "status": "400",
-     "description": "请求格式或参数无效"
+     "description": "The request format or parameters are invalid",
+     "description_zh": "请求格式或参数无效"
     },
     {
      "status": "401",
-     "description": "会话无效或已撤销"
+     "description": "The session is invalid or revoked",
+     "description_zh": "会话无效或已撤销"
     },
     {
      "status": "403",
-     "description": "作用域或权限拒绝"
+     "description": "Denied by scope or permission",
+     "description_zh": "作用域或权限拒绝"
     },
     {
      "status": "404",
-     "description": "源配置或发布记录不存在"
+     "description": "The source configuration or publication does not exist",
+     "description_zh": "源配置或发布记录不存在"
     },
     {
      "status": "405",
-     "description": "方法不受支持"
+     "description": "Method not supported",
+     "description_zh": "方法不受支持"
     },
     {
      "status": "409",
-     "description": "幂等键已绑定不同请求"
+     "description": "The idempotency key is bound to a different request",
+     "description_zh": "幂等键已绑定不同请求"
     },
     {
      "status": "412",
-     "description": "If-Match 不等于最新源配置 revision"
+     "description": "If-Match is not the latest source configuration revision",
+     "description_zh": "If-Match 不等于最新源配置 revision"
     },
     {
      "status": "422",
-     "description": "目标节点、接收密钥或源配置当前不可发布"
+     "description": "The target nodes, receiving keys or source configuration cannot be published now",
+     "description_zh": "目标节点、接收密钥或源配置当前不可发布"
     },
     {
      "status": "502",
-     "description": "持久化事实未通过严格身份校验"
+     "description": "Persisted facts failed the strict identity check",
+     "description_zh": "持久化事实未通过严格身份校验"
     },
     {
      "status": "503",
@@ -5550,7 +5583,8 @@
    "operation_id": "getOriginAuthEdgePublication",
    "method": "GET",
    "path": "/v1/tenant-scopes/{tenant_scope_id}/origin-auth/edge-publications/{publication_id}",
-   "summary": "读取一个不可变源站鉴权发布结果",
+   "summary": "Read one immutable origin authentication publication",
+   "summary_zh": "读取一个不可变源站鉴权发布结果",
    "auth": [
     "bearer"
    ],
@@ -5581,7 +5615,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "不可变发布结果",
+     "description": "Immutable publication result",
+     "description_zh": "不可变发布结果",
      "fields": [
       {
        "name": "tenant_id",
@@ -5651,31 +5686,38 @@
     },
     {
      "status": "400",
-     "description": "请求格式或参数无效"
+     "description": "The request format or parameters are invalid",
+     "description_zh": "请求格式或参数无效"
     },
     {
      "status": "401",
-     "description": "会话无效或已撤销"
+     "description": "The session is invalid or revoked",
+     "description_zh": "会话无效或已撤销"
     },
     {
      "status": "403",
-     "description": "作用域或权限拒绝"
+     "description": "Denied by scope or permission",
+     "description_zh": "作用域或权限拒绝"
     },
     {
      "status": "404",
-     "description": "源配置或发布记录不存在"
+     "description": "The source configuration or publication does not exist",
+     "description_zh": "源配置或发布记录不存在"
     },
     {
      "status": "405",
-     "description": "方法不受支持"
+     "description": "Method not supported",
+     "description_zh": "方法不受支持"
     },
     {
      "status": "502",
-     "description": "持久化事实未通过严格身份校验"
+     "description": "Persisted facts failed the strict identity check",
+     "description_zh": "持久化事实未通过严格身份校验"
     },
     {
      "status": "503",
-     "description": "服务暂不可用"
+     "description": "Service temporarily unavailable",
+     "description_zh": "服务暂不可用"
     }
    ]
   },
@@ -7458,6 +7500,10 @@
     {
      "status": "403",
      "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Stable localized-client error envelope"
     }
    ]
   },
@@ -7639,6 +7685,10 @@
     {
      "status": "404",
      "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "502",
+     "description": "Stable localized-client error envelope"
     }
    ]
   },
@@ -7747,6 +7797,10 @@
      "description": "Stable localized-client error envelope"
     },
     {
+     "status": "502",
+     "description": "Stable localized-client error envelope"
+    },
+    {
      "status": "503",
      "description": "Stable localized-client error envelope"
     }
@@ -7838,6 +7892,10 @@
      "description": "Stable localized-client error envelope"
     },
     {
+     "status": "502",
+     "description": "Stable localized-client error envelope"
+    },
+    {
      "status": "503",
      "description": "Stable localized-client error envelope"
     }
@@ -7926,6 +7984,10 @@
     },
     {
      "status": "409",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "502",
      "description": "Stable localized-client error envelope"
     },
     {
@@ -8036,6 +8098,10 @@
     },
     {
      "status": "422",
+     "description": "Stable localized-client error envelope"
+    },
+    {
+     "status": "502",
      "description": "Stable localized-client error envelope"
     },
     {
@@ -9096,220 +9162,6 @@
     {
      "status": "503",
      "description": "Store, secret, or write result unavailable"
-    }
-   ]
-  },
-  {
-   "operation_id": "getTenantTheme",
-   "method": "GET",
-   "path": "/v1/tenant-scopes/{tenant_scope_id}/theme",
-   "summary": "",
-   "auth": [
-    "bearer"
-   ],
-   "description": "The caller's own tenant theme state (any tenant member) and the downloaded themes it may choose.",
-   "params": [
-    {
-     "name": "tenant_scope_id",
-     "in": "path",
-     "type": "string(uuid)",
-     "required": true
-    }
-   ],
-   "responses": [
-    {
-     "status": "200",
-     "description": "Tenant theme",
-     "fields": [
-      {
-       "name": "schema",
-       "type": "const cdnca.theme.tenant/v1",
-       "required": true
-      },
-      {
-       "name": "tenant_scope_id",
-       "type": "string(uuid)",
-       "required": true
-      },
-      {
-       "name": "selection_mode",
-       "type": "any",
-       "required": true
-      },
-      {
-       "name": "platform_allows",
-       "type": "boolean",
-       "required": true
-      },
-      {
-       "name": "selection_allowed",
-       "type": "boolean",
-       "required": true
-      },
-      {
-       "name": "selected_package_sha256",
-       "type": "string"
-      },
-      {
-       "name": "assigned_by",
-       "type": "any"
-      },
-      {
-       "name": "effective_package_sha256",
-       "type": "string",
-       "required": true
-      },
-      {
-       "name": "effective_theme_id",
-       "type": "string",
-       "required": true
-      },
-      {
-       "name": "follows_platform",
-       "type": "boolean",
-       "required": true
-      },
-      {
-       "name": "revision",
-       "type": "integer",
-       "required": true
-      },
-      {
-       "name": "domains",
-       "type": "array<string>",
-       "required": true
-      },
-      {
-       "name": "choices",
-       "type": "array<object>",
-       "required": true
-      }
-     ]
-    },
-    {
-     "status": "403",
-     "description": "Not a member of this tenant scope"
-    }
-   ]
-  },
-  {
-   "operation_id": "selectTenantTheme",
-   "method": "PUT",
-   "path": "/v1/tenant-scopes/{tenant_scope_id}/theme",
-   "summary": "",
-   "auth": [
-    "bearer"
-   ],
-   "description": "Choose the tenant theme (tenant_theme.manage). package_sha256 \"\" follows the platform theme. Allowed only while the tenant may choose (its selection_mode allow, or inherit while the platform allows) and the platform has not assigned the tenant a theme. Audited as theme.tenant.activate.",
-   "params": [
-    {
-     "name": "tenant_scope_id",
-     "in": "path",
-     "type": "string(uuid)",
-     "required": true
-    },
-    {
-     "name": "If-Match",
-     "in": "header",
-     "type": "string",
-     "required": true,
-     "description": "\"<revision>\" from ETag"
-    }
-   ],
-   "body": {
-    "content_types": [
-     "application/json"
-    ],
-    "required": true,
-    "fields": [
-     {
-      "name": "package_sha256",
-      "type": "string",
-      "required": true
-     }
-    ]
-   },
-   "responses": [
-    {
-     "status": "200",
-     "description": "New tenant theme",
-     "fields": [
-      {
-       "name": "schema",
-       "type": "const cdnca.theme.tenant/v1",
-       "required": true
-      },
-      {
-       "name": "tenant_scope_id",
-       "type": "string(uuid)",
-       "required": true
-      },
-      {
-       "name": "selection_mode",
-       "type": "any",
-       "required": true
-      },
-      {
-       "name": "platform_allows",
-       "type": "boolean",
-       "required": true
-      },
-      {
-       "name": "selection_allowed",
-       "type": "boolean",
-       "required": true
-      },
-      {
-       "name": "selected_package_sha256",
-       "type": "string"
-      },
-      {
-       "name": "assigned_by",
-       "type": "any"
-      },
-      {
-       "name": "effective_package_sha256",
-       "type": "string",
-       "required": true
-      },
-      {
-       "name": "effective_theme_id",
-       "type": "string",
-       "required": true
-      },
-      {
-       "name": "follows_platform",
-       "type": "boolean",
-       "required": true
-      },
-      {
-       "name": "revision",
-       "type": "integer",
-       "required": true
-      },
-      {
-       "name": "domains",
-       "type": "array<string>",
-       "required": true
-      },
-      {
-       "name": "choices",
-       "type": "array<object>",
-       "required": true
-      }
-     ]
-    },
-    {
-     "status": "403",
-     "description": "theme_permission_denied, theme_tenant_selection_denied or entitlement_feature_denied"
-    },
-    {
-     "status": "404",
-     "description": "Package not downloaded"
-    },
-    {
-     "status": "412",
-     "description": "theme_revision_conflict"
     }
    ]
   }

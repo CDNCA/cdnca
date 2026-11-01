@@ -8,8 +8,10 @@
    "path": "/v1/dns/hub/domains",
    "summary": "Own DNS accounts and one page of their cached hosted domains",
    "auth": [
+    "apiKey",
     "bearer"
    ],
+   "description": "One item per (provider_id, apex), ordered by apex then provider_id. When the same apex is hosted by several of the tenant's DNS accounts (for example primary and secondary name servers), each account appears as its own item, so this lists every (provider_id, apex) pair of that apex; q is a substring filter, so match the apex exactly on the client.",
    "permissions": [
     "dns.read"
    ],
@@ -87,10 +89,12 @@
    "path": "/v1/dns/hub/domains/refresh",
    "summary": "Re-list hosted domains (each account at most once a minute)",
    "auth": [
+    "apiKey",
     "bearer"
    ],
-   "permissions": [
-    "dns.manage"
+   "any_permissions": [
+    "dns.manage",
+    "dns.records.manage"
    ],
    "params": [
     {
@@ -147,6 +151,7 @@
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
    "summary": "Live A/AAAA/CNAME/TXT records of a hosted domain",
    "auth": [
+    "apiKey",
     "bearer"
    ],
    "permissions": [
@@ -242,10 +247,12 @@
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records",
    "summary": "Create a record and read it back",
    "auth": [
+    "apiKey",
     "bearer"
    ],
-   "permissions": [
-    "dns.manage"
+   "any_permissions": [
+    "dns.manage",
+    "dns.records.manage"
    ],
    "params": [
     {
@@ -397,10 +404,12 @@
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
    "summary": "Change a record if it still holds expected",
    "auth": [
+    "apiKey",
     "bearer"
    ],
-   "permissions": [
-    "dns.manage"
+   "any_permissions": [
+    "dns.manage",
+    "dns.records.manage"
    ],
    "params": [
     {
@@ -559,10 +568,12 @@
    "path": "/v1/dns/hub/domains/{provider_id}/{apex}/records/{record_ref}",
    "summary": "Delete a record if it still holds expected",
    "auth": [
+    "apiKey",
     "bearer"
    ],
-   "permissions": [
-    "dns.manage"
+   "any_permissions": [
+    "dns.manage",
+    "dns.records.manage"
    ],
    "params": [
     {
@@ -692,10 +703,12 @@
    "path": "/v1/dns/hub/records/batch",
    "summary": "Apply up to 50 record changes, each on its own (item i uses key <Idempotency-Key>.<i>)",
    "auth": [
+    "apiKey",
     "bearer"
    ],
-   "permissions": [
-    "dns.manage"
+   "any_permissions": [
+    "dns.manage",
+    "dns.records.manage"
    ],
    "params": [
     {
@@ -753,7 +766,8 @@
    "operation_id": "getPlatformDNSConfig",
    "method": "GET",
    "path": "/v1/dns/platform-config",
-   "summary": "Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)",
+   "summary": "Read the installation-wide DNS configuration (Node management > DNS settings, platform administrator)",
+   "summary_zh": "Read the installation-wide DNS configuration (节点管理 > DNS配置, platform administrator)",
    "auth": [
     "bearer"
    ],
@@ -964,7 +978,8 @@
    "operation_id": "testPlatformDNSConnection",
    "method": "POST",
    "path": "/v1/dns/platform-config/connection-test",
-   "summary": "连接测试 - verify DNS credentials and the CNAME domains they host (read-only)",
+   "summary": "Connection test - verify DNS credentials and the CNAME domains they host (read-only)",
+   "summary_zh": "连接测试 - verify DNS credentials and the CNAME domains they host (read-only)",
    "auth": [
     "bearer"
    ],
@@ -1044,11 +1059,13 @@
    "operation_id": "startPlatformDNSOperation",
    "method": "POST",
    "path": "/v1/dns/platform-config/{kind}",
-   "summary": "Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs",
+   "summary": "Start record repair (repair) or remove non-CDN records (cleanup) as background jobs",
+   "summary_zh": "Start 记录修复 (repair) or 清除CDN无关解析 (cleanup) as background jobs",
    "auth": [
     "bearer"
    ],
-   "description": "repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner); cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the result lines shown under 系统管理 > 后台任务.",
+   "description": "repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner); cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the result lines shown under System > Background jobs.",
+   "description_zh": "repair queues one dns.repair.v1 job per tenant with settled CNAME owners (one item per owner); cleanup lists the CNAME domains at the provider and queues one dns.cleanup.v1 job with one item per A/AAAA/CNAME record that is neither the zone apex nor an allocated CNAME hostname. Item ids are the result lines shown under 系统管理 > 后台任务.",
    "params": [
     {
      "name": "kind",
@@ -1115,7 +1132,8 @@
    "operation_id": "listPlatformDNSZones",
    "method": "GET",
    "path": "/v1/dns/platform-zones",
-   "summary": "List the CNAME domains (CNAME域名)",
+   "summary": "List the CNAME domains",
+   "summary_zh": "List the CNAME domains (CNAME域名)",
    "auth": [
     "bearer"
    ],
@@ -1205,7 +1223,8 @@
      {
       "name": "random_allocation",
       "type": "boolean",
-      "description": "参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false."
+      "description": "Random allocation. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.",
+      "description_zh": "参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false."
      }
     ]
    },
@@ -1244,7 +1263,8 @@
        "name": "random_allocation",
        "type": "boolean",
        "required": true,
-       "description": "参与随机分配 (see PlatformDNSZoneInput)."
+       "description": "Random allocation (see PlatformDNSZoneInput).",
+       "description_zh": "参与随机分配 (see PlatformDNSZoneInput)."
       },
       {
        "name": "version",
@@ -1332,7 +1352,8 @@
      {
       "name": "random_allocation",
       "type": "boolean",
-      "description": "参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false."
+      "description": "Random allocation. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false.",
+      "description_zh": "参与随机分配. New sites without a CNAME domain draw one of the marked domains (any DNS provider); with none marked they use the default CNAME domain. Allocated CNAMEs do not move. Omitted on update keeps the current value; omitted on create is false."
      }
     ]
    },
@@ -1371,7 +1392,8 @@
        "name": "random_allocation",
        "type": "boolean",
        "required": true,
-       "description": "参与随机分配 (see PlatformDNSZoneInput)."
+       "description": "Random allocation (see PlatformDNSZoneInput).",
+       "description_zh": "参与随机分配 (see PlatformDNSZoneInput)."
       },
       {
        "name": "version",
@@ -1485,6 +1507,7 @@
    "auth": [
     "bearer"
    ],
+   "description": "A tenant scope lists only the accounts it entered (managed_by=tenant); the platform DNS copy is not returned. The platform scope lists every tenant's accounts, platform copies included.",
    "params": [
     {
      "name": "limit",
@@ -1558,7 +1581,8 @@
      {
       "name": "remark",
       "type": "string",
-      "description": "备注; trimmed"
+      "description": "Remark; trimmed, no control characters",
+      "description_zh": "备注; trimmed"
      }
     ]
    },
@@ -1585,7 +1609,8 @@
       {
        "name": "remark",
        "type": "string",
-       "description": "备注 (DNS API list and form); empty when none"
+       "description": "Remark (DNS API list and form); empty when none",
+       "description_zh": "备注 (DNS API list and form); empty when none"
       },
       {
        "name": "provider_type",
@@ -1606,7 +1631,7 @@
       {
        "name": "managed_by",
        "type": "string: tenant / platform",
-       "description": "tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)"
+       "description": "tenant = an account the tenant entered; platform = the platform DNS copy (only the platform-allocated CNAME records and platform administrators use it). Only the platform view returns platform rows: a tenant-scope list omits them and a tenant update, delete or verify of one is 404 dns_resource_not_found, as for an absent account; a platform-scope update, delete or verify of one is 409 dns_provider_platform_managed."
       },
       {
        "name": "version",
@@ -1688,7 +1713,8 @@
      {
       "name": "remark",
       "type": "string",
-      "description": "备注; omitted keeps the stored remark"
+      "description": "Remark; omitted keeps the stored remark",
+      "description_zh": "备注; omitted keeps the stored remark"
      },
      {
       "name": "status",
@@ -1726,7 +1752,8 @@
       {
        "name": "remark",
        "type": "string",
-       "description": "备注 (DNS API list and form); empty when none"
+       "description": "Remark (DNS API list and form); empty when none",
+       "description_zh": "备注 (DNS API list and form); empty when none"
       },
       {
        "name": "provider_type",
@@ -1747,7 +1774,7 @@
       {
        "name": "managed_by",
        "type": "string: tenant / platform",
-       "description": "tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)"
+       "description": "tenant = an account the tenant entered; platform = the platform DNS copy (only the platform-allocated CNAME records and platform administrators use it). Only the platform view returns platform rows: a tenant-scope list omits them and a tenant update, delete or verify of one is 404 dns_resource_not_found, as for an absent account; a platform-scope update, delete or verify of one is 409 dns_provider_platform_managed."
       },
       {
        "name": "version",
@@ -1917,7 +1944,7 @@
       {
        "name": "managed_by",
        "type": "string: tenant / platform",
-       "description": "tenant = an account the tenant entered; platform = the read-only platform DNS copy (only the platform-allocated CNAME records and platform administrators use it; dns_provider_platform_managed otherwise)"
+       "description": "tenant = an account the tenant entered; platform = the platform DNS copy (only the platform-allocated CNAME records and platform administrators use it). Only the platform view returns platform rows: a tenant-scope list omits them and a tenant update, delete or verify of one is 404 dns_resource_not_found, as for an absent account; a platform-scope update, delete or verify of one is 409 dns_provider_platform_managed."
       },
       {
        "name": "version",

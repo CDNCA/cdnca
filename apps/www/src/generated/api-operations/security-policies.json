@@ -185,7 +185,8 @@
      {
       "name": "cc_settings",
       "type": "SecurityPolicyCCSettings",
-      "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+      "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch. Omitted keeps the rules' own values.",
+      "description_zh": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
      },
      {
       "name": "waf_settings",
@@ -243,7 +244,8 @@
       {
        "name": "cc_settings",
        "type": "SecurityPolicyCCSettings",
-       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch. Omitted keeps the rules' own values.",
+       "description_zh": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
       },
       {
        "name": "waf_settings",
@@ -2477,7 +2479,8 @@
       {
        "name": "cc_settings",
        "type": "SecurityPolicyCCSettings",
-       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch. Omitted keeps the rules' own values.",
+       "description_zh": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
       },
       {
        "name": "waf_settings",
@@ -2619,7 +2622,8 @@
      {
       "name": "cc_settings",
       "type": "SecurityPolicyCCSettings",
-      "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+      "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch. Omitted keeps the rules' own values.",
+      "description_zh": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
      },
      {
       "name": "waf_settings",
@@ -2669,7 +2673,8 @@
       {
        "name": "cc_settings",
        "type": "SecurityPolicyCCSettings",
-       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
+       "description": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch. Omitted keeps the rules' own values.",
+       "description_zh": "CC only. Site-level ban/pass durations (override every rule's) and the auto switch (自动切换). Omitted keeps the rules' own values."
       },
       {
        "name": "waf_settings",

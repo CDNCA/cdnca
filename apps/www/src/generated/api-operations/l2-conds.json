@@ -6,12 +6,14 @@
    "operation_id": "listL2Conditions",
    "method": "GET",
    "path": "/v1/l2-conds",
-   "summary": "查询 L2 匹配条件列表",
+   "summary": "List L2 match conditions",
+   "summary_zh": "查询 L2 匹配条件列表",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "返回当前作用域未删除的全部匹配条件，按 display_id 排序，不分页。",
+   "description": "Returns every undeleted match condition of the current scope, ordered by display_id, without paging.",
+   "description_zh": "返回当前作用域未删除的全部匹配条件，按 display_id 排序，不分页。",
    "permissions": [
     "node_scheduling.read"
    ],
@@ -26,7 +28,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "L2 匹配条件列表；无数据时 items 为空数组。",
+     "description": "L2 match conditions; items is an empty array when there are none.",
+     "description_zh": "L2 匹配条件列表；无数据时 items 为空数组。",
      "fields": [
       {
        "name": "items",
@@ -57,12 +60,14 @@
    "operation_id": "createL2Condition",
    "method": "POST",
    "path": "/v1/l2-conds",
-   "summary": "创建 L2 匹配条件",
+   "summary": "Create an L2 match condition",
+   "summary_zh": "创建 L2 匹配条件",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，拒绝非 JSON、无效 UTF-8、未知字段及额外 JSON 值。",
+   "description": "Writes to the caller's own scope; a platform session cannot write to another tenant's scope. The same idempotency key with the same normalised request replays the original result. The body is limited to 128 KiB; non-JSON, invalid UTF-8, unknown fields and extra JSON values are rejected.",
+   "description_zh": "写入自身作用域，平台会话不能写入其他租户作用域；相同幂等键与规范化请求重放原结果。请求体限 128 KiB，拒绝非 JSON、无效 UTF-8、未知字段及额外 JSON 值。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -103,12 +108,14 @@
       "name": "name",
       "type": "string",
       "required": true,
-      "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+      "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+      "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
      },
      {
       "name": "remark",
       "type": "string",
-      "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+      "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+      "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
      },
      {
       "name": "rules",
@@ -120,7 +127,8 @@
    "responses": [
     {
      "status": "201",
-     "description": "返回修订 1 的匹配条件对象；名称或幂等键冲突返回 409。",
+     "description": "Returns the match condition at revision 1; a name or idempotency key conflict returns 409.",
+     "description_zh": "返回修订 1 的匹配条件对象；名称或幂等键冲突返回 409。",
      "fields": [
       {
        "name": "id",
@@ -146,13 +154,15 @@
        "name": "name",
        "type": "string",
        "required": true,
-       "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+       "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+       "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
       },
       {
        "name": "remark",
        "type": "string",
        "required": true,
-       "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+       "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+       "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
       },
       {
        "name": "rules",
@@ -197,12 +207,14 @@
    "operation_id": "updateL2Condition",
    "method": "PUT",
    "path": "/v1/l2-conds/{id}",
-   "summary": "替换 L2 匹配条件",
+   "summary": "Replace an L2 match condition",
+   "summary_zh": "替换 L2 匹配条件",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "完整替换名称、备注和规则并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。此单项路径不支持 GET。",
+   "description": "Replaces the name, remark and rules and increments the revision; omitting remark clears it. Writes are bound by the caller's own scope, live manage permission, revision and idempotency key. Known limitation: a missing resource and a stale revision both return 404/node_scheduling_not_found and cannot be told apart, unlike the 412 revision conflict of the node update and delete endpoints. This item path does not support GET.",
+   "description_zh": "完整替换名称、备注和规则并递增修订；省略 remark 将清空备注。写入受自身作用域、实时管理权限、修订和幂等键约束。当前实现的已知限制：资源不存在与陈旧修订均返回 404/node_scheduling_not_found，不能区分；不同于节点更新及删除接口的 412 修订冲突。此单项路径不支持 GET。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -212,7 +224,8 @@
      "in": "path",
      "type": "string(uuid)",
      "required": true,
-     "description": "非零 L2 匹配条件 UUID。"
+     "description": "Non-zero L2 match condition UUID.",
+     "description_zh": "非零 L2 匹配条件 UUID。"
     },
     {
      "name": "target_scope_id",
@@ -250,12 +263,14 @@
       "name": "name",
       "type": "string",
       "required": true,
-      "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+      "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+      "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
      },
      {
       "name": "remark",
       "type": "string",
-      "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+      "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+      "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
      },
      {
       "name": "rules",
@@ -267,7 +282,8 @@
    "responses": [
     {
      "status": "200",
-     "description": "返回更新后的匹配条件对象或已完成请求的原结果。",
+     "description": "Returns the updated match condition or the original result of a completed request.",
+     "description_zh": "返回更新后的匹配条件对象或已完成请求的原结果。",
      "fields": [
       {
        "name": "id",
@@ -293,13 +309,15 @@
        "name": "name",
        "type": "string",
        "required": true,
-       "description": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
+       "description": "Name; trimmed on write, then checked by Unicode character count; control characters are rejected.",
+       "description_zh": "名称；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。"
       },
       {
        "name": "remark",
        "type": "string",
        "required": true,
-       "description": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
+       "description": "Remark; trimmed on write, then checked by Unicode character count; control characters are rejected. Omitted means an empty string.",
+       "description_zh": "备注；写入时去除首尾空白后按 Unicode 字符数校验，禁止控制字符。省略时为空字符串。"
       },
       {
        "name": "rules",
@@ -348,12 +366,14 @@
    "operation_id": "deleteL2Condition",
    "method": "DELETE",
    "path": "/v1/l2-conds/{id}",
-   "summary": "删除 L2 匹配条件",
+   "summary": "Delete an L2 match condition",
+   "summary_zh": "删除 L2 匹配条件",
    "auth": [
     "apiKey",
     "bearer"
    ],
-   "description": "存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
+   "description": "Returns 409 while undeleted L2 node members reference it; nothing is deleted in cascade. Success or an idempotent replay returns 204 with no body; ETag keeps the revision at deletion. A missing resource returns 404, a revision conflict 412.",
+   "description_zh": "存在未删除的 L2 节点成员引用时返回 409，不级联删除。成功或幂等重放返回 204，无响应体；ETag 保留删除时修订。不存在返回 404，修订冲突返回 412。",
    "permissions": [
     "node_scheduling.manage"
    ],
@@ -363,7 +383,8 @@
      "in": "path",
      "type": "string(uuid)",
      "required": true,
-     "description": "非零 L2 匹配条件 UUID。"
+     "description": "Non-zero L2 match condition UUID.",
+     "description_zh": "非零 L2 匹配条件 UUID。"
     },
     {
      "name": "target_scope_id",
@@ -394,7 +415,8 @@
    "responses": [
     {
      "status": "204",
-     "description": "软删除完成或已完成请求的结果被重放。"
+     "description": "Soft-deleted, or the result of a completed request replayed.",
+     "description_zh": "软删除完成或已完成请求的结果被重放。"
     },
     {
      "status": "400",
