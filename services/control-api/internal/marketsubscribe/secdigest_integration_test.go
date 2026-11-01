@@ -40,7 +40,7 @@ func TestReceiveDigestBindsToLocalSite(t *testing.T) {
 	leaf, other := uuid.New(), uuid.New()
 	leafSite, grantID := uuid.New(), uuid.New()
 	now := time.Now().UTC()
-	if _, err := pool.Exec(ctx, `INSERT INTO site_supplies(id,platform_scope_id,kind,name,market_subscription_id,status,created_at,updated_at)
+	if _, err := pool.Exec(ctx, `INSERT INTO site_supplies(id,owner_scope_id,kind,name,market_subscription_id,status,created_at,updated_at)
 		VALUES($1,$2,'market_subscription','m',$3,'active',$4,$4)`, supply, platform, sub, now); err != nil {
 		t.Fatal(err)
 	}

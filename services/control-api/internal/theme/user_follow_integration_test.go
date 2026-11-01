@@ -27,25 +27,25 @@ func TestUserConsoleFollowsAdminPostgreSQL(t *testing.T) {
 		steps []step
 	}{
 		{"follows through admin changes", []step{
-			{"admin:" + theme.OfficialThemeID, theme.OfficialThemeID, true, ""},
+			{"admin:" + officialFixtureID, officialFixtureID, true, ""},
 			{"admin:" + theme.DefaultThemeID, theme.DefaultThemeID, true, ""},
 		}},
 		{"own theme stays when admin changes", []step{
-			{"user:" + theme.OfficialThemeID, theme.OfficialThemeID, false, theme.ActionUserUnfollow},
-			{"admin:" + theme.OfficialThemeID, theme.OfficialThemeID, false, ""},
-			{"admin:" + theme.DefaultThemeID, theme.OfficialThemeID, false, ""},
+			{"user:" + officialFixtureID, officialFixtureID, false, theme.ActionUserUnfollow},
+			{"admin:" + officialFixtureID, officialFixtureID, false, ""},
+			{"admin:" + theme.DefaultThemeID, officialFixtureID, false, ""},
 		}},
 		{"follow, own theme, follow again", []step{
-			{"admin:" + theme.OfficialThemeID, theme.OfficialThemeID, true, ""},
+			{"admin:" + officialFixtureID, officialFixtureID, true, ""},
 			{"user:" + theme.DefaultThemeID, theme.DefaultThemeID, false, theme.ActionUserUnfollow},
-			{"follow", theme.OfficialThemeID, true, theme.ActionUserFollow},
-			{"follow", theme.OfficialThemeID, true, ""},
+			{"follow", officialFixtureID, true, theme.ActionUserFollow},
+			{"follow", officialFixtureID, true, ""},
 			{"admin:" + theme.DefaultThemeID, theme.DefaultThemeID, true, ""},
 		}},
 		{"own theme equal to admin is still its own", []step{
-			{"admin:" + theme.OfficialThemeID, theme.OfficialThemeID, true, ""},
-			{"user:" + theme.OfficialThemeID, theme.OfficialThemeID, false, theme.ActionUserUnfollow},
-			{"admin:" + theme.DefaultThemeID, theme.OfficialThemeID, false, ""},
+			{"admin:" + officialFixtureID, officialFixtureID, true, ""},
+			{"user:" + officialFixtureID, officialFixtureID, false, theme.ActionUserUnfollow},
+			{"admin:" + theme.DefaultThemeID, officialFixtureID, false, ""},
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -53,12 +53,12 @@ func TestUserConsoleFollowsAdminPostgreSQL(t *testing.T) {
 			ctx := t.Context()
 			actor := seedPlatformAdmin(t, pool)
 			auditor := audit.New(pool)
-			service, err := theme.NewService(pool, auditor, nil, theme.BuiltinCatalog(), time.Now)
+			service, err := theme.NewService(pool, auditor, nil, officialFixtureCatalog(), time.Now)
 			if err != nil {
 				t.Fatal(err)
 			}
 			packages := map[string]string{}
-			for _, id := range []string{theme.DefaultThemeID, theme.OfficialThemeID} {
+			for _, id := range []string{theme.DefaultThemeID, officialFixtureID} {
 				view, err := service.Download(ctx, actor, id)
 				if err != nil {
 					t.Fatalf("download %s: %v", id, err)

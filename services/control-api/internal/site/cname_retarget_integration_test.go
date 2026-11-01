@@ -271,7 +271,7 @@ func TestCNAMETargetsFollowServingHolds(t *testing.T) {
 		t.Fatal(err)
 	}
 	supplyID := uuid.New()
-	exec(`INSERT INTO site_supplies(id,platform_scope_id,kind,name,market_subscription_id,target,status,created_at,updated_at)
+	exec(`INSERT INTO site_supplies(id,owner_scope_id,kind,name,market_subscription_id,target,status,created_at,updated_at)
 		VALUES($1,$2,'market_subscription','market',$3,'G7K2abcdefgh.supply.example.','active',now(),now())`, supplyID, platformScope, uuid.New())
 	exec(`INSERT INTO site_supply_bindings(site_id,supply_id,role,priority,created_at) VALUES($1,$2,'primary',1,now())`, created.Site.ID, supplyID)
 	if count, err := cname.PlanRetargets(ctx); err != nil || count != 1 {

@@ -749,11 +749,9 @@ func TestNodeCreateEntitlementLifecycle(t *testing.T) {
 	var clockUnix atomic.Int64
 	clockUnix.Store(baseTime.Unix())
 	now := func() time.Time { return time.Unix(clockUnix.Load(), 0).UTC() }
-	key := newSiteTestKey(t, "node-entitlement-key")
-	trust := newSiteTestTrust(t, key)
 	server := httptest.NewServer(New(pool, identityService, Config{
 		CookieSecure: false, APIKeyPepper: bytes.Repeat([]byte{0x52}, 32),
-		Now: now, EntitlementTrust: trust,
+		Now: now,
 	}).Handler())
 	t.Cleanup(server.Close)
 	client := server.Client()
@@ -771,33 +769,10 @@ func TestNodeCreateEntitlementLifecycle(t *testing.T) {
 			createBody(name), auth.AccessToken, idempotencyKey, "", requestID)
 	}
 
-	response := post("node-no-lease", "node-no-lease-request", "No Lease")
-	assertError(t, response, http.StatusForbidden, "entitlement_unavailable", "node-no-lease-request")
-	response.Body.Close()
-	assertNodeCreateResidue(t, pool, 0, 0, 0)
-	assertNodeEntitlementAudit(t, pool, "node-no-lease-request", "uninstalled", 0, -1)
-
-	installNodeTestEntitlement(t, pool, trust, baseTime, nodeTestLeaseOptions{
-		serial: 1, limit: 2, key: key, omitFeature: true,
-	})
-	response = post("node-feature-missing", "node-feature-missing-request", "Feature Missing")
-	assertError(t, response, http.StatusForbidden, "entitlement_feature_denied", "node-feature-missing-request")
-	response.Body.Close()
-	assertNodeCreateResidue(t, pool, 0, 0, 0)
-
-	installNodeTestEntitlement(t, pool, trust, baseTime, nodeTestLeaseOptions{
-		serial: 2, limit: 2, key: key, omitQuota: true,
-	})
-	response = post("node-quota-missing", "node-quota-missing-request", "Quota Missing")
-	assertError(t, response, http.StatusForbidden, "entitlement_quota_denied", "node-quota-missing-request")
-	response.Body.Close()
-	assertNodeCreateResidue(t, pool, 0, 0, 0)
-
-	installNodeTestEntitlement(t, pool, trust, baseTime, nodeTestLeaseOptions{
-		serial: 3, limit: 2, key: key,
-	})
-	firstBody := createBody("First Licensed Node")
-	response = nodeWriteRequest(t, client, http.MethodPost, server.URL+"/v1/nodes",
+	// Community edition: no activation and no lease. Nodes are created under
+	// the built-in community entitlement with no node quota.
+	firstBody := createBody("First Node")
+	response := nodeWriteRequest(t, client, http.MethodPost, server.URL+"/v1/nodes",
 		firstBody, auth.AccessToken, "node-first", "", "node-first-request")
 	var first createNodeResponse
 	decodeResponse(t, response, http.StatusCreated, &first)
@@ -859,74 +834,32 @@ func TestNodeCreateEntitlementLifecycle(t *testing.T) {
 	}
 	wait.Wait()
 	close(outcomes)
-	var quotaWinner uuid.UUID
-	var succeeded, exhausted int
+	// No node quota: both concurrent creations succeed.
+	var succeeded int
 	for outcome := range outcomes {
-		switch {
-		case outcome.status == http.StatusCreated:
-			succeeded++
-			quotaWinner = outcome.nodeID
-		case outcome.status == http.StatusConflict && outcome.code == "entitlement_quota_exceeded":
-			exhausted++
-		default:
+		if outcome.status != http.StatusCreated {
 			t.Fatalf("unexpected concurrent node create outcome = %#v", outcome)
 		}
+		succeeded++
 	}
-	if succeeded != 1 || exhausted != 1 {
-		t.Fatalf("concurrent outcomes: succeeded=%d exhausted=%d", succeeded, exhausted)
+	if succeeded != 2 {
+		t.Fatalf("concurrent outcomes: succeeded=%d", succeeded)
 	}
 
-	if _, err := pool.Exec(context.Background(), `UPDATE nodes SET admin_state = 'disabled' WHERE id = $1`, first.Node.ID); err != nil {
-		t.Fatalf("disable first node: %v", err)
-	}
-	response = post("node-disabled-still-counts", "node-disabled-still-counts-request", "Disabled Still Counts")
-	assertError(t, response, http.StatusConflict, "entitlement_quota_exceeded", "node-disabled-still-counts-request")
-	response.Body.Close()
-	if _, err := pool.Exec(context.Background(), `UPDATE nodes SET admin_state = 'retired' WHERE id = $1`, quotaWinner); err != nil {
-		t.Fatalf("retire quota winner: %v", err)
-	}
-	response = post("node-after-retire", "node-after-retire-request", "Replacement Node")
-	var replacement createNodeResponse
-	decodeResponse(t, response, http.StatusCreated, &replacement)
-	response.Body.Close()
-
-	clockUnix.Store(baseTime.Add(90 * time.Minute).Unix())
-	// Grace keeps node creation allowed: it reaches
-	// the quota check (still full here) instead of a state denial.
-	response = post("node-grace-full", "node-grace-full-request", "Grace Full")
-	assertError(t, response, http.StatusConflict, "entitlement_quota_exceeded", "node-grace-full-request")
+	// No lease window: creation and replay work at any clock.
+	clockUnix.Store(baseTime.Add(3 * time.Hour).Unix())
+	response = post("node-later-allowed", "node-later-allowed-request", "Later Allowed")
+	var laterNode createNodeResponse
+	decodeResponse(t, response, http.StatusCreated, &laterNode)
 	response.Body.Close()
 	response = nodeWriteRequest(t, client, http.MethodPost, server.URL+"/v1/nodes",
-		firstBody, auth.AccessToken, "node-first", "", "node-first-grace-replay")
+		firstBody, auth.AccessToken, "node-first", "", "node-first-later-replay")
 	decodeResponse(t, response, http.StatusCreated, &replay)
 	response.Body.Close()
 	if replay.Node.ID != first.Node.ID || replay.EnrollmentToken != nil {
-		t.Fatalf("grace replay = %#v", replay)
+		t.Fatalf("later replay = %#v", replay)
 	}
-	list := doRequest(t, client, http.MethodGet, server.URL+"/v1/nodes", nil, nil, auth.AccessToken)
-	if list.StatusCode != http.StatusOK {
-		t.Fatalf("grace list status = %d, body = %s", list.StatusCode, readBody(list.Body))
-	}
-	list.Body.Close()
-	retire := nodeWriteRequest(t, client, http.MethodPatch, server.URL+"/v1/nodes/"+replacement.Node.ID.String(),
-		map[string]any{"admin_state": nodedomain.StateRetired}, auth.AccessToken, "node-grace-retire", `"1"`, "node-grace-retire-request")
-	var retired nodedomain.Node
-	decodeResponse(t, retire, http.StatusOK, &retired)
-	retire.Body.Close()
-	response = post("node-grace-allowed", "node-grace-allowed-request", "Grace Allowed")
-	var graceNode createNodeResponse
-	decodeResponse(t, response, http.StatusCreated, &graceNode)
-	response.Body.Close()
-
-	clockUnix.Store(baseTime.Add(3 * time.Hour).Unix())
-	response = post("node-expired-denied", "node-expired-denied-request", "Expired Denied")
-	assertError(t, response, http.StatusForbidden, "entitlement_state_denied", "node-expired-denied-request")
-	response.Body.Close()
-
 	clockUnix.Store(baseTime.Unix())
-	installNodeTestEntitlement(t, pool, trust, now(), nodeTestLeaseOptions{
-		serial: 4, limit: 10, key: key,
-	})
 	if _, err := pool.Exec(context.Background(), `
 		CREATE FUNCTION reject_node_create_audit() RETURNS trigger LANGUAGE plpgsql AS $$
 		BEGIN

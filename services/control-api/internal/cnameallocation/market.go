@@ -32,7 +32,7 @@ type SupplyTarget struct {
 // pause; a supply of the site owner's own scope keeps carrying it. supply and
 // site are the aliases of a site_supplies and a sites row.
 func SupplyPausedWithoutPackageSQL(supply, site string) string {
-	return "(" + supply + ".kind IN ('third_party_cdn','market_subscription') AND " + supply + ".platform_scope_id<>" + site + ".scope_id" +
+	return "(" + supply + ".kind IN ('third_party_cdn','market_subscription') AND " + supply + ".owner_scope_id<>" + site + ".scope_id" +
 		" AND NOT EXISTS(SELECT 1 FROM package_subscriptions valid_package" +
 		" WHERE valid_package.tenant_scope_id=" + site + ".scope_id AND valid_package.id=" + site + ".package_subscription_id" +
 		" AND valid_package.admin_enabled AND valid_package.deleted_at IS NULL))"

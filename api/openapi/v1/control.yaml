@@ -11988,7 +11988,7 @@ components:
           type: boolean
           description: "The node's latest session declared NODE_STORAGE v1 (capability 71): the cache directory, cache limit and log directory can be changed under Edit node → Node settings. When false these three are read only (409 node_storage_unsupported)."
           x-description-zh: >-
-            节点最近一次会话声明 NODE_STORAGE v1（能力号 71，fix-nodesettings）：可在编辑节点 → 节点设置修改缓存目录、
+            节点最近一次会话声明 NODE_STORAGE v1（能力号 71）：可在编辑节点 → 节点设置修改缓存目录、
             缓存上限与日志目录。false 时这三项只读（409 node_storage_unsupported）。
         node_id: {type: string, format: uuid}
         node_name: {type: string, minLength: 1, maxLength: 128}

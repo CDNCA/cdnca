@@ -42,7 +42,7 @@ func TestRegionCatalogManagement235StoreCRUDIdempotencyAndAudit(t *testing.T) {
 		Name: "华南", Description: "主区域", L2CheckPort: 8080, Sort: 9,
 		IdempotencyKey: "region-create-store", RequestID: "region-create-store-request",
 	})
-	if err != nil || !replayed || replayedCreate != created {
+	if err != nil || !replayed || !sameRegion235(replayedCreate, created) {
 		t.Fatalf("replay region=%+v replayed=%v error=%v", replayedCreate, replayed, err)
 	}
 	if _, _, err := store.Create(t.Context(), actor, regioncatalog.CreateRequest{
@@ -351,4 +351,15 @@ func addRegionCatalogCode528Column(t *testing.T, pool *pgxpool.Pool) {
 		ADD COLUMN country_code text NOT NULL DEFAULT '', ADD COLUMN province_code text NOT NULL DEFAULT ''`); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// sameRegion235 compares regions with time.Equal: a replayed write is decoded
+// from the stored JSON response, so its times carry no monotonic reading and
+// may have another Location than the scanned original.
+func sameRegion235(a, b regioncatalog.Region) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) || !a.UpdatedAt.Equal(b.UpdatedAt) {
+		return false
+	}
+	a.CreatedAt, a.UpdatedAt = b.CreatedAt, b.UpdatedAt
+	return a == b
 }

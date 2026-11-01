@@ -371,7 +371,6 @@ const install: Tutorial = {
         s('按类型到启用位置完成启用与配置（见下表），再用目标角色进入实际功能页，验证保存、刷新回读和一次真实调用。', 'Enable and configure at the place for the kind (table below), then use the target role on the real page to check saving, reloading and one real call.'),
       ], ordered: true },
       { table: { head: row(s('类型', 'Kind'), s('主控里的启用位置', 'Where to enable in the control plane')), rows: [
-        row('theme', s('主题，/dashboard/sys/themes', 'Themes, /dashboard/sys/themes')),
         row('rule_pack', s('规则包，/dashboard/site/rule-packs', 'Rule packs, /dashboard/site/rule-packs')),
         row('provider', s('第三方服务商插件，/dashboard/sys/plugin-providers（先跑安装契约，全部通过才能启用）', 'Third-party providers, /dashboard/sys/plugin-providers (the installation contract must pass first)')),
         row(s('ui_page、external_service', 'ui_page, external_service'), s('目标租户的插件市场安装列表', 'The target tenant’s plugin marketplace list')),

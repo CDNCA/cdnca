@@ -255,14 +255,16 @@ func TestSiteBatchActionHTTPFlow(t *testing.T) {
 		}
 	})
 
-	t.Run("entitlement quota and grace contraction", func(t *testing.T) {
+	t.Run("community edition has no site quota", func(t *testing.T) {
+		// Community edition: the built-in entitlement has no site quota or
+		// lease window, so a batch enable updates every site; delete and
+		// its replay, and recreating a deleted domain, work as before.
 		quotaOne := createSite(t, client, server.URL, tenantAAuth.AccessToken, "batch-quota-create-one", createSiteRequest{
 			Basic: disabledSiteBasic("batch-quota-one.example", "198.51.100.111"),
 		})
 		quotaTwo := createSite(t, client, server.URL, tenantAAuth.AccessToken, "batch-quota-create-two", createSiteRequest{
 			Basic: disabledSiteBasic("batch-quota-two.example", "198.51.100.112"),
 		})
-		installSiteTestEntitlement(t, pool, trust, baseTime, siteTestLeaseOptions{serial: 2, limit: 1, key: key})
 		quota := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-quota-enable", batchSiteActionRequest{
 			Action: site.BatchActionEnable,
 			Items: []site.BatchActionItem{
@@ -270,62 +272,38 @@ func TestSiteBatchActionHTTPFlow(t *testing.T) {
 				{ID: quotaOne.ID, ExpectedRevision: 1},
 			},
 		})
-		var updated, denied int
-		var enabledID, disabledID uuid.UUID
-		disabledDomain := "batch-quota-two.example"
 		for _, item := range quota.Items {
-			switch item.Status {
-			case "updated":
-				updated++
-				enabledID = item.ID
-			case "failed":
-				if item.Error == nil || item.Error.Code != "entitlement_quota_exceeded" {
-					t.Fatalf("quota failure = %#v", item)
-				}
-				denied++
-				disabledID = item.ID
+			if item.Status != "updated" || item.Site == nil || !item.Site.Basic.Enabled {
+				t.Fatalf("community batch enable = %#v", quota)
 			}
 		}
-		if updated != 1 || denied != 1 {
-			t.Fatalf("quota batch = %#v", quota)
-		}
-		if disabledID == quotaOne.ID {
-			disabledDomain = "batch-quota-one.example"
-		}
-		clockUnix.Store(baseTime.Add(90 * time.Minute).Unix())
-		graceEnable := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-grace-enable", batchSiteActionRequest{
-			Action: site.BatchActionEnable,
-			Items:  []site.BatchActionItem{{ID: disabledID, ExpectedRevision: 1}},
-		})
-		// A lease in grace stays usable (entitlementguard leaseUsable, user
-		// decision 2026-10-21); enabling is still bounded by the quota.
-		assertBatchFailure(t, graceEnable.Items[0], "entitlement_quota_exceeded")
-		disableEnabled := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-grace-disable", batchSiteActionRequest{
+		clockUnix.Store(baseTime.Add(3 * time.Hour).Unix())
+		disableTwo := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-later-disable", batchSiteActionRequest{
 			Action: site.BatchActionDisable,
-			Items:  []site.BatchActionItem{{ID: enabledID, ExpectedRevision: 2}},
+			Items:  []site.BatchActionItem{{ID: quotaTwo.ID, ExpectedRevision: 2}},
 		})
-		if disableEnabled.Items[0].Site == nil || disableEnabled.Items[0].Site.Basic.Enabled || disableEnabled.Items[0].Site.Version != 3 {
-			t.Fatalf("grace disable = %#v", disableEnabled)
+		if disableTwo.Items[0].Site == nil || disableTwo.Items[0].Site.Basic.Enabled || disableTwo.Items[0].Site.Version != 3 {
+			t.Fatalf("later disable = %#v", disableTwo)
 		}
-		deleted := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-grace-delete", batchSiteActionRequest{
+		deleted := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-later-delete", batchSiteActionRequest{
 			Action: site.BatchActionDelete,
-			Items:  []site.BatchActionItem{{ID: disabledID, ExpectedRevision: 1}},
+			Items:  []site.BatchActionItem{{ID: quotaTwo.ID, ExpectedRevision: 3}},
 		})
 		if deleted.Items[0].Status != "deleted" || deleted.Items[0].Site != nil || deleted.Items[0].Error != nil {
-			t.Fatalf("grace delete = %#v", deleted)
+			t.Fatalf("later delete = %#v", deleted)
 		}
-		deleteReplay := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-grace-delete", batchSiteActionRequest{
+		deleteReplay := batchSiteActionOK(t, client, server.URL, tenantAAuth.AccessToken, "batch-later-delete", batchSiteActionRequest{
 			Action: site.BatchActionDelete,
-			Items:  []site.BatchActionItem{{ID: disabledID, ExpectedRevision: 1}},
+			Items:  []site.BatchActionItem{{ID: quotaTwo.ID, ExpectedRevision: 3}},
 		})
 		if mustJSON(t, deleteReplay) != mustJSON(t, deleted) {
 			t.Fatalf("delete replay = %s, want %s", mustJSON(t, deleteReplay), mustJSON(t, deleted))
 		}
 		clockUnix.Store(baseTime.Unix())
 		recreated := createSite(t, client, server.URL, tenantAAuth.AccessToken, "batch-recreate-domain", createSiteRequest{
-			Basic: disabledSiteBasic(disabledDomain, "198.51.100.113"),
+			Basic: disabledSiteBasic("batch-quota-two.example", "198.51.100.113"),
 		})
-		if recreated.ID == disabledID {
+		if recreated.ID == quotaTwo.ID {
 			t.Fatal("soft-delete domain recreation reused the deleted site ID")
 		}
 	})

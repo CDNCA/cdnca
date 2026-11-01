@@ -568,7 +568,7 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* AA-UI02：到期说明用正文高对比色（警示色只用于状态标签，#ff9900 做正文对比度不足）。 */
+/* AA-UI02：到期说明用正文高对比色（警示色只用于状态标签，警示橙做正文对比度不足）。 */
 .account-api-key-expiry-note {
   color: var(--cdnca-color-title);
 }

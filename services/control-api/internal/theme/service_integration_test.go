@@ -214,7 +214,10 @@ func TestThemeLifecyclePostgreSQL(t *testing.T) {
 	}
 
 	unsafe := bytes.Replace(officialFixtureRaw(), []byte(`"official.slate"`), []byte(`"custom.evil"`), 1)
-	unsafe = bytes.Replace(unsafe, []byte(`"token:colorBgPage"`), []byte(`"url(https://evil.example/x.png)"`), 1)
+	unsafe = bytes.Replace(unsafe, []byte(`"colorPrimary":"#0f766e"`), []byte(`"colorPrimary":"url(https://evil.example/x.png)"`), 1)
+	if !bytes.Contains(unsafe, []byte("evil.example")) {
+		t.Fatal("unsafe fixture did not inject the URL")
+	}
 	if _, err := service.Upload(ctx, actor, unsafe); !errors.Is(err, theme.ErrInvalidPackage) {
 		t.Fatalf("unsafe upload: %v", err)
 	}

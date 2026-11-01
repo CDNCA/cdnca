@@ -2401,6 +2401,11 @@ body.i-theme-dark {
 }
 
 .user-list-cell-primary,
+.user-list-cell-strong {
+  color: var(--cdnca-color-title);
+  font-weight: 600;
+}
+
 /* 用户信息单元格整体是"编辑用户"按钮：去掉原生按钮外观，悬停时主行变主色提示可点 */
 .user-list-cell-edit {
   width: 100%;
@@ -2426,11 +2431,6 @@ body.i-theme-dark {
 
 .user-list-cell-edit:disabled {
   cursor: not-allowed;
-}
-
-.user-list-cell-strong {
-  color: var(--cdnca-color-title);
-  font-weight: 600;
 }
 
 .user-list-cell-secondary {

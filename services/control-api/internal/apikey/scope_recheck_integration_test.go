@@ -18,7 +18,9 @@ import (
 
 // AA-KEY-01：撤权先提交、排队中的签发必须在锁内按实时授权重核，不得按锁前会话权限签出旧权限密钥。
 
-// narrowAlice 走与正式角色变更相同的授权锁协议，收回 alice 角色上的若干权限。
+// narrowAlice 走与正式角色变更相同的授权锁协议，收回 alice 的若干权限：系统角色 tenant_owner 的权限不可改
+// （guard_system_role_permission_mutation），自定义角色只能经 custom RBAC 建，所以像夹具 live RBAC 用例那样
+// 建一个只含夹具三项权限减去被收回者的系统角色，再把 alice 的角色分配换过去。
 func narrowAlice(t *testing.T, fixture *apiKeyIntegrationFixture, permissions ...string) {
 	t.Helper()
 	if err := pgx.BeginFunc(context.Background(), fixture.pool, func(tx pgx.Tx) error {
@@ -26,31 +28,54 @@ func narrowAlice(t *testing.T, fixture *apiKeyIntegrationFixture, permissions ..
 			[]uuid.UUID{fixture.alice.ScopeID}); err != nil {
 			return err
 		}
-		_, err := tx.Exec(context.Background(), `
-			DELETE FROM role_permissions rp USING role_assignments ra
-			WHERE ra.role_id=rp.role_id AND ra.scope_id=$1 AND ra.user_id=$2 AND rp.permission_name=ANY($3)`,
-			fixture.alice.ScopeID, fixture.alice.UserID, permissions)
-		return err
+		narrowed := uuid.New()
+		if _, err := tx.Exec(context.Background(), `
+			INSERT INTO roles (id,scope_id,name,description,system_role,created_at)
+			VALUES ($1,$2,$3,'API key scope recheck probe',true,now())`,
+			narrowed, fixture.alice.ScopeID, "apikey_narrowed_"+strings.ReplaceAll(narrowed.String(), "-", "")); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(context.Background(), `
+			INSERT INTO role_permissions (role_id,permission_name)
+			SELECT $1::uuid, p FROM unnest(ARRAY['api_keys.self.manage','sites.read','sites.manage']) p
+			WHERE NOT p=ANY($2) ON CONFLICT DO NOTHING`,
+			narrowed, permissions); err != nil {
+			return err
+		}
+		return reassignAlice(tx, fixture, narrowed)
 	}); err != nil {
 		t.Fatalf("narrow alice permissions %v: %v", permissions, err)
 	}
 }
 
-func restoreAlice(t *testing.T, fixture *apiKeyIntegrationFixture, permissions ...string) {
+// restoreAlice 把 alice 换回夹具建的 tenant_owner 角色。
+func restoreAlice(t *testing.T, fixture *apiKeyIntegrationFixture) {
 	t.Helper()
 	if err := pgx.BeginFunc(context.Background(), fixture.pool, func(tx pgx.Tx) error {
 		if _, err := protocol.BeginAuthorityMutation(context.Background(), tx, protocol.OperationUserUpdate,
 			[]uuid.UUID{fixture.alice.ScopeID}); err != nil {
 			return err
 		}
-		_, err := tx.Exec(context.Background(), `
-			INSERT INTO role_permissions (role_id,permission_name)
-			SELECT ra.role_id, p FROM role_assignments ra, unnest($3::text[]) p
-			WHERE ra.scope_id=$1 AND ra.user_id=$2`, fixture.alice.ScopeID, fixture.alice.UserID, permissions)
-		return err
+		var owner uuid.UUID
+		if err := tx.QueryRow(context.Background(), `SELECT id FROM roles WHERE scope_id=$1 AND name='tenant_owner'`,
+			fixture.alice.ScopeID).Scan(&owner); err != nil {
+			return err
+		}
+		return reassignAlice(tx, fixture, owner)
 	}); err != nil {
-		t.Fatalf("restore alice permissions %v: %v", permissions, err)
+		t.Fatalf("restore alice role: %v", err)
 	}
+}
+
+func reassignAlice(tx pgx.Tx, fixture *apiKeyIntegrationFixture, roleID uuid.UUID) error {
+	if _, err := tx.Exec(context.Background(), `DELETE FROM role_assignments WHERE scope_id=$1 AND user_id=$2`,
+		fixture.alice.ScopeID, fixture.alice.UserID); err != nil {
+		return err
+	}
+	_, err := tx.Exec(context.Background(), `
+		INSERT INTO role_assignments (scope_id,user_id,role_id,assigned_at) VALUES ($1,$2,$3,now())`,
+		fixture.alice.ScopeID, fixture.alice.UserID, roleID)
+	return err
 }
 
 func waitAdvisoryWaiters(t *testing.T, fixture *apiKeyIntegrationFixture, count int) {
@@ -131,7 +156,7 @@ func TestAPIKeyCreateQueuedBehindRoleNarrowingIsRefused(t *testing.T) {
 	expectNoKeyWrite(t, fixture, "race-stale-grant")
 
 	// 拒绝不留半成品：权限恢复后同一幂等键按新请求重新评估并成功。
-	restoreAlice(t, fixture, "sites.manage")
+	restoreAlice(t, fixture)
 	issued, err := fixture.service.CreateSelf(t.Context(), fixture.alice, CreateInput{
 		Name: "race-stale-grant", Scopes: []string{"sites.manage", "sites.read"},
 		IdempotencyKey: "race-stale-grant", RequestID: "race-stale-grant",

@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func TestSystemConfigurationBuiltInMonitoringEntitlement(t *testing.T) {
+func TestSystemConfigurationBuiltInMonitoringCommunityEntitlement(t *testing.T) {
 	pool := newDashboardCompositionTestPool(t)
 	actor := seedMonitoringConfigurationActor(t, pool)
 	now := time.Now().UTC().Truncate(time.Second)
-	fixture := installEdgePublishProductionEntitlement(t, pool, now) // sites.manage only; no node feature or quota.
+	fixture := installEdgePublishProductionEntitlement(t, pool, now) // ignored: the community entitlement is built in
 	service, err := systemconfig.NewService(pool)
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +37,7 @@ func TestSystemConfigurationBuiltInMonitoringEntitlement(t *testing.T) {
 	}
 	result, err := manager.SaveCategory(t.Context(), actor, request)
 	if err != nil {
-		t.Fatalf("valid controller license must allow built-in monitoring expansion: %v", err)
+		t.Fatalf("community entitlement must allow built-in monitoring expansion: %v", err)
 	}
 	if result.HeadRevision != 1 || result.Revision != 1 || result.Status != systemconfig.StatusDraft {
 		t.Fatalf("monitoring save = %#v", result)
@@ -57,42 +57,22 @@ func TestSystemConfigurationBuiltInMonitoringEntitlement(t *testing.T) {
 	}); !errors.Is(err, systemconfig.ErrEntitlementDenied) {
 		t.Fatalf("tenant monitor expansion = %v", err)
 	}
-	now = now.Add(6 * time.Minute) // Lease and grace expired; signed revocation LKG is still current.
+	// The community entitlement has no lease window: a year later expansion is
+	// still allowed, and reducing or disabling monitoring stays allowed.
+	now = now.AddDate(1, 0, 1)
 	monitoring.ProbeIntervalMS--
-	request.ExpectedHeadRevision, request.IdempotencyKey, request.RequestID = 1, "expired-monitoring-save", "expired-monitoring-save"
-	if _, err := manager.SaveCategory(t.Context(), actor, request); !errors.Is(err, systemconfig.ErrEntitlementDenied) {
-		t.Fatalf("expired license allowed expansion: %v", err)
+	request.ExpectedHeadRevision, request.IdempotencyKey, request.RequestID = 1, "later-monitoring-save", "later-monitoring-save"
+	result, err = manager.SaveCategory(t.Context(), actor, request)
+	if err != nil || result.HeadRevision != 2 {
+		t.Fatalf("community entitlement blocked later expansion: %#v, %v", result, err)
 	}
-	var revisions, writes, audits int
-	if err := pool.QueryRow(t.Context(), `SELECT
-		(SELECT count(*) FROM system_configuration_revisions),
-		(SELECT count(*) FROM system_configuration_write_requests WHERE idempotency_key=$1),
-		(SELECT count(*) FROM audit_events WHERE request_id=$1)`, request.RequestID).Scan(&revisions, &writes, &audits); err != nil {
-		t.Fatal(err)
-	}
-	if revisions != 1 || writes != 0 || audits != 1 {
-		t.Fatalf("denied write left revisions=%d writes=%d audits=%d", revisions, writes, audits)
-	}
-	var action, outcome, category, reason string
-	if err := pool.QueryRow(t.Context(), `SELECT action,result,payload->>'category',payload->>'reason'
-		FROM audit_events WHERE request_id=$1`, request.RequestID).Scan(&action, &outcome, &category, &reason); err != nil {
-		t.Fatal(err)
-	}
-	if action != "system_configuration.create_draft" || outcome != "denied" || category != systemconfig.CategoryNodeMonitoring || reason != "entitlement_denied" {
-		t.Fatalf("denial audit = %s %s %s %s", action, outcome, category, reason)
-	}
-	reloaded, err = manager.GetActiveCategory(t.Context(), actor, systemconfig.CategoryNodeMonitoring)
-	if err != nil || reloaded.HeadRevision != 1 || reloaded.Value.(systemconfig.NodeMonitoringConfiguration).ProbeIntervalMS != monitoring.ProbeIntervalMS+1 {
-		t.Fatalf("denial changed saved configuration: %#v, %v", reloaded, err)
-	}
-	// Existing monitoring may be reduced or disabled after license expiry.
 	monitoring.ProbeIntervalMS = systemconfig.EffectiveNodeMonitoring(nil).ProbeIntervalMS
 	disabled := false
 	monitoring.MonitorEnabled, monitoring.RecoveryNotificationEnabled = &disabled, false
-	request.IdempotencyKey, request.RequestID = "expired-monitoring-contract", "expired-monitoring-contract"
+	request.ExpectedHeadRevision, request.IdempotencyKey, request.RequestID = 2, "later-monitoring-contract", "later-monitoring-contract"
 	result, err = manager.SaveCategory(t.Context(), actor, request)
-	if err != nil || result.HeadRevision != 2 {
-		t.Fatalf("expired license blocked contraction: %#v, %v", result, err)
+	if err != nil || result.HeadRevision != 3 {
+		t.Fatalf("community entitlement blocked contraction: %#v, %v", result, err)
 	}
 }
 

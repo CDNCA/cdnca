@@ -25,6 +25,7 @@ import (
 	"github.com/cdnca/cdnca/services/control-api/internal/systemothersettings"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -843,15 +844,30 @@ func (s *Service) issueForSelf(
 			return ErrUnavailable
 		}
 		result.Secret = secret
+		expectedRevision := input.ExpectedRevision
+		if refreshedScopes != nil && !equalStrings(refreshedScopes, current.Scopes) {
+			// 生命周期触发器（117）不允许一次更新既换 secret 又改 scopes：同一事务内先改权限（元数据更新），再轮换 secret。
+			tag, err := tx.Exec(ctx, `
+				UPDATE api_keys SET scopes=$5, revision=revision+1, updated_at=$6
+				WHERE id=$1 AND scope_id=$2 AND user_id=$3 AND revision=$4 AND status='active'`,
+				input.ID, principal.ScopeID, principal.UserID, expectedRevision, refreshedScopes, now)
+			if err != nil {
+				return err
+			}
+			if tag.RowsAffected() != 1 {
+				return ErrRevisionConflict
+			}
+			expectedRevision++
+		}
 		err = scanKey(tx.QueryRow(ctx, `
 			UPDATE api_keys
 			SET secret_digest=$5, pepper_version=$6, status='active', pending_expires_at=NULL,
-			    activated_at=COALESCE(activated_at,$7), scopes=COALESCE($9::text[], scopes),
+			    activated_at=COALESCE(activated_at,$7),
 			    revision=revision+1, updated_at=$7
 			WHERE id=$1 AND scope_id=$2 AND user_id=$3 AND revision=$4 AND ip_allowlist=$8
 			RETURNING `+keyColumns,
-			input.ID, principal.ScopeID, principal.UserID, input.ExpectedRevision,
-			secretDigest[:], pepperVersion, now, input.IPAllowlist, refreshedScopes), &result.Key)
+			input.ID, principal.ScopeID, principal.UserID, expectedRevision,
+			secretDigest[:], pepperVersion, now, input.IPAllowlist), &result.Key)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ErrRevisionConflict
 		}
@@ -1581,6 +1597,11 @@ func reserveWrite(
 		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 		ON CONFLICT (actor_user_id, operation, idempotency_key) DO NOTHING`,
 		id, actor.UserID, actor.ScopeID, targetScopeID, targetUserID, operation, key, activeDigest[:], pepperVersion)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Message == "invalid API key write request principal boundary" {
+		// 025 的边界触发器在锁内按实时状态拒绝：发起人已无密钥管理权限，或成员关系/用户/租户已不再有效。
+		return uuid.Nil, nil, ErrPermissionDenied
+	}
 	if err != nil {
 		return uuid.Nil, nil, err
 	}

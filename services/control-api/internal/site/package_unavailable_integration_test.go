@@ -78,5 +78,6 @@ func TestPackageUnavailableReasonPostgres(t *testing.T) {
 	exec(`UPDATE package_subscriptions SET admin_enabled=true,deleted_at=NULL WHERE id=$1`, subscription)
 	expect("restored", "")
 	exec(`UPDATE sites SET package_subscription_id=NULL,package_id=NULL WHERE id=$1`, siteID)
-	expect("unbound", PackageUnavailableNoPackage)
+	// Community edition: a site without a package is served (no reason).
+	expect("unbound", "")
 }

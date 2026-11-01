@@ -11,7 +11,7 @@
 .plugin-market-actions { margin-top: 16px; }
 .plugin-market-state { margin-bottom: 16px; }
 .plugin-market-state-reason { margin: 8px 0 0; color: var(--cdnca-color-text-subtle, #596273); line-height: 1.5; }
-.plugin-market-pending-note { margin: 8px 0 0; color: var(--cdnca-color-warning-text, #8a5a00); line-height: 1.5; }
+.plugin-market-pending-note { margin: 8px 0 0; color: var(--cdnca-color-orange10, #ad6800); line-height: 1.5; }
 .plugin-market-state .plugin-market-actions { margin-top: 12px; }
 .plugin-market-danger { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--cdnca-color-border-divider, #f0f1f2); }
 .plugin-market-consent-note { margin-bottom: 12px; }

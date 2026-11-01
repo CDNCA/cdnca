@@ -100,7 +100,7 @@ func TestAPIKeyUsageRecordsSuccessfulAuthenticationOnly(t *testing.T) {
 		t.Fatalf("successful observation = %#v, want key=%s at=%s UTC", calls[0], issued.Key.ID, currentNow)
 	}
 
-	denied := apiKeyRequest(t, client, http.MethodGet, server.URL+"/v1/account/balance", nil,
+	denied := apiKeyRequest(t, client, http.MethodGet, server.URL+"/v1/certificate-defaults", nil,
 		"", credential, "", "", "usage-downstream-denied")
 	assertError(t, denied, http.StatusForbidden, "permission_denied", "usage-downstream-denied")
 	denied.Body.Close()

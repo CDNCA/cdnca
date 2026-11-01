@@ -45,7 +45,7 @@ func TestSubscriptionReportsOwnContactBindingPostgreSQL(t *testing.T) {
 	}
 	bound("put", updated, true, true)
 	// 重放同一请求：绑定状态取当前资料，不是回执里的旧值。
-	if _, err := pool.Exec(t.Context(), `UPDATE users SET email='' WHERE id=$1`, tenant.UserID); err != nil {
+	if _, err := pool.Exec(t.Context(), `UPDATE users SET email=NULL WHERE id=$1`, tenant.UserID); err != nil {
 		t.Fatal(err)
 	}
 	replayed, err := store.UpdateSubscription(t.Context(), tenant, EventTypeAnnouncementPublished, write)

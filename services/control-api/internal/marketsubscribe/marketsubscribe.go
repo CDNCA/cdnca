@@ -112,7 +112,7 @@ func (s *Service) SyncTargets(ctx context.Context, platform uuid.UUID) (int, err
 		seen := make([]uuid.UUID, 0, len(subs))
 		for id, e := range subs {
 			leaves, _ := json.Marshal(e.leaves)
-			if _, err := tx.Exec(ctx, `INSERT INTO site_supplies (id,platform_scope_id,kind,name,market_subscription_id,
+			if _, err := tx.Exec(ctx, `INSERT INTO site_supplies (id,owner_scope_id,kind,name,market_subscription_id,
 					target,target_synced_at,leaves,status,created_at,updated_at)
 				VALUES ($1,$2,'market_subscription',$3,$4,$5,$6,$7,'active',$6,$6)
 				ON CONFLICT (market_subscription_id) WHERE market_subscription_id IS NOT NULL DO UPDATE SET

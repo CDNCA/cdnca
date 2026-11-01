@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -210,22 +209,22 @@ func TestSiteHTTPFlow(t *testing.T) {
 
 	t.Run("all list filters and invalid query", func(t *testing.T) {
 		query := url.Values{
-			"page":           {"1"},
-			"limit":          {"20"},
-			"domain":         {"alpha"},
-			"domains":        {"www.alpha.example,www.unknown.example"},
-			"origin_ip":      {"192.0.2.10"},
-			"site_ids":       {createdA.ID.String()},
-			"owner":          {"Tenant A"},
-			"package_id":     {packageID},
-			"group_id":       {groupID},
-			"http_port":      {"80"},
-			"https_port":     {"443"},
-			"https_enabled":  {"true"},
-			"enabled":        {"true"},
-			"status":         {"active"},
-			"is_default":     {"false"},
-			"sync_status":    {"synced"},
+			"page":          {"1"},
+			"limit":         {"20"},
+			"domain":        {"alpha"},
+			"domains":       {"www.alpha.example,www.unknown.example"},
+			"origin_ip":     {"192.0.2.10"},
+			"site_ids":      {createdA.ID.String()},
+			"owner":         {"Tenant A"},
+			"package_id":    {packageID},
+			"group_id":      {groupID},
+			"http_port":     {"80"},
+			"https_port":    {"443"},
+			"https_enabled": {"true"},
+			"enabled":       {"true"},
+			"status":        {"active"},
+			"is_default":    {"false"},
+			"sync_status":   {"synced"},
 		}
 		filtered := listSites(t, client, server.URL+"/v1/sites?"+query.Encode(), platformAuth.AccessToken)
 		if filtered.Total != 1 || len(filtered.Items) != 1 || filtered.Items[0].ID != createdA.ID {
@@ -742,14 +741,11 @@ func TestSiteEntitlementHTTPFlow(t *testing.T) {
 	if err := pool.QueryRow(t.Context(), `SELECT date_trunc('second',clock_timestamp())`).Scan(&baseTime); err != nil {
 		t.Fatalf("read entitlement test clock: %v", err)
 	}
-	key := newSiteTestKey(t, "control-test-key-1")
-	trust := newSiteTestTrust(t, key)
 	var clockUnix atomic.Int64
 	clockUnix.Store(baseTime.Unix())
 	server := httptest.NewServer(New(pool, identityService, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32),
-		CookieSecure:     false,
-		Now:              func() time.Time { return time.Unix(clockUnix.Load(), 0).UTC() },
-		EntitlementTrust: trust,
+		CookieSecure: false,
+		Now:          func() time.Time { return time.Unix(clockUnix.Load(), 0).UTC() },
 	}).Handler())
 	t.Cleanup(server.Close)
 	client := server.Client()
@@ -757,69 +753,29 @@ func TestSiteEntitlementHTTPFlow(t *testing.T) {
 	tenantAAuth := loginForScope(t, client, server.URL, tenantA.username, tenantA.scopeID)
 	tenantBAuth := loginForScope(t, client, server.URL, tenantB.username, tenantB.scopeID)
 
+	// Community edition: no activation and no lease. Sites are created and
+	// published under the built-in community entitlement with unlimited
+	// quotas, so a fresh install creates sites at once, concurrently, and
+	// at any clock; idempotent replay and the audit chain still hold.
 	platformBody := createSiteRequest{
 		TargetScopeID: tenantA.scopeID.String(),
 		OwnerID:       tenantA.userID.String(),
 		Basic:         validSiteBasic("entitlement-replay.example", "192.0.2.50"),
 	}
-	response := siteRequest(t, client, http.MethodPost, server.URL+"/v1/sites", platformBody, platformAuth.AccessToken, "entitlement-no-lease", "", "entitlement-no-lease-request")
-	assertError(t, response, http.StatusForbidden, "entitlement_unavailable", "entitlement-no-lease-request")
-	response.Body.Close()
-	assertEntitlementAudit(t, pool, "entitlement-no-lease-request", "uninstalled", 0, -1)
-
-	validLease := installSiteTestEntitlement(t, pool, trust, baseTime, siteTestLeaseOptions{
-		serial: 1, limit: 10, key: key,
-	})
-	databaseOnlyServer := httptest.NewServer(New(pool, identityService, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32),
-		CookieSecure: false,
-		Now:          func() time.Time { return baseTime },
-	}).Handler())
-	response = siteRequest(t, databaseOnlyServer.Client(), http.MethodPost, databaseOnlyServer.URL+"/v1/sites", platformBody, platformAuth.AccessToken, "database-only-trust", "", "database-only-trust-request")
-	assertError(t, response, http.StatusForbidden, "entitlement_unavailable", "database-only-trust-request")
-	response.Body.Close()
-	databaseOnlyServer.Close()
 	created := createSite(t, client, server.URL, platformAuth.AccessToken, "entitlement-replay", platformBody)
-	if _, err := entitlementguard.NewService(pool, trust).Install(context.Background(), entitlementguard.InstallBundle{
-		InstallationID: validLease.Lease.InstallationID,
-		RevokedSerials: []uint64{validLease.Lease.Serial},
-		SignedLease:    validLease,
-	}, baseTime); !errors.Is(err, entitlementguard.ErrUntrustedRevocations) {
-		t.Fatalf("Install(forged revocation) error = %v", err)
-	}
 	replayed := createSite(t, client, server.URL, platformAuth.AccessToken, "entitlement-replay", platformBody)
 	if replayed.ID != created.ID {
 		t.Fatalf("replayed site ID = %s, want %s", replayed.ID, created.ID)
 	}
 	validDelete := siteRequest(t, client, http.MethodDelete, server.URL+"/v1/sites/"+created.ID.String(), nil, platformAuth.AccessToken, "valid-delete", `"1"`)
 	if validDelete.StatusCode != http.StatusNoContent {
-		t.Fatalf("delete in valid state = %d, body = %s", validDelete.StatusCode, readBody(validDelete.Body))
+		t.Fatalf("delete = %d, body = %s", validDelete.StatusCode, readBody(validDelete.Body))
 	}
 	validDelete.Body.Close()
 
-	installSiteTestEntitlement(t, pool, trust, baseTime, siteTestLeaseOptions{
-		serial: 2, limit: 10, key: key, omitFeature: true,
-	})
-	response = siteRequest(t, client, http.MethodPost, server.URL+"/v1/sites", createSiteRequest{
-		Basic: disabledSiteBasic("feature-create.example", "192.0.2.52"),
-	}, tenantAAuth.AccessToken, "feature-create", "", "feature-create-request")
-	assertError(t, response, http.StatusForbidden, "entitlement_feature_denied", "feature-create-request")
-	response.Body.Close()
-
-	installSiteTestEntitlement(t, pool, trust, baseTime, siteTestLeaseOptions{
-		serial: 3, limit: 10, key: key, omitQuota: true,
-	})
-	response = siteRequest(t, client, http.MethodPost, server.URL+"/v1/sites", createSiteRequest{
-		Basic: disabledSiteBasic("quota-create.example", "192.0.2.53"),
-	}, tenantAAuth.AccessToken, "quota-create", "", "quota-create-request")
-	assertError(t, response, http.StatusForbidden, "entitlement_quota_denied", "quota-create-request")
-	response.Body.Close()
-
-	installSiteTestEntitlement(t, pool, trust, baseTime, siteTestLeaseOptions{
-		serial: 4, limit: 1, key: key,
-	})
+	// No quota: two tenants create enabled sites at the same time and both succeed.
 	type quotaOutcome struct {
 		status int
-		code   string
 		err    error
 	}
 	quotaResults := concurrentSiteRequests(2, func(index int) quotaOutcome {
@@ -834,78 +790,40 @@ func TestSiteEntitlementHTTPFlow(t *testing.T) {
 			return quotaOutcome{err: requestErr}
 		}
 		defer request.Body.Close()
-		outcome := quotaOutcome{status: request.StatusCode}
-		if request.StatusCode != http.StatusCreated {
-			var envelope testErrorEnvelope
-			outcome.err = json.NewDecoder(request.Body).Decode(&envelope)
-			outcome.code = envelope.Error.Code
-		}
-		return outcome
+		return quotaOutcome{status: request.StatusCode}
 	})
-	statuses := []int{quotaResults[0].status, quotaResults[1].status}
-	sort.Ints(statuses)
-	if quotaResults[0].err != nil || quotaResults[1].err != nil ||
-		statuses[0] != http.StatusCreated || statuses[1] != http.StatusConflict {
-		t.Fatalf("concurrent entitlement quota outcomes = %#v", quotaResults)
-	}
 	for _, outcome := range quotaResults {
-		if outcome.status == http.StatusConflict && outcome.code != "entitlement_quota_exceeded" {
-			t.Fatalf("quota rejection code = %q", outcome.code)
+		if outcome.err != nil || outcome.status != http.StatusCreated {
+			t.Fatalf("concurrent community site creation = %#v", quotaResults)
 		}
-	}
-	var enabledCount int64
-	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM sites WHERE enabled AND deleted_at IS NULL`).Scan(&enabledCount); err != nil {
-		t.Fatalf("count enabled sites: %v", err)
-	}
-	if enabledCount != 1 {
-		t.Fatalf("enabled site count = %d, want quota limit 1", enabledCount)
 	}
 
-	installSiteTestEntitlement(t, pool, trust, baseTime, siteTestLeaseOptions{
-		serial: 5, limit: 10, key: key,
-	})
+	// No lease window: publishing, disabling and re-enabling work at any clock.
 	clockSite := createSite(t, client, server.URL, tenantAAuth.AccessToken, "clock-site", createSiteRequest{
 		Basic: validSiteBasic("clock-state.example", "203.0.113.60"),
 	})
-	clockUnix.Store(baseTime.Add(90 * time.Minute).Unix())
-	graceUpdate := updateSiteRequest{
+	clockUnix.Store(baseTime.Add(3 * time.Hour).Unix())
+	update := updateSiteRequest{
 		ExpectedVersion: 1,
 		Section:         "basic",
 		Changes:         validSiteBasic("clock-state.example", "203.0.113.61"),
 	}
-	// Grace keeps publishing allowed while the license service is unreachable;
-	// disable and re-enable work too.
-	published := updateSite(t, client, server.URL, clockSite.ID, tenantAAuth.AccessToken, "grace-publish", graceUpdate)
+	published := updateSite(t, client, server.URL, clockSite.ID, tenantAAuth.AccessToken, "later-publish", update)
 	if !published.Basic.Enabled || published.Version != 2 {
-		t.Fatalf("grace published site = %#v", published)
+		t.Fatalf("published site = %#v", published)
 	}
-
-	disableUpdate := graceUpdate
-	disableUpdate.ExpectedVersion = 2
-	disableUpdate.Changes = disabledSiteBasic("clock-state.example", "203.0.113.61")
-	disabled := updateSite(t, client, server.URL, clockSite.ID, tenantAAuth.AccessToken, "grace-disable", disableUpdate)
+	update.ExpectedVersion = 2
+	update.Changes = disabledSiteBasic("clock-state.example", "203.0.113.61")
+	disabled := updateSite(t, client, server.URL, clockSite.ID, tenantAAuth.AccessToken, "later-disable", update)
 	if disabled.Basic.Enabled || disabled.Version != 3 {
 		t.Fatalf("disabled site = %#v", disabled)
 	}
-	reenable := graceUpdate
-	reenable.ExpectedVersion = 3
-	reenabled := updateSite(t, client, server.URL, clockSite.ID, tenantAAuth.AccessToken, "grace-reenable", reenable)
-	if !reenabled.Basic.Enabled || reenabled.Version != 4 {
-		t.Fatalf("grace re-enabled site = %#v", reenabled)
+	created = createSite(t, client, server.URL, tenantAAuth.AccessToken, "later-create", createSiteRequest{
+		Basic: disabledSiteBasic("later-create.example", "203.0.113.62"),
+	})
+	if created.ID == uuid.Nil {
+		t.Fatal("later create returned no site")
 	}
-
-	deleted := siteRequest(t, client, http.MethodDelete, server.URL+"/v1/sites/"+clockSite.ID.String(), nil, tenantAAuth.AccessToken, "grace-delete", `"4"`)
-	if deleted.StatusCode != http.StatusNoContent {
-		t.Fatalf("delete in grace status = %d, body = %s", deleted.StatusCode, readBody(deleted.Body))
-	}
-	deleted.Body.Close()
-
-	clockUnix.Store(baseTime.Add(3 * time.Hour).Unix())
-	response = siteRequest(t, client, http.MethodPost, server.URL+"/v1/sites", createSiteRequest{
-		Basic: disabledSiteBasic("expired-create.example", "203.0.113.62"),
-	}, tenantAAuth.AccessToken, "expired-create", "", "expired-create-request")
-	assertError(t, response, http.StatusForbidden, "entitlement_state_denied", "expired-create-request")
-	response.Body.Close()
 	for _, scopeID := range []uuid.UUID{tenantA.scopeID, tenantB.scopeID} {
 		if err := audit.New(pool).VerifyScope(context.Background(), scopeID); err != nil {
 			t.Fatalf("VerifyScope(%s) error = %v", scopeID, err)

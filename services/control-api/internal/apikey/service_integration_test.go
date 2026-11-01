@@ -3,16 +3,19 @@ package apikey
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/cdnca/cdnca/services/control-api/internal/audit/audittest"
 	"github.com/cdnca/cdnca/services/control-api/internal/database/databasetest"
 	"github.com/cdnca/cdnca/services/control-api/internal/iamlock"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
@@ -929,13 +932,25 @@ func TestAPIKeyRotateGrantAllScopesRefreshesOnlyTargetKey(t *testing.T) {
 		return issued
 	}
 	primary, other := create("grant-all-primary"), create("grant-all-other")
+	// 重置密钥按锁内实时权限刷新（AA-KEY-01）：tenant_owner 系统角色建出时由 roles 触发器投影出的权限也算在内，
+	// 预期从库里实时读取，而不是夹具声明的三项。
+	var live []string
+	if err := fixture.pool.QueryRow(ctx, `
+		SELECT array_agg(DISTINCT rp.permission_name) FROM role_assignments ra JOIN role_permissions rp ON rp.role_id=ra.role_id
+		WHERE ra.scope_id=$1 AND ra.user_id=$2`, fixture.alice.ScopeID, fixture.alice.UserID).Scan(&live); err != nil {
+		t.Fatalf("read live permissions: %v", err)
+	}
+	wantScopes := grantableScopes(live)
+	if !slices.Contains(wantScopes, "sites.manage") || slices.Contains(wantScopes, "api_keys.self.manage") {
+		t.Fatalf("live grantable scopes = %v", wantScopes)
+	}
 
 	rotated, err := fixture.service.RotateSelf(ctx, fixture.alice, MutationInput{
 		ID: primary.Key.ID, ExpectedRevision: primary.Key.Revision, GrantAllScopes: true,
 		IdempotencyKey: "grant-all-rotate", RequestID: "grant-all-rotate",
 	})
 	if err != nil || rotated.Secret == "" || rotated.Secret == primary.Secret ||
-		strings.Join(rotated.Key.Scopes, ",") != "sites.manage,sites.read" {
+		strings.Join(rotated.Key.Scopes, ",") != strings.Join(wantScopes, ",") {
 		t.Fatalf("grant-all rotate = scopes %v err %v", rotated.Key.Scopes, err)
 	}
 	replay, err := fixture.service.RotateSelf(ctx, fixture.alice, MutationInput{
@@ -962,14 +977,12 @@ func TestAPIKeyRotateGrantAllScopesRefreshesOnlyTargetKey(t *testing.T) {
 	if err != nil || strings.Join(plain.Key.Scopes, ",") != "sites.read" {
 		t.Fatalf("plain rotate scopes %v err %v", plain.Key.Scopes, err)
 	}
-	var from, to string
-	if err := fixture.pool.QueryRow(ctx, `
-		SELECT payload->'changes'->'scopes'->>'from', payload->'changes'->'scopes'->>'to'
-		FROM audit_events WHERE action='api_key.self.rotate' AND resource_id=$1`, primary.Key.ID.String()).
-		Scan(&from, &to); err != nil {
-		t.Fatalf("read rotate audit: %v", err)
-	}
-	if from != `["sites.read"]` || to != `["sites.manage", "sites.read"]` {
+	// 统一日志（361）起改前→改后只在 changes 列（[{field,before,after}]），不在 payload。
+	change, ok := audittest.Last(t, fixture.pool, `action='api_key.self.rotate' AND resource_id=$1`, primary.Key.ID.String()).Change("scopes")
+	from, _ := json.Marshal(change.Before)
+	to, _ := json.Marshal(change.After)
+	want, _ := json.Marshal(wantScopes)
+	if !ok || string(from) != `["sites.read"]` || string(to) != string(want) {
 		t.Fatalf("rotate audit changes = %s -> %s", from, to)
 	}
 }

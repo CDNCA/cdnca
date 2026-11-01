@@ -1213,9 +1213,16 @@ func platformTheme(ctx context.Context, q querier) (effective, error) {
 func slotTheme(ctx context.Context, q querier, slot string) (effective, error) {
 	var result effective
 	var digest, css, tokens []byte
-	err := q.QueryRow(ctx, `SELECT activation.revision,package.theme_id,package.version,package.package_sha256,package.css_sha256,package.json_sha256
-		FROM theme_activations activation JOIN theme_packages package ON package.package_sha256=activation.package_sha256
-		WHERE activation.slot IN ($1,'all') ORDER BY activation.revision DESC LIMIT 1`, slot).Scan(&result.Revision, &result.ThemeID, &result.Version, &digest, &css, &tokens)
+	// The user console following the admin console resolves to the admin
+	// package now (migration 596). Revision is the latest console activation,
+	// so a cached pointer changes whenever either console does.
+	pick, revision := adminPackageSQL, `(SELECT max(revision) FROM theme_activations WHERE slot IN ('admin','all'))`
+	if slot == SlotUser {
+		pick, revision = UserPackageSQL, `(SELECT max(revision) FROM theme_activations)`
+	}
+	err := q.QueryRow(ctx, `SELECT `+revision+`,package.theme_id,package.version,package.package_sha256,
+		package.css_sha256,package.json_sha256 FROM theme_packages package WHERE package.package_sha256=`+pick).
+		Scan(&result.Revision, &result.ThemeID, &result.Version, &digest, &css, &tokens)
 	if errors.Is(err, pgx.ErrNoRows) {
 		rendered := DefaultRendered()
 		return effective{PackageSHA256: rendered.PackageSHA256, ThemeID: rendered.Package.ID, Version: rendered.Package.Version,

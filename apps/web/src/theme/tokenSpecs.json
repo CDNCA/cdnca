@@ -2468,7 +2468,8 @@
     "used_in": [
       "@cdnca/ui/styles.css",
       "pages/SiteAccessLogPage.css",
-      "pages/SystemSettingsPage.css"
+      "pages/SystemSettingsPage.css",
+      "pages/plugin-market/PluginMarketPage.css"
     ]
   },
   "colorOrange11": {

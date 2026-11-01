@@ -119,7 +119,7 @@ describe('任务式教程：命令与源码一致', () => {
   it('主控页面路径与主控路由一致', () => {
     const nav = read('apps/web/src/routes/navigation.ts') + read('apps/web/src/App.tsx')
     const paths = [...allText.matchAll(/\/dashboard(\/[a-z/-]+)/g)].map((m) => m[1])
-    expect(new Set(paths)).toEqual(new Set(['/sys/plugin-store', '/sys/plugin-market', '/sys/themes', '/site/rule-packs', '/sys/plugin-providers', '/account/api-key', '/sys/plugin-webhooks']))
+    expect(new Set(paths)).toEqual(new Set(['/sys/plugin-store', '/sys/plugin-market', '/site/rule-packs', '/sys/plugin-providers', '/account/api-key', '/sys/plugin-webhooks']))
     for (const p of paths) expect(nav, p).toContain(`"${p}"`)
   })
 

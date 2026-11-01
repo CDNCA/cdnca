@@ -239,7 +239,7 @@ func TestCNAMECarrierLinesPublishEndpointsPerLine(t *testing.T) {
 		t.Fatal(err)
 	}
 	supplyID := uuid.New()
-	exec(`INSERT INTO site_supplies(id,platform_scope_id,kind,name,target,status,created_at,updated_at)
+	exec(`INSERT INTO site_supplies(id,owner_scope_id,kind,name,target,status,created_at,updated_at)
 		VALUES($1,$2,'third_party_cdn','cf','edge.cdn.example.net','active',now(),now())`, supplyID, platformScope)
 	exec(`INSERT INTO aggregated_edge_line_targets(site_id,line_scope,kind,supply_id,target,since,next_publish_at,updated_at)
 		VALUES($1,'overseas','third_party_cdn',$2,'edge.cdn.example.net',now(),now(),now())`, created.Site.ID, supplyID)

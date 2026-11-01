@@ -28,10 +28,10 @@ func TestSiteAccessReadinessPostgres(t *testing.T) {
 	if err != nil || detail.AccessReadiness == nil {
 		t.Fatalf("detail readiness=%v err=%v", detail.AccessReadiness, err)
 	}
-	// fix-readiness2：no package bound → package fails first (blocked), then line_group.
+	// Community edition: a site needs no package, so the package check passes
+	// without one; the missing line group still blocks.
 	if detail.AccessReadiness.State != AccessBlocked || len(detail.AccessReadiness.Checks) != 6 ||
-		detail.AccessReadiness.Checks[0].Code != AccessCheckPackage || detail.AccessReadiness.Checks[0].OK ||
-		detail.AccessReadiness.Checks[0].Detail != PackageUnavailableNoPackage ||
+		detail.AccessReadiness.Checks[0].Code != AccessCheckPackage || !detail.AccessReadiness.Checks[0].OK ||
 		detail.AccessReadiness.Checks[1].Code != AccessCheckLineGroup || detail.AccessReadiness.Checks[1].OK {
 		t.Fatalf("fresh site readiness = %+v", detail.AccessReadiness)
 	}

@@ -106,7 +106,7 @@ func TestAPIKeyHTTPFlow(t *testing.T) {
 		}
 		response.Body.Close()
 
-		denied := apiKeyRequest(t, client, http.MethodGet, server.URL+"/v1/account/balance", nil, "", credential, "", "", "apikey-scope-denied")
+		denied := apiKeyRequest(t, client, http.MethodGet, server.URL+"/v1/certificate-defaults", nil, "", credential, "", "", "apikey-scope-denied")
 		assertError(t, denied, http.StatusForbidden, "permission_denied", "apikey-scope-denied")
 		denied.Body.Close()
 

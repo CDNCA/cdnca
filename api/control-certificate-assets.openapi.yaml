@@ -209,7 +209,7 @@ paths:
       summary: Download the current certificate version with its private key
       description: "Download certificate. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the latest activated version. Requires certificates.manage; a tenant downloads only its own certificates. Audited as certificate.asset.download in the same transaction before the key is returned. A revoked current version returns 409 certificate_asset_download_unavailable."
       x-description-zh: >-
-        fix-certops 下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the
+        下载证书. A zip with fullchain.pem (certificate chain) and privkey.pem (PKCS#8 PEM) of the
         latest activated version. Requires certificates.manage; a tenant downloads only its own certificates.
         Audited as certificate.asset.download in the same transaction before the key is returned.
         A revoked current version returns 409 certificate_asset_download_unavailable.

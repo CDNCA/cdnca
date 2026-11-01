@@ -38,16 +38,17 @@ func TestStaffCreateTicket(t *testing.T) {
 	if ticket.CreatorKind != AuthorStaff || ticket.CreatorName != detail.Messages[0].AuthorName || ticket.UserID != f.customer.UserID.String() {
 		t.Fatalf("staff view creator = %q %q, owner %s", ticket.CreatorKind, ticket.CreatorName, ticket.UserID)
 	}
-	if seen, err := f.service.Get(ctx, f.customer, false, ticket.ID); err != nil || seen.Ticket.CreatorKind != AuthorStaff ||
-		seen.Ticket.CreatorName != seen.Messages[0].AuthorName || !strings.HasPrefix(seen.Ticket.CreatorName, "客服 ") {
-		t.Fatalf("customer view creator = %+v, %v", seen.Ticket, err)
-	}
 	if again, err := f.service.StaffCreate(ctx, f.manager, "sc-1", "req-sc-1", input); err != nil || again.Ticket.ID != ticket.ID {
 		t.Fatalf("replay = %+v, %v", again.Ticket, err)
 	}
 	page, err := f.service.List(ctx, f.customer, false, Filter{})
 	if err != nil || page.Total != 1 || !page.Items[0].Unread {
 		t.Fatalf("customer list = %+v, %v", page, err)
+	}
+	// Get 会清客户未读，放在未读断言之后。
+	if seen, err := f.service.Get(ctx, f.customer, false, ticket.ID); err != nil || seen.Ticket.CreatorKind != AuthorStaff ||
+		seen.Ticket.CreatorName != seen.Messages[0].AuthorName || !strings.HasPrefix(seen.Ticket.CreatorName, "客服 ") {
+		t.Fatalf("customer view creator = %+v, %v", seen.Ticket, err)
 	}
 	if _, err := f.service.Reply(ctx, f.customer, false, "sc-r", "req-sc-r", ticket.ID, ReplyInput{Body: "收到"}); err != nil {
 		t.Fatalf("customer reply = %v", err)

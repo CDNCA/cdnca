@@ -28,10 +28,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// fix-transfer S2/S3: the old site's HTTP policy, cache policy, uploaded
-// certificate (sealed again under the new tenant's AAD) and ACL library are
-// carried to the new site; auto defense and the JS challenge are released
-// and named in the result.
+// The old site's HTTP policy, cache policy, uploaded certificate (sealed
+// again under the new tenant's AAD) and ACL library are carried to the new
+// site; the JS challenge is released and named in the result. The community
+// edition has no automatic defense module, so a leftover autodefense_sites row
+// is neither reported nor carried.
 func TestSiteTransferCopiesSettingsAndReleasesDefenses(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
@@ -151,7 +152,7 @@ func TestSiteTransferCopiesSettingsAndReleasesDefenses(t *testing.T) {
 		if _, err := tx.Exec(t.Context(), `INSERT INTO autodefense_sites(tenant_scope_id,site_id,mode,sensitivity,maturity,
 			cross_site,circuit_state,circuit_manual_resume,max_level,modules,revision,updated_at)
 			VALUES($1,$2,'protect','medium','prior',false,'closed',false,'{"field":"site.max_level"}','[]',1,$3)
-			ON CONFLICT (tenant_scope_id,site_id) DO UPDATE SET mode='protect'`, // site creation stored it as follow (fix-adglobal)
+			ON CONFLICT (tenant_scope_id,site_id) DO UPDATE SET mode='protect'`, // site creation stored it as follow
 			from.scopeID, old.ID, now); err != nil {
 			return err
 		}
@@ -180,7 +181,7 @@ func TestSiteTransferCopiesSettingsAndReleasesDefenses(t *testing.T) {
 	slices.Sort(moved.Copied)
 	slices.Sort(moved.Released)
 	if strings.Join(moved.Copied, ",") != "acl_policy,cache_policy,certificate,http_policy" ||
-		strings.Join(moved.Released, ",") != "auto_defense,js_challenge" {
+		strings.Join(moved.Released, ",") != "js_challenge" { // community edition has no automatic defense module
 		t.Fatalf("copied=%v released=%v", moved.Copied, moved.Released)
 	}
 	newID := moved.Site.ID

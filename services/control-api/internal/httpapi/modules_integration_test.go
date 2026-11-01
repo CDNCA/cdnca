@@ -6,52 +6,24 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"reflect"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/cdnca/cdnca/libs/entitlement"
-	"github.com/cdnca/cdnca/services/control-api/internal/entitlementguard"
 	"github.com/cdnca/cdnca/services/control-api/internal/identity"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const moduleProbe = "module.pa15_probe"
+const (
+	communityModule = "module.icp"
+	moduleUnknown   = "module.community_probe_unknown"
+)
 
-func installModuleTestLease(t *testing.T, pool *pgxpool.Pool, trust *entitlementguard.TrustStore, key siteTestKey,
-	now time.Time, serial uint64, modules ...string) {
-	t.Helper()
-	features := []entitlement.Feature{}
-	for _, code := range modules {
-		features = append(features, entitlement.Feature{Code: code})
-	}
-	features = append(features, entitlement.Feature{Code: entitlementguard.FeatureSitesManage})
-	lease := entitlement.Lease{
-		Schema: entitlement.SchemaV1, Audience: entitlement.ControlAudience,
-		CustomerID:     "11111111-1111-4111-8111-111111111111",
-		InstallationID: "22222222-2222-4222-8222-222222222222",
-		LicenseID:      "33333333-3333-4333-8333-333333333333",
-		Serial:         serial, NotBefore: now.Add(-time.Hour).Unix(), ExpiresAt: now.Add(time.Hour).Unix(),
-		GraceUntil: now.Add(2 * time.Hour).Unix(),
-		Version:    entitlement.VersionRange{Channel: "stable", Min: "0.1.0", Max: "1.0.0"},
-		Features:   features,
-		Quotas:     []entitlement.Quota{{Code: entitlementguard.QuotaDomainsCount, Limit: 10}},
-	}
-	ensureHTTPTestRevocation(t, pool, trust, key, now, lease)
-	signed, err := entitlement.Sign(context.Background(), lease, key)
-	if err != nil {
-		t.Fatalf("Sign() error = %v", err)
-	}
-	if _, err := entitlementguard.NewService(pool, trust).Install(context.Background(), entitlementguard.InstallBundle{
-		InstallationID: lease.InstallationID, SignedLease: signed}, now); err != nil {
-		t.Fatalf("Install() error = %v", err)
-	}
-}
-
-// Acceptance (PA-15 API entry and menu source): with the module granted,
-// GET /v1/modules lists it and the module route answers; re-signing the lease
-// without it removes it from GET /v1/modules and the route answers 403
-// entitlement_feature_denied; granting it again restores both.
+// Community edition: modules come from the built-in community entitlement,
+// not a signed lease. GET /v1/modules lists the community modules for platform
+// and tenant sessions alike; a module route answers for a community module and
+// 403 entitlement_feature_denied (audited as feature_missing) for a commercial
+// module or an unknown code.
 func TestModuleEntitlementHTTPFlow(t *testing.T) {
 	pool := isolatedTestPool(t)
 	passwordHash, err := identity.HashPassword(testPassword)
@@ -72,18 +44,13 @@ func TestModuleEntitlementHTTPFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var now time.Time
-	if err := pool.QueryRow(t.Context(), `SELECT date_trunc('second',clock_timestamp())`).Scan(&now); err != nil {
-		t.Fatal(err)
-	}
-	key := newSiteTestKey(t, "module-test-key-1")
-	trust := newSiteTestTrust(t, key)
-	api := New(pool, identityService, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32),
-		Now: func() time.Time { return now }, EntitlementTrust: trust})
+	api := New(pool, identityService, Config{APIKeyPepper: bytes.Repeat([]byte{0x52}, 32)})
 	mux := http.NewServeMux()
 	mux.Handle("/v1/modules", api.Handler())
-	mux.Handle("/v1/probe", api.withRequestID(api.requireModule(moduleProbe, "module_probe", "module_probe.use",
-		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))))
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
+	mux.Handle("/v1/probe/community", api.withRequestID(api.requireModule(communityModule, "module_probe", "module_probe.use", ok)))
+	mux.Handle("/v1/probe/commercial", api.withRequestID(api.requireModule(entitlement.ModuleAutoDefense, "module_probe", "module_probe.use", ok)))
+	mux.Handle("/v1/probe/unknown", api.withRequestID(api.requireModule(moduleUnknown, "module_probe", "module_probe.use", ok)))
 	mux.Handle("/", api.Handler())
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
@@ -109,9 +76,9 @@ func TestModuleEntitlementHTTPFlow(t *testing.T) {
 		}
 		return body
 	}
-	probe := func(token, requestID string) *http.Response {
+	probe := func(token, path, requestID string) *http.Response {
 		t.Helper()
-		request, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/probe", nil)
+		request, _ := http.NewRequest(http.MethodGet, server.URL+path, nil)
 		request.Header.Set("Authorization", "Bearer "+token)
 		request.Header.Set("X-Request-ID", requestID)
 		response, err := client.Do(request)
@@ -129,45 +96,27 @@ func TestModuleEntitlementHTTPFlow(t *testing.T) {
 		t.Fatalf("GET /v1/modules without session = %d", unauthenticated.StatusCode)
 	}
 	unauthenticated.Body.Close()
-	if got := listModules(admin.AccessToken); got.Status != entitlementguard.StatusUninstalled || len(got.Modules) != 0 {
-		t.Fatalf("modules without lease = %+v", got)
-	}
-
-	installModuleTestLease(t, pool, trust, key, now, 1, moduleProbe, "pack.crs")
 	for _, token := range []string{admin.AccessToken, user.AccessToken} {
-		if got := listModules(token); got.Status != "valid" || got.LeaseSerial != 1 ||
-			!reflect.DeepEqual(got.Modules, []string{moduleProbe, "pack.crs"}) {
-			t.Fatalf("modules granted = %+v", got)
+		got := listModules(token)
+		if got.Status != "valid" || !slices.Contains(got.Modules, communityModule) ||
+			slices.Contains(got.Modules, entitlement.ModuleAutoDefense) || slices.Contains(got.Modules, moduleUnknown) {
+			t.Fatalf("community modules = %+v", got)
 		}
 	}
-	if response := probe(user.AccessToken, "module-probe-granted"); response.StatusCode != http.StatusNoContent {
-		t.Fatalf("probe granted = %d %s", response.StatusCode, readBody(response.Body))
+	if response := probe(user.AccessToken, "/v1/probe/community", "module-probe-community"); response.StatusCode != http.StatusNoContent {
+		t.Fatalf("community module probe = %d %s", response.StatusCode, readBody(response.Body))
 	}
-
-	installModuleTestLease(t, pool, trust, key, now, 2, "pack.crs")
-	if got := listModules(user.AccessToken); !reflect.DeepEqual(got.Modules, []string{"pack.crs"}) {
-		t.Fatalf("modules revoked = %+v", got)
-	}
-	response := probe(user.AccessToken, "module-probe-revoked")
-	assertError(t, response, http.StatusForbidden, "entitlement_feature_denied", "module-probe-revoked")
-	response.Body.Close()
-	var reason string
-	if err := pool.QueryRow(t.Context(), `SELECT payload->>'reason' FROM audit_events
-		WHERE action='entitlement.guard.reject' AND request_id='module-probe-revoked'`).Scan(&reason); err != nil ||
-		reason != "feature_missing" {
-		t.Fatalf("probe denial audit reason = %q, %v", reason, err)
-	}
-
-	installModuleTestLease(t, pool, trust, key, now, 3, moduleProbe, "pack.crs")
-	if got := listModules(admin.AccessToken); !reflect.DeepEqual(got.Modules, []string{moduleProbe, "pack.crs"}) {
-		t.Fatalf("modules restored = %+v", got)
-	}
-	if response := probe(user.AccessToken, "module-probe-restored"); response.StatusCode != http.StatusNoContent {
-		t.Fatalf("probe restored = %d %s", response.StatusCode, readBody(response.Body))
-	}
-	var changes int
-	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM audit_events WHERE action=$1`,
-		entitlementguard.ModulesChangedAction).Scan(&changes); err != nil || changes != 3 {
-		t.Fatalf("module change audits = %d, %v", changes, err)
+	for _, denied := range []struct{ path, requestID string }{
+		{"/v1/probe/commercial", "module-probe-commercial"}, {"/v1/probe/unknown", "module-probe-unknown"},
+	} {
+		response := probe(user.AccessToken, denied.path, denied.requestID)
+		assertError(t, response, http.StatusForbidden, "entitlement_feature_denied", denied.requestID)
+		response.Body.Close()
+		var reason string
+		if err := pool.QueryRow(t.Context(), `SELECT payload->>'reason' FROM audit_events
+			WHERE action='entitlement.guard.reject' AND request_id=$1`, denied.requestID).Scan(&reason); err != nil ||
+			reason != "feature_missing" {
+			t.Fatalf("%s denial audit reason = %q, %v", denied.path, reason, err)
+		}
 	}
 }

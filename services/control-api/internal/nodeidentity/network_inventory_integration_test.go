@@ -31,7 +31,7 @@ func TestNetworkInventoryFormalRegistration(t *testing.T) {
 	service := newIdentityTestService(t, pool, newIdentityTestCA(t, now), clock)
 	fixture := seedIdentityPlatformNode(t, pool, now, "pending", "initial_enrollment")
 	authorize := validAuthorizeRequest(t, testCSR(t, false))
-	authorize.EnrollmentToken, authorize.PeerIP = fixture.token, "203.0.113.125"
+	authorize.EnrollmentToken, authorize.PeerIP = fixture.token, "11.0.0.125"
 	auth, err := service.Authorize(context.Background(), authorize)
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +40,7 @@ func TestNetworkInventoryFormalRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := NetworkInventoryRequest{GetAuthorizationRequest: GetAuthorizationRequest{NodeID: fixture.nodeID, CertificateSerialNumber: completion.Certificate.SerialNumber, CertificateSHA256: certificateDERDigest(t, completion.Certificate), GatewayWorkloadIdentity: authorize.GatewayWorkloadIdentity, GatewayInstanceID: authorize.GatewayInstanceID}, PeerIP: "203.0.113.125", Inventory: &agentv1.ReportNodeNetworkInventoryV1Request{SchemaVersion: 1, Request: &commonv1.RequestMetadata{RequestId: uuid.NewString(), SentTime: timestamppb.New(now)}, Ipv4: &agentv1.NodeNetworkCandidateV1{Address: "203.0.113.125", InterfaceName: "ens17"}, Ipv6Reason: "no_default_route"}}
+	request := NetworkInventoryRequest{GetAuthorizationRequest: GetAuthorizationRequest{NodeID: fixture.nodeID, CertificateSerialNumber: completion.Certificate.SerialNumber, CertificateSHA256: certificateDERDigest(t, completion.Certificate), GatewayWorkloadIdentity: authorize.GatewayWorkloadIdentity, GatewayInstanceID: authorize.GatewayInstanceID}, PeerIP: "11.0.0.125", Inventory: &agentv1.ReportNodeNetworkInventoryV1Request{SchemaVersion: 1, Request: &commonv1.RequestMetadata{RequestId: uuid.NewString(), SentTime: timestamppb.New(now)}, Ipv4: &agentv1.NodeNetworkCandidateV1{Address: "11.0.0.125", InterfaceName: "ens17"}, Ipv6Reason: "no_default_route"}}
 	result, err := service.ReportNetworkInventory(context.Background(), request)
 	if err != nil || result.GetIpv4State() != "verified" || result.GetNodeId() != fixture.nodeID.String() {
 		t.Fatalf("automatic inventory = %v, %v", result, err)
@@ -72,7 +72,7 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 			t.Fatal(err)
 		}
 		request.ArtifactEncryptionPublicKey = key.PublicKey().Bytes()
-		request.EnrollmentToken, request.PeerIP = fixture.token, "203.0.113.125"
+		request.EnrollmentToken, request.PeerIP = fixture.token, "11.0.0.125"
 		authorized, err := service.Authorize(ctx, request)
 		if err != nil {
 			t.Fatal(err)
@@ -81,7 +81,7 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return fixture, NetworkInventoryRequest{GetAuthorizationRequest: GetAuthorizationRequest{NodeID: fixture.nodeID, CertificateSerialNumber: completed.Certificate.SerialNumber, CertificateSHA256: certificateDERDigest(t, completed.Certificate), GatewayWorkloadIdentity: request.GatewayWorkloadIdentity, GatewayInstanceID: request.GatewayInstanceID}, PeerIP: "203.0.113.125", Inventory: &agentv1.ReportNodeNetworkInventoryV1Request{SchemaVersion: 1, Request: &commonv1.RequestMetadata{RequestId: uuid.NewString(), SentTime: timestamppb.New(now)}, Ipv4: &agentv1.NodeNetworkCandidateV1{Address: "203.0.113.125", InterfaceName: "ens17"}, Ipv6Reason: "no_default_route"}}
+		return fixture, NetworkInventoryRequest{GetAuthorizationRequest: GetAuthorizationRequest{NodeID: fixture.nodeID, CertificateSerialNumber: completed.Certificate.SerialNumber, CertificateSHA256: certificateDERDigest(t, completed.Certificate), GatewayWorkloadIdentity: request.GatewayWorkloadIdentity, GatewayInstanceID: request.GatewayInstanceID}, PeerIP: "11.0.0.125", Inventory: &agentv1.ReportNodeNetworkInventoryV1Request{SchemaVersion: 1, Request: &commonv1.RequestMetadata{RequestId: uuid.NewString(), SentTime: timestamppb.New(now)}, Ipv4: &agentv1.NodeNetworkCandidateV1{Address: "11.0.0.125", InterfaceName: "ens17"}, Ipv6Reason: "no_default_route"}}
 	}
 	clone := func(request NetworkInventoryRequest) NetworkInventoryRequest {
 		request.Inventory = proto.Clone(request.Inventory).(*agentv1.ReportNodeNetworkInventoryV1Request)
@@ -127,11 +127,11 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 		if _, err := inventory.Get(ctx, uuid.New(), fixture.nodeID); !errors.Is(err, node.ErrNotFound) {
 			t.Fatalf("cross scope read: %v", err)
 		}
-		if _, err := pool.Exec(ctx, `UPDATE nodes SET ipv4='203.0.113.126',revision=revision+1 WHERE id=$1`, fixture.nodeID); err != nil {
+		if _, err := pool.Exec(ctx, `UPDATE nodes SET ipv4='11.0.0.126',revision=revision+1 WHERE id=$1`, fixture.nodeID); err != nil {
 			t.Fatal(err)
 		}
 		read, err := inventory.Get(ctx, fixture.scopeID, fixture.nodeID)
-		if err != nil || read.NetworkInventory.IPv4State != "address_conflict" || read.IPv4 == nil || *read.IPv4 != "203.0.113.126" {
+		if err != nil || read.NetworkInventory.IPv4State != "address_conflict" || read.IPv4 == nil || *read.IPv4 != "11.0.0.126" {
 			t.Fatalf("manual change falsely verified: %v %v", read, err)
 		}
 		list, err := inventory.List(ctx, nodepresence.InventoryListRequest{ScopeID: fixture.scopeID, Limit: 300})
@@ -155,13 +155,13 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 			t.Fatalf("conflict changed revision: %v", got)
 		}
 		read, err = inventory.Get(ctx, fixture.scopeID, fixture.nodeID)
-		if err != nil || read.IPv4 == nil || *read.IPv4 != "203.0.113.126" {
+		if err != nil || read.IPv4 == nil || *read.IPv4 != "11.0.0.126" {
 			t.Fatal("manual value overwritten")
 		}
 	})
 	t.Run("pending-is-not-an-address-or-cross-family-proof", func(t *testing.T) {
 		fixture, request := enroll()
-		request.PeerIP = "203.0.113.23"
+		request.PeerIP = "11.0.0.23"
 		request.Inventory.Ipv6Reason = ""
 		request.Inventory.Ipv6 = &agentv1.NodeNetworkCandidateV1{Address: "2606:4700:4700::1111", InterfaceName: "ens17"}
 		result, err := service.ReportNetworkInventory(ctx, request)
@@ -172,7 +172,7 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 		if err != nil || read.IPv4 != nil || read.IPv6 != nil {
 			t.Fatal("pending wrote an address")
 		}
-		if _, err := pool.Exec(ctx, `UPDATE nodes SET ipv4='203.0.113.24',revision=revision+1 WHERE id=$1`, fixture.nodeID); err != nil {
+		if _, err := pool.Exec(ctx, `UPDATE nodes SET ipv4='11.0.0.24',revision=revision+1 WHERE id=$1`, fixture.nodeID); err != nil {
 			t.Fatal(err)
 		}
 		verified := clone(request)
@@ -182,13 +182,13 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 			t.Fatalf("IPv6 independent proof: %v %v", result, err)
 		}
 		read, err = inventory.Get(ctx, fixture.scopeID, fixture.nodeID)
-		if err != nil || read.IPv4 == nil || *read.IPv4 != "203.0.113.24" || read.IPv6 == nil || *read.IPv6 != verified.PeerIP {
+		if err != nil || read.IPv4 == nil || *read.IPv4 != "11.0.0.24" || read.IPv6 == nil || *read.IPv6 != verified.PeerIP {
 			t.Fatal("independent proof changed manual address")
 		}
 	})
 	t.Run("authority-is-current-even-for-replay", func(t *testing.T) {
 		fixture, request := enroll()
-		request.Inventory.Ipv4.Address, request.PeerIP = "203.0.113.40", "203.0.113.40"
+		request.Inventory.Ipv4.Address, request.PeerIP = "11.0.0.40", "11.0.0.40"
 		if _, err := service.ReportNetworkInventory(ctx, request); err != nil {
 			t.Fatal(err)
 		}
@@ -285,7 +285,7 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 	})
 	t.Run("scheduled-bound-revocation-is-checked-on-replay", func(t *testing.T) {
 		fixture, request := enroll()
-		request.Inventory.Ipv4.Address, request.PeerIP = "203.0.113.60", "203.0.113.60"
+		request.Inventory.Ipv4.Address, request.PeerIP = "11.0.0.60", "11.0.0.60"
 		roleID := uuid.New()
 		if _, err := pool.Exec(ctx, `INSERT INTO roles(id,scope_id,name,system_role) VALUES($1,$2,'platform_owner',true)`, roleID, fixture.scopeID); err != nil {
 			t.Fatal(err)
@@ -320,7 +320,7 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 	t.Run("concurrent-conflict-and-replay", func(t *testing.T) {
 		_, first := enroll()
 		_, second := enroll()
-		first.Inventory.Ipv4.Address, first.PeerIP = "203.0.113.50", "203.0.113.50"
+		first.Inventory.Ipv4.Address, first.PeerIP = "11.0.0.50", "11.0.0.50"
 		second.Inventory.Ipv4.Address, second.PeerIP = first.PeerIP, first.PeerIP
 		start := make(chan struct{})
 		results := make(chan string, 2)
@@ -403,7 +403,7 @@ func TestNetworkInventorySafetyContract(t *testing.T) {
 	})
 	t.Run("revoked-CA-cannot-replay", func(t *testing.T) {
 		fixture, request := enroll()
-		request.Inventory.Ipv4.Address, request.PeerIP = "203.0.113.70", "203.0.113.70"
+		request.Inventory.Ipv4.Address, request.PeerIP = "11.0.0.70", "11.0.0.70"
 		if _, err := service.ReportNetworkInventory(ctx, request); err != nil {
 			t.Fatal(err)
 		}

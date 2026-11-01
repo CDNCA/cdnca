@@ -72,7 +72,10 @@ func (*edgePublishRuntimeTypedNilResolver) ResolveTarget(
 	return edgepublish.TargetSnapshot{}, nil
 }
 
-func TestEdgePublishProductionEntitlementUsesRequestClockAndAcceptedRevocations(t *testing.T) {
+// TestEdgePublishProductionCommunityEntitlementAllowsAnyClock: publication
+// under the community entitlement uses the request clock and has no lease
+// window to fall out of.
+func TestEdgePublishProductionCommunityEntitlementAllowsAnyClock(t *testing.T) {
 	pool, _ := edgePublishProductionPGPool(t, &edgePublishProductionPGQueryTrace{})
 	evaluatedAt := time.Now().UTC().Truncate(time.Second)
 	fixture := installEdgePublishProductionEntitlement(t, pool, evaluatedAt)
@@ -113,22 +116,25 @@ func TestEdgePublishProductionEntitlementUsesRequestClockAndAcceptedRevocations(
 	if err != nil || !decision.Allowed || !decision.EvaluatedAt.Equal(evaluatedAt) {
 		t.Fatalf("valid production decision=%+v err=%v", decision, err)
 	}
+	// Community edition: the built-in community entitlement has no lease
+	// window and nothing to revoke, so publication stays allowed at any request
+	// clock and after a revocation is accepted; the decision still carries
+	// the request clock.
 	for name, at := range map[string]time.Time{
 		"not before": evaluatedAt.Add(-2 * time.Minute),
-		// 租约 ExpiresAt=+1 分钟、GraceUntil=+5 分钟；宽限期内放行发布，所以取宽限期之后
-		"expired": evaluatedAt.Add(6 * time.Minute),
+		"expired":    evaluatedAt.Add(6 * time.Minute),
 	} {
 		t.Run(name, func(t *testing.T) {
 			decision, err := authorize(at)
-			if !entitlementguard.IsDenial(err) || decision.Allowed {
-				t.Fatalf("production clock-skew decision=%+v err=%v", decision, err)
+			if err != nil || !decision.Allowed || !decision.EvaluatedAt.Equal(at) {
+				t.Fatalf("community clock-skew decision=%+v err=%v", decision, err)
 			}
 		})
 	}
 	acceptEdgePublishProductionRevocation(t, pool, fixture, evaluatedAt)
 	decision, err = authorize(evaluatedAt)
-	if !entitlementguard.IsDenial(err) || decision.Allowed {
-		t.Fatalf("accepted revocation decision=%+v err=%v", decision, err)
+	if err != nil || !decision.Allowed {
+		t.Fatalf("community decision after a revocation=%+v err=%v", decision, err)
 	}
 }
 
